@@ -33,7 +33,12 @@ browse = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.3", "ruff>=0.14"]
+# The web extra is OPTIONAL for users and MANDATORY for contributors.
+# tests/test_web_server.py skips its whole module without fastapi, so a
+# plain `uv run pytest` in an env synced without the extra reports a
+# green suite that quietly ran 51 fewer tests. Pulling the extra into the
+# dev group means the default developer environment runs everything.
+dev = ["pytest>=8.3", "ruff>=0.14", "yantra[web]"]
 
 [build-system]
 requires = ["hatchling"]

@@ -17,6 +17,7 @@ A tool is three things glued together:
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -108,16 +109,68 @@ class ToolRegistry:
     the soft twin of ``unregister`` (the YANTRA_DISABLED_TOOLS startup
     kill-switch, which removes tools outright): a disable is reversible
     mid-session, by the operator, on purpose.
+
+    A registry can also carry a standing ADMISSION POLICY
+    (``admit_only``): what may ever be registered here at all. That is a
+    third thing, and the distinction matters. ``unregister`` removes what
+    is present now; a policy also governs what arrives LATER -- the
+    ask_user tool the host adds after construction, load_skill, an MCP
+    server's tools. An agent package that says it does not get ``bash``
+    means it never gets bash, not that bash was missing for a moment
+    during startup.
     """
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
         self._disabled: set[str] = set()
+        self._allow: tuple[str, ...] | None = None
+        self._deny: tuple[str, ...] = ()
+        self._refused: list[str] = []
 
     def register(self, tool: Tool) -> None:
         if tool.name in self._tools:
             raise ValueError(f"duplicate tool name: {tool.name!r}")
+        if not self.admits(tool.name):
+            # Refusing is SILENT by design: hosts register ask_user and
+            # load_skill unconditionally, and a package that excluded them
+            # wants them absent, not a crash on startup. The names are
+            # recorded so a host can say what it dropped.
+            self._refused.append(tool.name)
+            return
         self._tools[tool.name] = tool
+
+    # ---- admission policy ---------------------------------------------------
+
+    def admits(self, name: str) -> bool:
+        """Whether the policy lets ``name`` in. Patterns are fnmatch, so
+        'browser_*' and 'mcp__slack__*' work like they do in
+        $YANTRA_DISABLED_TOOLS."""
+        if any(fnmatch.fnmatch(name, pat) for pat in self._deny):
+            return False
+        if self._allow is None:
+            return True
+        return any(fnmatch.fnmatch(name, pat) for pat in self._allow)
+
+    def admit_only(self, allow=None, deny=()) -> list[str]:
+        """Install the policy and apply it to what is already here.
+
+        ``allow=None`` means "everything not denied"; a non-None allow is
+        a COMPLETE whitelist, which includes MCP tools -- a package that
+        both narrows its tools and declares an MCP server has to say so
+        ('mcp__*'), because guessing either way would be wrong half the
+        time. Returns the names dropped right now, for the host to report.
+        """
+        self._allow = tuple(allow) if allow is not None else None
+        self._deny = tuple(deny)
+        dropped = [n for n in sorted(self._tools) if not self.admits(n)]
+        for name in dropped:
+            self.unregister(name)
+        return dropped
+
+    def refused_names(self) -> list[str]:
+        """Tools the policy turned away after construction, in arrival
+        order -- what a host prints so a missing tool is never a mystery."""
+        return list(self._refused)
 
     def unregister(self, name: str) -> bool:
         """Remove a tool by exact name; False when it was not registered."""

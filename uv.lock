@@ -838,6 +838,7 @@ web = [
 dev = [
     { name = "pytest" },
     { name = "ruff" },
+    { name = "yantra", extra = ["web"] },
 ]
 
 [package.metadata]
@@ -854,4 +855,5 @@ provides-extras = ["web", "browse"]
 dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.14" },
+    { name = "yantra", extras = ["web"] },
 ]

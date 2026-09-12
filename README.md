@@ -20,7 +20,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 944 tests. The
+The harness underneath is complete and covered by 1019 tests. The
 framework layer on top — agents you define as a folder of files, tools
 loaded from outside this tree, evals as an acceptance gate — is being
 built now, and the API is not stable yet.
@@ -78,6 +78,7 @@ surface ([notes/19](notes/19-responses-api.md)).
 ## Usage
 
 ```bash
+uv run yantra --agent ./researcher                   # run an AGENT PACKAGE (see below)
 uv run yantra                                        # REPL (provider auto-guessed from keys)
 uv run yantra --provider openai                      # pick a dialect explicitly
 uv run yantra --provider ollama                      # LOCAL models (localhost:11434, no key)
@@ -570,6 +571,99 @@ independently re-verifies; exit code doubles as a CI gate),
 measured live), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop).
 
+## Agent packages
+
+An agent is a **directory**, so it can be named, versioned, reviewed and
+handed to someone:
+
+```
+researcher/
+├── agent.toml      identity · model · tools · skills · servers · policy
+├── prompt.md       the system prompt
+└── skills/         procedures this agent knows
+```
+
+```bash
+uv run yantra --agent ./researcher "what changed in notes/30 recently?"
+uv run yantra --agent ./researcher --provider ollama   # against your own hardware
+cd researcher && uv run yantra                         # ./agent.toml is found
+```
+
+A worked example ships in
+[examples/agents/researcher](examples/agents/researcher) — a read-only
+research agent with its own skill. The full format and the reasoning
+behind it are [notes/31](notes/31-agent-packages.md).
+
+The smallest package that works is two lines:
+
+```toml
+[agent]
+name = "tiny"
+```
+
+**Every field is optional, and that is the portability promise.** Flags
+beat the manifest, the manifest beats the environment, the environment
+beats the built-in default:
+
+```
+command line   >   agent.toml   >   environment   >   built-in default
+```
+
+So a package you wrote against Anthropic runs on somebody else's Ollama
+box with `--provider ollama` and *their* model — no fork, no diff to
+maintain, no edit to your file.
+
+```toml
+[agent]
+name        = "researcher"
+description = "Reads sources and answers with citations."
+version     = "0.1.0"
+
+[model]
+max_iterations = 20             # provider/model left open on purpose
+
+[tools]
+allow = ["read_file", "glob", "grep", "web_fetch", "load_skill"]
+deny  = ["browser_*"]           # fnmatch, like $YANTRA_DISABLED_TOOLS
+
+[permissions]
+mode = "ask"                    # ask | yolo
+
+[env]
+context = "local"               # off | local | full
+```
+
+`allow`/`deny` are a **standing admission policy**, not a one-time sweep:
+they also govern tools registered later — `ask_user`, `load_skill`, an MCP
+server's tools — so an agent that says it does not get `bash` never gets
+bash. A non-empty `allow` is a complete whitelist, MCP tools included
+(say `mcp__*` if you want them).
+
+**Unknown keys are errors.** A misspelled `deny` that quietly left `bash`
+armed would be the worst bug this format could have:
+
+```
+$ uv run yantra --agent ./broken
+error: ./broken/agent.toml: unknown key(s) in [tools]: alow
+       (known: allow, deny, per_turn)
+```
+
+Embedding it instead of running it:
+
+```python
+from yantra import load_package, yolo
+
+spec = load_package("./researcher")
+agent = spec.build(permissions=yolo)          # or spec.build_async(...)
+reply = agent.run("what changed in notes/30?")
+print(reply.message.text())
+```
+
+`AgentSpec` owns the assembly order — admission policy before any tool is
+registered, prompt layers before `env_context` appends to them, skills
+before the tool catalog. `Agent.__init__` still takes its seventeen
+arguments for anyone who wants them.
+
 ## Architecture
 
 Normalization happens in exactly ONE layer: the provider adapters.
@@ -621,6 +715,16 @@ src/yantra/
 │                   allowed-tools is ENFORCED rather than announced; /skills
 │                   off|on + $YANTRA_DISABLED_SKILLS are the operator's switch
 │                   ([notes/30](notes/30-skills.md))
+├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
+│                   skills/, parsed with tomllib, unknown keys refused so a
+│                   typo can never quietly leave a tool armed
+│                   ([notes/31](notes/31-agent-packages.md))
+├── spec.py         AgentSpec: one description of an agent and the build that
+│                   wires it -- admission policy before any tool registers,
+│                   prompt layers before env_context appends, skills before
+│                   the catalog. merge() is the resolution order: flags >
+│                   agent.toml > environment > default
+│                   ([notes/31](notes/31-agent-packages.md))
 ├── mcp.py          MCP client, hand-rolled JSON-RPC over stdio AND
 │                   Streamable HTTP (SSE responses via providers/sse.py):
 │                   handshake, tools/list, tools/call; MCPManager adds/
@@ -824,7 +928,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 866 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1019 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

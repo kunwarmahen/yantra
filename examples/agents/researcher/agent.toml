@@ -1,0 +1,47 @@
+# A worked agent package. Run it from the repo root:
+#
+#   yantra --agent examples/agents/researcher "what does notes/30 say about allowed-tools?"
+#   yantra --agent examples/agents/researcher --provider ollama     # your own hardware
+#
+# Every key below is optional. What is NOT here is as deliberate as what
+# is: no provider and no model, so this package runs against whatever you
+# already have -- a cloud key or a local server -- with no edit from you.
+
+[agent]
+name = "researcher"
+description = "Reads sources in the working directory and answers with citations."
+version = "0.1.0"
+# prompt.md is picked up by convention; the key exists for other layouts.
+
+[model]
+# A research turn reads a lot of files before it answers.
+max_iterations = 20
+
+[tools]
+# A COMPLETE whitelist: reading, searching, fetching, and the two tools
+# that make a long job legible. Note what is absent -- no bash, no
+# write_file, no edit_file. This agent answers questions; it does not
+# change your working tree, and the admission policy means it cannot,
+# even if a prompt talks it into trying.
+#
+# load_skill has to be here, or the skill below would be listed in the
+# prompt with no way to open it (the loader refuses that package outright).
+# run_skill is its sibling, for skills that run in a sub-agent rather than
+# inline -- leave it out and a delegated skill has nowhere to run.
+allow = [
+    "read_file", "list_dir", "glob", "grep",
+    "web_fetch",
+    "load_skill", "run_skill",
+    "todo_read", "todo_write",
+]
+
+[permissions]
+# web_fetch is network egress, so it asks before reaching out. Nothing
+# else here can do damage -- every other tool is read-only and
+# auto-approves.
+mode = "ask"
+
+[env]
+# Machine facts without the location lookup: a research agent benefits
+# from knowing the OS and the working directory, and not from the rest.
+context = "local"

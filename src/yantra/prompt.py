@@ -13,9 +13,14 @@ silently erases the other.
 So the string gets a seam before the second appender exists. A
 ``SystemPrompt`` is an ordered map of NAMED layers:
 
+    agent   the agent package's own prompt -- who this agent IS (notes/32)
     base    the operator's --system, captured verbatim, never edited
     env     env_context's fact sheet + policy (notes/29)
     skills  the skill roster (notes/30)
+
+``agent`` renders FIRST and ``base`` second, which is the composition an
+operator expects: the package says what the agent is, and whatever the
+operator typed refines it rather than being buried under it.
 
 Each owner writes ONLY its own layer and re-applies; render() joins the
 non-empty ones, in declared order, with blank lines. Two rules make it
@@ -44,7 +49,7 @@ from typing import Any
 
 #: Declared render order. Layers not in this tuple are rejected loudly:
 #: a typo'd name would otherwise vanish into a dict and render nothing.
-LAYER_ORDER = ("base", "env", "skills")
+LAYER_ORDER = ("agent", "base", "env", "skills")
 
 #: Attribute the composer lives under on an Agent (or any object with a
 #: ``system``). Set by attach_prompt; read by recompose.

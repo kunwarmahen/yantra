@@ -399,6 +399,24 @@ def skill_roots(cwd: Path | None = None,
     return roots
 
 
+def prepend_skill_path(dirs) -> None:
+    """Put explicit directories AHEAD of $YANTRA_SKILLS_PATH and every
+    implicit root.
+
+    Discovery reads its roots from the environment, so an extra directory
+    can only be added by writing to it -- which is a real wart, and the
+    reason this is one function instead of the same four lines in the CLI,
+    in AgentSpec, and in whatever hosts an agent next. Callers that need
+    to add a dir per-registry rather than per-process are asking for a
+    parameter ``discover`` does not have yet.
+    """
+    existing = os.environ.get(ENV_PATH, "")
+    entries = [str(Path(d).expanduser()) for d in dirs]
+    if existing:
+        entries.append(existing)
+    os.environ[ENV_PATH] = os.pathsep.join(entries)
+
+
 def discover(cwd: Path | None = None,
              *, home: Path | None = None) -> SkillSet:
     """Scan every root and return what is loadable, broken, or shadowed.

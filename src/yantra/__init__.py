@@ -3,6 +3,9 @@
 Layers, outside in:
 
 * ``yantra.cli``     -- terminal UI (REPL, rendering, permission prompts)
+* ``yantra.package`` -- an agent as a DIRECTORY: agent.toml, prompt, skills
+* ``yantra.spec``    -- AgentSpec: one description of an agent, and the
+                        build that wires it in the order that works
 * ``yantra.agent``   -- THE LOOP: model -> tool calls -> results -> repeat
 * ``yantra.providers`` -- wire-format adapters behind one streaming interface
 * ``yantra.tools``   -- what the model may do (fs, shell, grep) + sandboxing
@@ -16,9 +19,11 @@ See README.md for the map and notes/ for per-topic write-ups.
 """
 
 from yantra.agent import Agent, AgentEvent, ToolExecuted, TurnEnd
+from yantra.async_agent import AsyncAgent
 from yantra.config import default_model, load_settings
 from yantra.images import load_image_block
 from yantra.mcp import MCPServerConfig, MCPSession, connect_mcp, register_mcp
+from yantra.package import MANIFEST, find_manifest, load_package
 from yantra.permissions import (
     PermissionFn,
     PermissionRequest,
@@ -30,8 +35,11 @@ from yantra.pricing import ModelPrice, cost_of, price_for, session_cost
 from yantra.prompt import SystemPrompt, attach_prompt, recompose
 from yantra.providers import get_provider
 from yantra.providers.base import Provider, ProviderSettings, collect
+from yantra.session import SessionStore, apply_payload
 from yantra.skills import Skill, SkillRegistry, enable_skills
+from yantra.spec import AgentSpec
 from yantra.tools import default_registry
+from yantra.tools.base import Tool, ToolContext, ToolOutput, ToolRegistry
 from yantra.types import (
     Block,
     EndEvent,
@@ -57,6 +65,9 @@ from yantra.types import (
 __all__ = [
     "Agent",
     "AgentEvent",
+    "AgentSpec",
+    "apply_payload",
+    "AsyncAgent",
     "allow_read_only",
     "attach_prompt",
     "Block",
@@ -67,8 +78,11 @@ __all__ = [
     "EndEvent",
     "get_provider",
     "ImageBlock",
+    "find_manifest",
     "load_image_block",
+    "load_package",
     "load_settings",
+    "MANIFEST",
     "Message",
     "ModelResponse",
     "MCPServerConfig",
@@ -86,6 +100,7 @@ __all__ = [
     "ProviderSettings",
     "RedactedThinkingBlock",
     "StartEvent",
+    "SessionStore",
     "Skill",
     "SkillRegistry",
     "enable_skills",
@@ -96,10 +111,14 @@ __all__ = [
     "TextDelta",
     "ThinkingBlock",
     "ThinkingDelta",
+    "Tool",
     "ToolCall",
     "ToolCallDelta",
     "ToolCallStart",
     "ToolExecuted",
+    "ToolContext",
+    "ToolOutput",
+    "ToolRegistry",
     "ToolResult",
     "ToolSpec",
     "TurnEnd",

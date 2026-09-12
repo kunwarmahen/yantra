@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import os
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from rich.console import Console
@@ -18,27 +18,26 @@ from yantra.cli.repl import Repl, confirm_gate
 from yantra.config import (
     _load_dotenv,
     browser_profile,
-    default_context_window,
     default_env_context,
     default_model,
     default_tool_select,
+    guess_provider,
     disabled_skill_patterns,
     disabled_tool_patterns,
     load_settings,
 )
-from yantra.env_context import EnvContext
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
 from yantra.images import load_image_block
 from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
                          load_remembered, remembered_path)
 from yantra.mcp_oauth import TOKEN_FILE
+from yantra.package import MANIFEST, load_package
 from yantra.permissions import SwitchableGate, trust_sandbox, yolo
 from yantra.providers import get_provider
 from yantra.sandbox import autodetect
+from yantra.spec import AgentSpec
 from yantra.session import SessionStore, apply_payload
-from yantra.skills import enable_skills
-from yantra.skills.loader import ENV_PATH
 from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools import default_registry
 from yantra.tools.ask_user import AskUser, TerminalChannel
@@ -49,19 +48,7 @@ from yantra.tools.selector import (
 )
 
 
-def _guess_provider() -> str:
-    """Default to whichever provider has a key in the environment."""
-    _load_dotenv()  # .env fills gaps; real env vars already set would win anyway
-    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-        return "anthropic"
-    if os.environ.get("OPENAI_API_KEY"):
-        return "openai"
-    if os.environ.get("RESPONSES_API_KEY"):
-        return "responses"
-    raise ConfigError(
-        "no API key found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) in the "
-        "environment or .env -- or run a local model with: yantra --provider ollama"
-    )
+
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "local models at localhost:11434 (no key)")
     parser.add_argument("--model", help="model slug (default from env / per-provider)")
     parser.add_argument("--system", help="system prompt")
-    parser.add_argument("--max-iterations", type=int, default=25,
+    parser.add_argument("--max-iterations", type=int, default=None,
                         help="tool round-trips allowed per turn (default 25)")
     parser.add_argument("--context-window", type=int, default=None,
                         metavar="TOKENS",
@@ -87,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="prompt caching (anthropic dialect): mark the "
                              "request prefix with cache breakpoints so long "
                              "sessions bill cached tokens at ~0.1x")
+    parser.add_argument("--agent", metavar="DIR",
+                        help="run an AGENT PACKAGE: a directory with an "
+                             "agent.toml (prompt, tools, skills, servers, "
+                             "policy). Flags here override the package. "
+                             "Omitted, ./agent.toml is used when present.")
     parser.add_argument("--yolo", action="store_true",
                         help="skip permission prompts -- tools run without asking")
     parser.add_argument("--sandbox", action="store_true",
@@ -174,14 +166,56 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _prepend_skill_path(dirs: list[str]) -> None:
-    """--skills-dir entries win over $YANTRA_SKILLS_PATH and every implicit
-    root: a flag is the most explicit thing the operator can say."""
-    existing = os.environ.get(ENV_PATH, "")
-    entries = [str(Path(d).expanduser()) for d in dirs]
-    if existing:
-        entries.append(existing)
-    os.environ[ENV_PATH] = os.pathsep.join(entries)
+def _cli_spec(args) -> AgentSpec:
+    """What the COMMAND LINE asked for, and nothing it merely defaulted to.
+
+    Every field left as None here is a field the operator did not mention,
+    which is what lets ``merge`` hand the decision back to the package. The
+    two store_true flags become None rather than False for the same reason:
+    "--yolo absent" is not "the package may not ask for yolo".
+    """
+    return AgentSpec(
+        provider=args.provider,
+        model=args.model,
+        system=args.system,
+        max_iterations=args.max_iterations,
+        context_window=args.context_window,
+        cache=True if args.cache else None,
+        skills=False if args.no_skills else None,
+        skill_dirs=tuple(Path(d).expanduser() for d in args.skills_dir),
+        permissions_mode="yolo" if args.yolo else None,
+        env_context=args.env_context,
+        cwd=Path(args.cwd),
+    )
+
+
+def _resolve_spec(args) -> AgentSpec:
+    """The package's spec with the command line layered over it.
+
+    ``--agent DIR`` is explicit; with no flag, ``./agent.toml`` is picked
+    up when it happens to be there, which is what makes a package
+    directory feel like a project you can just cd into. Nothing is
+    searched for upwards: a manifest that silently governed a session from
+    three directories up would be a surprise nobody asked for.
+
+    The two environment-backed defaults are applied AFTER the merge, or
+    they would outrank the package they are supposed to fall behind.
+    """
+    base = AgentSpec()
+    where = args.agent
+    if where is None:
+        implicit = Path(args.cwd) / MANIFEST
+        if implicit.is_file():
+            where = str(implicit)
+    if where is not None:
+        base = load_package(Path(where))
+
+    spec = base.merge(_cli_spec(args))
+    if spec.env_context is None:
+        spec = replace(spec, env_context=default_env_context())
+    if spec.skills is None:
+        spec = replace(spec, skills=True)
+    return spec
 
 
 def enable_subagents(agent: Agent, console: Console) -> SubagentSpawner:
@@ -232,7 +266,10 @@ def _build_mode(args, provider_name: str, settings, model: str,
             tools=default_registry(sandbox),
             permissions=gate,
             cwd=ws,
-            max_iterations=args.max_iterations,
+            # --max-iterations now defaults to None so an agent package can
+            # own it; build mode has no package, so it restates the default.
+            max_iterations=(args.max_iterations
+                            if args.max_iterations is not None else 25),
         )
 
     console.print(f"[bold]{provider_name}[/bold] · {model} · "
@@ -425,13 +462,14 @@ def main(argv: list[str] | None = None) -> int:
         return _mcp_login(args.mcp_login, args, console)
 
     try:
-        provider_name = args.provider or _guess_provider()
+        spec = _resolve_spec(args)
+        provider_name = spec.provider or guess_provider()
         settings = load_settings(provider_name)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    model = args.model or default_model(provider_name)
+    model = spec.model or default_model(provider_name)
 
     if args.build is not None:
         return _build_mode(args, provider_name, settings, model, console)
@@ -466,34 +504,41 @@ def main(argv: list[str] | None = None) -> int:
         # every other tool keeps the ask-gate ([notes/16](../notes/16-sandboxing.md))
         ask_gate = trust_sandbox(ask_gate, sandbox)
         console.print("[dim]sandboxed bash auto-approved; other writes ask[/dim]")
-    gate = SwitchableGate(ask_gate, mode="yolo" if args.yolo else "ask")
+    # The package may ask for yolo too; --yolo, if given, already won
+    # the merge, so one attribute answers for both.
+    gate = SwitchableGate(ask_gate, mode=spec.permissions_mode or "ask")
 
-    agent = Agent(
-        get_provider(provider_name, settings, cache_control=args.cache),
-        model=model,
-        system=args.system,
-        tools=default_registry(sandbox),
-        cwd=Path(args.cwd),
-        max_iterations=args.max_iterations,
-        context_window=(args.context_window
-                        if args.context_window is not None
-                        else default_context_window(provider_name)),
-        permissions=gate,
-    )
-
-    # Session awareness ([notes/29](../notes/29-environment-awareness.md)):
-    # capture the operator's --system as the composition base, collect
-    # facts for the starting level (one geo lookup at most), and compose
-    # onto agent.system. Flips later are live -- /env (REPL) and the env
-    # chip (web) recompose mid-session without a restart.
+    # ONE call owns the assembly order (see spec.py): the admission policy
+    # before any tool is registered, the prompt layers before env_context
+    # appends to them, skills before the catalog the MCP block builds below.
     try:
-        env_ctx = EnvContext(args.env_context or default_env_context(),
-                             Path(args.cwd))
-        env_ctx.attach(agent)
+        agent = spec.build(
+            permissions=gate, sandbox=sandbox, cwd=Path(args.cwd),
+            # Already resolved above, for build-mode dispatch and the banner.
+            provider_name=provider_name, model=model,
+            provider=get_provider(provider_name, settings,
+                                  cache_control=bool(spec.cache)),
+        )
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    if env_ctx.geo_error:
+
+    if spec.root is not None:
+        label = f"{spec.name} {spec.version}" if spec.version else spec.name
+        # A package inside the working tree prints as a relative path: the
+        # absolute one wraps onto three lines and says nothing extra.
+        try:
+            where = spec.root.relative_to(Path(args.cwd).resolve())
+        except ValueError:
+            where = spec.root
+        console.print(f"[dim]agent: {label} -- {where}[/dim]")
+    # A tool the package's allow/deny turned away is reported, never silent:
+    # "why is there no bash" must have an answer on screen.
+    if refused := agent.registry.refused_names():
+        console.print(f"[dim]package excludes: {', '.join(refused)}[/dim]")
+
+    env_ctx = getattr(agent, "env_context", None)
+    if env_ctx is not None and env_ctx.geo_error:
         console.print(f"[dim]env context: location lookup failed "
                       f"({env_ctx.geo_error}); continuing without[/dim]")
 
@@ -512,14 +557,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         agent.registry.register(AskUser(None))
 
-    # Skills ([notes/30](../notes/30-skills.md)): discover, compose the
-    # roster onto its own prompt layer, register load_skill. Before the
-    # MCP block on purpose -- the tool catalog is built after it, and a
-    # pinned tool that does not exist yet cannot be pinned.
-    if not args.no_skills:
-        if args.skills_dir:
-            _prepend_skill_path(args.skills_dir)
-        skills = enable_skills(agent, Path(args.cwd))
+    # Skills themselves are attached by spec.build -- discovery, the roster
+    # layer, load_skill -- because a package declares its own, and because
+    # the order matters (before the MCP block below, whose catalog cannot
+    # pin a tool that does not exist yet). What stays here is the part a
+    # package has no say in: the OPERATOR's kill-switch, and reporting.
+    skills = getattr(agent, "skills", None)
+    if skills is not None:
         # Operator kill-switch, the skills twin of YANTRA_DISABLED_TOOLS:
         # globs pull skills out of the roster before the model ever sees
         # one. Reversible in-session with /skills on NAME.
@@ -540,9 +584,9 @@ def main(argv: list[str] | None = None) -> int:
         if len(skills):
             console.print(f"[dim]skills: {len(skills)} loaded -- "
                           f"{', '.join(skills.names())}[/dim]")
-        for broken in skills.found.broken:
-            console.print(f"[yellow]skill {broken.path}: {broken.reason}"
-                          f"[/yellow]")
+        for broken_skill in skills.found.broken:
+            console.print(f"[yellow]skill {broken_skill.path}: "
+                          f"{broken_skill.reason}[/yellow]")
 
     store = SessionStore(Path(args.cwd) / ".yantra" / "session.sqlite3")
     # The manager owns live MCP connections so servers can be added,
@@ -621,6 +665,8 @@ def main(argv: list[str] | None = None) -> int:
         # $YANTRA_TOOLS_PER_TURN) forces it; 0 forces it off; both unset
         # auto-enables past the threshold.
         width = args.tool_select
+        if width is None:
+            width = spec.tools_per_turn      # [tools] per_turn in agent.toml
         if width is None:
             width = default_tool_select()
         if width is None and len(agent.registry) > AUTO_SELECTION_THRESHOLD:

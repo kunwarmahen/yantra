@@ -241,3 +241,25 @@ def disabled_tool_patterns() -> list[str]:
     """
     raw = os.environ.get("YANTRA_DISABLED_TOOLS", "")
     return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def guess_provider() -> str:
+    """Whichever provider the environment already has a key for.
+
+    Lives here rather than in the CLI because an AgentSpec with no
+    provider declared has to answer the same question, and two copies of
+    this ladder would drift the day a fourth dialect arrives. Ollama is
+    never guessed: it needs no key, so "a local server might be running"
+    is not evidence that a local model is what you meant.
+    """
+    _load_dotenv()  # .env fills gaps; real env vars already set would win anyway
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return "anthropic"
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    if os.environ.get("RESPONSES_API_KEY"):
+        return "responses"
+    raise ConfigError(
+        "no API key found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) in the "
+        "environment or .env -- or run a local model with: yantra --provider ollama"
+    )

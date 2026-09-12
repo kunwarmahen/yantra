@@ -54,8 +54,25 @@ class TestRendering:
 
     def test_layers_snapshot_is_ordered_and_complete(self):
         prompt = SystemPrompt("BASE")
-        assert list(prompt.layers()) == ["base", "env", "skills"]
+        assert list(prompt.layers()) == ["agent", "base", "env", "skills"]
         assert prompt.layers()["env"] is None
+
+    def test_agent_layer_renders_before_the_operators_base(self):
+        """A package says what the agent IS; --system refines it. Burying
+        the operator's words under the package prompt would invert that,
+        so the declared order is checked on a real render."""
+        prompt = SystemPrompt("ANSWER IN GERMAN")
+        prompt.set("agent", "You are a research assistant.")
+        assert prompt.render() == (
+            "You are a research assistant.\n\nANSWER IN GERMAN"
+        )
+
+    def test_agent_layer_alone_needs_no_base(self):
+        """A package run with no --system has an empty base; the render
+        must not open with a blank line."""
+        prompt = SystemPrompt()
+        prompt.set("agent", "You are a research assistant.")
+        assert prompt.render() == "You are a research assistant."
 
 
 class TestAttachment:
