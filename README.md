@@ -39,9 +39,21 @@ Copyright 2026 Mahen Singh. Licensed under the Apache License, Version
 
 ## Setup
 
+Working *on* Yantra:
+
 ```bash
 uv sync                          # creates .venv from pyproject.toml
 cp .env.example .env             # then fill in a key (never committed)
+```
+
+Building *with* Yantra, from another project. Yantra installs from git
+rather than PyPI — the name is taken there by an unrelated package:
+
+```bash
+uv add git+https://github.com/kunwarmahen/yantra
+# or: pip install git+https://github.com/kunwarmahen/yantra
+# pin it for anything reproducible:
+uv add "yantra @ git+https://github.com/kunwarmahen/yantra@v0.1.0"
 ```
 
 `.env` is loaded automatically (a ~15-line loader in `config.py` — no
