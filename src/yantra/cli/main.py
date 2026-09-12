@@ -10,6 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape
 
 from yantra.agent import Agent
 from yantra.builder import BUILD_SYSTEM, BuildSpec, default_checks, run_build
@@ -27,13 +28,16 @@ from yantra.config import (
     load_settings,
 )
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
+from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
+from yantra.evals import EvalRunner
 from yantra.images import load_image_block
 from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
                          load_remembered, remembered_path)
 from yantra.mcp_oauth import TOKEN_FILE
 from yantra.package import MANIFEST, load_package
-from yantra.permissions import SwitchableGate, trust_sandbox, yolo
+from yantra.permissions import (SwitchableGate, allow_read_only,
+                                 trust_sandbox, yolo)
 from yantra.providers import get_provider
 from yantra.sandbox import autodetect
 from yantra.spec import AgentSpec
@@ -93,6 +97,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "re-verify the acceptance commands (unittest "
                              "gate). Exit 0 = build green, 1 = red. "
                              "Use --cwd to choose the workspace explicitly.")
+    parser.add_argument("--eval", action="store_true",
+                        help="run the agent package's own eval suite "
+                             f"({SUITE_DIR}/{CASES}) and exit non-zero on "
+                             "failure; the package is named the usual way "
+                             "(--agent DIR, or ./agent.toml)")
     parser.add_argument("--browse-login", metavar="URL", dest="browse_login",
                         default=None,
                         help="one-time LOGIN SETUP for the browser_* tools: "
@@ -304,6 +313,103 @@ def _build_mode(args, provider_name: str, settings, model: str,
     return 0 if result.ok else 1
 
 
+def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
+               model: str, console: Console) -> int:
+    """--eval: run the package's own suite, and make the exit code the verdict.
+
+    Builder mode's rule pointed at the agent instead of the project. An
+    author's claim that their agent works is worth what a model's claim
+    that the tests passed is worth, so a package ships the evidence and
+    this runs it: non-zero on any failure, which is all CI needs.
+
+    The suite grades THE PACKAGE -- ``spec=`` hands the runner the same
+    AgentSpec a session would build, so the prompt, skills, package tools
+    and admission policy under test are the shipped ones.
+    """
+    if spec.root is None:
+        print("error: --eval runs an agent package's own suite, and no "
+              "package was named: --agent DIR (or cd into one)",
+              file=sys.stderr)
+        return 2
+    suite = find_suite(spec.root)
+    if suite is None:
+        print(f"error: {spec.root} has no eval suite -- create "
+              f"{SUITE_DIR}/{CASES} with a [[case]] for each behavior you "
+              f"want held", file=sys.stderr)
+        return 2
+    try:
+        # Graders resolve HERE, before a single token is spent: a typo in
+        # case nine must not cost eight cases to discover (eval_suite.py).
+        cases = load_cases(suite)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    # A SUITE NEVER ASKS, AND A PACKAGE CANNOT OPEN ITS OWN GATE. Nobody
+    # is sitting in front of an acceptance run, so "ask" would hang it;
+    # and spec.permissions_mode is deliberately ignored, or an author
+    # could ship mode = "yolo" and have their own gate graded with the
+    # safety off. The operator opens it, on their command line, or not.
+    sandbox = autodetect() if args.sandbox else None
+    gate = yolo if args.yolo else allow_read_only
+    gate_note = ("yolo -- every tool runs unasked" if args.yolo else
+                 "read-only tools only; writes and commands are refused "
+                 "(--yolo opens it)")
+    if sandbox is not None:
+        gate_note += f" · bash sandbox: {sandbox.describe}"
+
+    # Reproducibility: a verdict that depends on which directory the
+    # operator happened to be standing in is not a gate. The package's own
+    # root is the default -- a suite over files the package SHIPS answers
+    # the same way on every machine -- and --cwd points it at a wider tree.
+    cwd = Path(args.cwd).resolve() if str(args.cwd) != "." else spec.root
+
+    label = f"{spec.name} {spec.version}" if spec.version else (spec.name or "")
+    console.print(f"[bold]eval[/bold] {escape(label)} · {len(cases)} case(s) · "
+                  f"{provider_name} · {model}\n[dim]cwd: {cwd}\n"
+                  f"gate: {gate_note}[/dim]\n")
+
+    runner = EvalRunner(
+        get_provider(provider_name, settings, cache_control=bool(spec.cache)),
+        model, tools=default_registry(sandbox), permissions=gate,
+        cwd=cwd, spec=spec, provider_name=provider_name,
+    )
+    results = []
+    try:
+        for case in cases:
+            # Printed as each case lands rather than in one table at the
+            # end: a live suite is minutes of silence otherwise, and the
+            # first red is the one you want to see soonest.
+            result = runner.run_case(case)
+            results.append(result)
+            mark = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
+            tools = ", ".join(result.tool_calls_seen) or "no tools"
+            console.print(f"  {mark}  {escape(result.case_id)}  "
+                          f"[dim]{result.duration_seconds:.1f}s · "
+                          f"{result.tokens_used} tok · "
+                          f"{result.iterations_used} it · "
+                          f"{escape(tools)}[/dim]")
+            for failure in result.failures:
+                console.print(f"        {failure}", style="red",
+                              markup=False, highlight=False)
+    except KeyboardInterrupt:
+        console.print("\n[yellow](cancelled -- no verdict)[/yellow]")
+        return 130
+    except ConfigError as exc:
+        # Building the agent, not running it: a package tool that will not
+        # import breaks every case, so say it once and stop.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    passed = sum(1 for r in results if r.passed)
+    verdict = ("[bold green]SUITE GREEN[/bold green]" if passed == len(results)
+               else "[bold red]SUITE RED[/bold red]")
+    spent = sum(r.tokens_used for r in results)
+    console.print(f"\n{verdict} · {passed}/{len(results)} passed · "
+                  f"{spent} tokens")
+    return 0 if passed == len(results) else 1
+
+
 def _browse_login(url: str, console: Console) -> int:
     """--browse-login URL: headed one-time login on the persistent profile.
 
@@ -440,6 +546,11 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --browse-login is its own mode: drop --build/--prompt/"
               "PROMPT/--web", file=sys.stderr)
         return 2
+    if args.eval and (args.build or args.prompt or args.prompt_positional
+                      or args.web):
+        print("error: --eval runs the package's suite and reports a verdict; "
+              "drop --build/--prompt/PROMPT/--web", file=sys.stderr)
+        return 2
     if args.build and (args.prompt or args.prompt_positional):
         print("error: --build takes the spec itself; drop --prompt/PROMPT",
               file=sys.stderr)
@@ -474,6 +585,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.build is not None:
         return _build_mode(args, provider_name, settings, model, console)
+
+    # After the spec is resolved, because the suite belongs to the package
+    # the spec came from -- and before any of the session wiring below,
+    # none of which an acceptance run has a use for.
+    if args.eval:
+        return _eval_mode(args, spec, provider_name, settings, model, console)
 
     sandbox = autodetect() if args.sandbox else None
     if sandbox is not None:

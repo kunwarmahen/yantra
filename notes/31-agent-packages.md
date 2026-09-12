@@ -17,7 +17,7 @@ researcher/
 ├── prompt.md       the system prompt
 ├── tools/          your own Tool subclasses (notes/32)
 ├── skills/         procedures this agent knows (notes/30)
-└── evals/          how you know it still works (a later note)
+└── evals/          how you know it still works ([notes/33](33-evals-as-a-gate.md))
 ```
 
 And the thing to clear up in the first paragraph, because everybody has
@@ -318,6 +318,10 @@ Named, so the format's refusals are as legible as its features:
   own `Tool` subclasses, loaded from the package rather than from this
   tree. Schemas stayed hand-written (notes/04 explains why at length);
   only discovery was new.
+* ~~**`evals/`**~~ — shipped in [notes/33](33-evals-as-a-gate.md): the
+  package carries the evidence that it works, and `--eval` turns it into
+  an exit code. The format is this one's shape again — declarative keys,
+  one narrow hatch to Python, unknown keys refused.
 * **`[budget]`** — a per-run cost ceiling. Deliberately absent rather than
   present-and-ignored: a field that silently does nothing, in the one area
   where someone is trusting it with their money, is worse than no field.

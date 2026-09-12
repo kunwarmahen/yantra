@@ -148,3 +148,13 @@ regression-worthiness → fossil committed → CI blocks recurrence.
 `run_evals.py` exits 1 on any failure — wire into CI as pre-merge /
 pre-model-upgrade / nightly. Not per commit: cost and flakiness are
 real, and probabilistic red doesn't belong on every push.
+
+## The same machinery, pointed at somebody else's agent
+
+Everything above measures THIS harness, from a Python script in this
+repo. [Note 33](33-evals-as-a-gate.md) turns it outward: an agent
+package ships `evals/cases.toml`, `yantra --eval` runs it, and the
+cases are graded against the package's own prompt, tools and admission
+policy (`EvalRunner(spec=…)`) rather than against a bare agent. The
+scoring rules on this page are unchanged — that is the point of them
+living in one place.

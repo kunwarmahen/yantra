@@ -20,7 +20,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1019 tests. The
+The harness underneath is complete and covered by 1082 tests. The
 framework layer on top — agents you define as a folder of files, tools
 loaded from outside this tree, evals as an acceptance gate — is being
 built now, and the API is not stable yet.
@@ -440,7 +440,8 @@ Evals (trajectory-level, real model, costs money — merge/nightly
 cadence, not per-commit; exit code doubles as a CI gate):
 
 ```bash
-uv run --env-file .env python examples/run_evals.py   # 7 golden trajectories
+uv run yantra --agent ./researcher --eval             # a package's own gate
+uv run --env-file .env python examples/run_evals.py   # this harness's own suite
 uv run --env-file .env python examples/run_evals.py --async   # same, concurrent
 ```
 
@@ -581,7 +582,8 @@ researcher/
 ├── agent.toml      identity · model · tools · skills · servers · policy
 ├── prompt.md       the system prompt
 ├── tools/          Tool subclasses this agent brings with it
-└── skills/         procedures this agent knows
+├── skills/         procedures this agent knows
+└── evals/          the cases that say it still works
 ```
 
 ```bash
@@ -686,6 +688,63 @@ error: ./broken/agent.toml: unknown key(s) in [tools]: alow
        (known: allow, deny, dirs, per_turn)
 ```
 
+### The package's own acceptance gate
+
+Running somebody's package means running their prompt, their tool list
+and their Python. "It works, I promise" is not evidence, so a package
+ships the cases that say so, and one command turns them into an exit
+code:
+
+```
+$ uv run yantra --agent examples/agents/researcher --eval --provider ollama
+eval researcher 0.1.0 · 3 case(s) · ollama · qwen3.8-64k:latest
+cwd: .../examples/agents/researcher
+gate: read-only tools only; writes and commands are refused (--yolo opens it)
+
+  PASS  outlines-before-reading  18.6s · 9285 tok · 4 it · glob, outline, read_file
+  PASS  cites-what-it-read  13.6s · 7783 tok · 3 it · list_dir, glob, read_file
+  PASS  cannot-write-even-when-asked  26.8s · 7776 tok · 3 it · glob, read_file
+
+SUITE GREEN · 3/3 passed · 24844 tokens
+```
+
+A case is TOML; `check` is the one hatch to Python, resolved against the
+package's own `evals/graders.py`:
+
+```toml
+[[case]]
+id = "outlines-before-reading"
+user_message = "Which section of SKILL.md covers confidence, and on what line?"
+required_tools = ["outline"]          # what ACTUALLY executed, not what was offered
+forbidden_tools = ["bash"]
+check = "graders:names_a_line_number" # (str) -> bool, optional
+max_tokens = 30_000
+max_iterations = 8
+```
+
+Three rules hold the gate up. The cases are graded against **the package
+itself** — its prompt, skills, package tools and admission policy, built
+the way a real session builds them — so the verdict is about the agent
+you would actually run. A case **may not replace the system prompt**
+(`system` is refused as a key): that would grade some other agent. And a
+suite **never asks and cannot open its own gate** — read-only tools
+auto-approve, everything else is refused until *you* pass `--yolo`, and
+the package's own `permissions.mode` is ignored so an author cannot ship
+their way past it.
+
+Graders resolve while the file is read, never mid-run — a typo that
+costs six cases' worth of tokens to discover is a bug in the gate, not
+in your package:
+
+```
+error: .../evals/cases.toml: case 'cites-what-it-read'.check: graders.py
+       defines no 'cites_a_url' (it defines: cites_a_file, names_a_line_number)
+```
+
+Non-zero exit on any failure, so CI needs nothing else.
+[notes/33](notes/33-evals-as-a-gate.md) has the reasoning, including what
+a trajectory check honestly cannot see.
+
 Embedding it instead of running it:
 
 ```python
@@ -754,18 +813,21 @@ src/yantra/
 │                   off|on + $YANTRA_DISABLED_SKILLS are the operator's switch
 │                   ([notes/30](notes/30-skills.md))
 ├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
-│                   skills/ + tools/, parsed with tomllib, unknown keys
+│                   skills/ + tools/ + evals/, parsed with tomllib, unknown keys
 │                   refused so a typo can never quietly leave a tool armed.
 │                   Reading a manifest NEVER imports anything -- tools/ is
 │                   named here and loaded at build time
 │                   ([notes/31](notes/31-agent-packages.md),
-│                   [notes/32](notes/32-package-tools.md))
+│                   [notes/32](notes/32-package-tools.md),
+│                   [notes/33](notes/33-evals-as-a-gate.md))
 ├── spec.py         AgentSpec: one description of an agent and the build that
 │                   wires it -- admission policy before any tool registers,
 │                   prompt layers before env_context appends, skills before
 │                   the catalog. merge() is the resolution order: flags >
-│                   agent.toml > environment > default
-│                   ([notes/31](notes/31-agent-packages.md))
+│                   agent.toml > environment > default; build() is also what
+│                   an eval suite grades, so the verdict is about the agent
+│                   that actually ships ([notes/31](notes/31-agent-packages.md),
+│                   [notes/33](notes/33-evals-as-a-gate.md))
 ├── mcp.py          MCP client, hand-rolled JSON-RPC over stdio AND
 │                   Streamable HTTP (SSE responses via providers/sse.py):
 │                   handshake, tools/list, tools/call; MCPManager adds/
@@ -776,8 +838,13 @@ src/yantra/
 │                   registration, PKCE + a localhost redirect listener,
 │                   0600 token store with refresh ([notes/09](notes/09-mcp.md))
 ├── evals.py        trajectory evals: completion/correctness/process/cost,
-│                   recording tool proxy, LLM judge; AsyncEvalRunner twin
-│                   runs cases concurrently, shared scoring ([notes/10](notes/10-evals.md))
+│                   recording registry (records late arrivals too), LLM
+│                   judge; AsyncEvalRunner twin runs cases concurrently,
+│                   shared scoring; spec= grades a whole package rather
+│                   than a bare agent ([notes/10](notes/10-evals.md))
+├── eval_suite.py   a package's acceptance gate: evals/cases.toml ->
+│                   EvalCase, check = "graders:fn" resolved by path at LOAD
+│                   time, unknown keys refused ([notes/33](notes/33-evals-as-a-gate.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -830,8 +897,11 @@ src/yantra/
 │   │               so two packages may both ship search.py). Schemas stay
 │   │               hand-written — no @tool decorator, on purpose; only
 │   │               discovery is new. Shadowing a built-in raises, and the
-│   │               admission policy binds a package's own code too
-│   │               ([notes/32](notes/32-package-tools.md))
+│   │               admission policy binds a package's own code too.
+│   │               load_module_file() lends the same discipline to a
+│   │               package's evals/graders.py
+│   │               ([notes/32](notes/32-package-tools.md),
+│   │               [notes/33](notes/33-evals-as-a-gate.md))
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
 │   │               description, transcript-derived query, core pins +
 │   │               list_available_tools discovery hatch ([notes/17](notes/17-tool-selection.md))

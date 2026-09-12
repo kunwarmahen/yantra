@@ -128,6 +128,20 @@ def _load_module(path: Path, parent: str) -> types.ModuleType:
     return module
 
 
+def load_module_file(path: Path) -> types.ModuleType:
+    """One file executed as a private module, addressed by path.
+
+    The same import discipline tools get -- a per-directory private
+    parent, nothing added to ``sys.path``, the file's own directory
+    importable as ``from . import _helpers`` -- offered to anything else
+    a package ships that is Python rather than data. An eval suite's
+    ``graders.py`` is the first caller (eval_suite.py); the loading rules
+    are identical because the trust is identical.
+    """
+    path = Path(path)
+    return _load_module(path, _parent_module(path.parent.resolve()))
+
+
 def _tool_classes(module: types.ModuleType) -> list[type[Tool]]:
     """Concrete Tool subclasses DEFINED in this module.
 
@@ -234,5 +248,8 @@ def package_tool_names(registry: ToolRegistry) -> list[str]:
     A host prints this: loading them ran somebody's Python, and the
     operator should be able to see that it happened.
     """
+    # ``_inner`` unwraps a recording proxy (evals.py): a package tool is
+    # still a package tool when something is watching it execute.
     return sorted(tool.name for tool in registry
-                  if type(tool).__module__.startswith(f"{NAMESPACE}."))
+                  if type(getattr(tool, "_inner", tool)).__module__
+                  .startswith(f"{NAMESPACE}."))

@@ -7,7 +7,7 @@ A package is a DIRECTORY, and that is the whole idea:
     |-- prompt.md       the system prompt
     |-- tools/          Tool subclasses this agent brings with it (notes/32)
     |-- skills/         procedures this agent knows (notes/30)
-    `-- evals/          how you know it still works
+    `-- evals/          the acceptance gate: cases.toml (eval_suite.py)
 
 The confusion to clear up first, because everybody has it once: a SKILL
 is a procedure an agent may load; a PACKAGE is the whole agent. Packages

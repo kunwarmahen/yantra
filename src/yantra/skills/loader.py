@@ -411,10 +411,13 @@ def prepend_skill_path(dirs) -> None:
     parameter ``discover`` does not have yet.
     """
     existing = os.environ.get(ENV_PATH, "")
-    entries = [str(Path(d).expanduser()) for d in dirs]
-    if existing:
-        entries.append(existing)
-    os.environ[ENV_PATH] = os.pathsep.join(entries)
+    already = existing.split(os.pathsep) if existing else []
+    # Prepending the same directory twice is how a process that builds
+    # SEVERAL agents from one package (an eval suite: one agent per case)
+    # grows a path full of duplicates, each shadowing the last.
+    entries = [e for d in dirs
+               if (e := str(Path(d).expanduser())) not in already]
+    os.environ[ENV_PATH] = os.pathsep.join([*entries, *already])
 
 
 def discover(cwd: Path | None = None,

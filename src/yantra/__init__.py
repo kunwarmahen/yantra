@@ -4,6 +4,8 @@ Layers, outside in:
 
 * ``yantra.cli``     -- terminal UI (REPL, rendering, permission prompts)
 * ``yantra.package`` -- an agent as a DIRECTORY: agent.toml, prompt, skills
+* ``yantra.eval_suite`` -- that same directory's acceptance gate: cases in
+                        TOML, graded against the package they ship with
 * ``yantra.spec``    -- AgentSpec: one description of an agent, and the
                         build that wires it in the order that works
 * ``yantra.agent``   -- THE LOOP: model -> tool calls -> results -> repeat
@@ -21,6 +23,16 @@ See README.md for the map and notes/ for per-topic write-ups.
 from yantra.agent import Agent, AgentEvent, ToolExecuted, TurnEnd
 from yantra.async_agent import AsyncAgent
 from yantra.config import default_model, load_settings
+from yantra.eval_suite import find_suite, load_cases
+from yantra.evals import (
+    AsyncEvalRunner,
+    EvalCase,
+    EvalResult,
+    EvalRunner,
+    case_from_trace,
+    judge,
+    summarize,
+)
 from yantra.images import load_image_block
 from yantra.mcp import MCPServerConfig, MCPSession, connect_mcp, register_mcp
 from yantra.package import MANIFEST, find_manifest, load_package
@@ -77,6 +89,15 @@ __all__ = [
     "deny_all",
     "discover_tools",
     "EndEvent",
+    "EvalCase",
+    "EvalResult",
+    "EvalRunner",
+    "AsyncEvalRunner",
+    "case_from_trace",
+    "find_suite",
+    "judge",
+    "load_cases",
+    "summarize",
     "get_provider",
     "ImageBlock",
     "find_manifest",

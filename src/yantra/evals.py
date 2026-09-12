@@ -29,6 +29,13 @@ the parent's doing).
 Every real failure in production should leave a fossil in the suite:
 ``case_from_trace`` turns an observed failure into a regression case
 whose budget is observed-cost x 1.5.
+
+Pass ``spec=`` and the cases run against a whole agent PACKAGE instead
+of a bare agent -- its prompt, its skills, its own tools, its admission
+policy -- which is what lets a package ship the evidence that it works
+(eval_suite.py). Without it the runners measure this harness; with it
+they measure somebody's agent, and the difference is the whole of the
+acceptance gate.
 """
 
 from __future__ import annotations
@@ -36,12 +43,14 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any, ClassVar
 
 from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
 from yantra.providers.base import Provider, collect
+from yantra.spec import AgentSpec
 from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
 from yantra.types import Message, TextBlock
@@ -105,17 +114,88 @@ class _RecordingTool(Tool):
         return self._inner.run(args, ctx)
 
 
-def recording_registry(base: ToolRegistry, seen: list[str]) -> ToolRegistry:
-    """Wrap every tool in a recording proxy. IDEMPOTENT: a registry that
-    already holds proxies (re-wrapping after case.setup registered extras)
-    unwraps to the real tool first -- an execution is recorded exactly
-    once no matter how many layers it sits under."""
-    reg = ToolRegistry()
-    for name in base.names():
-        tool = base.get(name)
+class RecordingRegistry(ToolRegistry):
+    """A registry that records every tool it holds -- including late arrivals.
+
+    Wrapping a registry once was enough while a case's agent was built by
+    hand. It stopped being enough the moment cases run against an
+    ``AgentSpec``: a package's own tools, ``load_skill`` and MCP tools all
+    register AFTER the registry is handed over, and a proxy applied
+    up-front would never see them. So the recording lives in ``register``
+    rather than in a one-time sweep -- the same move ``admit_only`` made,
+    for the same reason.
+
+    IDEMPOTENT: a tool that is already a proxy is unwrapped first, so an
+    execution is recorded exactly once no matter how many layers it sits
+    under.
+    """
+
+    def __init__(self, seen: list[str]) -> None:
+        super().__init__()
+        self._seen = seen
+
+    def register(self, tool: Tool) -> None:
         inner = getattr(tool, "_inner", None)
-        reg.register(_RecordingTool(inner if inner is not None else tool, seen))
+        super().register(_RecordingTool(inner if inner is not None else tool,
+                                        self._seen))
+
+
+def recording_registry(base: ToolRegistry, seen: list[str]) -> RecordingRegistry:
+    """A recording copy of ``base``. Iterates the registry rather than
+    asking for each name, so a tool the operator disabled copies across as
+    disabled instead of raising on the way out."""
+    reg = RecordingRegistry(seen)
+    for tool in base:
+        reg.register(tool)
+    for name in base.disabled_names():
+        reg.disable(name)
     return reg
+
+
+def _agent_for(case: EvalCase, seen: list[str], *, agent_cls,
+               spec: AgentSpec | None, provider: Provider, model: str,
+               provider_name: str | None, base_tools: ToolRegistry,
+               permissions: Callable[[Any], bool], max_iterations: int,
+               context_window: int | None, cwd: Any, extra: dict | None = None):
+    """One fresh agent for one case, built from the spec when there is one.
+
+    THE SPEC IS THE POINT when a package is under test. A hand-built
+    ``Agent(provider, model=..., tools=...)`` has none of the package's
+    prompt, skills, own tools or admission policy, so a suite that graded
+    one would be reporting a verdict on a different agent than the one it
+    named. ``AgentSpec.build`` owns that assembly (spec.py) and is the only
+    thing allowed to perform it.
+
+    The runner's own ceilings are FALLBACKS behind the package's: an agent
+    whose manifest says twenty iterations is under test at twenty, and the
+    runner's default only fills a blank.
+    """
+    registry = recording_registry(base_tools, seen)
+    extra = extra or {}
+    if spec is None:
+        kwargs: dict[str, Any] = {}
+        if context_window is not None:
+            kwargs["context_window"] = context_window
+        if cwd is not None:
+            kwargs["cwd"] = cwd
+        return agent_cls(
+            provider, model=model, system=case.system, tools=registry,
+            max_iterations=max_iterations, permissions=permissions,
+            **kwargs, **extra,
+        )
+    if spec.max_iterations is None:
+        spec = replace(spec, max_iterations=max_iterations)
+    if spec.context_window is None and context_window is not None:
+        spec = replace(spec, context_window=context_window)
+    if case.system:
+        # Library callers may still override; the package FORMAT refuses
+        # the key outright (eval_suite.py) because a suite that swaps the
+        # prompt is grading something other than the package it shipped in.
+        spec = replace(spec, system=case.system)
+    build = spec.build if agent_cls is Agent else spec.build_async
+    return build(permissions=permissions, cwd=Path(cwd) if cwd else None,
+                 registry=registry, provider=provider,
+                 provider_name=provider_name, model=model, **extra)
 
 
 class EvalRunner:
@@ -129,7 +209,8 @@ class EvalRunner:
     def __init__(self, provider: Provider, model: str, *, tools: ToolRegistry,
                  permissions: Callable[[Any], bool], max_iterations: int = 25,
                  context_window: int | None = None,
-                 cwd: Any = None) -> None:
+                 cwd: Any = None, spec: AgentSpec | None = None,
+                 provider_name: str | None = None) -> None:
         self.provider = provider
         self.model = model
         self.base_tools = tools
@@ -137,25 +218,25 @@ class EvalRunner:
         self.max_iterations = max_iterations
         self.context_window = context_window
         self.cwd = cwd  # sandbox root for the cases' tool calls
+        #: The agent under test, when the cases belong to a package. Without
+        #: it the runner builds a bare agent -- fine for measuring the
+        #: harness, wrong for measuring somebody's agent (see _agent_for).
+        self.spec = spec
+        self.provider_name = provider_name
         self.seen: list[str] = []  # shared with the proxies; cleared per case
+
+    def _agent(self, case: EvalCase, seen: list[str], **extra):
+        return _agent_for(
+            case, seen, agent_cls=Agent, spec=self.spec,
+            provider=self.provider, model=self.model,
+            provider_name=self.provider_name, base_tools=self.base_tools,
+            permissions=self.permissions, max_iterations=self.max_iterations,
+            context_window=self.context_window, cwd=self.cwd, extra=extra,
+        )
 
     def run_case(self, case: EvalCase) -> EvalResult:
         self.seen.clear()
-        # Agent.context_window has a concrete default (200k) that its
-        # compaction math requires -- only override when actually given
-        kwargs: dict[str, Any] = {}
-        if self.context_window is not None:
-            kwargs["context_window"] = self.context_window
-        if self.cwd is not None:
-            kwargs["cwd"] = self.cwd
-        agent = Agent(
-            self.provider, model=self.model,
-            system=case.system,
-            tools=recording_registry(self.base_tools, self.seen),
-            max_iterations=self.max_iterations,
-            permissions=self.permissions,
-            **kwargs,
-        )
+        agent = self._agent(case, self.seen)
         if case.setup is not None:
             # per-case wiring seam: the runner builds a fresh Agent, the
             # case decides what EXTRA machinery it gets. Re-wrap after so
@@ -244,7 +325,8 @@ class AsyncEvalRunner:
     def __init__(self, provider: Provider, model: str, *, tools: ToolRegistry,
                  permissions: Callable[[Any], bool], max_iterations: int = 25,
                  context_window: int | None = None, cwd: Any = None,
-                 concurrency: int = 4) -> None:
+                 concurrency: int = 4, spec: AgentSpec | None = None,
+                 provider_name: str | None = None) -> None:
         self.provider = provider
         self.model = model
         self.base_tools = tools
@@ -253,21 +335,17 @@ class AsyncEvalRunner:
         self.context_window = context_window
         self.cwd = cwd
         self.concurrency = concurrency
+        self.spec = spec
+        self.provider_name = provider_name
 
     async def run_case(self, case: EvalCase) -> EvalResult:
         seen: list[str] = []  # per case: concurrent cases must not share
-        kwargs: dict[str, Any] = {}
-        if self.context_window is not None:
-            kwargs["context_window"] = self.context_window
-        if self.cwd is not None:
-            kwargs["cwd"] = self.cwd
-        agent = AsyncAgent(
-            self.provider, model=self.model,
-            system=case.system,
-            tools=recording_registry(self.base_tools, seen),
-            max_iterations=self.max_iterations,
-            permissions=self.permissions,
-            **kwargs,
+        agent = _agent_for(
+            case, seen, agent_cls=AsyncAgent, spec=self.spec,
+            provider=self.provider, model=self.model,
+            provider_name=self.provider_name, base_tools=self.base_tools,
+            permissions=self.permissions, max_iterations=self.max_iterations,
+            context_window=self.context_window, cwd=self.cwd,
         )
         if case.setup is not None:
             case.setup(agent)

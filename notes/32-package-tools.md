@@ -355,3 +355,8 @@ honesty goes.
 * **Hot reload.** A tool file edited mid-session is not re-read. The module
   cache is what makes "same package, same classes" true, and giving that up
   for an editing convenience is a bad trade.
+
+The by-path loader here has one other caller now:
+[notes/33](33-evals-as-a-gate.md) resolves a package's `evals/graders.py`
+through it, because a grader is the same kind of trust as a tool — the
+author's Python, running as you, because you asked for this package.

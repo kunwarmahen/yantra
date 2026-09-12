@@ -3,6 +3,14 @@
 #   yantra --agent examples/agents/researcher "what does notes/30 say about allowed-tools?"
 #   yantra --agent examples/agents/researcher --provider ollama     # your own hardware
 #
+# And to check it still works before you trust it with anything:
+#
+#   yantra --agent examples/agents/researcher --eval
+#
+# evals/cases.toml is this package's acceptance gate -- three behaviors it
+# promises, graded against this file's own prompt and tool list, exit
+# non-zero if any of them has stopped being true (notes/33).
+#
 # Every key below is optional. What is NOT here is as deliberate as what
 # is: no provider and no model, so this package runs against whatever you
 # already have -- a cloud key or a local server -- with no edit from you.
