@@ -15,6 +15,7 @@ So an agent becomes a directory:
 researcher/
 ├── agent.toml      identity · model · tools · skills · servers · policy
 ├── prompt.md       the system prompt
+├── tools/          your own Tool subclasses (notes/32)
 ├── skills/         procedures this agent knows (notes/30)
 └── evals/          how you know it still works (a later note)
 ```
@@ -65,6 +66,7 @@ cache          = true
 allow    = ["read_file", "glob", "grep", "web_fetch", "load_skill"]
 deny     = ["browser_*"]
 per_turn = 6                    # tool selection width (notes/17)
+dirs     = ["tools"]            # your own Tool subclasses (notes/32)
 
 [skills]
 dirs     = ["skills"]           # optional: skills/ is found anyway
@@ -117,7 +119,7 @@ them.
 ```
 $ yantra --agent ./broken
 error: ./broken/agent.toml: unknown key(s) in [tools]: alow
-       (known: allow, deny, per_turn)
+       (known: allow, deny, dirs, per_turn)
 ```
 
 A typo'd key that is quietly ignored is how a package comes to
@@ -305,16 +307,17 @@ the only thing this invocation got wrong.
 ```
 $ yantra --agent ./broken
 error: ./broken/agent.toml: unknown key(s) in [tools]: alow
-       (known: allow, deny, per_turn)
+       (known: allow, deny, dirs, per_turn)
 ```
 
 ## What is not here yet
 
 Named, so the format's refusals are as legible as its features:
 
-* **`tools.dirs`** — your own `Tool` subclasses loaded from the package
-  rather than from this tree. The next note. Schemas stay hand-written
-  (notes/04 explains why at length); only discovery is new.
+* ~~**`tools.dirs`**~~ — shipped in [notes/32](32-package-tools.md): your
+  own `Tool` subclasses, loaded from the package rather than from this
+  tree. Schemas stayed hand-written (notes/04 explains why at length);
+  only discovery was new.
 * **`[budget]`** — a per-run cost ceiling. Deliberately absent rather than
   present-and-ignored: a field that silently does nothing, in the one area
   where someone is trusting it with their money, is worse than no field.

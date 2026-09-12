@@ -5,6 +5,7 @@ A package is a DIRECTORY, and that is the whole idea:
     researcher/
     |-- agent.toml      identity, model, tools, skills, servers, policy
     |-- prompt.md       the system prompt
+    |-- tools/          Tool subclasses this agent brings with it (notes/32)
     |-- skills/         procedures this agent knows (notes/30)
     `-- evals/          how you know it still works
 
@@ -33,9 +34,15 @@ worst version of that is a misspelled ``deny`` leaving ``bash`` armed in
 an agent whose author believes they switched it off. Every table and key
 is checked against the known set, and the error names the file.
 
-CONVENTION WHERE IT IS OBVIOUS. ``prompt.md`` and ``skills/`` are picked
-up when they exist without being declared, so the common package needs
-three lines of TOML and the keys exist for when you want somewhere else.
+CONVENTION WHERE IT IS OBVIOUS. ``prompt.md``, ``skills/`` and
+``tools/`` are picked up when they exist without being declared, so the
+common package needs three lines of TOML and the keys exist for when you
+want somewhere else.
+
+READING A MANIFEST NEVER RUNS CODE. ``tools/`` is named here and loaded
+in ``yantra/tools/discover.py``, at build time. Anything that wants to
+inspect a package -- a listing, a registry, a UI -- can parse it without
+executing the author's Python.
 """
 
 from __future__ import annotations
@@ -55,6 +62,7 @@ MANIFEST = "agent.toml"
 #: Conventional locations, used when the manifest does not say otherwise.
 DEFAULT_PROMPT = "prompt.md"
 DEFAULT_SKILLS = "skills"
+DEFAULT_TOOLS = "tools"
 
 #: Every table and the keys it may hold. The check is exhaustive on
 #: purpose: see the module docstring on why silence is the enemy here.
@@ -62,7 +70,7 @@ SCHEMA: dict[str, frozenset[str]] = {
     "agent": frozenset({"name", "description", "version", "prompt"}),
     "model": frozenset({"provider", "model", "max_tokens", "max_iterations",
                         "context_window", "cache"}),
-    "tools": frozenset({"allow", "deny", "per_turn"}),
+    "tools": frozenset({"allow", "deny", "per_turn", "dirs"}),
     "skills": frozenset({"dirs", "disabled", "enabled"}),
     "mcp": frozenset({"name", "command", "args", "env", "url", "headers"}),
     "permissions": frozenset({"mode"}),
@@ -236,6 +244,22 @@ def load_package(where: Path) -> AgentSpec:
         _fail(manifest, f"agent.prompt points at {prompt_path}, which is "
                         f"not a file")
 
+    # tools/ is picked up by convention like skills/, and for the same
+    # reason: the common package should not have to declare where its own
+    # things live. NOTHING IS IMPORTED HERE. Reading a manifest is a pure
+    # read -- the code in tools/ runs when an agent is actually built from
+    # this spec, which is the moment a human asked for it (tools/discover.py).
+    declared_tools = _str_list(tools, "dirs", manifest, "tools")
+    if declared_tools is None:
+        conventional = root / DEFAULT_TOOLS
+        tool_dirs = (conventional,) if conventional.is_dir() else ()
+    else:
+        tool_dirs = tuple((root / d).resolve() for d in declared_tools)
+        for directory in tool_dirs:
+            if not directory.is_dir():
+                _fail(manifest, f"tools.dirs entry {directory} is not a "
+                                f"directory")
+
     declared_dirs = _str_list(skills, "dirs", manifest, "skills")
     if declared_dirs is None:
         conventional = root / DEFAULT_SKILLS
@@ -264,6 +288,7 @@ def load_package(where: Path) -> AgentSpec:
         tool_allow=_str_list(tools, "allow", manifest, "tools"),
         tool_deny=_str_list(tools, "deny", manifest, "tools") or (),
         tools_per_turn=_int(tools, "per_turn", manifest, "tools"),
+        tool_dirs=tool_dirs,
         skills=skills_on,
         skill_dirs=skill_dirs,
         skills_disabled=_str_list(skills, "disabled", manifest, "skills") or (),

@@ -24,6 +24,7 @@ from yantra.tools.background import (
     JobManager,
 )
 from yantra.tools.base import Tool, ToolContext, ToolOutput, ToolRegistry
+from yantra.tools.discover import discover_tools, register_tool_dirs
 from yantra.tools.browser import (
     BrowserClick,
     BrowserClose,
@@ -69,6 +70,8 @@ __all__ = [
     "WriteFile",
     "WriteNote",
     "default_registry",
+    "discover_tools",
+    "register_tool_dirs",
 ]
 
 

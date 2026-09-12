@@ -28,12 +28,24 @@ max_iterations = 20
 # prompt with no way to open it (the loader refuses that package outright).
 # run_skill is its sibling, for skills that run in a sub-agent rather than
 # inline -- leave it out and a delegated skill has nowhere to run.
+#
+# "outline" is this package's OWN tool (tools/outline.py). A package tool
+# goes through the same admission policy as a built-in, so it has to be
+# named here like everything else -- leave it out and startup prints
+# "package excludes: outline" rather than quietly shipping it.
 allow = [
     "read_file", "list_dir", "glob", "grep",
     "web_fetch",
+    "outline",
     "load_skill", "run_skill",
     "todo_read", "todo_write",
 ]
+
+# tools/ is picked up because it exists; the key is for other layouts:
+#   dirs = ["tools", "../shared-tools"]
+# Loading these RUNS THEIR PYTHON as you, before any permission gate --
+# read a package's tools/ before you run it, the same way you would read
+# a dependency you are about to install (notes/32).
 
 [permissions]
 # web_fetch is network egress, so it asks before reaching out. Nothing

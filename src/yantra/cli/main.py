@@ -41,6 +41,7 @@ from yantra.session import SessionStore, apply_payload
 from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools import default_registry
 from yantra.tools.ask_user import AskUser, TerminalChannel
+from yantra.tools.discover import package_tool_names
 from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
     DEFAULT_TOOLS_PER_TURN,
@@ -532,6 +533,11 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError:
             where = spec.root
         console.print(f"[dim]agent: {label} -- {where}[/dim]")
+    # Tools the package brought with it are named, never silent either --
+    # loading them executed somebody else's Python on this machine, and the
+    # operator is entitled to see that it happened and what it added.
+    if brought := package_tool_names(agent.registry):
+        console.print(f"[dim]package tools: {', '.join(brought)}[/dim]")
     # A tool the package's allow/deny turned away is reported, never silent:
     # "why is there no bash" must have an answer on screen.
     if refused := agent.registry.refused_names():

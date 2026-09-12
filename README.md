@@ -580,6 +580,7 @@ handed to someone:
 researcher/
 ├── agent.toml      identity · model · tools · skills · servers · policy
 ├── prompt.md       the system prompt
+├── tools/          Tool subclasses this agent brings with it
 └── skills/         procedures this agent knows
 ```
 
@@ -591,8 +592,8 @@ cd researcher && uv run yantra                         # ./agent.toml is found
 
 A worked example ships in
 [examples/agents/researcher](examples/agents/researcher) — a read-only
-research agent with its own skill. The full format and the reasoning
-behind it are [notes/31](notes/31-agent-packages.md).
+research agent with its own skill and its own tool. The full format and
+the reasoning behind it are [notes/31](notes/31-agent-packages.md).
 
 The smallest package that works is two lines:
 
@@ -625,6 +626,7 @@ max_iterations = 20             # provider/model left open on purpose
 [tools]
 allow = ["read_file", "glob", "grep", "web_fetch", "load_skill"]
 deny  = ["browser_*"]           # fnmatch, like $YANTRA_DISABLED_TOOLS
+dirs  = ["tools"]               # your own tools; ./tools is found anyway
 
 [permissions]
 mode = "ask"                    # ask | yolo
@@ -639,13 +641,49 @@ server's tools — so an agent that says it does not get `bash` never gets
 bash. A non-empty `allow` is a complete whitelist, MCP tools included
 (say `mcp__*` if you want them).
 
+### Your own tools
+
+A package is not limited to the sixteen built-ins. Drop a `Tool` subclass
+into `tools/` and it loads with the agent:
+
+```python
+# researcher/tools/outline.py
+from yantra.tools.base import Tool, require_str
+from yantra.tools.fs import resolve_in_sandbox        # same fence read_file uses
+
+class Outline(Tool):
+    name = "outline"
+    description = "List the Markdown headings of a file with line numbers..."
+    parameters = {"type": "object", ...}              # hand-written, on purpose
+    read_only = True                                  # auto-approves; your word
+
+    def summary(self, args, ctx): return f"outline: {args.get('path')}"
+    def run(self, args, ctx): ...
+```
+
+```
+$ uv run yantra --agent ./researcher "outline notes/30-skills.md at depth 1"
+agent: researcher 0.1.0 -- ./researcher
+package tools: outline
+```
+
+Three things worth knowing before you run somebody else's package:
+**loading `tools/` runs their Python as you**, before any permission gate
+— so package paths come from your command line, never from a message or a
+model; `read_only = True` is the author's word and nothing checks it; and
+a package tool that shadows a built-in raises instead of quietly becoming
+`bash`. There is deliberately **no `@tool` decorator** — the hand-written
+schema is what makes the model call your tool correctly, and generating
+one from type hints throws that away.
+[notes/32](notes/32-package-tools.md) argues all of it.
+
 **Unknown keys are errors.** A misspelled `deny` that quietly left `bash`
 armed would be the worst bug this format could have:
 
 ```
 $ uv run yantra --agent ./broken
 error: ./broken/agent.toml: unknown key(s) in [tools]: alow
-       (known: allow, deny, per_turn)
+       (known: allow, deny, dirs, per_turn)
 ```
 
 Embedding it instead of running it:
@@ -716,9 +754,12 @@ src/yantra/
 │                   off|on + $YANTRA_DISABLED_SKILLS are the operator's switch
 │                   ([notes/30](notes/30-skills.md))
 ├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
-│                   skills/, parsed with tomllib, unknown keys refused so a
-│                   typo can never quietly leave a tool armed
-│                   ([notes/31](notes/31-agent-packages.md))
+│                   skills/ + tools/, parsed with tomllib, unknown keys
+│                   refused so a typo can never quietly leave a tool armed.
+│                   Reading a manifest NEVER imports anything -- tools/ is
+│                   named here and loaded at build time
+│                   ([notes/31](notes/31-agent-packages.md),
+│                   [notes/32](notes/32-package-tools.md))
 ├── spec.py         AgentSpec: one description of an agent and the build that
 │                   wires it -- admission policy before any tool registers,
 │                   prompt layers before env_context appends, skills before
@@ -783,6 +824,14 @@ src/yantra/
 │   │               $YANTRA_BROWSER_PROFILE keeps logins between sessions
 │   │               (--browse-login = headed one-time setup) — cookies stay on
 │   │               disk, never in model context ([notes/28](notes/28-browser-tools.md))
+│   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
+│   │               subclasses, loaded from tools/*.py by path under a
+│   │               private per-directory module name (sys.path untouched,
+│   │               so two packages may both ship search.py). Schemas stay
+│   │               hand-written — no @tool decorator, on purpose; only
+│   │               discovery is new. Shadowing a built-in raises, and the
+│   │               admission policy binds a package's own code too
+│   │               ([notes/32](notes/32-package-tools.md))
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
 │   │               description, transcript-derived query, core pins +
 │   │               list_available_tools discovery hatch ([notes/17](notes/17-tool-selection.md))

@@ -248,3 +248,20 @@ next request — including one already in flight. The failure mode is
 deliberately data, not an exception: a model calling a just-disabled
 tool gets the refusal as a tool result and picks another route, exactly
 like a denied permission.
+
+## A tool does not have to live in this tree
+
+Everything above describes the sixteen built-ins, but nothing in it is
+specific to them. An agent package ships its own `Tool` subclasses in a
+`tools/` folder and they register alongside these
+([32-package-tools.md](32-package-tools.md)) — same base class, same
+hand-written schema, same `read_only` declaration driving the same gate.
+
+Which is where this note's central claim got its real test. Every
+framework in this space offers a `@tool` decorator that reads a function
+signature and generates the JSON Schema, and the obvious moment to add
+one is the moment strangers start writing tools. Yantra does not, for
+the reason argued at the top: a signature cannot say *search what
+archive*, and a schema that does not say it produces a model that
+guesses. The sugar would have cost one minute of typing per tool and
+bought a worse agent — so discovery is the only thing that is new.

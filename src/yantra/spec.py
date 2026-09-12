@@ -70,6 +70,7 @@ from yantra.skills import enable_skills
 from yantra.skills.loader import prepend_skill_path
 from yantra.tools import default_registry
 from yantra.tools.base import ToolRegistry
+from yantra.tools.discover import register_tool_dirs
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +107,10 @@ class AgentSpec:
     tool_allow: tuple[str, ...] | None = None
     tool_deny: tuple[str, ...] = ()
     tools_per_turn: int | None = None
+    #: Directories of the package's OWN Tool subclasses. Loading one runs
+    #: its Python -- see tools/discover.py on where a package path may
+    #: legitimately come from.
+    tool_dirs: tuple[Path, ...] = ()
 
     # ---- skills ------------------------------------------------------------
     skills: bool | None = None
@@ -257,6 +262,14 @@ class AgentSpec:
         # after this function returns.
         tools = registry if registry is not None else default_registry(sandbox)
         tools.admit_only(self.tool_allow, self.tool_deny)
+
+        # The package's own tools, registered under that same policy and
+        # before the agent exists -- a tool that arrives after the catalog
+        # is built is a tool the model is never told about. This is the
+        # step that executes somebody else's code; load_package deliberately
+        # did not, so it happens here, where a human asked for this agent.
+        if self.tool_dirs:
+            register_tool_dirs(tools, self.tool_dirs)
 
         optional = {
             "max_tokens": self.max_tokens,

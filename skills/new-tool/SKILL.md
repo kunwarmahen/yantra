@@ -13,6 +13,13 @@ a hand-written JSON Schema, a `summary()` the permission prompt shows a
 human, and a `run()` that does the thing. Get all three right and the
 loop handles the rest.
 
+**First, is it a BUILT-IN?** These steps are for a tool that ships with
+the harness. A tool that belongs to one agent goes in that agent's
+package instead -- `<package>/tools/<name>.py`, same `Tool` subclass,
+same hand-written schema, but no registration and no selector step: it
+is discovered by being there. See `notes/32-package-tools.md` and
+`examples/agents/researcher/tools/outline.py`.
+
 ## Steps
 
 1. **Read the neighbours first.** `src/yantra/tools/glob.py` is the

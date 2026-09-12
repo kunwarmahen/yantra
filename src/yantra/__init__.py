@@ -38,7 +38,7 @@ from yantra.providers.base import Provider, ProviderSettings, collect
 from yantra.session import SessionStore, apply_payload
 from yantra.skills import Skill, SkillRegistry, enable_skills
 from yantra.spec import AgentSpec
-from yantra.tools import default_registry
+from yantra.tools import default_registry, discover_tools
 from yantra.tools.base import Tool, ToolContext, ToolOutput, ToolRegistry
 from yantra.types import (
     Block,
@@ -75,6 +75,7 @@ __all__ = [
     "default_model",
     "default_registry",
     "deny_all",
+    "discover_tools",
     "EndEvent",
     "get_provider",
     "ImageBlock",
