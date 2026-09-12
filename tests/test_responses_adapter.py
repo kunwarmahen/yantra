@@ -13,19 +13,19 @@ from pathlib import Path
 import httpx
 import pytest
 
-from akshara.errors import (
+from yantra.errors import (
     AuthError,
     ContextOverflowError,
     ProviderError,
     RateLimitError,
 )
-from akshara.providers.base import ProviderSettings, collect
-from akshara.providers.responses import (
+from yantra.providers.base import ProviderSettings, collect
+from yantra.providers.responses import (
     REASONING_INDEX,
     ResponsesProvider,
     ResponsesStreamRouter,
 )
-from akshara.types import (
+from yantra.types import (
     EndEvent,
     ImageBlock,
     Message,
@@ -188,7 +188,7 @@ class TestRequestShape:
 
     def test_thinking_blocks_dropped_on_encode(self, responses_settings):
         """Display-only reasoning: nothing to send it back through."""
-        from akshara.types import ThinkingBlock
+        from yantra.types import ThinkingBlock
         provider, sent = _provider(
             responses_settings,
             lambda r: httpx.Response(200, json=_fixture("responses_text.json")))
@@ -462,7 +462,7 @@ class TestErrors:
                               system=None, tools=[], model="m", max_tokens=100)
 
     def test_rate_limit_carries_retry_after(self, responses_settings):
-        from akshara.providers.retry import RetryPolicy
+        from yantra.providers.retry import RetryPolicy
         # max_attempts=1: raise immediately -- we are testing the ERROR's
         # payload here, not the retry loop (which would honor retry-after
         # and sleep for real).
@@ -497,7 +497,7 @@ class TestErrors:
                 return httpx.Response(500, json={"error": {"message": "boom"}})
             return httpx.Response(200, json=_fixture("responses_text.json"))
 
-        from akshara.providers.retry import RetryPolicy
+        from yantra.providers.retry import RetryPolicy
         provider, _ = _provider(
             responses_settings, flaky,
             retry=RetryPolicy(max_attempts=3, base_delay=0.0))

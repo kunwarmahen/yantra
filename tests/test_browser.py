@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-import akshara.cli.main as cli_main
-from akshara.errors import ToolError
-from akshara.tools import BrowserClick, BrowserClose, BrowserFill, \
+import yantra.cli.main as cli_main
+from yantra.errors import ToolError
+from yantra.tools import BrowserClick, BrowserClose, BrowserFill, \
     BrowserOpen, default_registry
-from akshara.tools.base import ToolContext
-from akshara.tools.browser import MAX_ELEMENTS, BrowserSession, \
+from yantra.tools.base import ToolContext
+from yantra.tools.browser import MAX_ELEMENTS, BrowserSession, \
     run_login_session
 
 URL = "https://fake.local/"
@@ -82,7 +82,7 @@ class FakePage:
         self.gotos.append(url)
 
     def evaluate(self, script):
-        assert "data-akshara-ref" in script  # snapshots must tag targets
+        assert "data-yantra-ref" in script  # snapshots must tag targets
         self.threads.add(threading.get_ident())
         return {"text": self.text, "elements": self.elements}
 
@@ -168,7 +168,7 @@ class TestRefs:
         session = make_session(page)
         session.open(URL)
         out = session.click("e1")
-        assert page.clicks == ['[data-akshara-ref="e1"]']
+        assert page.clicks == ['[data-yantra-ref="e1"]']
         assert "results for query" in out  # refreshed snapshot came back
         assert '[e1] link Next' in out
 
@@ -177,7 +177,7 @@ class TestRefs:
         session = make_session(page)
         session.open(URL)
         out = session.fill("e2", "wire adapters")
-        assert page.fills == [('[data-akshara-ref="e2"]', "wire adapters")]
+        assert page.fills == [('[data-yantra-ref="e2"]', "wire adapters")]
         assert ELEMENTS_LINE in out  # refreshed page returned
 
     def test_fill_on_a_dropdown_selects_the_option_by_label(self):
@@ -186,7 +186,7 @@ class TestRefs:
         session = make_session(page)
         session.open(URL)
         session.fill("e5", "books")
-        assert page.selects == [('[data-akshara-ref="e5"]', "books")]
+        assert page.selects == [('[data-yantra-ref="e5"]', "books")]
 
     def test_fill_on_a_button_is_refused_with_guidance(self):
         page = FakePage(elements=[{"ref": "e4", "kind": "button",
@@ -227,7 +227,7 @@ class TestLifecycle:
         session.close()
         monkeypatch.setitem(sys.modules, "playwright", None)
         monkeypatch.setitem(sys.modules, "playwright.sync_api", None)
-        with pytest.raises(ToolError, match=r"aksharaharness\[browse\]"):
+        with pytest.raises(ToolError, match=r"yantra\[browse\]"):
             session.open(URL)  # launch door re-arms after close
 
     def test_all_traffic_on_one_worker_thread(self):
@@ -249,7 +249,7 @@ class TestLaunchPaths:
         monkeypatch.setitem(sys.modules, "playwright", None)
         monkeypatch.setitem(sys.modules, "playwright.sync_api", None)
         with pytest.raises(ToolError,
-                           match=r"aksharaharness\[browse\]"):
+                           match=r"yantra\[browse\]"):
             BrowserSession().open(URL)
 
     def test_chromium_binary_missing_names_playwright_install(self,
@@ -331,7 +331,7 @@ def install_fake_playwright(monkeypatch, chromium: FakeChromium) -> list:
 
 
 class TestPersistentProfile:
-    """$AKSHARA_BROWSER_PROFILE set => launch_persistent_context on that
+    """$YANTRA_BROWSER_PROFILE set => launch_persistent_context on that
     dir; unset => today's plain launch. Same four verbs either way."""
 
     def test_ephemeral_session_launches_a_plain_browser(self, monkeypatch):
@@ -375,23 +375,23 @@ class TestPersistentProfile:
         assert context.closed
 
     def test_default_sentinel_reads_the_env_once(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AKSHARA_BROWSER_PROFILE", str(tmp_path))
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", str(tmp_path))
         assert BrowserSession()._profile == tmp_path
-        monkeypatch.delenv("AKSHARA_BROWSER_PROFILE")
+        monkeypatch.delenv("YANTRA_BROWSER_PROFILE")
         assert BrowserSession()._profile is None  # blank/unset => ephemeral
 
     def test_browser_tools_wire_the_env_knob_through_one_session(
             self, monkeypatch):
-        monkeypatch.setattr("akshara.tools.browser.find_spec",
+        monkeypatch.setattr("yantra.tools.browser.find_spec",
                             lambda name: True)
-        monkeypatch.setenv("AKSHARA_BROWSER_PROFILE", "~/akshara-prof")
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", "~/yantra-prof")
         registry = default_registry()
         names = ("browser_open", "browser_click", "browser_fill",
                  "browser_close")
         sessions = {registry.get(n).browser for n in names}
         assert len(sessions) == 1
         (session,) = sessions
-        assert session._profile == Path.home() / "akshara-prof"
+        assert session._profile == Path.home() / "yantra-prof"
 
 
 class TestLoginSession:
@@ -401,7 +401,7 @@ class TestLoginSession:
     def test_missing_extra_names_the_install(self, monkeypatch, tmp_path):
         monkeypatch.setitem(sys.modules, "playwright", None)
         monkeypatch.setitem(sys.modules, "playwright.sync_api", None)
-        with pytest.raises(ToolError, match=r"aksharaharness\[browse\]"):
+        with pytest.raises(ToolError, match=r"yantra\[browse\]"):
             run_login_session(tmp_path)
 
     def test_non_http_url_refused_before_any_launch(self, tmp_path):
@@ -442,19 +442,19 @@ class TestBrowseLoginFlag:
     no model, no API key, on purpose."""
 
     def test_without_a_profile_names_the_env_var(self, monkeypatch, capsys):
-        monkeypatch.delenv("AKSHARA_BROWSER_PROFILE", raising=False)
+        monkeypatch.delenv("YANTRA_BROWSER_PROFILE", raising=False)
         assert cli_main.main(["--browse-login", URL]) == 2
-        assert "AKSHARA_BROWSER_PROFILE" in capsys.readouterr().err
+        assert "YANTRA_BROWSER_PROFILE" in capsys.readouterr().err
 
     def test_with_a_profile_opens_and_reports_saved(self, monkeypatch,
                                                     tmp_path, capsys):
-        monkeypatch.setenv("AKSHARA_BROWSER_PROFILE", str(tmp_path))
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", str(tmp_path))
         seen: dict = {}
 
         def fake_login(profile, url=None):
             seen["args"] = (profile, url)
 
-        monkeypatch.setattr("akshara.tools.browser.run_login_session",
+        monkeypatch.setattr("yantra.tools.browser.run_login_session",
                             fake_login)
         assert cli_main.main(["--browse-login", URL]) == 0
         assert seen["args"] == (tmp_path, URL)
@@ -495,14 +495,14 @@ class TestRegistration:
     and the tool count the selection threshold keys on stays put."""
 
     def test_without_extra_registry_stays_at_sixteen(self, monkeypatch):
-        monkeypatch.setattr("akshara.tools.browser.find_spec",
+        monkeypatch.setattr("yantra.tools.browser.find_spec",
                             lambda name: None)
         registry = default_registry()
         assert len(registry) == 16
         assert "browser_open" not in registry
 
     def test_with_extra_four_tools_share_one_session(self, monkeypatch):
-        monkeypatch.setattr("akshara.tools.browser.find_spec",
+        monkeypatch.setattr("yantra.tools.browser.find_spec",
                             lambda name: True)
         registry = default_registry()
         names = ("browser_open", "browser_click", "browser_fill",

@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from akshara.mcp_oauth import (
+from yantra.mcp_oauth import (
     AuthServer,
     MCPAuthError,
     RedirectListener,

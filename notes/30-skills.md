@@ -32,9 +32,9 @@ description: Add a new built-in tool to this harness -- schema, summary,
 allowed-tools: read_file, write_file, edit_file, grep, glob, bash
 ---
 
-# Adding a tool to AksharaHarness
+# Adding a tool to Yantra
 
-1. Read the neighbours first. `src/akshara/tools/glob.py` is the
+1. Read the neighbours first. `src/yantra/tools/glob.py` is the
    smallest complete example...
 ```
 
@@ -82,7 +82,7 @@ Receipt, from `qwen3.8-64k` (a local 27B) on this repo. The prompt never
 says the word *skill*:
 
 ```
-$ akshara --provider ollama --model qwen3.8-64k:latest \
+$ yantra --provider ollama --model qwen3.8-64k:latest \
     --prompt "What would I have to change to add a count_lines tool
               to this project? Just give me the checklist."
 
@@ -145,7 +145,7 @@ hypothetical — it is what would have happened the first time someone ran
 `/env off` with skills loaded.
 
 So `agent.system` got a seam before the second author existed
-(`src/akshara/prompt.py`). It is now an ordered map of named layers:
+(`src/yantra/prompt.py`). It is now an ordered map of named layers:
 
 ```
 base     the operator's --system, captured verbatim, never edited
@@ -284,7 +284,7 @@ Skills get the same operator switch tools have, for the same reasons:
 ```bash
 /skills off deploy-*        # pull one, or a family, mid-session
 /skills on deploy-web       # put it back
-AKSHARA_DISABLED_SKILLS=deploy-*,pr-review   # or never load them at all
+YANTRA_DISABLED_SKILLS=deploy-*,pr-review   # or never load them at all
 ```
 
 The semantics are ToolRegistry's, deliberately: a pulled skill stays
@@ -306,15 +306,15 @@ Nearest wins:
 
 | Root | For |
 |---|---|
-| `$AKSHARA_SKILLS_PATH` / `--skills-dir` | explicit, wins everything |
-| `.akshara/skills/` | private overrides — gitignored |
+| `$YANTRA_SKILLS_PATH` / `--skills-dir` | explicit, wins everything |
+| `.yantra/skills/` | private overrides — gitignored |
 | `skills/` | the set your repo commits |
-| `~/.akshara/skills/` | yours, everywhere |
+| `~/.yantra/skills/` | yours, everywhere |
 
-`.akshara/` is machine state — a sqlite session store, job logs, a Chrome
+`.yantra/` is machine state — a sqlite session store, job logs, a Chrome
 profile — and it is gitignored. Skills are hand-written source meant to
 travel with the repo, so the committed set lives in a plain top-level
-`skills/`, and `.akshara/skills/` becomes the place to override one
+`skills/`, and `.yantra/skills/` becomes the place to override one
 locally without touching what your team sees.
 
 ## What a bad skill file costs you
@@ -343,15 +343,15 @@ working skill away in the middle of a task.
 ## Using them
 
 ```bash
-akshara                      # skills in ./skills are found automatically
+yantra                      # skills in ./skills are found automatically
 /skills                      # what is on disk, what broke, what got loaded
 /skills new-tool             # read one yourself — costs no model turn
 /skills off deploy-*         # pull one or a family; /skills on puts it back
 /skills reload               # after you edit one
 /new-tool add a count_lines tool     # run a skill directly
-akshara --skills-dir ~/shared-skills # extra root, wins over the implicit ones
-akshara --no-skills          # off entirely
-AKSHARA_DISABLED_SKILLS=deploy-*     # never load these in the first place
+yantra --skills-dir ~/shared-skills # extra root, wins over the implicit ones
+yantra --no-skills          # off entirely
+YANTRA_DISABLED_SKILLS=deploy-*     # never load these in the first place
 ```
 
 `./start.sh` needs nothing new: drop a folder in `./skills` and every

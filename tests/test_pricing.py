@@ -15,18 +15,18 @@ from rich.console import Console
 
 from conftest import ScriptedProvider
 
-from akshara.agent import Agent, TurnEnd
-from akshara.cli.render import Renderer
-from akshara.cli.repl import Repl
-from akshara.errors import ConfigError
-from akshara.pricing import (
+from yantra.agent import Agent, TurnEnd
+from yantra.cli.render import Renderer
+from yantra.cli.repl import Repl
+from yantra.errors import ConfigError
+from yantra.pricing import (
     ModelPrice,
     cost_of,
     price_for,
     session_cost,
 )
-from akshara.permissions import allow_read_only
-from akshara.types import Message, ModelResponse, TextBlock, Usage
+from yantra.permissions import allow_read_only
+from yantra.types import Message, ModelResponse, TextBlock, Usage
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ class TestOverrides:
         return str(path)
 
     def test_exact_override_and_new_entry(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AKSHARA_PRICES", self._write(tmp_path, {
+        monkeypatch.setenv("YANTRA_PRICES", self._write(tmp_path, {
             "claude-haiku-4-5": {"input": 9.0, "output": 9.0},
             "my-gateway/model-x": {"input": 1.0, "output": 2.0},
         }))
@@ -87,14 +87,14 @@ class TestOverrides:
         assert price_for("my-gateway/model-x") == ModelPrice(1.0, 2.0)
 
     def test_prefix_override_beats_builtins(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AKSHARA_PRICES", self._write(tmp_path, {
+        monkeypatch.setenv("YANTRA_PRICES", self._write(tmp_path, {
             "gpt-5*": {"input": 42.0, "output": 43.0},
         }))
         assert price_for("gpt-5-mini").input_per_mtok == 42.0
         assert price_for("gpt-4o-mini").input_per_mtok == 0.15  # untouched
 
     def test_free_local_entry_zero_rates(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AKSHARA_PRICES", self._write(tmp_path, {
+        monkeypatch.setenv("YANTRA_PRICES", self._write(tmp_path, {
             "qwen3.8": {"input": 0.0, "output": 0.0,
                         "cached_read": 0.0, "cached_write": 0.0},
         }))
@@ -104,12 +104,12 @@ class TestOverrides:
     def test_bad_json_is_loud(self, tmp_path, monkeypatch):
         path = tmp_path / "broken.json"
         path.write_text("{nope")
-        monkeypatch.setenv("AKSHARA_PRICES", str(path))
+        monkeypatch.setenv("YANTRA_PRICES", str(path))
         with pytest.raises(ConfigError, match="not valid JSON"):
             price_for("gpt-4o")
 
     def test_missing_fields_are_loud(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AKSHARA_PRICES", self._write(
+        monkeypatch.setenv("YANTRA_PRICES", self._write(
             tmp_path, {"m": {"output": 1.0}}))
         with pytest.raises(ConfigError, match="'input' and 'output'"):
             price_for("m")
@@ -186,7 +186,7 @@ def _openai_payload(model: str, prompt: int, cached: int, completion: int) -> di
 ])
 def test_openai_family_subtracts_cached_from_headline(
         provider_name, settings_fx, payload, request):
-    from akshara.providers import get_provider
+    from yantra.providers import get_provider
     settings = request.getfixturevalue(settings_fx)
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -208,8 +208,8 @@ def test_openai_cached_over_prompt_clamps_to_zero():
     """A gateway reporting more cached than prompt tokens must not produce
     a negative counter -- clamp, don't poison the session totals."""
     payload = _openai_payload("gpt-4o-mini", 100, 400, 1)
-    from akshara.providers.openai import OpenAIProvider
-    from akshara.providers.base import ProviderSettings
+    from yantra.providers.openai import OpenAIProvider
+    from yantra.providers.base import ProviderSettings
     provider = OpenAIProvider(
         ProviderSettings(api_key="k", base_url="http://mock.local/v1"),
         transport=httpx.MockTransport(lambda req: httpx.Response(200, json=payload)))
@@ -222,8 +222,8 @@ def test_openai_cached_over_prompt_clamps_to_zero():
 def test_streaming_usage_chunk_gets_same_subtraction():
     """The streaming path assembles Usage incrementally; the convention
     must hold there too (same rule, second implementation)."""
-    from akshara.providers.openai import OpenAIProvider
-    from akshara.providers.base import ProviderSettings
+    from yantra.providers.openai import OpenAIProvider
+    from yantra.providers.base import ProviderSettings
     sse = (
         b'data: {"model":"gpt-4o-mini","choices":[{"index":0,'
         b'"delta":{"content":"hi"}}]}\n\n'

@@ -7,7 +7,7 @@ are the ones that catch the bugs real networks cause.
 
 from __future__ import annotations
 
-from akshara.providers.sse import iter_sse_lines, parse_events
+from yantra.providers.sse import iter_sse_lines, parse_events
 
 
 def lines_of(*chunks: bytes) -> list[str]:

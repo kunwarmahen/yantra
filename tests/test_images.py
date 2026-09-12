@@ -2,7 +2,7 @@
 
 The feature has three seams and each gets pinned here:
 
-* ``akshara.images`` -- file -> ImageBlock (validation happens BEFORE
+* ``yantra.images`` -- file -> ImageBlock (validation happens BEFORE
   any request exists; bad input is a usage error, not turn data),
 * the adapters -- one internal ImageBlock, two wire dialects
   (Anthropic nests a source object; OpenAI wants a data: URL inside an
@@ -22,14 +22,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from akshara.agent import Agent
-from akshara.async_agent import AsyncAgent
-from akshara.errors import ImageError
-from akshara.images import MAX_IMAGE_BYTES, load_image_block
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.openai import OpenAIProvider
-from akshara.tools.base import ToolRegistry
-from akshara.types import ImageBlock, Message, TextBlock
+from yantra.agent import Agent
+from yantra.async_agent import AsyncAgent
+from yantra.errors import ImageError
+from yantra.images import MAX_IMAGE_BYTES, load_image_block
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.openai import OpenAIProvider
+from yantra.tools.base import ToolRegistry
+from yantra.types import ImageBlock, Message, TextBlock
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -39,7 +39,7 @@ B64 = base64.b64encode(b"ABC").decode()
 
 
 # ---------------------------------------------------------------------------
-# Loading (akshara.images)
+# Loading (yantra.images)
 # ---------------------------------------------------------------------------
 
 
@@ -72,7 +72,7 @@ class TestLoadImageBlock:
             load_image_block(path)
 
     def test_oversize_is_rejected_on_raw_bytes(self, tmp_path, monkeypatch):
-        import akshara.images as images_mod
+        import yantra.images as images_mod
         monkeypatch.setattr(images_mod, "MAX_IMAGE_BYTES", 4)
         path = tmp_path / "big.png"
         path.write_bytes(b"x" * 5)
@@ -215,7 +215,7 @@ class TestLoopAttach:
 
 
 def test_estimate_bills_images_by_decoded_size():
-    from akshara.context import estimate_tokens
+    from yantra.context import estimate_tokens
 
     msg = Message("user", [TextBlock("hi"),
                            ImageBlock(media_type="image/png", data=B64)])
@@ -232,7 +232,7 @@ def test_estimate_bills_images_by_decoded_size():
 class TestCliImageFlag:
     def test_flag_wires_images_into_the_one_shot_turn(
             self, tmp_path, monkeypatch):
-        import akshara.cli.main as cli_main
+        import yantra.cli.main as cli_main
         from conftest import ScriptedProvider, assistant_text
 
         img = tmp_path / "dot.png"
@@ -260,14 +260,14 @@ class TestCliImageFlag:
             captured["images"][0].media_type == "image/png"
 
     def test_flag_without_a_prompt_is_a_usage_error(self, capsys):
-        import akshara.cli.main as cli_main
+        import yantra.cli.main as cli_main
 
         assert cli_main.main(["--image", "whatever.png"]) == 2
         assert "needs a prompt" in capsys.readouterr().err
 
     def test_bad_image_file_exits_2_before_any_turn(
             self, tmp_path, monkeypatch, capsys):
-        import akshara.cli.main as cli_main
+        import yantra.cli.main as cli_main
 
         called = False
 

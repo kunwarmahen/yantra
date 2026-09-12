@@ -12,14 +12,14 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from akshara.config import (
+from yantra.config import (
     default_context_window,
     default_model,
     load_settings,
 )
-from akshara.providers import get_provider
-from akshara.providers.openai import OpenAIProvider
-from akshara.types import Message, TextBlock
+from yantra.providers import get_provider
+from yantra.providers.openai import OpenAIProvider
+from yantra.types import Message, TextBlock
 
 
 @pytest.fixture(autouse=True)
@@ -102,8 +102,8 @@ class TestSessionRoundTripName:
         'ollama' so --resume rebuilds this provider, not plain openai."""
         from conftest import ScriptedProvider
 
-        from akshara.agent import Agent
-        from akshara.session import SessionStore
+        from yantra.agent import Agent
+        from yantra.session import SessionStore
 
         agent = Agent(ScriptedProvider([]), model="qwen3:4b")
         store = SessionStore(tmp_path / "s.sqlite3")

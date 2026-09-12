@@ -22,12 +22,12 @@ import argparse
 
 from rich.console import Console
 
-from akshara.agent import Agent
-from akshara.cli.render import Renderer
-from akshara.config import default_model, load_settings
-from akshara.permissions import allow_read_only
-from akshara.providers import get_provider
-from akshara.tools import default_registry
+from yantra.agent import Agent
+from yantra.cli.render import Renderer
+from yantra.config import default_model, load_settings
+from yantra.permissions import allow_read_only
+from yantra.providers import get_provider
+from yantra.tools import default_registry
 
 
 def main() -> None:

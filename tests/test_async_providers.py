@@ -13,16 +13,16 @@ import asyncio
 import httpx
 import pytest
 
-from akshara.errors import AuthError, ContextOverflowError, ProviderError, RateLimitError
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.base import (
+from yantra.errors import AuthError, ContextOverflowError, ProviderError, RateLimitError
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.base import (
     acollect,
 )
-from akshara.providers.fallback import FallbackProvider
-from akshara.providers.openai import OpenAIProvider
-from akshara.providers.retry import RetryPolicy
-from akshara.providers.sse import aiter_sse_lines, aparse_events, iter_sse_lines, parse_events
-from akshara.types import (
+from yantra.providers.fallback import FallbackProvider
+from yantra.providers.openai import OpenAIProvider
+from yantra.providers.retry import RetryPolicy
+from yantra.providers.sse import aiter_sse_lines, aparse_events, iter_sse_lines, parse_events
+from yantra.types import (
     EndEvent,
     Message,
     StartEvent,
@@ -222,7 +222,7 @@ class TestAsyncRetry:
         async def _record(delay):
             waited.append(delay)
 
-        monkeypatch.setattr("akshara.providers.retry._asleep", _record)
+        monkeypatch.setattr("yantra.providers.retry._asleep", _record)
         calls = {"n": 0}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -247,7 +247,7 @@ class TestAsyncRetry:
         async def _nosleep(_delay):
             return None
 
-        monkeypatch.setattr("akshara.providers.retry._asleep", _nosleep)
+        monkeypatch.setattr("yantra.providers.retry._asleep", _nosleep)
 
         provider = AnthropicProvider(
             anthropic_settings,
@@ -290,7 +290,7 @@ class FakeAsyncProvider:
     async def acomplete(self, **kwargs):
         if self._complete_error is not None:
             raise self._complete_error
-        from akshara.types import ModelResponse
+        from yantra.types import ModelResponse
         return ModelResponse(message=Message("assistant", [TextBlock(f"from {self.name}")]),
                              stop_reason="end_turn", usage=Usage())
 

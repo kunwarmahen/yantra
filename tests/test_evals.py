@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 
-from akshara.evals import (
+from yantra.evals import (
     AsyncEvalRunner,
     EvalCase,
     EvalResult,
@@ -22,11 +22,11 @@ from akshara.evals import (
     spawn_setup,
     summarize,
 )
-from akshara.errors import ProviderError
-from akshara.permissions import yolo
-from akshara.subagent import SPAWN_TOOL_NAME
-from akshara.tools.base import Tool, ToolRegistry
-from akshara.types import Usage
+from yantra.errors import ProviderError
+from yantra.permissions import yolo
+from yantra.subagent import SPAWN_TOOL_NAME
+from yantra.tools.base import Tool, ToolRegistry
+from yantra.types import Usage
 
 
 class EchoTool(Tool):

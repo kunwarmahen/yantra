@@ -31,10 +31,10 @@ import time
 
 from rich.console import Console
 
-from akshara import Agent, default_registry
-from akshara.config import default_model, load_settings
-from akshara.providers import get_provider
-from akshara.types import Message, TextBlock
+from yantra import Agent, default_registry
+from yantra.config import default_model, load_settings
+from yantra.providers import get_provider
+from yantra.types import Message, TextBlock
 
 # A long, boring reference document: long enough to clear the minimum
 # cacheable-prefix threshold (~1k tokens), stable enough to be worth

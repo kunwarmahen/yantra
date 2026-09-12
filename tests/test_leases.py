@@ -12,10 +12,10 @@ import time
 
 import pytest
 
-from akshara.errors import ToolError
-from akshara.leases import LeaseBusy, LeaseManager, new_owner
-from akshara.tools.base import ToolContext
-from akshara.tools.fs import EditFile, WriteFile, file_lease_key
+from yantra.errors import ToolError
+from yantra.leases import LeaseBusy, LeaseManager, new_owner
+from yantra.tools.base import ToolContext
+from yantra.tools.fs import EditFile, WriteFile, file_lease_key
 
 
 class TestMechanics:

@@ -29,10 +29,10 @@ import argparse
 import asyncio
 import time
 
-from akshara.async_agent import AsyncAgent
-from akshara.config import default_model, load_settings
-from akshara.providers import get_provider
-from akshara.types import TextDelta
+from yantra.async_agent import AsyncAgent
+from yantra.config import default_model, load_settings
+from yantra.providers import get_provider
+from yantra.types import TextDelta
 
 QUESTIONS = [
     "In exactly one short sentence: why is the sky blue?",

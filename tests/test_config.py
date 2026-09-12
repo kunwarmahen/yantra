@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pytest
 
-from akshara import config
-from akshara.errors import ConfigError
-from akshara.config import (
+from yantra import config
+from yantra.errors import ConfigError
+from yantra.config import (
     _load_dotenv,
     browser_profile,
     default_context_window,
@@ -36,7 +36,7 @@ def _fresh_loader(monkeypatch, tmp_path):
     """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(config, "_dotenv_loaded", False)
-    for var in ("AKSHARA_TEST_KEY", "AKSHARA_TEST_WINDOW",
+    for var in ("YANTRA_TEST_KEY", "YANTRA_TEST_WINDOW",
                 "OLLAMA_CONTEXT_WINDOW"):
         monkeypatch.delenv(var, raising=False)
 
@@ -49,54 +49,54 @@ class TestParsing:
     def test_trailing_comment_is_stripped(self):
         # the exact shape of every annotated line in .env.example
         _write_env(
-            "AKSHARA_TEST_WINDOW=8192"
+            "YANTRA_TEST_WINDOW=8192"
             "                            # default (auto-compaction math)\n"
         )
         _load_dotenv()
-        assert os.environ["AKSHARA_TEST_WINDOW"] == "8192"
+        assert os.environ["YANTRA_TEST_WINDOW"] == "8192"
 
     def test_hash_inside_quotes_is_value(self):
-        _write_env('AKSHARA_TEST_KEY="sk-abc#def"\n')
+        _write_env('YANTRA_TEST_KEY="sk-abc#def"\n')
         _load_dotenv()
-        assert os.environ["AKSHARA_TEST_KEY"] == "sk-abc#def"
+        assert os.environ["YANTRA_TEST_KEY"] == "sk-abc#def"
 
     def test_glued_hash_in_unquoted_value_is_value(self):
         # only whitespace marks a comment start -- secrets may contain '#'
-        _write_env("AKSHARA_TEST_KEY=abc#def\n")
+        _write_env("YANTRA_TEST_KEY=abc#def\n")
         _load_dotenv()
-        assert os.environ["AKSHARA_TEST_KEY"] == "abc#def"
+        assert os.environ["YANTRA_TEST_KEY"] == "abc#def"
 
     def test_comment_after_closing_quote_ignored(self):
-        _write_env('AKSHARA_TEST_KEY="hello"  # greeting\n')
+        _write_env('YANTRA_TEST_KEY="hello"  # greeting\n')
         _load_dotenv()
-        assert os.environ["AKSHARA_TEST_KEY"] == "hello"
+        assert os.environ["YANTRA_TEST_KEY"] == "hello"
 
     def test_quotes_and_first_equals_split(self):
-        _write_env('AKSHARA_TEST_KEY = "a=b=c"\n')
+        _write_env('YANTRA_TEST_KEY = "a=b=c"\n')
         _load_dotenv()
-        assert os.environ["AKSHARA_TEST_KEY"] == "a=b=c"
+        assert os.environ["YANTRA_TEST_KEY"] == "a=b=c"
 
 
 class TestContract:
     def test_blank_value_is_skipped(self):
         # ``KEY=   `` is template residue from copying .env.example; it
         # must not shadow code fallbacks with ""
-        _write_env("AKSHARA_TEST_KEY=   \n")
+        _write_env("YANTRA_TEST_KEY=   \n")
         _load_dotenv()
-        assert "AKSHARA_TEST_KEY" not in os.environ
+        assert "YANTRA_TEST_KEY" not in os.environ
 
     def test_real_environment_wins(self, monkeypatch):
-        monkeypatch.setenv("AKSHARA_TEST_KEY", "from-shell")
-        _write_env("AKSHARA_TEST_KEY=from-file\n")
+        monkeypatch.setenv("YANTRA_TEST_KEY", "from-shell")
+        _write_env("YANTRA_TEST_KEY=from-file\n")
         _load_dotenv()
-        assert os.environ["AKSHARA_TEST_KEY"] == "from-shell"
+        assert os.environ["YANTRA_TEST_KEY"] == "from-shell"
 
     def test_loads_once(self):
-        _write_env("AKSHARA_TEST_KEY=first\n")
+        _write_env("YANTRA_TEST_KEY=first\n")
         _load_dotenv()
-        _write_env("AKSHARA_TEST_KEY=second\n")
+        _write_env("YANTRA_TEST_KEY=second\n")
         _load_dotenv()
-        assert os.environ["AKSHARA_TEST_KEY"] == "first"
+        assert os.environ["YANTRA_TEST_KEY"] == "first"
 
     def test_no_file_no_error(self):
         _load_dotenv()  # must not raise
@@ -114,61 +114,61 @@ class TestEndToEnd:
 
 
 class TestToolSelectEnv:
-    """AKSHARA_TOOLS_PER_TURN backs --tool-select: same semantics, .env
+    """YANTRA_TOOLS_PER_TURN backs --tool-select: same semantics, .env
     convenience. K forces the width on, 0 forces selection off, unset
     leaves the auto-enable rule to decide."""
 
     def test_unset_is_none(self, monkeypatch):
-        monkeypatch.delenv("AKSHARA_TOOLS_PER_TURN", raising=False)
+        monkeypatch.delenv("YANTRA_TOOLS_PER_TURN", raising=False)
         assert default_tool_select() is None
 
     def test_zero_and_width_pass_through(self, monkeypatch):
-        monkeypatch.setenv("AKSHARA_TOOLS_PER_TURN", "0")
+        monkeypatch.setenv("YANTRA_TOOLS_PER_TURN", "0")
         assert default_tool_select() == 0
-        monkeypatch.setenv("AKSHARA_TOOLS_PER_TURN", "14")
+        monkeypatch.setenv("YANTRA_TOOLS_PER_TURN", "14")
         assert default_tool_select() == 14
 
     def test_non_integer_fails_loudly(self, monkeypatch):
-        monkeypatch.setenv("AKSHARA_TOOLS_PER_TURN", "seven")
+        monkeypatch.setenv("YANTRA_TOOLS_PER_TURN", "seven")
         with pytest.raises(ConfigError, match="must be an integer"):
             default_tool_select()
 
 
 class TestDisabledToolsEnv:
     def test_unset_means_nothing_disabled(self, monkeypatch):
-        monkeypatch.delenv("AKSHARA_DISABLED_TOOLS", raising=False)
+        monkeypatch.delenv("YANTRA_DISABLED_TOOLS", raising=False)
         assert disabled_tool_patterns() == []
 
     def test_comma_split_strips_blanks(self, monkeypatch):
-        monkeypatch.setenv("AKSHARA_DISABLED_TOOLS",
+        monkeypatch.setenv("YANTRA_DISABLED_TOOLS",
                            " web_fetch , browser_* ,, mcp__slack__* ,")
         assert disabled_tool_patterns() == [
             "web_fetch", "browser_*", "mcp__slack__*"]
 
 
 class TestBrowserProfileEnv:
-    """$AKSHARA_BROWSER_PROFILE: where the browser family keeps logins.
+    """$YANTRA_BROWSER_PROFILE: where the browser family keeps logins.
     Unset/blank => None (fresh sessions, nothing persists -- the safe
     default for what is ultimately a plaintext credential store)."""
 
     def test_unset_is_none(self, monkeypatch):
-        monkeypatch.delenv("AKSHARA_BROWSER_PROFILE", raising=False)
+        monkeypatch.delenv("YANTRA_BROWSER_PROFILE", raising=False)
         assert browser_profile() is None
 
     def test_blank_template_residue_is_none(self, monkeypatch):
-        # copying .env.example leaves ``AKSHARA_BROWSER_PROFILE=`` behind
-        monkeypatch.setenv("AKSHARA_BROWSER_PROFILE", "   ")
+        # copying .env.example leaves ``YANTRA_BROWSER_PROFILE=`` behind
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", "   ")
         assert browser_profile() is None
 
     def test_tilde_expands(self, monkeypatch):
-        monkeypatch.setenv("AKSHARA_BROWSER_PROFILE", "~/.state/prof")
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", "~/.state/prof")
         assert browser_profile() == Path.home() / ".state" / "prof"
 
     def test_relative_paths_anchor_to_cwd(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("AKSHARA_BROWSER_PROFILE", "prof")
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", "prof")
         assert browser_profile() == tmp_path / "prof"
 
     def test_absolute_passes_through(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AKSHARA_BROWSER_PROFILE", str(tmp_path))
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", str(tmp_path))
         assert browser_profile() == tmp_path

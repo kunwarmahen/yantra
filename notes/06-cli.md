@@ -1,6 +1,6 @@
 # 06 · The CLI: REPL loop, cancellation UX, and rendering
 
-> Files: `akshara/cli/{main,repl,render}.py`.
+> Files: `yantra/cli/{main,repl,render}.py`.
 
 ## Layering: the CLI is a consumer, never a participant
 
@@ -69,7 +69,7 @@ leading slash, because "/etc/hosts?" is a legitimate first character.
 ## Entrypoint shape
 
 `main(argv)` returns an int exit code and is wired via
-`akshara = "akshara.cli.main:main"` in pyproject — argparse stays
+`yantra = "yantra.cli.main:main"` in pyproject — argparse stays
 testable without spawning processes. Config errors exit 2 with the fix
 in the message ("set ANTHROPIC_API_KEY (see .env.example)"); a cancelled
 one-shot exits 130 (128+SIGINT convention).
@@ -101,7 +101,7 @@ the session never notices.
 
 New surface, all thin over `session.py` / `context.py`:
 
-* `/save [name]` — checkpoint to SQLite (`.akshara/session.sqlite3`);
+* `/save [name]` — checkpoint to SQLite (`.yantra/session.sqlite3`);
   every save appends a version row. `/load [name]` restores the newest.
 * `--resume` — restore before the first prompt; verified live by saving
   a code word, exiting, and recalling it in a fresh process.
@@ -152,7 +152,7 @@ that don't use it. Classic inverted-guard blind spot.
 `main.py` grew one more mode with no new agent logic: `--web` builds a
 `WebSession` *before* the Agent (the browser gate is injected at
 construction, same as `confirm_gate`), then hands the finished session
-to `akshara.web.server.launch()` ([22-web-ui.md](22-web-ui.md)). The
+to `yantra.web.server.launch()` ([22-web-ui.md](22-web-ui.md)). The
 layering rule held: main.py picks the front door; the door owns how to
 ask.
 
@@ -215,7 +215,7 @@ Design points that carried over from `/yolo`:
 * **Reversible, session-scoped.** `registry.disable()` hides a tool but
   leaves it registered ([04-tools.md](04-tools.md)) — nothing to
   rebuild, `/tools on` restores exactly what was there. The permanent
-  spelling stays `AKSHARA_DISABLED_TOOLS`, which unregisters at startup.
+  spelling stays `YANTRA_DISABLED_TOOLS`, which unregisters at startup.
 * **The listing never lies by omission.** Disabled tools still appear,
   marked `[off]` with a count in the header — an operator who forgot
   what they switched off should be able to see it, not diff against a
@@ -241,7 +241,7 @@ manager object, so there is no second bookkeeping to drift:
 
 * **The listing shows health honestly** — an unhealthy stdio child gets
   a red `\[down]` mark (escaped from rich markup, again), and a server
-  remembered in `.akshara/mcp.json` is tagged `saved`.
+  remembered in `.yantra/mcp.json` is tagged `saved`.
 * **`off` is not `remove`.** Off is the same soft switch as
   `/tools off`, pointed at every qualified name of one server;
   reversible, mid-turn-safe. Remove tears down the transport (SIGTERM →
@@ -251,7 +251,7 @@ manager object, so there is no second bookkeeping to drift:
 * **`add` asks before remembering.** After a successful connect the
   REPL prompts `remember this server for future launches? [y/N]` — the
   exact question the web form's checkbox answers. Yes writes
-  `.akshara/mcp.json`; future launches reconnect it automatically.
+  `.yantra/mcp.json`; future launches reconnect it automatically.
 * Connection failures print as errors (`could not connect 'x': …`),
   never as tracebacks — a bad command name is operator input to fix,
   not a bug to report.
@@ -269,7 +269,7 @@ The terminal face:
 /env off|local|full         # flip it — applies to the very next model call
 ```
 
-The starting level comes from `--env-context` or `$AKSHARA_ENV_CONTEXT`
+The starting level comes from `--env-context` or `$YANTRA_ENV_CONTEXT`
 (default `full`). Flips recompose the prompt LIVE — mid-turn included,
 the same no-guard argument as `/yolo`: the loop reads `agent.system` per
 request. And `/load` re-composes after restoring a checkpoint, because
@@ -292,7 +292,7 @@ face is four commands, and the last one is the one people actually use:
 
 `/skills off` shares `/tools off`'s matching rule (globs), its soft
 semantics (the skill stays on disk, marked `[off]`, and refuses to load
-until restored) and its startup twin (`$AKSHARA_DISABLED_SKILLS`). It
+until restored) and its startup twin (`$YANTRA_DISABLED_SKILLS`). It
 differs in one way worth knowing: pulling a skill rewrites the system
 prompt, so it costs the cached prefix. Pulling a tool does not.
 

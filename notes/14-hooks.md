@@ -1,7 +1,7 @@
 # 14 · Hooks: watching without touching
 
-> Files: [agent.py](../src/akshara/agent.py) +
-> [async_agent.py](../src/akshara/async_agent.py) (`on_before_tool`,
+> Files: [agent.py](../src/yantra/agent.py) +
+> [async_agent.py](../src/yantra/async_agent.py) (`on_before_tool`,
 > `on_after_tool`), [`examples/hooks_demo.py`](../examples/hooks_demo.py),
 > `tests/test_hooks.py`.
 

@@ -6,7 +6,7 @@ a protocol: containment is a LAYER, not a property of the bash tool.*
 
 ## The protocol
 
-One seam, three methods (`akshara/sandbox.py`):
+One seam, three methods (`yantra/sandbox.py`):
 
 ```python
 class ToolSandbox(Protocol):
@@ -73,8 +73,8 @@ other, and neither knows the other's internals beyond the one boolean.
 ## Wiring
 
 ```
-uv run akshara --sandbox              # autodetect: bwrap if usable, else subprocess
-uv run akshara --sandbox none         # explicit legacy behavior
+uv run yantra --sandbox              # autodetect: bwrap if usable, else subprocess
+uv run yantra --sandbox none         # explicit legacy behavior
 ```
 
 REPL inherits the sandbox into sub-agents and `/build` children;

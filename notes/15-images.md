@@ -15,7 +15,7 @@ nothing on the way IN.
 
 | Seam | Job | File |
 |---|---|---|
-| load | file → validated ImageBlock, before any turn | `akshara/images.py` |
+| load | file → validated ImageBlock, before any turn | `yantra/images.py` |
 | encode | ImageBlock → wire dialect | both adapters' `_encode_*` |
 | attach | text first, then images, ONE user message | `Agent.run_streaming` / async twin |
 
@@ -84,11 +84,11 @@ Same path cloud or local — file → loader → dialect → gateway → answer:
 
 ```bash
 # needs a key in .env:
-uv run akshara --yolo --image dot.png "One word: what color dominates this image?"
+uv run yantra --yolo --image dot.png "One word: what color dominates this image?"
 
 # fully local, no key:
 printf '/image dot.png\nOne word: dominant color?\n/quit\n' \
-  | uv run akshara --provider ollama --model gemma4:12b --yolo
+  | uv run yantra --provider ollama --model gemma4:12b --yolo
 ```
 
 The REPL route (`/image`) stages onto your *next* message — staging,

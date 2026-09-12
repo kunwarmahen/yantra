@@ -26,16 +26,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from akshara.agent import Agent, ToolExecuted  # noqa: E402
-from akshara.config import (  # noqa: E402
+from yantra.agent import Agent, ToolExecuted  # noqa: E402
+from yantra.config import (  # noqa: E402
     default_context_window,
     default_model,
     load_settings,
 )
-from akshara.permissions import yolo  # noqa: E402
-from akshara.providers import get_provider  # noqa: E402
-from akshara.skills import enable_skills  # noqa: E402
-from akshara.tools import default_registry  # noqa: E402
+from yantra.permissions import yolo  # noqa: E402
+from yantra.providers import get_provider  # noqa: E402
+from yantra.skills import enable_skills  # noqa: E402
+from yantra.tools import default_registry  # noqa: E402
 
 CHANGELOG = """\
 ---
@@ -52,7 +52,7 @@ House format, and it is picky on purpose:
 1. Newest entries go at the TOP, under `## Unreleased`.
 2. One line per change: `- <area>: <what changed, present tense>`.
 3. The area is the package path without `src/` (`tools/glob`, not
-   `src/akshara/tools/glob.py`).
+   `src/yantra/tools/glob.py`).
 4. No issue numbers, no author names. `git log` already knows both.
 
 Example: `- tools/glob: match hidden files when the pattern asks for them`

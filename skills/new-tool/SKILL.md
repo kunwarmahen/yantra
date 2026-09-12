@@ -6,21 +6,21 @@ description: Add a new built-in tool to this harness -- schema, summary,
 allowed-tools: read_file, write_file, edit_file, grep, glob, bash
 ---
 
-# Adding a tool to AksharaHarness
+# Adding a tool to Yantra
 
-A tool is three things glued together (see `src/akshara/tools/base.py`):
+A tool is three things glued together (see `src/yantra/tools/base.py`):
 a hand-written JSON Schema, a `summary()` the permission prompt shows a
 human, and a `run()` that does the thing. Get all three right and the
 loop handles the rest.
 
 ## Steps
 
-1. **Read the neighbours first.** `src/akshara/tools/glob.py` is the
-   smallest complete example; `src/akshara/tools/fs.py` shows a gated
+1. **Read the neighbours first.** `src/yantra/tools/glob.py` is the
+   smallest complete example; `src/yantra/tools/fs.py` shows a gated
    write. Match their comment density and voice -- this repo explains
    WHY in prose, not just what.
 
-2. **Write the tool** in `src/akshara/tools/<name>.py`. Start from
+2. **Write the tool** in `src/yantra/tools/<name>.py`. Start from
    `template.py` in this skill's folder (read it with read_file). The
    rules that matter:
    - `parameters` is hand-written JSON Schema with a real `description`
@@ -36,13 +36,13 @@ loop handles the rest.
      are whatever JSON the model produced, not what your schema asked for.
 
 3. **Register it** in `default_registry()` in
-   `src/akshara/tools/__init__.py`, add it to `__all__`, and update that
+   `src/yantra/tools/__init__.py`, add it to `__all__`, and update that
    module's docstring count ("Sixteen built-ins ...") -- it is prose that
    goes stale silently.
 
 4. **Consider selection.** If the tool belongs to the autonomy floor
    (every task needs it), add it to `CORE_PINS` in
-   `src/akshara/tools/selector.py`. Otherwise leave it retrievable.
+   `src/yantra/tools/selector.py`. Otherwise leave it retrievable.
 
 5. **Test it** in `tests/test_tools.py` (or its own module if the surface
    is large). Cover: the happy path, a bad argument raising `ToolError`,
@@ -50,8 +50,6 @@ loop handles the rest.
 
 6. **Document it.** This repo ships docs WITH the feature, never after:
    - `README.md` -- the tool table and any usage section it touches
-   - `TUTORIAL.md` (and regenerate `TUTORIAL.html`) if a beginner would
-     meet it
    - `notes/NN-<topic>.md` if the tool introduces a concept worth a
      write-up
 

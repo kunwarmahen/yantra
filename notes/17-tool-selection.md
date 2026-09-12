@@ -111,10 +111,10 @@ Without a catalog everything is byte-identical to before (pinned by
 ## Wiring
 
 ```
-uv run akshara --tool-select 12    # force width K
+uv run yantra --tool-select 12    # force width K
                                    # auto-enables at 12 above 20 tools otherwise
-uv run akshara --tool-select 0     # opt out of the auto-enable
-AKSHARA_TOOLS_PER_TURN=12          # .env spelling of the same switch
+uv run yantra --tool-select 0     # opt out of the auto-enable
+YANTRA_TOOLS_PER_TURN=12          # .env spelling of the same switch
 ```
 
 ## Trimming the toolset entirely
@@ -122,7 +122,7 @@ AKSHARA_TOOLS_PER_TURN=12          # .env spelling of the same switch
 Selection decides what fits in a request; sometimes you want a tool to
 not exist. Two spellings, for two lifetimes:
 
-**Startup kill-switch (permanent).** `AKSHARA_DISABLED_TOOLS` takes
+**Startup kill-switch (permanent).** `YANTRA_DISABLED_TOOLS` takes
 comma-separated glob patterns matched against tool names and UNREGISTERS
 matches after MCP servers connect but before any catalog is built — so a
 disabled tool is never sent, never executed, never suggested by
@@ -130,9 +130,9 @@ disabled tool is never sent, never executed, never suggested by
 
 ```bash
 # hide one family ...
-AKSHARA_DISABLED_TOOLS=browser_open,browser_click,browser_fill,browser_close
+YANTRA_DISABLED_TOOLS=browser_open,browser_click,browser_fill,browser_close
 # ... or one tool, or a whole MCP server
-AKSHARA_DISABLED_TOOLS=web_fetch,mcp__slack__*
+YANTRA_DISABLED_TOOLS=web_fetch,mcp__slack__*
 ```
 
 A pattern matching nothing prints a warning — typos should be loud.

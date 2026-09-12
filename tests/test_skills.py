@@ -13,9 +13,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from akshara.errors import ToolError
-from akshara.prompt import attach_prompt
-from akshara.skills import (
+from yantra.errors import ToolError
+from yantra.prompt import attach_prompt
+from yantra.skills import (
     SKILL_FILE,
     SkillError,
     SkillRegistry,
@@ -25,14 +25,14 @@ from akshara.skills import (
     parse_frontmatter,
     skill_roots,
 )
-from akshara.skills.registry import ROSTER_HEADER
-from akshara.tools.base import ToolRegistry
+from yantra.skills.registry import ROSTER_HEADER
+from yantra.tools.base import ToolRegistry
 
 
 @pytest.fixture(autouse=True)
 def _no_ambient_skills(monkeypatch):
-    """An operator's own $AKSHARA_SKILLS_PATH must not reach the suite."""
-    monkeypatch.delenv("AKSHARA_SKILLS_PATH", raising=False)
+    """An operator's own $YANTRA_SKILLS_PATH must not reach the suite."""
+    monkeypatch.delenv("YANTRA_SKILLS_PATH", raising=False)
 
 GOOD = """\
 ---
@@ -152,7 +152,7 @@ class TestDiscovery:
     def test_nearest_root_wins_and_the_loser_is_reported(self, tmp_path):
         # a private local copy overrides the committed one
         write_skill(tmp_path / "skills", "pr-review")
-        write_skill(tmp_path / ".akshara" / "skills", "pr-review",
+        write_skill(tmp_path / ".yantra" / "skills", "pr-review",
                     GOOD.replace("# PR review", "# PR review (local)"))
         found = discover(tmp_path, home=tmp_path / "home")
         assert len(found) == 1
@@ -165,14 +165,14 @@ class TestDiscovery:
         explicit = tmp_path / "elsewhere"
         write_skill(explicit, "pr-review",
                     GOOD.replace("# PR review", "# PR review (explicit)"))
-        monkeypatch.setenv("AKSHARA_SKILLS_PATH", str(explicit))
+        monkeypatch.setenv("YANTRA_SKILLS_PATH", str(explicit))
         found = discover(tmp_path, home=tmp_path / "home")
         assert found.skills[0].source == "path"
         assert "(explicit)" in found.skills[0].body
 
     def test_user_root_contributes_what_the_project_lacks(self, tmp_path):
         write_skill(tmp_path / "skills", "pr-review")
-        write_skill(tmp_path / "home" / ".akshara" / "skills", "release-cut",
+        write_skill(tmp_path / "home" / ".yantra" / "skills", "release-cut",
                     GOOD.replace("pr-review", "release-cut"))
         found = discover(tmp_path, home=tmp_path / "home")
         assert found.names() == ["pr-review", "release-cut"]
@@ -187,7 +187,7 @@ class TestDiscovery:
 
     def test_a_broken_local_copy_falls_back_to_the_committed_one(self, tmp_path):
         write_skill(tmp_path / "skills", "pr-review")
-        write_skill(tmp_path / ".akshara" / "skills", "pr-review", "junk\n")
+        write_skill(tmp_path / ".yantra" / "skills", "pr-review", "junk\n")
         found = discover(tmp_path, home=tmp_path / "home")
         assert found.names() == ["pr-review"]
         assert found.skills[0].source == "project"
@@ -211,7 +211,7 @@ class TestDiscovery:
         assert not found.skills and not found.broken
 
     def test_roots_are_reported_nearest_first(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("AKSHARA_SKILLS_PATH", raising=False)
+        monkeypatch.delenv("YANTRA_SKILLS_PATH", raising=False)
         sources = [source for _, source in
                    skill_roots(tmp_path, home=tmp_path / "home")]
         assert sources == ["local", "project", "user"]
@@ -231,7 +231,7 @@ def _wire(tmp_path, *names, system=None):
         write_skill(tmp_path / "skills", name, GOOD.replace("pr-review", name))
     agent = _agent()
     agent.system = system
-    # home= keeps ~/.akshara/skills out of the suite, whatever the machine has
+    # home= keeps ~/.yantra/skills out of the suite, whatever the machine has
     return agent, enable_skills(agent, tmp_path, home=tmp_path / "home")
 
 
@@ -459,8 +459,8 @@ class RecordingSpawner:
 
 def _delegated_agent(tmp_path, *, tools=("read_file", "glob")):
     """An agent with one delegated skill and a recording spawner."""
-    from akshara.tools.fs import ReadFile
-    from akshara.tools.glob import Glob
+    from yantra.tools.fs import ReadFile
+    from yantra.tools.glob import Glob
 
     write_skill(tmp_path / "skills", "repo-survey", DELEGATED)
     agent = _agent()
@@ -549,8 +549,8 @@ class TestDelegation:
     def test_the_subagent_budget_is_shared_not_doubled(self, tmp_path):
         # a delegated skill IS a sub-agent; two counters would let the pair
         # spend twice what the operator allowed
-        from akshara.agent import Agent
-        from akshara.subagent import SubagentSpawner
+        from yantra.agent import Agent
+        from yantra.subagent import SubagentSpawner
 
         write_skill(tmp_path / "skills", "repo-survey", DELEGATED)
         agent = Agent(None, model="m")
@@ -560,8 +560,8 @@ class TestDelegation:
         assert skills.spawner() is existing
 
     def test_a_spawner_is_created_on_demand_without_subagents_flag(self, tmp_path):
-        from akshara.agent import Agent
-        from akshara.subagent import SubagentSpawner
+        from yantra.agent import Agent
+        from yantra.subagent import SubagentSpawner
 
         write_skill(tmp_path / "skills", "repo-survey", DELEGATED)
         agent = Agent(None, model="m")
@@ -570,7 +570,7 @@ class TestDelegation:
         assert skills.spawner() is agent.subagents   # cached, not rebuilt
 
 
-# ---- the operator's switch: /skills off|on, $AKSHARA_DISABLED_SKILLS -------
+# ---- the operator's switch: /skills off|on, $YANTRA_DISABLED_SKILLS -------
 
 
 class TestDisabling:
@@ -654,15 +654,15 @@ class TestDisabling:
 
 class TestDisabledPatterns:
     def test_globs_come_off_the_environment(self, monkeypatch):
-        from akshara import config
+        from yantra import config
 
-        monkeypatch.setenv("AKSHARA_DISABLED_SKILLS", "deploy-*, pr-review")
+        monkeypatch.setenv("YANTRA_DISABLED_SKILLS", "deploy-*, pr-review")
         assert config.disabled_skill_patterns() == ["deploy-*", "pr-review"]
 
     def test_unset_disables_nothing(self, monkeypatch):
-        from akshara import config
+        from yantra import config
 
-        monkeypatch.delenv("AKSHARA_DISABLED_SKILLS", raising=False)
+        monkeypatch.delenv("YANTRA_DISABLED_SKILLS", raising=False)
         assert config.disabled_skill_patterns() == []
 
 
@@ -671,7 +671,7 @@ class TestDisabledPatterns:
 
 class TestRenderRoundTrip:
     def test_what_it_writes_the_parser_reads_back(self, tmp_path):
-        from akshara.skills import render_skill_md
+        from yantra.skills import render_skill_md
 
         text = render_skill_md(
             "repo-survey",
@@ -688,7 +688,7 @@ class TestRenderRoundTrip:
         assert skill.body.startswith("# Surveying")
 
     def test_a_long_description_folds_and_unfolds(self, tmp_path):
-        from akshara.skills import parse_frontmatter, render_skill_md
+        from yantra.skills import parse_frontmatter, render_skill_md
 
         long = ("Cut a tagged release for this repo including the version "
                 "bump, the changelog line, the tag itself and the push. Use "
@@ -699,7 +699,7 @@ class TestRenderRoundTrip:
         assert fields["description"] == long
 
     def test_inline_skills_carry_no_delegated_keys(self):
-        from akshara.skills import render_skill_md
+        from yantra.skills import render_skill_md
 
         text = render_skill_md("pr-review", "x" * 30, "# Do it")
         assert "mode:" not in text
@@ -721,13 +721,13 @@ class TestWriting:
     def test_an_edit_rewrites_in_place_wherever_it_lives(self, tmp_path):
         # writing an edit to a different root would create a shadowing copy
         # and leave the original behind
-        write_skill(tmp_path / ".akshara" / "skills", "pr-review")
+        write_skill(tmp_path / ".yantra" / "skills", "pr-review")
         agent = _agent()
         skills = enable_skills(agent, tmp_path, home=tmp_path / "home")
         assert skills.get("pr-review").source == "local"
         skill = skills.write("pr-review", "Review a git diff for bugs and "
                              "missing tests. Use on any PR.", "# v2")
-        assert skill.path == tmp_path / ".akshara" / "skills" / "pr-review" / SKILL_FILE
+        assert skill.path == tmp_path / ".yantra" / "skills" / "pr-review" / SKILL_FILE
         assert not (tmp_path / "skills" / "pr-review").exists()
         assert skill.body == "# v2"
 

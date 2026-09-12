@@ -116,7 +116,7 @@ blob in the same shape as `--mcp-config`
 (`{"servers": {...}}`) parsed server-side; each entry reports its own
 result inside `results[]` — one bad server is an `ok:false` row, not a
 500 hiding the three that worked. A checked-by-default "remember"
-saves the entry to `.akshara/mcp.json` for auto-reconnect on future
+saves the entry to `.yantra/mcp.json` for auto-reconnect on future
 launches; remove always forgets it. A click-by-click walkthrough of
 that panel -- adding a server both ways, watching a local model call
 it, and the three traps (cwd-relative paths, remember-by-default, the
@@ -185,8 +185,8 @@ registered as `None` whenever stdin/stdout aren't a TTY (piped runs,
 cron, evals), and a call raises `UserUnavailable` — deliberately a
 `BaseException`, so the loop's errors-are-data conversion cannot turn
 "no user" into a tool result the model would explain away with a guess
-([tools/ask_user.py](../src/akshara/tools/ask_user.py),
-[errors.py](../src/akshara/errors.py)). The turn fails loudly, exit
+([tools/ask_user.py](../src/yantra/tools/ask_user.py),
+[errors.py](../src/yantra/errors.py)). The turn fails loudly, exit
 code 1, history stays resumable. Receipt below.
 
 ## Cancel is Ctrl-C, at every checkpoint including mid-sentence
@@ -211,7 +211,7 @@ running and no modal owns the keyboard.
 `--web` in the foreground owns the tab it runs in, which is fine until
 you want the UI *and* your shell. `./start.sh web-start` (the launcher
 from [notes/06](06-cli.md)) detaches it: `nohup` + background, with
-three small files in `.akshara/` as the whole state machine —
+three small files in `.yantra/` as the whole state machine —
 `web-ui.pid`, `web-ui.port`, `web-ui.log`.
 
 The parts that earned their keep:
@@ -258,8 +258,8 @@ answer. Your other server's port is sacred — the container defaults to
 8321 and only *moves up* (8322–8342) when that is already serving
 something, so launching it can never kill a web UI you left running.
 `stop`, `status`, `restart`, `logs` are the companions — and the script
-only ever touches a container it started itself (`akshara-web`). A `yes`
-menu answer adds `--auto-approve` (`AKSHARA_AUTO_APPROVE`); `--model`,
+only ever touches a container it started itself (`yantra-web`). A `yes`
+menu answer adds `--auto-approve` (`YANTRA_AUTO_APPROVE`); `--model`,
 `--timeout`, `--max-turns` pass through to the CLI. An explicit
 `--port` already busy is refused — it tells you the port, it doesn't
 take it.
@@ -312,7 +312,7 @@ endpoint with a skill-shaped name. Three rules:
   carries the loader's own message, which is the useful one ("description
   is too thin (11 chars): say what the skill does AND when to use it").
 - **An edit rewrites in place, wherever the skill lives.** Writing an
-  edit of a `~/.akshara/skills` skill into the project root would create
+  edit of a `~/.yantra/skills` skill into the project root would create
   a shadowing copy and leave the original behind — two files, one name,
   and a user wondering why their change did nothing.
 
@@ -413,7 +413,7 @@ off.
 
 All against local Ollama `qwen3.8` (27B, Q4):
 
-1. **Headless fail**: `uv run akshara --provider ollama --model qwen3.8
+1. **Headless fail**: `uv run yantra --provider ollama --model qwen3.8
    "Write a poem about my favorite editor..."` — the model searched its
    notes first (`recall_notes` came up empty), then called `ask_user`,
    and the run ended: `turn failed: ask_user ran with no interactive

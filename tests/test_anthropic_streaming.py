@@ -10,10 +10,10 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from akshara.errors import AuthError, ProviderError
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.base import ProviderSettings, collect
-from akshara.types import (
+from yantra.errors import AuthError, ProviderError
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.base import ProviderSettings, collect
+from yantra.types import (
     ThinkingBlock,
     EndEvent,
     Message,

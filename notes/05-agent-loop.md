@@ -1,6 +1,6 @@
 # 05 · The agent loop, cancellation, and the history invariant
 
-> Files: `akshara/agent.py`, `akshara/permissions.py`.
+> Files: `yantra/agent.py`, `yantra/permissions.py`.
 > This is the note `errors.py` points at from `ContextOverflowError`.
 
 ## The loop

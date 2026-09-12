@@ -79,6 +79,6 @@ Offline suite green via MockTransport.
 Live receipt (local-only, no external traffic): `python -m http.server
 8377` serving a hand-written page; Ollama `qwen3.8` one-shot `--yolo`
 fetched `http://127.0.0.1:8377/hello.html` through the real tool and
-reported back the title — *"Akshara Receipt Page"* — plus its body
+reported back the title — *"Yantra Receipt Page"* — plus its body
 text. The gate was skipped via --yolo by choice; without it the run
 would have stopped at the approval prompt naming that exact url.

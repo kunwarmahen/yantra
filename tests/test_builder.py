@@ -1,6 +1,6 @@
 """Builder tests: spec in -> project out, VERIFIED independently.
 
-The whole point of akshara.builder is that it trusts nothing the model
+The whole point of yantra.builder is that it trusts nothing the model
 claims, so the tests attack exactly that: a build that goes green, a
 model whose acceptance checks fail anyway, and a repair job that tries
 to weaken its checksummed tests.
@@ -12,16 +12,16 @@ import sys
 from pathlib import Path
 
 
-from akshara.agent import Agent
-from akshara.builder import (
+from yantra.agent import Agent
+from yantra.builder import (
     BUILD_SYSTEM,
     BuildSpec,
     default_checks,
     run_build,
 )
-from akshara.permissions import yolo
-from akshara.tools import default_registry
-from akshara.types import Message, ModelResponse, TextBlock, ToolCall, Usage
+from yantra.permissions import yolo
+from yantra.tools import default_registry
+from yantra.types import Message, ModelResponse, TextBlock, ToolCall, Usage
 
 from conftest import ScriptedProvider
 

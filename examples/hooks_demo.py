@@ -17,12 +17,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from akshara.agent import Agent  # noqa: E402
-from akshara.config import default_model, load_settings  # noqa: E402
-from akshara.permissions import allow_read_only  # noqa: E402
-from akshara.providers import get_provider  # noqa: E402
-from akshara.tools import default_registry  # noqa: E402
-from akshara.types import ToolCall, ToolResult  # noqa: E402
+from yantra.agent import Agent  # noqa: E402
+from yantra.config import default_model, load_settings  # noqa: E402
+from yantra.permissions import allow_read_only  # noqa: E402
+from yantra.providers import get_provider  # noqa: E402
+from yantra.tools import default_registry  # noqa: E402
+from yantra.types import ToolCall, ToolResult  # noqa: E402
 
 
 def main() -> None:

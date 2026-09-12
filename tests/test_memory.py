@@ -13,9 +13,9 @@ from typing import Any
 
 import pytest
 
-from akshara.errors import ToolError
-from akshara.tools.base import ToolContext
-from akshara.tools.memory import NoteStore, RecallNotes, WriteNote
+from yantra.errors import ToolError
+from yantra.tools.base import ToolContext
+from yantra.tools.memory import NoteStore, RecallNotes, WriteNote
 
 
 @pytest.fixture()
@@ -30,8 +30,8 @@ def run(tool, args: dict[str, Any], ctx: ToolContext) -> str:
 class TestNoteStore:
     def test_upsert_get_round_trip(self, tmp_path):
         store = NoteStore(tmp_path)
-        store.upsert("layout", "src/akshara has the package")
-        assert store.get("layout") == "src/akshara has the package"
+        store.upsert("layout", "src/yantra has the package")
+        assert store.get("layout") == "src/yantra has the package"
 
     def test_persists_across_instances(self, tmp_path):
         # the entire point of the file backing: a NEW process (or a new
@@ -41,7 +41,7 @@ class TestNoteStore:
 
     def test_store_lives_under_sandbox_root(self, ctx):
         WriteNote().run({"topic": "t", "content": "c"}, ctx)
-        assert (ctx.cwd / ".akshara" / "memory.json").exists()
+        assert (ctx.cwd / ".yantra" / "memory.json").exists()
 
     def test_rewrites_replace_never_append(self, tmp_path):
         store = NoteStore(tmp_path)
@@ -51,7 +51,7 @@ class TestNoteStore:
         assert len(store.all()) == 1
 
     def test_corrupt_store_is_a_model_readable_error(self, tmp_path):
-        path = tmp_path / ".akshara" / "memory.json"
+        path = tmp_path / ".yantra" / "memory.json"
         path.parent.mkdir(parents=True)
         path.write_text("{not json", encoding="utf-8")
         with pytest.raises(ToolError, match="corrupted"):
@@ -83,7 +83,7 @@ class TestWriteNote:
 class TestRecallNotes:
     def _seed(self, ctx) -> None:
         run(WriteNote(), {"topic": "project-layout",
-                          "content": "package lives in src/akshara"},
+                          "content": "package lives in src/yantra"},
             ctx)
         run(WriteNote(), {"topic": "dead-ends",
                           "content": "ripgrep flags break on BSD grep"}, ctx)
@@ -96,7 +96,7 @@ class TestRecallNotes:
         self._seed(ctx)
         out = run(RecallNotes(), {}, ctx)
         assert "[dead-ends]" in out and "[project-layout]" in out
-        assert "src/akshara" in out  # body preview visible
+        assert "src/yantra" in out  # body preview visible
 
     def test_query_ranks_topic_hits_over_body_hits(self, ctx):
         self._seed(ctx)
@@ -116,7 +116,7 @@ class TestRecallNotes:
         self._seed(ctx)
         out = run(RecallNotes(), {"topic": "project-layout"}, ctx)
         assert out.startswith("# project-layout")
-        assert "src/akshara" in out
+        assert "src/yantra" in out
 
     def test_missing_exact_topic_suggests_alternatives(self, ctx):
         self._seed(ctx)
@@ -126,5 +126,5 @@ class TestRecallNotes:
     def test_store_file_is_inspectable_json(self, ctx):
         self._seed(ctx)
         data = json.loads(
-            (ctx.cwd / ".akshara" / "memory.json").read_text())
+            (ctx.cwd / ".yantra" / "memory.json").read_text())
         assert set(data) == {"project-layout", "dead-ends"}

@@ -3,7 +3,7 @@
 > Book ch13 — which uses the official `mcp` SDK and calls a from-scratch
 > client "300 lines of undifferentiated code". This project disagrees:
 > no wire is undifferentiated (the SSE parser is hand-rolled too), so
-> [mcp.py](../src/akshara/mcp.py) implements both transports — stdio and
+> [mcp.py](../src/yantra/mcp.py) implements both transports — stdio and
 > Streamable HTTP — plus JSON-RPC 2.0 directly. Files: `mcp.py`,
 > `examples/tiny_mcp_server.py` (the book's suggested exercise — both
 > sides of BOTH transports), `tests/test_mcp.py`.
@@ -183,7 +183,7 @@ The decisions worth writing down:
   as one wired at startup.
 * **Remembering is opt-in per server, asked each time.** The web form
   has a checked-by-default checkbox; the REPL follows its success
-  message with the y/N prompt. Yes → `.akshara/mcp.json` in the working
+  message with the y/N prompt. Yes → `.yantra/mcp.json` in the working
   directory (same building-block shape as `--mcp-config`, upserted with
   an atomic tmp+rename); future launches auto-reconnect those servers
   after flag configs, skipping any name already connected. Removal
@@ -200,7 +200,7 @@ spawns the child itself, so there is nothing to start beforehand.
 
 ```bash
 cd <this repo>                      # the cwd matters; see the traps below
-uv run akshara --web --provider ollama
+uv run yantra --web --provider ollama
 ```
 
 Open `http://localhost:8321` and click the **tools chip** in the top
@@ -265,7 +265,7 @@ refused before anything spawns, with the parser's own complaint
   `exited unexpectedly (code 2) during 'initialize'` -- which does not
   obviously mean "wrong path". Absolute paths always work.
 * **remember is ticked by default.** Leave it on for a test server and
-  it lands in `.akshara/mcp.json` and reconnects on every future
+  it lands in `.yantra/mcp.json` and reconnects on every future
   launch; the row grows a **saved** badge when that has happened.
   Removing forgets it again.
 * **The transport radio defaults to stdio.** For a Streamable-HTTP
@@ -308,7 +308,7 @@ credential resurfaces as an unexplained 401 an hour later.
 
 **`${VAR}` is expanded from the environment at connect time**, and
 that indirection is the point rather than a convenience. `remember`
-writes `.akshara/mcp.json` into the working directory; storing the
+writes `.yantra/mcp.json` into the working directory; storing the
 literal token there would put a live credential one `git add -A` away
 from a public repository. The placeholder is what lands on disk, and it
 resolves afresh every launch. An UNSET variable is an error, not an
@@ -335,12 +335,12 @@ second error is the server having read the credential and disliked it
 #### If the server only issues tokens through a login
 
 Most commercial ones do, and then there is no token to paste: the flow
-IS the credential. `akshara --mcp-login NAME` walks it
-([mcp_oauth.py](../src/akshara/mcp_oauth.py)), and the panel's 🔑 on any
+IS the credential. `yantra --mcp-login NAME` walks it
+([mcp_oauth.py](../src/yantra/mcp_oauth.py)), and the panel's 🔑 on any
 http row does the same thing from the browser you already have open.
 
 ```bash
-uv run akshara --mcp-login vendor --mcp-config vendor.json
+uv run yantra --mcp-login vendor --mcp-config vendor.json
 ```
 
 Five RFCs' worth of moving parts, and the walk between them is short
@@ -384,9 +384,9 @@ Decisions worth writing down:
   The success page now also carries `<link rel="icon" href="data:,">`
   so the request is never made; either guard alone is enough, and
   having both is cheap.
-* **Tokens live in `~/.local/state/akshara/mcp-tokens.json`, mode
+* **Tokens live in `~/.local/state/yantra/mcp-tokens.json`, mode
   0600**, set on the temp file BEFORE the rename so the secret is never
-  briefly world-readable. Not `.akshara/` -- that sits in a working
+  briefly world-readable. Not `.yantra/` -- that sits in a working
   directory, and a refresh token is a long-lived credential one
   `git add -A` in one careless repo away from being public.
 * **A 401 raises `MCPAuthRequired`, a subclass of `MCPError`.** Every

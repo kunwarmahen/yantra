@@ -8,7 +8,7 @@ Run:
 While it runs, PRESS CTRL-C DURING A TURN: the turn cancels, outstanding
 tool calls get synthesized error results (the resumable-history
 invariant), and the next prompt still works. That recovery path is the
-single most important behavior in this file's sibling, akshara/agent.py.
+single most important behavior in this file's sibling, yantra/agent.py.
 
 The two channels of an agent turn:
 
@@ -29,13 +29,13 @@ import argparse
 
 from rich.console import Console
 
-from akshara.agent import Agent, ToolExecuted, TurnEnd
-from akshara.cli.repl import confirm_gate
-from akshara.config import default_model, load_settings
-from akshara.permissions import deny_all
-from akshara.providers import get_provider
-from akshara.tools import default_registry
-from akshara.types import (
+from yantra.agent import Agent, ToolExecuted, TurnEnd
+from yantra.cli.repl import confirm_gate
+from yantra.config import default_model, load_settings
+from yantra.permissions import deny_all
+from yantra.providers import get_provider
+from yantra.tools import default_registry
+from yantra.types import (
     StartEvent,
     RedactedThinking,
     TextDelta,

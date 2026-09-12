@@ -1,8 +1,8 @@
-# AksharaHarness — web UI in a container.
+# Yantra — web UI in a container.
 #
-# Build:  podman build -t localhost/akshara-web .
-# Run:    podman run -d --name akshara-web -p 8400:8321 \
-#             -v ./.env:/app/.env:ro localhost/akshara-web
+# Build:  podman build -t localhost/yantra-web .
+# Run:    podman run -d --name yantra-web -p 8400:8321 \
+#             -v ./.env:/app/.env:ro localhost/yantra-web
 #         (see README "Run in a container")
 #
 # The image carries code only — no keys. Secrets arrive at run time,
@@ -23,7 +23,7 @@ RUN uv sync --frozen --no-install-project --extra web
 COPY src/ src/
 # Skills are hand-written source, not machine state, so the repo's own
 # set travels with the image. Your project's skills are a run-time
-# mount: -v ./skills:/app/skills:ro (or $AKSHARA_SKILLS_PATH).
+# mount: -v ./skills:/app/skills:ro (or $YANTRA_SKILLS_PATH).
 COPY skills/ skills/
 RUN uv sync --frozen --extra web
 
@@ -36,8 +36,8 @@ ENV PYTHONUNBUFFERED=1
 
 # A dedicated user: the agent's tools run inside this filesystem, so
 # they shouldn't be root in it either.
-RUN useradd -m akshara && chown -R akshara:akshara /app
-USER akshara
+RUN useradd -m yantra && chown -R yantra:yantra /app
+USER yantra
 
 EXPOSE 8321
 
@@ -45,7 +45,7 @@ EXPOSE 8321
 # COMPOSE instead of replacing ("image --web --cwd /workspace" works).
 # Bind 0.0.0.0 — the default loopback bind is unreachable from outside
 # the container no matter how you publish the port.
-ENTRYPOINT ["akshara"]
+ENTRYPOINT ["yantra"]
 CMD ["--web", "--host", "0.0.0.0"]
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \

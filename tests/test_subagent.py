@@ -14,18 +14,18 @@ import pytest
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 
-from akshara.agent import Agent
-from akshara.errors import ProviderError, ToolError
-from akshara.permissions import yolo
-from akshara.subagent import (
+from yantra.agent import Agent
+from yantra.errors import ProviderError, ToolError
+from yantra.permissions import yolo
+from yantra.subagent import (
     EXECUTE_CLAUSE,
     SPAWN_TOOL_NAME,
     CHILD_SYSTEM_TEMPLATE,
     SpawnSubagent,
     SubagentSpawner,
 )
-from akshara.tools.fs import ReadFile
-from akshara.types import ModelResponse, Usage
+from yantra.tools.fs import ReadFile
+from yantra.types import ModelResponse, Usage
 
 VALID_ARGS = {
     "objective": "Find which file defines the agent loop.",
@@ -96,9 +96,9 @@ class TestChildRun:
     def test_fresh_context_filtered_catalog_compact_return(self):
         script = [
             _spawn_response(),                              # parent spawns
-            assistant_text("src/akshara/agent.py -> the loop",
+            assistant_text("src/yantra/agent.py -> the loop",
                            usage=Usage(input_tokens=10, output_tokens=5)),
-            assistant_text("the loop lives in src/akshara/agent.py"),
+            assistant_text("the loop lives in src/yantra/agent.py"),
         ]
         agent, spawner = make_agent(script)
         provider = agent.provider
@@ -128,9 +128,9 @@ class TestChildRun:
                      and any(getattr(b, "tool_call_id", None) == "call_1"
                              for b in m.content))
         content = batch.content[0].content
-        assert "src/akshara/agent.py -> the loop" in content  # the report...
+        assert "src/yantra/agent.py -> the loop" in content  # the report...
         content = batch.content[0].content
-        assert "src/akshara/agent.py -> the loop" in content  # the report...
+        assert "src/yantra/agent.py -> the loop" in content  # the report...
         assert "[sub-agent ·" in content                     # ...plus cost meta
         assert "10in/5out tokens]" in content
         assert spawner.spawned == 1
@@ -265,7 +265,7 @@ class TestStreamTee:
     def test_cli_helper_registers_tool_and_tee(self):
         from rich.console import Console
 
-        from akshara.cli.main import enable_subagents
+        from yantra.cli.main import enable_subagents
 
         # a plain agent -- enable_subagents does the whole wiring itself
         agent = Agent(ScriptedProvider([]), model="m", permissions=yolo)

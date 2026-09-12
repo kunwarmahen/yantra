@@ -11,17 +11,17 @@ from __future__ import annotations
 import pytest
 from conftest import ScriptedProvider, assistant_text
 
-from akshara.agent import Agent
-from akshara.errors import (
+from yantra.agent import Agent
+from yantra.errors import (
     AuthError,
     ContextOverflowError,
     ProviderError,
     RateLimitError,
 )
-from akshara.permissions import yolo
-from akshara.providers.base import collect
-from akshara.providers.fallback import FallbackProvider
-from akshara.types import StartEvent, TextDelta, Usage
+from yantra.permissions import yolo
+from yantra.providers.base import collect
+from yantra.providers.fallback import FallbackProvider
+from yantra.types import StartEvent, TextDelta, Usage
 
 
 def healthy(text: str = "ok", **kw) -> ScriptedProvider:

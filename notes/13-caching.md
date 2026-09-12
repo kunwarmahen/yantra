@@ -45,7 +45,7 @@ request kwarg.
 
 ```python
 provider = get_provider("anthropic", settings, cache_control=True)
-#   or:  uv run akshara --cache
+#   or:  uv run yantra --cache
 ```
 
 Off by default (it is a billing-relevant choice). When off, requests

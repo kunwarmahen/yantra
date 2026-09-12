@@ -18,7 +18,7 @@ CALLS for a browser engine.
 ## The extra is the opt-in
 
 ```
-uv add 'aksharaharness[browse]'
+uv add 'yantra[browse]'
 uv run playwright install chromium
 ```
 
@@ -37,7 +37,7 @@ so the harness switches to its heavy-mode tool strategy (`--tool-select
 
 Every action returns readable prose plus numbered interactive elements
 harvested from the LIVE DOM in one `evaluate()` pass: visible elements
-matching link/button/input/select roles get `data-akshara-ref="eN"`
+matching link/button/input/select roles get `data-yantra-ref="eN"`
 attributes AND appear as `[e3] textbox Search`. Clicking and filling
 resolve refs through that same attribute — the model's view of the
 page and its click targets can never disagree. Refs regenerate on
@@ -79,7 +79,7 @@ model your cookies — is exactly wrong twice over:
    keeps ALL of it, because it's not an export at all — it's just the
    browser keeping its own profile directory between runs.
 
-So: `$AKSHARA_BROWSER_PROFILE=<dir>` (unset = fresh sessions, nothing
+So: `$YANTRA_BROWSER_PROFILE=<dir>` (unset = fresh sessions, nothing
 persists — the default, since a profile IS a plaintext credential
 store). Set it, and every headless launch lands on that dir;
 `--browse-login <url>` opens a HEADED Chromium on the same dir so the
@@ -117,13 +117,13 @@ and every action without a page saying so in model-readable words.
 - snapshot rendering: title/source header, element lines, unlabeled
   elements clean, "(no interactive elements found)"
 - head-tail clip on long pages; `[showing N of M]` element cap at 60
-- click resolves `[data-akshara-ref]` and returns the REFRESHED page;
+- click resolves `[data-yantra-ref]` and returns the REFRESHED page;
   fill types into textboxes, selects dropdown options by label, and
   refuses buttons with guidance; unknown ref lists known refs
 - lifecycle: url-less open needs a page; second open reuses the page;
   close resets everything; reopen re-arms launch (proved by the
   missing-extra error firing again)
-- launch paths: missing playwright names `aksharaharness[browse]`;
+- launch paths: missing playwright names `yantra[browse]`;
   missing chromium binary names `playwright install chromium`;
   `file://` refused BEFORE any launch cost
 - ONE worker thread sees all traffic, never the caller's thread
@@ -134,8 +134,8 @@ and every action without a page saying so in model-readable words.
   all four verbs share that one session
 - login setup: headed launch + goto + wait_for_event('close'),
   playwright stopped even when waiting explodes, missing extra names
-  `aksharaharness[browse]`, file:// refused before any launch cost;
-  CLI dispatch — no profile names $AKSHARA_BROWSER_PROFILE (exit 2),
+  `yantra[browse]`, file:// refused before any launch cost;
+  CLI dispatch — no profile names $YANTRA_BROWSER_PROFILE (exit 2),
   a profile runs key-free to completion, --prompt/--build/--web
   combinations refused
 - gating: all four NOT read_only; summaries name url/ref/text

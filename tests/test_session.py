@@ -15,10 +15,10 @@ import pytest
 
 from conftest import ScriptedProvider
 
-from akshara.agent import Agent
-from akshara.permissions import allow_read_only
-from akshara.session import SessionStore, apply_payload
-from akshara.types import (
+from yantra.agent import Agent
+from yantra.permissions import allow_read_only
+from yantra.session import SessionStore, apply_payload
+from yantra.types import (
     Message,
     RedactedThinkingBlock,
     TextBlock,

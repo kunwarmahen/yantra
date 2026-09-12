@@ -18,12 +18,12 @@ from __future__ import annotations
 import pytest
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
-from akshara.agent import Agent, ToolExecuted, TurnEnd
-from akshara.errors import UserUnavailable
-from akshara.permissions import allow_read_only, deny_all
-from akshara.tools.ask_user import AskUser, TerminalChannel
-from akshara.tools.base import Tool, ToolRegistry
-from akshara.types import ModelResponse, ToolCall, ToolResult
+from yantra.agent import Agent, ToolExecuted, TurnEnd
+from yantra.errors import UserUnavailable
+from yantra.permissions import allow_read_only, deny_all
+from yantra.tools.ask_user import AskUser, TerminalChannel
+from yantra.tools.base import Tool, ToolRegistry
+from yantra.types import ModelResponse, ToolCall, ToolResult
 
 
 def make_agent(script: list[ModelResponse], channel, *,

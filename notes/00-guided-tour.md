@@ -53,7 +53,7 @@ That postal service is what this repository builds.
 
 ## 3 · The cast of characters
 
-One folder per job (`src/akshara/`):
+One folder per job (`src/yantra/`):
 
 ```
  ┌─────────────────────────── YOU ───────────────────────────┐
@@ -154,7 +154,7 @@ with the transcript (the "filing cabinet") growing each time:
  ┌─ TRANSCRIPT after steps 3–4 ─────────────────────────┐
  │ user:      "What's in README.md?"                    │
  │ assistant: [request: read_file('README.md')]         │
- │ user:      [result: "# AksharaHarness — a from-scratch…"]   │
+ │ user:      [result: "# Yantra — a from-scratch…"]   │
  └──────────────────────────────────────────────────────┘
    │  mailed to the model again
    ▼
@@ -341,7 +341,7 @@ everything done:
 
  [0] user      ["What's in README.md?"]
  [1] assistant [thinking…, request: read_file]
- [2] user      [result: "# AksharaHarness — a from-scratch…"]
+ [2] user      [result: "# Yantra — a from-scratch…"]
  [3] assistant ["It's a from-scratch agent harness…"]
 ```
 
@@ -504,9 +504,9 @@ uv sync                                   # one-time setup
 uv run pytest -q                          # full offline suite (~592 tests)
 
 # the rest talks to a real model (needs a key, or a local Ollama):
-uv run akshara                            # interactive session
-uv run akshara --provider ollama --web    # the same session in your browser
-uv run akshara --yolo "summarize README.md"
+uv run yantra                            # interactive session
+uv run yantra --provider ollama --web    # the same session in your browser
+uv run yantra --yolo "summarize README.md"
 uv run python examples/agent_loop_demo.py # watch the loop, event by event
 uv run python examples/builder_demo.py    # watch it BUILD a project
 uv run python examples/cache_demo.py      # watch caching cut the bill

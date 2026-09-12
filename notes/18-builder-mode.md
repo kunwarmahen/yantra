@@ -2,7 +2,7 @@
 
 *Companion to [notes/12](12-builder.md), which proved an agent COULD
 build a project. This note is the promotion of that demo into a
-product: `akshara/builder.py`, `--build`, `/build`.*
+product: `yantra/builder.py`, `--build`, `/build`.*
 
 ## What changed when it became a library
 
@@ -50,7 +50,7 @@ files are watched.
 
 | Surface | Shape |
 |---|---|
-| `uv run akshara --build "SPEC"` | one-shot: workspace defaults to `.akshara/builds/<ts>/` (override with `--cwd`); prints per-check PASS/FAIL + BUILD GREEN/RED; **exit 0/1** so CI can gate on it |
+| `uv run yantra --build "SPEC"` | one-shot: workspace defaults to `.yantra/builds/<ts>/` (override with `--cwd`); prints per-check PASS/FAIL + BUILD GREEN/RED; **exit 0/1** so CI can gate on it |
 | REPL `/build TASK` | child Agent via the SubagentSpawner pattern: same provider/model, BUILD_SYSTEM prompt, fresh workspace under the session's cwd, parent history untouched; streams through the normal renderer |
 | `examples/builder_demo.py` | now a thin wrapper over `run_build` with its presets (`unitconv`, `todo`, `repair`) as BuildSpec data |
 

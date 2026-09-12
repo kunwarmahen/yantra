@@ -62,7 +62,7 @@ Honesty rules, enforced by tests rather than convention:
 * A **local model is genuinely free**: the `ollama` provider renders
   `$0.00 (local model)` without consulting any table.
 * Prices are **list prices, snapshot-dated 2026-08**, and will drift.
-  `AKSHARA_PRICES=/path/to.json` overrides or extends the built-ins:
+  `YANTRA_PRICES=/path/to.json` overrides or extends the built-ins:
   exact slugs plus `prefix*` family rules, USD per 1M tokens, with
   `cached_read`/`cached_write` optional (absent → billed at full input
   rate — the conservative fallback, matching vendors like the `-pro`

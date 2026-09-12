@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from akshara.env_context import POLICY, EnvContext
-from akshara.prompt import SystemPrompt, attach_prompt, recompose
+from yantra.env_context import POLICY, EnvContext
+from yantra.prompt import SystemPrompt, attach_prompt, recompose
 
 
 def _agent(system=None):

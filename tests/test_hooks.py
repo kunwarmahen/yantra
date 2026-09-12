@@ -19,10 +19,10 @@ import asyncio
 import pytest
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
-from akshara.agent import Agent
-from akshara.async_agent import AsyncAgent
-from akshara.permissions import deny_all, yolo
-from akshara.tools.base import Tool, ToolRegistry
+from yantra.agent import Agent
+from yantra.async_agent import AsyncAgent
+from yantra.permissions import deny_all, yolo
+from yantra.tools.base import Tool, ToolRegistry
 
 
 class EchoTool(Tool):

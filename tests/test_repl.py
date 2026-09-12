@@ -13,12 +13,12 @@ from rich.console import Console
 
 from conftest import ScriptedProvider, assistant_text
 
-from akshara.agent import Agent
-from akshara.cli.repl import Repl, confirm_gate
-from akshara.env_context import EnvContext
-from akshara.permissions import PermissionRequest, SwitchableGate, allow_read_only
-from akshara.skills import enable_skills
-from akshara.types import (ImageBlock, Message, StartEvent, TextBlock,
+from yantra.agent import Agent
+from yantra.cli.repl import Repl, confirm_gate
+from yantra.env_context import EnvContext
+from yantra.permissions import PermissionRequest, SwitchableGate, allow_read_only
+from yantra.skills import enable_skills
+from yantra.types import (ImageBlock, Message, StartEvent, TextBlock,
                            TextDelta)
 
 
@@ -414,8 +414,8 @@ class TestToolsCommand:
     switches. Pulls are live immediately and reversible in-session."""
 
     def _repl(self):
-        from akshara.tools.base import ToolRegistry
-        from akshara.tools.fs import ReadFile, WriteFile
+        from yantra.tools.base import ToolRegistry
+        from yantra.tools.fs import ReadFile, WriteFile
 
         registry = ToolRegistry()
         registry.register(ReadFile())
@@ -435,7 +435,7 @@ class TestToolsCommand:
         assert not repl.agent.registry.is_disabled("write_file")
 
     def test_glob_patterns_match_like_the_env_kill_switch(self):
-        from akshara.tools.glob import Glob
+        from yantra.tools.glob import Glob
 
         repl, console = self._repl()
         repl.agent.registry.register(Glob())  # name: "glob"
@@ -474,7 +474,7 @@ class TestMcpCommand:
 
     @staticmethod
     def _fake_connector(closed_log=None):
-        from akshara.tools.base import Tool
+        from yantra.tools.base import Tool
 
         class FakeSess:
             def __init__(self, config):
@@ -508,20 +508,20 @@ class TestMcpCommand:
 
     @staticmethod
     def _mcpcfg(name):
-        from akshara.mcp import MCPServerConfig
+        from yantra.mcp import MCPServerConfig
         return MCPServerConfig(name=name, command="python",
                                args=["srv.py"])
 
     def _repl(self, tmp_path=None, connector=None):
-        from akshara.mcp import MCPManager
-        from akshara.tools.base import ToolRegistry
-        from akshara.tools.fs import ReadFile
+        from yantra.mcp import MCPManager
+        from yantra.tools.base import ToolRegistry
+        from yantra.tools.fs import ReadFile
 
         registry = ToolRegistry()
         registry.register(ReadFile())
         manager = MCPManager(
             registry,
-            memory_path=(tmp_path / ".akshara" / "mcp.json")
+            memory_path=(tmp_path / ".yantra" / "mcp.json")
             if tmp_path else None,
             connector=connector or self._fake_connector())
         agent = Agent(ScriptedProvider([]), model="m", tools=registry,
@@ -612,12 +612,12 @@ class TestMcpCommand:
         cfgs = manager.servers()
         assert cfgs[0]["target"] == "python srv.py --port 9"
         assert cfgs[0]["remembered"] is True
-        saved = tmp / ".akshara" / "mcp.json"
+        saved = tmp / ".yantra" / "mcp.json"
         assert saved.exists() and "tiny" in saved.read_text()
         assert "saved to" in console.file.getvalue()
 
     def test_add_failure_is_reported_not_raised(self):
-        from akshara.mcp import MCPError
+        from yantra.mcp import MCPError
 
         def failing(config, timeout=30.0):
             raise MCPError("cannot spawn mcp server 'dead'")

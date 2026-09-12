@@ -13,16 +13,16 @@ from pathlib import Path
 import httpx
 import pytest
 
-from akshara.errors import (
+from yantra.errors import (
     AuthError,
     ContextOverflowError,
     ProviderError,
     RateLimitError,
 )
-from akshara.providers.base import ProviderSettings, collect
-from akshara.providers.openai import OpenAIProvider
-from akshara.providers.retry import RetryPolicy
-from akshara.types import (
+from yantra.providers.base import ProviderSettings, collect
+from yantra.providers.openai import OpenAIProvider
+from yantra.providers.retry import RetryPolicy
+from yantra.types import (
     EndEvent,
     Message,
     StartEvent,

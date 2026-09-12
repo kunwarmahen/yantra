@@ -1,6 +1,6 @@
 # 10 · Evals: measuring right behavior, not just working code
 
-> Book ch19. Files: [evals.py](../src/akshara/evals.py),
+> Book ch19. Files: [evals.py](../src/yantra/evals.py),
 > [`examples/run_evals.py`](../examples/run_evals.py) (the live gate),
 > `tests/test_evals.py`.
 

@@ -104,6 +104,6 @@ auto-compaction when transcripts grow ([notes/07](notes/07-reliability-and-scale
 and async for N builds at once ([notes/11](notes/11-async.md)).
 
 > This demo later graduated into the product proper —
-> `akshara/builder.py` with `--build` and REPL `/build`, independent
+> `yantra/builder.py` with `--build` and REPL `/build`, independent
 > verification plus a bounded repair round that feeds failures back into
 > the conversation. See [18-builder-mode.md](18-builder-mode.md).

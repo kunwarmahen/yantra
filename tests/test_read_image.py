@@ -1,7 +1,7 @@
 """read_image end to end: tool -> loop hoist -> three wire encodings ->
 session round-trip.
 
-The interesting seams are NOT the loader (akshara.images already pins
+The interesting seams are NOT the loader (yantra.images already pins
 that) but what happens AFTER a tool returns pixels:
 
 * the loop splits ToolOutput into a text result + images hoisted onto
@@ -20,16 +20,16 @@ import base64
 
 import pytest
 
-from akshara.agent import Agent
-from akshara.async_agent import AsyncAgent
-from akshara.errors import ToolError
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.openai import OpenAIProvider
-from akshara.providers.responses import ResponsesProvider
-from akshara.session import _dump_message, _load_message
-from akshara.tools import ReadImage, ToolRegistry
-from akshara.tools.base import ToolContext, ToolOutput
-from akshara.types import (
+from yantra.agent import Agent
+from yantra.async_agent import AsyncAgent
+from yantra.errors import ToolError
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.openai import OpenAIProvider
+from yantra.providers.responses import ResponsesProvider
+from yantra.session import _dump_message, _load_message
+from yantra.tools import ReadImage, ToolRegistry
+from yantra.tools.base import ToolContext, ToolOutput
+from yantra.types import (
     ImageBlock,
     Message,
     TextBlock,

@@ -13,10 +13,10 @@ from collections.abc import Iterator
 
 import pytest
 
-from akshara.errors import ToolError
-from akshara.tools import BashKill, BashPoll, BashStart, JobManager
-from akshara.tools.background import MAX_JOBS, Job
-from akshara.tools.base import ToolContext
+from yantra.errors import ToolError
+from yantra.tools import BashKill, BashPoll, BashStart, JobManager
+from yantra.tools.background import MAX_JOBS, Job
+from yantra.tools.base import ToolContext
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ class TestStartPoll:
     def test_start_returns_job_id_and_log_hint(self, jobs, ctx):
         out = BashStart(jobs).run({"command": "echo hi"}, ctx)
         assert "started job-1" in out
-        assert ".akshara/jobs/job-1.log" in out
+        assert ".yantra/jobs/job-1.log" in out
 
     def test_finished_job_polls_exit_code_and_output(self, jobs, ctx):
         BashStart(jobs).run({"command": "echo all done"}, ctx)

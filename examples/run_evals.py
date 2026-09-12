@@ -28,18 +28,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from akshara.config import default_model, load_settings  # noqa: E402
-from akshara.evals import (  # noqa: E402
+from yantra.config import default_model, load_settings  # noqa: E402
+from yantra.evals import (  # noqa: E402
     AsyncEvalRunner,
     EvalCase,
     EvalRunner,
     spawn_setup,
     summarize,
 )
-from akshara.errors import ConfigError  # noqa: E402
-from akshara.permissions import yolo  # noqa: E402
-from akshara.providers import get_provider  # noqa: E402
-from akshara.tools import default_registry  # noqa: E402
+from yantra.errors import ConfigError  # noqa: E402
+from yantra.permissions import yolo  # noqa: E402
+from yantra.providers import get_provider  # noqa: E402
+from yantra.tools import default_registry  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -72,7 +72,7 @@ def build_cases() -> list[EvalCase]:
             id="list-dir-discipline",
             description="explicit tool preference must be followed",
             user_message="Using the dedicated directory listing tool (NOT "
-                         "bash), show what's inside src/akshara/, then name "
+                         "bash), show what's inside src/yantra/, then name "
                          "one file you saw.",
             required_tools=["list_dir"],
             forbidden_tools=["bash"],
@@ -117,7 +117,7 @@ def build_cases() -> list[EvalCase]:
             description="delegation: coordinator spawns, child surveys",
             user_message="Use the spawn_subagent tool to delegate this: "
                          "spawn a child whose tools_allowed is exactly "
-                         "[\"list_dir\"], objective 'list src/akshara/ and "
+                         "[\"list_dir\"], objective 'list src/yantra/ and "
                          "name one .py file you saw'. Relay its answer.",
             required_tools=["spawn_subagent", "list_dir"],
             forbidden_tools=["bash"],
@@ -161,7 +161,7 @@ def main() -> int:
 
 
 def _guess_provider() -> str:
-    from akshara.config import _load_dotenv
+    from yantra.config import _load_dotenv
     _load_dotenv()
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
         return "anthropic"

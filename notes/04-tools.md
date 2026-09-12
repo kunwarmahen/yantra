@@ -1,6 +1,6 @@
 # 04 · Tools: schemas, sandboxes, and honest summaries
 
-> Files: `akshara/tools/*`. See also `05-agent-loop.md`
+> Files: `yantra/tools/*`. See also `05-agent-loop.md`
 > for how the loop turns tool failures into data.
 
 ## A tool is three functions glued to a schema
@@ -173,7 +173,7 @@ long-term memory. The design pressure is compaction itself: masking and
 summarizing DELIBERATELY discard old tool results, so anything expensive
 to learn must be written down or it stops existing after an auto-compact.
 
-* **One JSON file, not a note directory** (`.akshara/memory.json`,
+* **One JSON file, not a note directory** (`.yantra/memory.json`,
   atomic tmp+replace writes). The model should never have to remember
   WHERE its memory lives — only WHAT it called things. Topics are keys;
   rewriting one is an upsert.
@@ -229,7 +229,7 @@ The registry grew a second removal spelling after the first one met the
 UI ([22-web-ui.md](22-web-ui.md)). They answer different questions:
 
 * **`unregister(name)`** — gone for good; the operator's startup
-  kill-switch (`AKSHARA_DISABLED_TOOLS`,
+  kill-switch (`YANTRA_DISABLED_TOOLS`,
   [17-tool-selection.md](17-tool-selection.md)) uses it before any
   catalog is built.
 * **`disable(name)` / `enable(name)`** — reversible and mid-session:

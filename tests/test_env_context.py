@@ -15,13 +15,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from akshara import config
-from akshara.env_context import (
+from yantra import config
+from yantra.env_context import (
     POLICY,
     EnvContext,
     _format_location,
 )
-from akshara.errors import ConfigError
+from yantra.errors import ConfigError
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +29,7 @@ def _no_network(monkeypatch):
     """Reaching the geo seam without stubbing it first is a test bug --
     fail loudly here rather than quietly calling ipinfo from CI."""
     monkeypatch.setattr(
-        "akshara.env_context._http_get",
+        "yantra.env_context._http_get",
         lambda url: (_ for _ in ()).throw(
             AssertionError(f"test hit the network seam: {url}")),
     )
@@ -49,21 +49,21 @@ def _ctx(mode: str = "local", cwd: str = "/tmp/wksp") -> EnvContext:
 class TestModeResolution:
     @pytest.mark.parametrize("value", ["off", "local", "full"])
     def test_valid_values_pass_through(self, monkeypatch, value):
-        monkeypatch.setenv("AKSHARA_ENV_CONTEXT", value)
+        monkeypatch.setenv("YANTRA_ENV_CONTEXT", value)
         assert config.default_env_context() == value
 
     def test_unset_means_full(self, monkeypatch):
-        monkeypatch.delenv("AKSHARA_ENV_CONTEXT", raising=False)
+        monkeypatch.delenv("YANTRA_ENV_CONTEXT", raising=False)
         assert config.default_env_context() == "full"
 
     def test_blank_counts_as_unset(self, monkeypatch):
         # copying .env.example leaves empty templates behind; they must not
         # shadow the code's own default (same rule as browser_profile)
-        monkeypatch.setenv("AKSHARA_ENV_CONTEXT", "   ")
+        monkeypatch.setenv("YANTRA_ENV_CONTEXT", "   ")
         assert config.default_env_context() == "full"
 
     def test_junk_fails_loudly(self, monkeypatch):
-        monkeypatch.setenv("AKSHARA_ENV_CONTEXT", "psychic")
+        monkeypatch.setenv("YANTRA_ENV_CONTEXT", "psychic")
         with pytest.raises(ConfigError, match="off|local|full"):
             config.default_env_context()
 
@@ -84,7 +84,7 @@ class TestCollection:
         assert POLICY in block  # the nudge rides EVERY enabled level
 
     def test_full_with_geo_renders_location_line(self, monkeypatch):
-        monkeypatch.setattr("akshara.env_context._http_get",
+        monkeypatch.setattr("yantra.env_context._http_get",
                             _geo({"city": "Pune", "region": "Maharashtra",
                                   "country": "IN"}))
         ctx = _ctx("full")
@@ -96,14 +96,14 @@ class TestCollection:
         def boom(url):
             raise OSError("network unreachable")
 
-        monkeypatch.setattr("akshara.env_context._http_get", boom)
+        monkeypatch.setattr("yantra.env_context._http_get", boom)
         ctx = _ctx("full")
         ctx.ensure_facts()
         assert "Location" not in ctx.render_block()  # line simply dropped
         assert "OSError" in ctx.geo_error  # surfaced for the startup notice
 
     def test_unusable_geo_payload_still_counts_as_done(self, monkeypatch):
-        monkeypatch.setattr("akshara.env_context._http_get", _geo({}))
+        monkeypatch.setattr("yantra.env_context._http_get", _geo({}))
         ctx = _ctx("full")
         ctx.ensure_facts()
         assert ctx.describe()["location"] is None
@@ -134,7 +134,7 @@ class TestComposition:
         assert _ctx("off").compose() is None
 
     def test_describe_snapshot_shape(self, monkeypatch):
-        monkeypatch.setattr("akshara.env_context._http_get",
+        monkeypatch.setattr("yantra.env_context._http_get",
                             _geo({"city": "Pune"}))
         ctx = _ctx("full")
         ctx.ensure_facts()
@@ -166,7 +166,7 @@ class TestAttachAndFlips:
         assert "- Working directory: /tmp/wksp" in agent.system
 
     def test_flips_are_live_on_the_agent(self, monkeypatch):
-        monkeypatch.setattr("akshara.env_context._http_get",
+        monkeypatch.setattr("yantra.env_context._http_get",
                             _geo({"city": "Pune"}))
         agent = SimpleNamespace(system=None)
         ctx = _ctx("off")
@@ -183,7 +183,7 @@ class TestAttachAndFlips:
             calls.append(url)
             return {"city": "Pune"}
 
-        monkeypatch.setattr("akshara.env_context._http_get", counting)
+        monkeypatch.setattr("yantra.env_context._http_get", counting)
         agent = SimpleNamespace(system=None)
         ctx = _ctx("local")
         ctx.attach(agent)

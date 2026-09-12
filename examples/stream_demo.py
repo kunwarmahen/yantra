@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import sys
 
-from akshara.config import default_model, load_settings
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.types import EndEvent, Message, StartEvent, TextBlock, TextDelta
+from yantra.config import default_model, load_settings
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.types import EndEvent, Message, StartEvent, TextBlock, TextDelta
 
 
 def main() -> None:

@@ -65,7 +65,7 @@ staleness is printed into the block itself; nobody has to remember it.
   pre-feature wire shape (`system=None` stays `None`). The old behavior
   remains one command away, not deleted.
 
-Three surfaces agree on one tuple (`MODES_ENV`): `$AKSHARA_ENV_CONTEXT`
+Three surfaces agree on one tuple (`MODES_ENV`): `$YANTRA_ENV_CONTEXT`
 / `--env-context` set the STARTING level; `/env` (REPL) and the env chip
 (web) flip it live. Junk values fail loudly at startup (`ConfigError`),
 same contract as every other knob in config.py.

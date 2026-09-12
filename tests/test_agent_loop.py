@@ -25,11 +25,11 @@ from conftest import (
     assistant_text,
     assistant_tool_call,
 )
-from akshara.agent import Agent, ToolExecuted, TurnEnd
-from akshara.permissions import yolo
-from akshara.providers.base import collect
-from akshara.tools.base import Tool, ToolRegistry
-from akshara.types import (
+from yantra.agent import Agent, ToolExecuted, TurnEnd
+from yantra.permissions import yolo
+from yantra.providers.base import collect
+from yantra.tools.base import Tool, ToolRegistry
+from yantra.types import (
     EndEvent,
     Message,
     ModelResponse,

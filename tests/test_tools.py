@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from akshara.errors import ToolError
-from akshara.tools import Bash, EditFile, Grep, ListDir, ReadFile, WriteFile
-from akshara.tools.base import ToolContext, ToolRegistry
+from yantra.errors import ToolError
+from yantra.tools import Bash, EditFile, Grep, ListDir, ReadFile, WriteFile
+from yantra.tools.base import ToolContext, ToolRegistry
 
 
 @pytest.fixture
@@ -188,7 +188,7 @@ class TestGrepBackends:
         return tmp_path
 
     def test_fallback_backend_when_rg_missing(self, ctx, tree, monkeypatch):
-        import akshara.tools.search as search
+        import yantra.tools.search as search
         monkeypatch.setattr(search, "_find_rg", lambda: None)
 
         out = Grep().run({"pattern": "needle"}, ctx)
@@ -222,7 +222,7 @@ class TestGrepBackends:
 
     def test_ripgrep_json_stream_normalizes_to_tool_format(
             self, ctx, tree, tmp_path, monkeypatch):
-        import akshara.tools.search as search
+        import yantra.tools.search as search
         # absolute path in, relative 'path:line: text' out -- same as walker
         abs_file = tree / "src" / "util.py"
         events = (
@@ -247,7 +247,7 @@ class TestGrepBackends:
 
     def test_ripgrep_include_filter_and_case_flag(
             self, ctx, tree, tmp_path, monkeypatch):
-        import akshara.tools.search as search
+        import yantra.tools.search as search
         args_log = tmp_path / "argv.txt"
         events = "".join(
             json.dumps({"type": "match", "data": {
@@ -267,7 +267,7 @@ class TestGrepBackends:
 
     def test_ripgrep_cap_stops_reading_the_tree(
             self, ctx, tree, tmp_path, monkeypatch):
-        import akshara.tools.search as search
+        import yantra.tools.search as search
         events = "".join(
             json.dumps({"type": "match", "data": {
                 "path": {"text": str(tree / "notes.md")},
@@ -285,7 +285,7 @@ class TestGrepBackends:
 
     def test_ripgrep_failure_falls_back_to_walker(
             self, ctx, tree, tmp_path, monkeypatch):
-        import akshara.tools.search as search
+        import yantra.tools.search as search
         # exit 3 with no output: e.g. rust-re rejected a python-only regex
         monkeypatch.setattr(
             search, "_find_rg",
@@ -316,7 +316,7 @@ class TestListDir:
 
 class TestRegistryEnableDisable:
     """Runtime disable: the soft, REVERSIBLE twin of unregister (the
-    AKSHARA_DISABLED_TOOLS startup kill-switch). Disabled tools stay
+    YANTRA_DISABLED_TOOLS startup kill-switch). Disabled tools stay
     registered -- history and checkpoints keep referencing them -- but
     are never sent, never returned by get(), and restorable mid-session."""
 
@@ -391,7 +391,7 @@ class TestArgumentCoercion:
     }}
 
     def _c(self, args):
-        from akshara.tools.base import coerce_arguments
+        from yantra.tools.base import coerce_arguments
         return coerce_arguments(args, self.SCHEMA)
 
     def test_the_reported_failure(self):
@@ -435,34 +435,34 @@ class TestArgumentCoercion:
 
     def test_well_formed_arguments_come_back_identical(self):
         """Identity, not just equality: callers use it to detect repairs."""
-        from akshara.tools.base import coerce_arguments
+        from yantra.tools.base import coerce_arguments
         args = {"symbols": ["AAPL"], "limit": 5}
         assert coerce_arguments(args, self.SCHEMA) is args
 
     def test_items_inside_an_array_are_repaired_too(self):
         schema = {"properties": {"rows": {
             "type": "array", "items": {"type": "object"}}}}
-        from akshara.tools.base import coerce_arguments
+        from yantra.tools.base import coerce_arguments
         assert coerce_arguments({"rows": ['{"a": 1}']}, schema) == {
             "rows": [{"a": 1}]}
 
     def test_nested_object_properties_are_repaired_too(self):
         schema = {"properties": {"outer": {"type": "object", "properties": {
             "inner": {"type": "array"}}}}}
-        from akshara.tools.base import coerce_arguments
+        from yantra.tools.base import coerce_arguments
         assert coerce_arguments({"outer": {"inner": "[1]"}}, schema) == {
             "outer": {"inner": [1]}}
 
     def test_a_schema_without_properties_is_a_no_op(self):
-        from akshara.tools.base import coerce_arguments
+        from yantra.tools.base import coerce_arguments
         args = {"x": "[1]"}
         assert coerce_arguments(args, {}) is args
         assert coerce_arguments(args, None) is args
 
     def test_todo_write_is_the_built_in_that_needed_this(self):
         """Not an MCP-only problem: a core tool takes an array too."""
-        from akshara.tools import default_registry
-        from akshara.tools.base import coerce_arguments
+        from yantra.tools import default_registry
+        from yantra.tools.base import coerce_arguments
         schema = default_registry().get("todo_write").parameters
         fixed = coerce_arguments(
             {"items": '[{"task": "x", "status": "pending"}]'}, schema)

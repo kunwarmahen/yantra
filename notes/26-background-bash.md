@@ -10,7 +10,7 @@ letter that choice leaves open.*
 ## Three verbs, not one mega-tool
 
 - `bash_start(command)` → returns a job id immediately. Output tees to
-  `.akshara/jobs/<id>.log` FROM BIRTH (a `Popen` writing straight to
+  `.yantra/jobs/<id>.log` FROM BIRTH (a `Popen` writing straight to
   the file) so a three-hour job never grows a three-hour string in RAM.
 - `bash_poll([job_id])` → one job's status plus recent output, or an
   index of every job with no argument. Doubles as the reaper: poll()

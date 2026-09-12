@@ -12,10 +12,10 @@ import json
 import httpx
 import pytest
 
-from akshara.errors import ToolError
-from akshara.tools import WebFetch
-from akshara.tools.base import ToolContext
-from akshara.tools.web_fetch import _client_factory, fetch, html_to_text
+from yantra.errors import ToolError
+from yantra.tools import WebFetch
+from yantra.tools.base import ToolContext
+from yantra.tools.web_fetch import _client_factory, fetch, html_to_text
 
 
 @pytest.fixture
@@ -28,12 +28,12 @@ def serve(handler) -> None:
     # same client options as production; only the transport is fake
     client = httpx.Client(transport=httpx.MockTransport(handler),
                           follow_redirects=True)
-    import akshara.tools.web_fetch as wf
+    import yantra.tools.web_fetch as wf
     wf._client_factory = lambda: client
 
 
 def restore() -> None:
-    import akshara.tools.web_fetch as wf
+    import yantra.tools.web_fetch as wf
     wf._client_factory = _client_factory
 
 

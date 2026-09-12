@@ -16,9 +16,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from akshara import config
-from akshara.providers.base import Provider, ProviderSettings
-from akshara.types import (
+from yantra import config
+from yantra.providers.base import Provider, ProviderSettings
+from yantra.types import (
     Message,
     ModelResponse,
     StartEvent,
@@ -43,7 +43,7 @@ def load_fixture(name: str) -> bytes:
 
 
 #: Everything a provider or a knob reads straight off the environment.
-#: AKSHARA_* names are swept by prefix instead, so a new knob is covered
+#: YANTRA_* names are swept by prefix instead, so a new knob is covered
 #: the day it is added rather than the day someone remembers this list.
 AMBIENT_VARS = tuple(
     f"{prefix}_{suffix}"
@@ -73,7 +73,7 @@ def seal_ambient_env(monkeypatch):
     monkeypatch.setattr(config, "_dotenv_loaded", True)
     for var in AMBIENT_VARS:
         monkeypatch.delenv(var, raising=False)
-    for var in [v for v in os.environ if v.startswith("AKSHARA_")]:
+    for var in [v for v in os.environ if v.startswith("YANTRA_")]:
         monkeypatch.delenv(var, raising=False)
 
 

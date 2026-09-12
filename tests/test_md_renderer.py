@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-MD_JS = Path(__file__).resolve().parent.parent / "src/akshara/web/static/md.js"
+MD_JS = Path(__file__).resolve().parent.parent / "src/yantra/web/static/md.js"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
                                 reason="node not installed")

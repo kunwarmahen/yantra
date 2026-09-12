@@ -7,9 +7,9 @@ import time
 
 import pytest
 
-from akshara.errors import ToolError
-from akshara.tools import Glob
-from akshara.tools.base import ToolContext
+from yantra.errors import ToolError
+from yantra.tools import Glob
+from yantra.tools.base import ToolContext
 
 
 @pytest.fixture

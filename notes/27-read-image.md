@@ -9,7 +9,7 @@ one of the three wires physically cannot do the obvious thing.*
 
 ## The tool is thin; the hand-off is the design
 
-`load_image_block` (akshara/images.py) already owned validation:
+`load_image_block` (yantra/images.py) already owned validation:
 extension allowlist, 5 MB cap, base64 encoding before any request
 exists. Both adapters already carried ImageBlocks in user messages.
 The only new machinery is the hand-off from TOOL RESULT to HISTORY,

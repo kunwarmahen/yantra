@@ -20,12 +20,12 @@ import json
 import httpx
 import pytest
 
-from akshara.agent import Agent, ToolExecuted, TurnEnd
-from akshara.permissions import allow_read_only
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.base import ProviderSettings
-from akshara.providers.openai import OpenAIProvider
-from akshara.tools import default_registry
+from yantra.agent import Agent, ToolExecuted, TurnEnd
+from yantra.permissions import allow_read_only
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.base import ProviderSettings
+from yantra.providers.openai import OpenAIProvider
+from yantra.tools import default_registry
 
 from conftest import Recorder, load_fixture
 

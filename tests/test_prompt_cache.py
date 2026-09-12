@@ -19,10 +19,10 @@ import json
 import httpx
 import pytest
 
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.base import ProviderSettings, acollect, collect
-from akshara.providers.openai import OpenAIProvider
-from akshara.types import (
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.base import ProviderSettings, acollect, collect
+from yantra.providers.openai import OpenAIProvider
+from yantra.types import (
     Message,
     TextBlock,
     ToolSpec,

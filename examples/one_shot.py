@@ -20,9 +20,9 @@ from __future__ import annotations
 import argparse
 import json
 
-from akshara.config import default_model, load_settings
-from akshara.providers import get_provider
-from akshara.types import Message, TextBlock
+from yantra.config import default_model, load_settings
+from yantra.providers import get_provider
+from yantra.types import Message, TextBlock
 
 
 def main() -> None:

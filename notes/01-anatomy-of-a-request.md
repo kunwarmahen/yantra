@@ -43,7 +43,7 @@ Every request to `POST {base}/v1/messages` carries:
 
 The block-shaped content is the important design idea. A single
 assistant turn can mix prose and tool calls because each is just another
-block. Our internal types (`src/akshara/types.py`) mirror this shape on
+block. Our internal types (`src/yantra/types.py`) mirror this shape on
 purpose.
 
 ## Normalization — the one big architectural decision
@@ -85,11 +85,11 @@ executable version of the wire-format cheat-sheet.
 
 - `pyproject.toml`, `.python-version` — uv-managed project, core deps:
   httpx + rich (the browser UI lives behind an optional `[web]` extra)
-- `src/akshara/types.py` — the shared vocabulary (read this first)
-- `src/akshara/errors.py` — two exception families: provider failures propagate, tool failures become data
-- `src/akshara/config.py` — env vars → settings; base-URL conventions documented at top
-- `src/akshara/providers/base.py` — the `Provider` ABC
-- `src/akshara/providers/anthropic.py` — encode/decode for the Messages dialect
+- `src/yantra/types.py` — the shared vocabulary (read this first)
+- `src/yantra/errors.py` — two exception families: provider failures propagate, tool failures become data
+- `src/yantra/config.py` — env vars → settings; base-URL conventions documented at top
+- `src/yantra/providers/base.py` — the `Provider` ABC
+- `src/yantra/providers/anthropic.py` — encode/decode for the Messages dialect
 - `examples/one_shot.py` — prints request JSON → raw response → normalized view
 
 ## Try it live

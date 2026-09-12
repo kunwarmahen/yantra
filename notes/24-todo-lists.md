@@ -40,7 +40,7 @@ teaches the model to lie about status instead.
 
 ## Same skeleton as memory.py, deliberately
 
-One JSON document under `.akshara/`, temp-file + atomic rename so a
+One JSON document under `.yantra/`, temp-file + atomic rename so a
 crash mid-write never truncates the store, caps on items (50) and task
 length (500 chars), corrupted-store errors that name the file. When a
 pattern works, reuse it — consistency IS the tutorial here: two
@@ -56,7 +56,7 @@ stores, identical persistence discipline, different semantics.
 - todo_read shows done/active/pending counts; empty store hints at
   todo_write; a store containing UNKNOWN statuses from a newer version
   drops them instead of bricking
-- gating: read auto-approved, write prompts (it writes under .akshara)
+- gating: read auto-approved, write prompts (it writes under .yantra)
 
 ## Receipts
 

@@ -17,11 +17,11 @@ from pathlib import Path
 import httpx
 import pytest
 
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.base import collect
-from akshara.providers.openai import OpenAIProvider
-from akshara.providers.responses import ResponsesProvider
-from akshara.types import Message, TextBlock, ToolCall, ToolResult, Usage
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.base import collect
+from yantra.providers.openai import OpenAIProvider
+from yantra.providers.responses import ResponsesProvider
+from yantra.types import Message, TextBlock, ToolCall, ToolResult, Usage
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

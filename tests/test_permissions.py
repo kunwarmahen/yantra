@@ -14,16 +14,16 @@ import json
 import pytest
 
 from conftest import ScriptedProvider, assistant_text
-from akshara.agent import Agent
-from akshara.permissions import (
+from yantra.agent import Agent
+from yantra.permissions import (
     PermissionRequest,
     SwitchableGate,
     allow_read_only,
     deny_all,
     yolo,
 )
-from akshara.tools.base import Tool, ToolRegistry
-from akshara.types import Message, ModelResponse, ToolCall
+from yantra.tools.base import Tool, ToolRegistry
+from yantra.types import Message, ModelResponse, ToolCall
 
 
 class ReaderTool(Tool):
@@ -144,7 +144,7 @@ def script() -> list[ModelResponse]:
 
 
 def test_mixed_batch_allowed_and_denied_as_data(registry, script):
-    from akshara.agent import ToolExecuted
+    from yantra.agent import ToolExecuted
 
     agent = Agent(
         ScriptedProvider(script), model="m",
@@ -193,7 +193,7 @@ def _echo_script(arguments: dict) -> list[ModelResponse]:
 
 
 def test_gate_edited_arguments_are_what_execute():
-    from akshara.agent import ToolExecuted
+    from yantra.agent import ToolExecuted
 
     def editing_gate(request: PermissionRequest) -> bool:
         request.arguments = {"amended": True}  # the human's edit
@@ -215,7 +215,7 @@ def test_gate_edited_arguments_are_what_execute():
 
 
 def test_gate_edit_then_deny_executes_nothing():
-    from akshara.agent import ToolExecuted
+    from yantra.agent import ToolExecuted
 
     def fickle_gate(request: PermissionRequest) -> bool:
         request.arguments = {"amended": True}

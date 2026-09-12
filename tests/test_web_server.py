@@ -19,14 +19,14 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient # noqa: E402
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call  # noqa: E402
-from akshara.agent import Agent  # noqa: E402
-from akshara.permissions import PermissionRequest, SwitchableGate, allow_read_only  # noqa: E402
-from akshara.providers.base import ProviderSettings  # noqa: E402
-from akshara.session import SessionStore  # noqa: E402
-from akshara.tools.ask_user import AskUser  # noqa: E402
-from akshara.tools.base import Tool, ToolRegistry  # noqa: E402
-from akshara.types import Message, ModelResponse, TextBlock  # noqa: E402
-from akshara.web.server import WebSession, make_app  # noqa: E402
+from yantra.agent import Agent  # noqa: E402
+from yantra.permissions import PermissionRequest, SwitchableGate, allow_read_only  # noqa: E402
+from yantra.providers.base import ProviderSettings  # noqa: E402
+from yantra.session import SessionStore  # noqa: E402
+from yantra.tools.ask_user import AskUser  # noqa: E402
+from yantra.tools.base import Tool, ToolRegistry  # noqa: E402
+from yantra.types import Message, ModelResponse, TextBlock  # noqa: E402
+from yantra.web.server import WebSession, make_app  # noqa: E402
 
 
 class WriteThing(Tool):
@@ -151,7 +151,7 @@ def seed_history(agent: Agent) -> None:
     """Write a user -> assistant(+tool_call) -> tool_result exchange straight
     into history. Deliberately NOT via run_streaming: a seeded gated call
     would block on the web gate, and no tab is connected yet."""
-    from akshara.types import ToolCall as TC, ToolResult as TR
+    from yantra.types import ToolCall as TC, ToolResult as TR
 
     agent.history.append(Message("user", [TextBlock("do it")]))
     agent.history.append(Message("assistant", [
@@ -467,7 +467,7 @@ def _attach_ctx(agent, mode="local"):
     """Wire an EnvContext exactly like cli/main.py does post-construction.
     Only ever started at 'local'/'off' here -- 'full' would hit the geo
     seam, and this suite stays offline."""
-    from akshara.env_context import EnvContext
+    from yantra.env_context import EnvContext
 
     ctx = EnvContext(mode)
     ctx.attach(agent)
@@ -584,7 +584,7 @@ def test_disabled_tool_call_fails_as_data_mid_turn():
 
     # resumable, as on every abnormal-ish path -- three results: the
     # clean write, ask_user's answer receipt, then the pulled tool's data
-    from akshara.types import ToolResult
+    from yantra.types import ToolResult
     results = [b for m in agent.history if m.role == "user"
                for b in m.content if isinstance(b, ToolResult)]
     assert [r.is_error for r in results] == [False, False, True]
@@ -676,7 +676,7 @@ class _MCPTool(Tool):
 def fake_mcp_connector(fail_names=()):
     def connector(config, timeout=30.0):
         if config.name in fail_names:
-            from akshara.mcp import MCPError
+            from yantra.mcp import MCPError
             raise MCPError(f"cannot spawn mcp server {config.name!r}")
         s = _FakeMCPSession(config)
         return s, [_MCPTool(s, "echo", config.name),
@@ -688,7 +688,7 @@ def make_mcp_session(script=None, *, fail_names=()):
     """Like make_session, plus an MCPManager over the same registry with
     the transport faked out (the transports have their own real-subprocess
     tests in test_mcp.py)."""
-    from akshara.mcp import MCPManager
+    from yantra.mcp import MCPManager
 
     session, agent = make_session(script or [])
     manager = MCPManager(agent.registry, connector=fake_mcp_connector(fail_names))
@@ -732,7 +732,7 @@ def test_listing_and_add_then_remove_round_trip():
 
 
 def test_toggle_soft_switches_whole_server_even_mid_turn():
-    from akshara.mcp import MCPServerConfig
+    from yantra.mcp import MCPServerConfig
 
     session, agent, manager = make_mcp_session()
     manager.connect(MCPServerConfig(name="tiny", command="py"))
@@ -840,7 +840,7 @@ def test_login_reports_a_server_that_needs_no_login(monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr("akshara.mcp.MCPHttpSession", Probe)
+    monkeypatch.setattr("yantra.mcp.MCPHttpSession", Probe)
     r = client.post("/api/mcp/login",
                     json={"name": "open", "url": "http://x/mcp"})
     assert r.status_code == 200 and r.json()["already"] is True
@@ -865,10 +865,10 @@ def test_add_and_remove_refuse_to_race_a_running_turn():
 
 
 def test_remember_flag_persists_the_entry(tmp_path):
-    from akshara.mcp import load_remembered
+    from yantra.mcp import load_remembered
 
     session, _, manager = make_mcp_session()
-    manager.memory_path = tmp_path / ".akshara" / "mcp.json"
+    manager.memory_path = tmp_path / ".yantra" / "mcp.json"
     client = TestClient(make_app(session))
     client.post("/api/mcp/add", json={"name": "kept", "command": "py",
                                       "remember": True})
@@ -897,7 +897,7 @@ description: Review a git diff for correctness bugs and missing tests.
 
 def make_skill_session(tmp_path, *, name="pr-review", text=SKILL_MD):
     """A --web session with one skill on disk, wired like cli/main.py."""
-    from akshara.skills import enable_skills
+    from yantra.skills import enable_skills
 
     folder = tmp_path / "skills" / name
     folder.mkdir(parents=True, exist_ok=True)

@@ -13,16 +13,16 @@ from pathlib import Path
 import httpx
 import pytest
 
-from akshara.errors import (
+from yantra.errors import (
     AuthError,
     ContextOverflowError,
     ProviderError,
     RateLimitError,
 )
-from akshara.providers.anthropic import API_VERSION, AnthropicProvider
-from akshara.providers.base import ProviderSettings
-from akshara.providers.retry import RetryPolicy
-from akshara.types import (
+from yantra.providers.anthropic import API_VERSION, AnthropicProvider
+from yantra.providers.base import ProviderSettings
+from yantra.providers.retry import RetryPolicy
+from yantra.types import (
     Message, RedactedThinkingBlock, TextBlock, ThinkingBlock,
     ToolCall, ToolResult, Usage,
 )
@@ -146,7 +146,7 @@ class TestRequestShape:
         ]
 
     def test_tools_encode_with_input_schema(self, anthropic_settings):
-        from akshara.types import ToolSpec
+        from yantra.types import ToolSpec
 
         provider, sent = _provider(
             anthropic_settings, lambda r: httpx.Response(200, json=_text_fixture()))

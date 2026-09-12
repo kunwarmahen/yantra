@@ -19,9 +19,9 @@ import pytest
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 
-from akshara.agent import Agent
-from akshara.errors import ToolError
-from akshara.mcp import (
+from yantra.agent import Agent
+from yantra.errors import ToolError
+from yantra.mcp import (
     SUPPORTED_VERSIONS,
     MCPError,
     MCPHttpSession,
@@ -32,8 +32,8 @@ from akshara.mcp import (
     register_mcp,
     remember_server,
 )
-from akshara.permissions import yolo
-from akshara.tools.base import Tool, ToolContext, ToolRegistry
+from yantra.permissions import yolo
+from yantra.tools.base import Tool, ToolContext, ToolRegistry
 
 
 def write_server(tmp_path: Path, body: str, name: str = "srv") -> MCPServerConfig:
@@ -97,7 +97,7 @@ STANDARD_BODY = """\
 @pytest.fixture()
 def standard(tmp_path):
     cfg = write_server(tmp_path, STANDARD_BODY)
-    from akshara.mcp import connect_mcp
+    from yantra.mcp import connect_mcp
     session, tools = connect_mcp(cfg, timeout=10.0)
     yield session, {t.raw_name: t for t in tools}
     session.close()
@@ -124,7 +124,7 @@ class TestHandshakeAndDiscovery:
                     sys.stdout.flush()
         """
         cfg = write_server(tmp_path, body)
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         with pytest.raises(MCPError, match="unsupported protocol version"):
             connect_mcp(cfg)
 
@@ -136,7 +136,7 @@ class TestHandshakeAndDiscovery:
             '{"name": "echo", "description": "Echo back.",'
             ' "annotations": {"readOnlyHint": True},')
         cfg = write_server(tmp_path, body)
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         session, wrapped = connect_mcp(cfg, timeout=10.0)
         try:
             by_raw = {t.raw_name: t for t in wrapped}
@@ -201,7 +201,7 @@ class TestServerInitiatedRequests:
                     send({"jsonrpc": "2.0", "id": mid,
                           "result": {"tools": []}})
         """
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         session, tools = connect_mcp(write_server(tmp_path, body), timeout=5.0)
         try:
             assert session.list_tools() == []
@@ -231,7 +231,7 @@ class TestServerInitiatedRequests:
                 elif method == "tools/list":
                     send({"jsonrpc": "2.0", "id": mid, "result": {"tools": []}})
         """
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         session, tools = connect_mcp(write_server(tmp_path, body), timeout=5.0)
         try:
             assert session.list_tools() == []
@@ -241,7 +241,7 @@ class TestServerInitiatedRequests:
 
 class TestLifecycleAndConfig:
     def test_close_reaps_process_and_is_idempotent(self, tmp_path):
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         session, _ = connect_mcp(write_server(tmp_path, STANDARD_BODY),
                                  timeout=10.0)
         proc = session._proc
@@ -262,14 +262,14 @@ class TestLifecycleAndConfig:
                 sys.stdout.flush()
             sys.exit(7)   # die before any tools/list can be answered
         """
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         # the failure fires during connect's own discovery step, which
         # must clean up the dead process before re-raising
         with pytest.raises(MCPError, match="exited unexpectedly.*code 7"):
             connect_mcp(write_server(tmp_path, body), timeout=5.0)
 
     def test_spawn_failure_names_the_command(self, tmp_path):
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         cfg = MCPServerConfig(name="ghost", command="/no/such/binary")
         with pytest.raises(MCPError, match="cannot spawn mcp server 'ghost'"):
             connect_mcp(cfg)
@@ -520,35 +520,35 @@ class TestMcpLoginFlag:
         return str(path)
 
     def test_unknown_server_names_where_it_looked(self, tmp_path, capsys):
-        from akshara.cli import main as cli_main
+        from yantra.cli import main as cli_main
         cfg = self._config(tmp_path, {"other": {"url": "http://x/mcp"}})
         assert cli_main.main(["--mcp-login", "ghost", "--mcp-config", cfg,
                               "--cwd", str(tmp_path)]) == 2
         assert "no mcp server named 'ghost'" in capsys.readouterr().err
 
     def test_stdio_server_has_nothing_to_log_in_to(self, tmp_path, capsys):
-        from akshara.cli import main as cli_main
+        from yantra.cli import main as cli_main
         cfg = self._config(tmp_path, {"local": {"command": "py"}})
         assert cli_main.main(["--mcp-login", "local", "--mcp-config", cfg,
                               "--cwd", str(tmp_path)]) == 2
         assert "stdio server" in capsys.readouterr().err
 
     def test_it_is_its_own_mode(self):
-        from akshara.cli import main as cli_main
+        from yantra.cli import main as cli_main
         assert cli_main.main(["--mcp-login", "x", "--prompt", "hi"]) == 2
 
     def test_a_server_needing_no_login_says_so_and_does_not_open_a_browser(
             self, tmp_path, monkeypatch, capsys, http_server):
         """The tiny fixture server authenticates nobody, so the flow must
         stop before the browser rather than 'signing in' to nothing."""
-        from akshara.cli import main as cli_main
+        from yantra.cli import main as cli_main
         base = http_server()
         cfg = self._config(tmp_path, {"tiny": {"url": base.url}})
 
         def explode(*a, **k):  # pragma: no cover - must never run
             raise AssertionError("opened a browser for an open server")
 
-        monkeypatch.setattr("akshara.mcp_oauth.login", explode)
+        monkeypatch.setattr("yantra.mcp_oauth.login", explode)
         assert cli_main.main(["--mcp-login", "tiny", "--mcp-config", cfg,
                               "--cwd", str(tmp_path)]) == 0
         assert "needs no login" in capsys.readouterr().out
@@ -587,21 +587,21 @@ class TestAuthHeaders:
         assert headers["X-Trace"] == "1"   # ours only override collisions
 
     def test_env_reference_expands_at_connect(self, monkeypatch):
-        monkeypatch.setenv("AKSHARA_TEST_MCP_TOKEN", "t0ken")
+        monkeypatch.setenv("YANTRA_TEST_MCP_TOKEN", "t0ken")
         cfg = MCPServerConfig(
             name="x", url="http://x/mcp",
-            headers={"Authorization": "Bearer ${AKSHARA_TEST_MCP_TOKEN}"})
+            headers={"Authorization": "Bearer ${YANTRA_TEST_MCP_TOKEN}"})
         session = MCPHttpSession(cfg)
         assert session._headers()["Authorization"] == "Bearer t0ken"
 
     def test_unset_reference_is_loud_not_an_empty_bearer(self, monkeypatch):
         """Silently sending `Bearer ` turns a setup mistake into a 401
         the user reads as a wrong password."""
-        monkeypatch.delenv("AKSHARA_TEST_MCP_TOKEN", raising=False)
+        monkeypatch.delenv("YANTRA_TEST_MCP_TOKEN", raising=False)
         cfg = MCPServerConfig(
             name="x", url="http://x/mcp",
-            headers={"Authorization": "Bearer ${AKSHARA_TEST_MCP_TOKEN}"})
-        with pytest.raises(MCPError, match="AKSHARA_TEST_MCP_TOKEN"):
+            headers={"Authorization": "Bearer ${YANTRA_TEST_MCP_TOKEN}"})
+        with pytest.raises(MCPError, match="YANTRA_TEST_MCP_TOKEN"):
             MCPHttpSession(cfg)
 
     def test_config_file_round_trips_headers(self, tmp_path):
@@ -621,7 +621,7 @@ class TestAuthHeaders:
 
     def test_remembered_file_keeps_the_reference_not_the_secret(self,
                                                                 tmp_path):
-        """The whole point of ${VAR}: .akshara/mcp.json sits in the
+        """The whole point of ${VAR}: .yantra/mcp.json sits in the
         working directory, so the token must not land in it."""
         path = tmp_path / "mcp.json"
         remember_server(MCPServerConfig(
@@ -672,7 +672,7 @@ class TestHttpTransport:
     def test_unsupported_version_refused(self, http_server):
         cfg = http_server("bad")
         with pytest.raises(MCPError, match="unsupported protocol version"):
-            from akshara.mcp import connect_mcp
+            from yantra.mcp import connect_mcp
             connect_mcp(cfg, timeout=5.0)
 
     def test_subsequent_requests_carry_the_negotiated_version(self, tmp_path,
@@ -715,7 +715,7 @@ class TestHttpTransport:
         assert not session.healthy()
 
     def test_unreachable_url_is_an_mcperror_not_a_traceback(self):
-        from akshara.mcp import connect_mcp
+        from yantra.mcp import connect_mcp
         dead = MCPServerConfig(name="dead", url="http://127.0.0.1:9/mcp")
         with pytest.raises(MCPError, match="unreachable"):
             connect_mcp(dead, timeout=2.0)
@@ -809,11 +809,11 @@ def _cfg(name, url=None):
 
 class TestMCPManager:
     def _manager(self, tmp_path, registry=None, **kw):
-        from akshara.mcp import MCPManager
+        from yantra.mcp import MCPManager
 
         registry = registry or ToolRegistry()
         return MCPManager(
-            registry, memory_path=tmp_path / ".akshara" / "mcp.json",
+            registry, memory_path=tmp_path / ".yantra" / "mcp.json",
             connector=fake_connector_factory(**kw)), registry
 
     def test_connect_registers_qualified_tools_and_reports_status(self, tmp_path):
@@ -855,7 +855,7 @@ class TestMCPManager:
         registered -- cleanup must close the transport so no orphan
         process outlives the failed add."""
         connector = fake_connector_factory(collide_at="dup")
-        from akshara.mcp import MCPManager
+        from yantra.mcp import MCPManager
 
         registry = ToolRegistry()
         manager = MCPManager(registry, connector=connector)
@@ -912,7 +912,7 @@ class TestMCPManager:
         index contains the new tools, custom pins survive."""
         from types import SimpleNamespace
 
-        from akshara.tools.selector import enable_selection
+        from yantra.tools.selector import enable_selection
 
         registry = ToolRegistry()
         for i in range(3):
@@ -920,7 +920,7 @@ class TestMCPManager:
         catalog, _ = enable_selection(registry)
         catalog.must_include = ("t0",)
         agent_stub = SimpleNamespace(tool_catalog=catalog)
-        from akshara.mcp import MCPManager
+        from yantra.mcp import MCPManager
 
         manager = MCPManager(registry, agent=agent_stub,
                              connector=fake_connector_factory())
@@ -990,7 +990,7 @@ class TestManagerEndToEnd:
     reaped' is a claim about processes, not about dicts."""
 
     def test_connect_then_disconnect_with_real_server(self, tmp_path):
-        from akshara.mcp import MCPManager, connect_mcp
+        from yantra.mcp import MCPManager, connect_mcp
 
         cfg = write_server(tmp_path, STANDARD_BODY)
         registry = ToolRegistry()

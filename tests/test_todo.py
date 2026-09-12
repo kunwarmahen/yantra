@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from akshara.errors import ToolError
-from akshara.tools import TodoRead, TodoWrite
-from akshara.tools.base import ToolContext
+from yantra.errors import ToolError
+from yantra.tools import TodoRead, TodoWrite
+from yantra.tools.base import ToolContext
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ class TestWriteSemantics:
         TodoWrite().run({"items": items(("a", "pending"), ("b", "in_progress"))}, ctx)
         TodoWrite().run({"items": items(("c", "done"))}, ctx)
         stored = json.loads(
-            (tmp_path / ".akshara/todos.json").read_text())["todos"]
+            (tmp_path / ".yantra/todos.json").read_text())["todos"]
         assert [i["task"] for i in stored] == ["c"]
         assert stored[0]["status"] == "done"
 
@@ -37,7 +37,7 @@ class TestWriteSemantics:
     def test_default_status_is_pending(self, ctx, tmp_path):
         TodoWrite().run({"items": [{"task": "just a task"}]}, ctx)
         stored = json.loads(
-            (tmp_path / ".akshara/todos.json").read_text())["todos"]
+            (tmp_path / ".yantra/todos.json").read_text())["todos"]
         assert stored[0]["status"] == "pending"
 
     def test_result_renders_the_checklist(self, ctx):
@@ -92,15 +92,15 @@ class TestRead:
         assert "1 done / 1 active / 2 pending" in out
 
     def test_corrupted_store_is_model_readable(self, ctx, tmp_path):
-        (tmp_path / ".akshara").mkdir()
-        (tmp_path / ".akshara/todos.json").write_text("{not json")
+        (tmp_path / ".yantra").mkdir()
+        (tmp_path / ".yantra/todos.json").write_text("{not json")
         with pytest.raises(ToolError, match="corrupted"):
             TodoRead().run({}, ctx)
 
     def test_unknown_statuses_dropped_not_fatal(self, ctx, tmp_path):
         # a store from a NEWER harness version must not brick the old one
-        (tmp_path / ".akshara").mkdir()
-        (tmp_path / ".akshara/todos.json").write_text(json.dumps(
+        (tmp_path / ".yantra").mkdir()
+        (tmp_path / ".yantra/todos.json").write_text(json.dumps(
             {"todos": [{"task": "ok", "status": "pending"},
                        {"task": "weird", "status": "blocked"}]}))
         out = TodoRead().run({}, ctx)

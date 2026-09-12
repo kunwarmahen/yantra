@@ -1,19 +1,41 @@
-# AksharaHarness — a from-scratch LLM agent harness
+# Yantra — a framework for building agents
 
-A learning project: build the machinery behind tools like Claude Code —
-an agentic loop around a chat model, a JSON-Schema tool system, a
-permission gate, hand-parsed streaming — **without SDKs, pydantic, or
-frameworks**. Runtime deps: `httpx` and `rich` only; optional extras
-add a browser UI (`fastapi` + `uvicorn`, `[web]`) and real-browser
-tools (`playwright`, `[browse]`) — each installs only what it needs.
+Yantra is the machinery behind tools like Claude Code, packaged so you
+can build your own agent with it: an agentic loop around a chat model, a
+JSON-Schema tool system, a permission gate, skills, sub-agents, MCP,
+sandboxing and hand-parsed streaming — **without SDKs, pydantic, or
+heavyweight frameworks**. Runtime deps: `httpx` and `rich` only;
+optional extras add a browser UI (`fastapi` + `uvicorn`, `[web]`) and
+real-browser tools (`playwright`, `[browse]`) — each installs only what
+it needs.
 
-The code is the tutorial; [`notes/`](notes/) is the per-topic
-write-up. New to agents entirely?
-Two ways in: [TUTORIAL.md](TUTORIAL.md) — type a ~200-line working
-agent into existence, step by step, no background assumed ([TUTORIAL.html](TUTORIAL.html)
-is the same thing as a styled page you can open or send to anyone) — or
-[notes/00-guided-tour.md](notes/00-guided-tour.md), a plain-English
-tour of how this one works, with diagrams.
+Cloud models and local ones are both first-class. Point it at
+Anthropic, any OpenAI-compatible gateway, the Responses API, or an
+Ollama box on hardware you own — the same agent, the same tools, no
+code changes.
+
+[`notes/`](notes/) is the per-topic write-up of how every layer works;
+[notes/00-guided-tour.md](notes/00-guided-tour.md) is the plain-English
+tour, with diagrams.
+
+## Status
+
+The harness underneath is complete and covered by 944 tests. The
+framework layer on top — agents you define as a folder of files, tools
+loaded from outside this tree, evals as an acceptance gate — is being
+built now, and the API is not stable yet.
+
+## Provenance and license
+
+Yantra began as a fork of
+[AksharaHarness](https://github.com/kunwarmahen/aksharaharness), a
+from-scratch harness written to learn how harnesses work. That repo
+stays what it is: a tutorial you can read end to end. This one takes the
+same machinery and builds a framework on top, which means it is free to
+break things a teaching repo cannot afford to break.
+
+Copyright 2026 Mahen Singh. Licensed under the Apache License, Version
+2.0 — see [LICENSE](LICENSE).
 
 ## Setup
 
@@ -44,22 +66,22 @@ surface ([notes/19](notes/19-responses-api.md)).
 ## Usage
 
 ```bash
-uv run akshara                                        # REPL (provider auto-guessed from keys)
-uv run akshara --provider openai                      # pick a dialect explicitly
-uv run akshara --provider ollama                      # LOCAL models (localhost:11434, no key)
-uv run akshara --provider ollama --model qwen3.8      # any tag you have pulled
-uv run akshara --yolo                                 # no permission prompts (careful)
+uv run yantra                                        # REPL (provider auto-guessed from keys)
+uv run yantra --provider openai                      # pick a dialect explicitly
+uv run yantra --provider ollama                      # LOCAL models (localhost:11434, no key)
+uv run yantra --provider ollama --model qwen3.8      # any tag you have pulled
+uv run yantra --yolo                                 # no permission prompts (careful)
                                                       #   ...and /yolo flips it back
                                                       #   mid-session (web UI: mode chip)
-uv run akshara --cache                                # prompt-cache breakpoints on
-uv run akshara --resume                               # restore the newest checkpoint
-uv run akshara --env-context local                    # machine facts only (default: full)
-uv run akshara --skills-dir ~/shared-skills           # extra skills root (repeatable)
-uv run akshara --no-skills                            # ignore skills entirely
+uv run yantra --cache                                # prompt-cache breakpoints on
+uv run yantra --resume                               # restore the newest checkpoint
+uv run yantra --env-context local                    # machine facts only (default: full)
+uv run yantra --skills-dir ~/shared-skills           # extra skills root (repeatable)
+uv run yantra --no-skills                            # ignore skills entirely
                                                       #   ...and /skills off NAME
                                                       #   pulls one mid-session
-uv run akshara "summarize README.md"                  # one-shot prompt, then exit
-uv run akshara --image photo.png "what's in this picture?"   # vision one-shot
+uv run yantra "summarize README.md"                  # one-shot prompt, then exit
+uv run yantra --image photo.png "what's in this picture?"   # vision one-shot
 ```
 
 ### It knows where (and when) it is
@@ -73,7 +95,7 @@ you're in. The same prompt tells it to try its tools before asking you
 for any fact it could discover itself; questions stay reserved for what
 only you know — preferences, permissions, irreversible calls.
 
-Three levels (`AKSHARA_ENV_CONTEXT` / `--env-context` set the start,
+Three levels (`YANTRA_ENV_CONTEXT` / `--env-context` set the start,
 `/env` or the web UI's env chip flip it live):
 
 | level | what the agent gets |
@@ -106,8 +128,8 @@ description: Add a new built-in tool to this harness -- schema, summary,
   add, write, or wire up a tool that the model can call.
 ---
 
-# Adding a tool to AksharaHarness
-1. Read the neighbours first. `src/akshara/tools/glob.py` is the...
+# Adding a tool to Yantra
+1. Read the neighbours first. `src/yantra/tools/glob.py` is the...
 ```
 
 Nothing else to wire up — drop the folder in and start a session. Only
@@ -121,7 +143,7 @@ It works on local models too — here is `qwen3.8-64k` through Ollama,
 with a prompt that never says the word *skill*:
 
 ```
-$ uv run akshara --provider ollama --prompt "What would I have to change
+$ uv run yantra --provider ollama --prompt "What would I have to change
     to add a count_lines tool to this project? Just the checklist."
 
 skills: 2 loaded -- new-tool, notes-entry
@@ -136,9 +158,9 @@ because someone got bitten by it once and wrote it down.
 | where | for |
 |---|---|
 | `skills/` | the set your repo commits |
-| `.akshara/skills/` | private overrides (gitignored) |
-| `~/.akshara/skills/` | yours, on every project |
-| `--skills-dir` / `$AKSHARA_SKILLS_PATH` | explicit, wins over all of them |
+| `.yantra/skills/` | private overrides (gitignored) |
+| `~/.yantra/skills/` | yours, on every project |
+| `--skills-dir` / `$YANTRA_SKILLS_PATH` | explicit, wins over all of them |
 
 A skill can also declare `mode: subagent`, and then its `allowed-tools`
 stop being advice: the instructions run in a **fresh child agent** built
@@ -149,7 +171,7 @@ able to write, an audit you want provably read-only.
 In the REPL: `/skills` lists them (with what broke and what got loaded),
 `/skills NAME` prints one without spending a turn, `/skills off deploy-*`
 pulls one mid-session the way `/tools off` pulls a tool (and
-`$AKSHARA_DISABLED_SKILLS` never loads them at all), `/skills reload`
+`$YANTRA_DISABLED_SKILLS` never loads them at all), `/skills reload`
 re-scans after an edit, and `/new-tool add a count_lines tool` runs one
 directly. The web UI gets a skills section in the tools panel — switches to
 turn one off, and an editor (＋ new, or `edit` on any row) that writes a
@@ -203,27 +225,27 @@ arguments — it always targets the container this script started.
 Prefer the raw commands? Same image, your own port choices:
 
 ```bash
-podman build --format docker -t localhost/akshara-web .
+podman build --format docker -t localhost/yantra-web .
 # (--format docker so the HEALTHCHECK survives; OCI images ignore it)
 
 # cloud road: mount your .env read-only (or pass -e ANTHROPIC_API_KEY=...).
 # --userns=keep-id lets the in-container user read your 600-perm .env.
-podman run -d --name akshara-web --userns=keep-id -p 8400:8321 \
-    -v ./.env:/app/.env:ro localhost/akshara-web
+podman run -d --name yantra-web --userns=keep-id -p 8400:8321 \
+    -v ./.env:/app/.env:ro localhost/yantra-web
 
 # local road: reach Ollama on the HOST via its special name. The
 # trailing flags compose with the image's entrypoint; --provider is
 # needed because env vars alone don't tip the key-based guess.
-podman run -d --name akshara-local -p 8401:8321 \
+podman run -d --name yantra-local -p 8401:8321 \
     -e OLLAMA_BASE_URL=http://host.containers.internal:11434/v1 \
     -e OLLAMA_MODEL=qwen3.8 \
-    localhost/akshara-web --web --host 0.0.0.0 --provider ollama
+    localhost/yantra-web --web --host 0.0.0.0 --provider ollama
 
 # your own skills: the image ships this repo's set, yours ride a mount
-podman run -d --name akshara-web --userns=keep-id -p 8400:8321 \
-    -v ./.env:/app/.env:ro -v ./skills:/app/skills:ro localhost/akshara-web
+podman run -d --name yantra-web --userns=keep-id -p 8400:8321 \
+    -v ./.env:/app/.env:ro -v ./skills:/app/skills:ro localhost/yantra-web
 
-podman logs -f akshara-web        # watch it boot
+podman logs -f yantra-web        # watch it boot
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8400/
 ```
 
@@ -234,9 +256,9 @@ Notes worth knowing:
 * **The tools run in the container**, not on your machine — `read_file`
   sees `/app`, so give it a workspace if you want it to touch your
   files: mount one and add args after the image name (they compose):
-  `-v ./workspace:/workspace localhost/akshara-web --web --cwd /workspace`.
-* **Sessions live in `/app/.akshara/`** and vanish with the container;
-  add `-v akshara-state:/app/.akshara` to keep checkpoints across runs.
+  `-v ./workspace:/workspace localhost/yantra-web --web --cwd /workspace`.
+* **Sessions live in `/app/.yantra/`** and vanish with the container;
+  add `-v yantra-state:/app/.yantra` to keep checkpoints across runs.
 * Docker users: swap `podman` → `docker`, and replace
   `host.containers.internal` with `host.docker.internal`.
 
@@ -249,8 +271,8 @@ edits them fails the build even if the suite then passes, and tampering
 is never repaired:
 
 ```bash
-uv run akshara --build "CLI that converts between temperature units"   # BUILD GREEN → exit 0
-uv run akshara --build --cwd somewhere/seeded "repair the broken CLI"
+uv run yantra --build "CLI that converts between temperature units"   # BUILD GREEN → exit 0
+uv run yantra --build --cwd somewhere/seeded "repair the broken CLI"
 ```
 
 Bash sandboxing ([notes/16](notes/16-sandboxing.md)) — `--sandbox`
@@ -260,8 +282,8 @@ timed-out process trees fully reaped) and falls back to the legacy
 scrubbed-env subprocess otherwise:
 
 ```bash
-uv run akshara --sandbox                    # autodetect (bwrap > subprocess)
-uv run akshara --sandbox none               # explicit legacy behavior
+uv run yantra --sandbox                    # autodetect (bwrap > subprocess)
+uv run yantra --sandbox none               # explicit legacy behavior
 ```
 
 Dynamic tool loading ([notes/17](notes/17-tool-selection.md)) — past
@@ -274,16 +296,16 @@ any real tool by its exact name loads it on the spot, so a selection
 miss costs nothing:
 
 ```bash
-uv run akshara --mcp-config big.json --tool-select 12   # force width K
-uv run akshara --tool-select 0                          # opt out of auto-enable
-# (.env equivalent: AKSHARA_TOOLS_PER_TURN=12)
+uv run yantra --mcp-config big.json --tool-select 12   # force width K
+uv run yantra --tool-select 0                          # opt out of auto-enable
+# (.env equivalent: YANTRA_TOOLS_PER_TURN=12)
 ```
 
 Trim tools you never want — not sent, not executed, not even suggested
 by discovery ([.env.example](.env.example)):
 
 ```bash
-AKSHARA_DISABLED_TOOLS=browser_*,mcp__slack__*   # comma-separated globs on tool names
+YANTRA_DISABLED_TOOLS=browser_*,mcp__slack__*   # comma-separated globs on tool names
 ```
 
 That kill-switch is permanent (tools unregistered at startup). To pull
@@ -312,7 +334,7 @@ register as `mcp__<server>__<tool>`:
 ```
 
 ```bash
-uv run akshara --mcp-config mcp.json          # connect + discover at startup
+uv run yantra --mcp-config mcp.json          # connect + discover at startup
 python examples/tiny_mcp_server.py --http     # the same server over Streamable HTTP
 ```
 
@@ -338,18 +360,18 @@ get the spec's OAuth 2.1 flow instead, hand-rolled like everything else
 here (discovery → dynamic registration → PKCE in your browser → refresh):
 
 ```bash
-uv run akshara --mcp-login vendor --mcp-config vendor.json
+uv run yantra --mcp-login vendor --mcp-config vendor.json
 ```
 
 The panel's 🔑 on any http row does the same from the browser you already
-have open. Tokens land in `~/.local/state/akshara/mcp-tokens.json` at
+have open. Tokens land in `~/.local/state/yantra/mcp-tokens.json` at
 mode 0600 — never in the working directory — and refresh themselves,
 including one retry when a server disagrees with our expiry arithmetic
 ([notes/09](notes/09-mcp.md#remote-servers-that-want-a-token)).
 
 Servers are runtime furniture, not just startup wiring: `/mcp` lists
 them, `/mcp add NAME URL` (or `NAME COMMAND [ARGS...]`) connects one
-mid-session — asking whether to remember it in `.akshara/mcp.json` for
+mid-session — asking whether to remember it in `.yantra/mcp.json` for
 future launches — and `/mcp off|on NAME` / `/mcp remove NAME` toggle or
 tear down. The web panel's "servers & tools" section does the same:
 health dots, add-by-form or paste-JSON, per-server switches, remove.
@@ -366,7 +388,7 @@ catalog, per-session spawn budget, compact results — child streams tee
 to the terminal live):
 
 ```bash
-uv run akshara --subagents "research X and report back"
+uv run yantra --subagents "research X and report back"
 ```
 
 Browser UI ([notes/22](notes/22-web-ui.md)) — `--web` serves the same
@@ -389,8 +411,8 @@ browser's own, and a layout that reflows to one column on a phone.
 Install the extra once: `uv sync --extra web`.
 
 ```bash
-uv run akshara --provider ollama --web      # local model + browser UI
-uv run akshara --web                        # provider auto-guessed, as usual
+uv run yantra --provider ollama --web      # local model + browser UI
+uv run yantra --web                        # provider auto-guessed, as usual
 ```
 
 The `ask_user` tool rides along in every surface: when the model hits a
@@ -424,7 +446,7 @@ and one that finishes ([notes/23](notes/23-glob.md)–
 
 - **glob** finds files by NAME (`**` recursion, newest-first) without
   a permission-gated bash call; **grep** still searches contents.
-- **todo_write / todo_read** keep live plan state (`.akshara/todos.json`,
+- **todo_write / todo_read** keep live plan state (`.yantra/todos.json`,
   replace-whole-list semantics) — distinct from write_note's durable
   facts, and cheap grounding that keeps local models on script through
   long missions.
@@ -435,7 +457,7 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   approves the address.
 - **bash_start / bash_poll / bash_kill** run commands that outlive one
   tool call — dev servers, watchers, long builds — with output teeing
-  to `.akshara/jobs/<id>.log`. Jobs always run as plain env-scrubbed
+  to `.yantra/jobs/<id>.log`. Jobs always run as plain env-scrubbed
   subprocesses (they outlive any sandbox), so start/kill gate even when
   confined bash doesn't.
 - **read_image PATH** lets the model LOOK at a png/jpeg/gif/webp in
@@ -452,8 +474,8 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   rule as web_fetch — all four gate. Installing the extra IS the
   opt-in: the four register only when playwright is present
   ([notes/28](notes/28-browser-tools.md)). Logins persist too: set
-  `AKSHARA_BROWSER_PROFILE=~/.local/state/akshara/browser-profile`
-  and run `uv run akshara --browse-login <url>` once — a visible
+  `YANTRA_BROWSER_PROFILE=~/.local/state/yantra/browser-profile`
+  and run `uv run yantra --browse-login <url>` once — a visible
   window opens, you sign in yourself (2FA included), close it — and
   every later session starts signed-in. Cookies never enter model
   context: the profile holds them on disk, outside the conversation.
@@ -466,7 +488,7 @@ multi-line input that keeps indentation). `/tools` lists the toolset;
 Ctrl-C cancels the current turn, not the session. `/build TASK` runs a child
 builder agent in its own workspace and reports BUILD GREEN/RED without
 touching this session's history. `/save`+`--resume` persist
-sessions to `.akshara/session.sqlite3` (append-only versions);
+sessions to `.yantra/session.sqlite3` (append-only versions);
 `/compact` force-clears context pressure — auto-compaction also fires by
 itself at 80% of the window (`--context-window` to set it; the web UI's
 meter shows the same number live).
@@ -476,7 +498,7 @@ footer and `/usage` show approximate dollars from a built-in list-price
 table (current Claude + GPT slugs, snapshot-dated), summed over
 per-model buckets so mid-session model switches price correctly. An
 unknown slug shows NO figure — never `$0`. Prices drift; point
-`AKSHARA_PRICES` at a JSON file to override or extend:
+`YANTRA_PRICES` at a JSON file to override or extend:
 
 ```json
 {"my-model": {"input": 3.0, "output": 15.0},
@@ -492,14 +514,14 @@ context window.
 Library use:
 
 ```python
-from akshara import Agent, allow_read_only, default_registry, get_provider, load_settings
+from yantra import Agent, allow_read_only, default_registry, get_provider, load_settings
 
 agent = Agent(get_provider("anthropic", load_settings("anthropic")),
               model="claude-sonnet-4-5", tools=default_registry(),
               permissions=allow_read_only)          # read-only tools run free
 
 # opt in to sub-agents: two objects, wired to each other
-from akshara.subagent import SpawnSubagent, SubagentSpawner
+from yantra.subagent import SpawnSubagent, SubagentSpawner
 spawner = SubagentSpawner(agent)                    # per-session budget lives here
 agent.registry.register(SpawnSubagent(spawner))     # the model now sees the tool
 
@@ -507,7 +529,7 @@ print(agent.run("what's in README.md?").message.text())
 
 # async: one event loop, many independent conversations
 import asyncio
-from akshara.async_agent import AsyncAgent
+from yantra.async_agent import AsyncAgent
 
 async def main():
     provider = get_provider("anthropic", load_settings("anthropic"))
@@ -542,7 +564,7 @@ Normalization happens in exactly ONE layer: the provider adapters.
 Internal types are the only representation the rest of the program sees.
 
 ```
-src/akshara/
+src/yantra/
 ├── types.py        shared vocabulary: Message/Block/ToolCall/ToolResult, StreamEvent union
 ├── errors.py       ProviderError family (terminal for the turn) vs ToolError
 │                   family (become data the model reads) vs UserUnavailable
@@ -585,12 +607,12 @@ src/akshara/
 │                   so --cache's prefix survives. mode:subagent runs one in a
 │                   scoped child instead (run_skill), which is the only place
 │                   allowed-tools is ENFORCED rather than announced; /skills
-│                   off|on + $AKSHARA_DISABLED_SKILLS are the operator's switch
+│                   off|on + $YANTRA_DISABLED_SKILLS are the operator's switch
 │                   ([notes/30](notes/30-skills.md))
 ├── mcp.py          MCP client, hand-rolled JSON-RPC over stdio AND
 │                   Streamable HTTP (SSE responses via providers/sse.py):
 │                   handshake, tools/list, tools/call; MCPManager adds/
-│                   removes/toggles servers mid-session, .akshara/mcp.json
+│                   removes/toggles servers mid-session, .yantra/mcp.json
 │                   remembers them ([notes/09](notes/09-mcp.md))
 ├── mcp_oauth.py    OAuth 2.1 for authenticated HTTP servers, by hand:
 │                   RFC 9728/8414 discovery, RFC 7591 dynamic
@@ -601,7 +623,7 @@ src/akshara/
 │                   runs cases concurrently, shared scoring ([notes/10](notes/10-evals.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
-│                   buckets, AKSHARA_PRICES overrides; unknown = no figure,
+│                   buckets, YANTRA_PRICES overrides; unknown = no figure,
 │                   never a guess ([notes/21](notes/21-cost-accounting.md))
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
@@ -630,7 +652,7 @@ src/akshara/
 │   ├── shell.py    bash — delegates to any ToolSandbox (default: legacy
 │   │               subprocess semantics; timeout -> killpg -> salvage)
 │   ├── background.py bash_start / bash_poll / bash_kill: jobs that outlive
-│   │               one tool call, log teeing to .akshara/jobs/, process-group
+│   │               one tool call, log teeing to .yantra/jobs/, process-group
 │   │               kill; plain subprocesses by design -> always gate ([notes/26](notes/26-background-bash.md))
 │   ├── web_fetch.py fetch ONE url as readable text (stdlib HTML stripping,
 │   │               2 MB cap, head-tail clip) — network egress, gated like
@@ -642,7 +664,7 @@ src/akshara/
 │   │               behind the [browse] extra: JS-rendered pages come back as
 │   │               text + numbered element refs; registers only when playwright
 │   │               imports, so the tool count never moves uninvited; optional
-│   │               $AKSHARA_BROWSER_PROFILE keeps logins between sessions
+│   │               $YANTRA_BROWSER_PROFILE keeps logins between sessions
 │   │               (--browse-login = headed one-time setup) — cookies stay on
 │   │               disk, never in model context ([notes/28](notes/28-browser-tools.md))
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
@@ -651,7 +673,7 @@ src/akshara/
 │   ├── search.py   grep — ripgrep subprocess when available, pure-python
 │   │               walker fallback (identical output contract)
 │   ├── memory.py   scratchpad: write_note / recall_notes — JSON store under
-│   │               .akshara/, ranked substring retrieval, survives restarts
+│   │               .yantra/, ranked substring retrieval, survives restarts
 │   ├── todo.py     live plan state vs memory's durable facts: todo_write /
 │   │               todo_read — replace-whole-list semantics ([notes/24](notes/24-todo-lists.md))
 │   └── ask_user.py pause-and-ask-the-human tool: UserChannel protocol
@@ -771,11 +793,11 @@ uv run python examples/agent_loop_demo.py            # the loop, event by event
 uv run python examples/agent_loop_demo.py --deny-all # denial-as-data demo
 uv run python examples/async_demo.py                 # 4 conversations, seq vs concurrent
 uv run python examples/builder_demo.py               # agent BUILDS a project, verified
-uv run akshara                                       # REPL
+uv run yantra                                       # REPL
 ./start.sh                                           # same thing, via menus/presets (see "One-command starts")
-uv run akshara --provider ollama --web               # REPL in your browser (free, local)
-uv run akshara --yolo "run: echo hi"                 # one-shot, no prompts
-uv run akshara --cache                               # prompt caching on
+uv run yantra --provider ollama --web               # REPL in your browser (free, local)
+uv run yantra --yolo "run: echo hi"                 # one-shot, no prompts
+uv run yantra --cache                               # prompt caching on
 uv run python examples/cache_demo.py                 # cache hit, measured live
 uv run python examples/hooks_demo.py                 # watch tool executions live
 ```
@@ -801,7 +823,7 @@ family goes further and stays green in BOTH worlds: without playwright
 (fakes carry the session) and with the extra synced.
 
 The suite is sealed off from the machine it runs on: a `conftest.py`
-fixture latches the `.env` loader shut and clears every `AKSHARA_*` and
+fixture latches the `.env` loader shut and clears every `YANTRA_*` and
 provider variable, so the result never depends on whose keys happen to
 be lying around. Warnings are failures (`filterwarnings = ["error"]`),
 `ResourceWarning` included — which is what keeps descriptors and child

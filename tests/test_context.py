@@ -10,15 +10,15 @@ from __future__ import annotations
 
 from conftest import ScriptedProvider, assistant_text
 
-from akshara.agent import Agent
-from akshara.context import (
+from yantra.agent import Agent
+from yantra.context import (
     MASK_MARKER,
     compact_history,
     mask_old_results,
     summarizable_span,
 )
-from akshara.permissions import allow_read_only, yolo
-from akshara.types import Message, TextBlock, ToolCall, ToolResult
+from yantra.permissions import allow_read_only, yolo
+from yantra.types import Message, TextBlock, ToolCall, ToolResult
 
 from test_agent_loop import assert_history_resumable
 
@@ -204,7 +204,7 @@ class TestAutoCompactInLoop:
 
 
 def _registry_with_echo():
-    from akshara.tools.base import Tool, ToolRegistry
+    from yantra.tools.base import Tool, ToolRegistry
 
     class Echo(Tool):
         name = "echo"

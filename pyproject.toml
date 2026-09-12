@@ -1,17 +1,19 @@
 [project]
-name = "aksharaharness"
+name = "yantra"
 version = "0.1.0"
-description = "AksharaHarness -- a from-scratch LLM agent harness, written to learn how harnesses work"
+description = "Yantra -- a framework for building agents: the loop, tools, skills and permissions, as a package you define in files"
 requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "httpx>=0.28",
     "rich>=13.7",
 ]
 
 [project.scripts]
-akshara = "akshara.cli.main:main"
+yantra = "yantra.cli.main:main"
 
-# Optional browser UI (akshara --web). The core stays httpx + rich; the web
+# Optional browser UI (yantra --web). The core stays httpx + rich; the web
 # layer is a deliberate exception -- FastAPI/uvicorn serve it, chosen over
 # hand-rolling an HTTP server when this feature called for one.
 #
@@ -38,7 +40,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/akshara"]
+packages = ["src/yantra"]
 
 [tool.ruff]
 line-length = 100          # the prose here wraps near 79; this is the HARD ceiling
@@ -80,4 +82,12 @@ testpaths = ["tests"]
 filterwarnings = [
     "error",
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:",
+    # Same class of problem, same verdict: starlette's testclient reaches
+    # anyio through an alias anyio itself now deprecates. Nothing here can
+    # fix a warning raised between two third-party packages, and the alias
+    # is resolved lazily -- so whichever import touches it FIRST eats the
+    # warning, which makes the failure depend on plugin and import order
+    # rather than on our code. Matched by message so the filter still
+    # parses where neither package is installed.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:",
 ]

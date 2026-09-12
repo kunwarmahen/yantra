@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from akshara.errors import ToolError
-from akshara.tools.base import Tool, ToolContext, require_str
+from yantra.errors import ToolError
+from yantra.tools.base import Tool, ToolContext, require_str
 
 
 class MyTool(Tool):

@@ -13,7 +13,7 @@ responses to stdout, never let logs near stdout (stderr only):
 
     {"servers": {"tiny": {"command": "python",
                           "args": ["examples/tiny_mcp_server.py"]}}}
-    akshara --mcp-config that-file.json
+    yantra --mcp-config that-file.json
 
 Streamable HTTP (--http) -- the SAME dispatcher behind ThreadingHTTPServer.
 tools/call answers as text/event-stream with an EMBEDDED server->client
@@ -22,7 +22,7 @@ answer-by-POST politeness get exercised against a real socket:
 
     python examples/tiny_mcp_server.py --http            # prints its URL
     {"servers": {"tiny": {"url": "http://127.0.0.1:PORT/mcp"}}}
-    akshara --mcp-config http-file.json
+    yantra --mcp-config http-file.json
 """
 
 from __future__ import annotations

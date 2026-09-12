@@ -5,7 +5,7 @@ A flaky connection before status-line -> retried. A failure after events
 have reached the caller -> propagates untouched, because replaying a
 half-delivered stream would duplicate output.
 
-Sleeps are intercepted (akshara.providers.retry._sleep) so the suite
+Sleeps are intercepted (yantra.providers.retry._sleep) so the suite
 stays offline-fast while still asserting real delay decisions.
 """
 
@@ -16,11 +16,11 @@ import pytest
 
 from conftest import load_fixture
 
-from akshara.errors import AuthError, ProviderError, RateLimitError
-from akshara.providers.anthropic import AnthropicProvider
-from akshara.providers.base import ProviderSettings
-from akshara.providers.retry import RetryPolicy, delay_for
-from akshara.types import Message, TextBlock
+from yantra.errors import AuthError, ProviderError, RateLimitError
+from yantra.providers.anthropic import AnthropicProvider
+from yantra.providers.base import ProviderSettings
+from yantra.providers.retry import RetryPolicy, delay_for
+from yantra.types import Message, TextBlock
 
 
 def _provider(settings: ProviderSettings, responder) -> tuple[AnthropicProvider, list]:
@@ -47,7 +47,7 @@ def _complete(provider: AnthropicProvider) -> None:
 def sleeps(monkeypatch):
     """Capture backoff waits instead of taking them."""
     waited: list[float] = []
-    monkeypatch.setattr("akshara.providers.retry._sleep", waited.append)
+    monkeypatch.setattr("yantra.providers.retry._sleep", waited.append)
     return waited
 
 

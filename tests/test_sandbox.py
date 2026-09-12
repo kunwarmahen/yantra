@@ -17,15 +17,15 @@ from pathlib import Path
 
 import pytest
 
-from akshara.permissions import PermissionRequest, trust_sandbox
-from akshara.sandbox import (
+from yantra.permissions import PermissionRequest, trust_sandbox
+from yantra.sandbox import (
     BwrapSandbox,
     CommandTimedOut,
     SubprocessSandbox,
     autodetect,
 )
-from akshara.tools.base import ToolContext
-from akshara.tools.shell import Bash
+from yantra.tools.base import ToolContext
+from yantra.tools.shell import Bash
 
 BWRAP = shutil.which("bwrap")
 
@@ -48,10 +48,10 @@ class TestSubprocessSandbox:
         assert "out" in out and "err" in out  # stderr interleaved into stdout
 
     def test_env_is_allowlisted(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AKSHARA_SECRET_TOKEN", "supersecret")
+        monkeypatch.setenv("YANTRA_SECRET_TOKEN", "supersecret")
         monkeypatch.setenv("HOME", "/host/home")
         _, out = SubprocessSandbox().execute(
-            ["bash", "-c", 'echo "secret=[$AKSHARA_SECRET_TOKEN] home=$HOME"'],
+            ["bash", "-c", 'echo "secret=[$YANTRA_SECRET_TOKEN] home=$HOME"'],
             cwd=_ws(tmp_path), timeout=10)
         assert "supersecret" not in out
         assert str(tmp_path) in out  # HOME repointed at the workspace
@@ -128,9 +128,9 @@ class TestBwrapSandbox:
         assert "BLOCKED" in out, out
 
     def test_secrets_absent_from_env(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("AKSHARA_SECRET_PROBE", "leak-me-not")
+        monkeypatch.setenv("YANTRA_SECRET_PROBE", "leak-me-not")
         s = BwrapSandbox()
-        _, out = s.execute(["bash", "-c", 'echo "[$AKSHARA_SECRET_PROBE]"'],
+        _, out = s.execute(["bash", "-c", 'echo "[$YANTRA_SECRET_PROBE]"'],
                            cwd=_ws(tmp_path), timeout=15)
         assert "leak-me-not" not in out
 
@@ -209,9 +209,9 @@ def test_bash_tool_default_keeps_subprocess_behavior(tmp_path):
 
 @pytest.mark.skipif(BWRAP is None, reason="bubblewrap not installed")
 def test_bash_tool_through_the_wall(tmp_path, monkeypatch):
-    monkeypatch.setenv("AKSHARA_SECRET_PROBE", "nope")
+    monkeypatch.setenv("YANTRA_SECRET_PROBE", "nope")
     tool = Bash(sandbox=BwrapSandbox())
-    result = tool.run({"command": "echo [$AKSHARA_SECRET_PROBE]"},
+    result = tool.run({"command": "echo [$YANTRA_SECRET_PROBE]"},
                       ToolContext(cwd=_ws(tmp_path)))
     assert "exit code: 0" in result
     assert "nope" not in result

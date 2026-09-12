@@ -7,11 +7,11 @@ then VERIFIES THE RESULT INDEPENDENTLY (it does not trust the model's
 claims).
 
 Since the build loop was promoted into the library, this file is now a
-thin shell around ``akshara.builder``: the presets below are DEMO
+thin shell around ``yantra.builder``: the presets below are DEMO
 CONTENT (spec text + acceptance commands); everything else -- the
 build-system prompt, the event rendering, the independent verification,
-the checksum contract -- lives in src/akshara/builder.py, which is what
-``akshara --build SPEC`` and the REPL's /build command drive too.
+the checksum contract -- lives in src/yantra/builder.py, which is what
+``yantra --build SPEC`` and the REPL's /build command drive too.
 
 Two job shapes:
 
@@ -35,7 +35,7 @@ What this exercises end-to-end, live:
     output the model must read and fix; its own bugs are its problem
   * the permission story of an autonomous build: fs writes are sandboxed
     to the workspace by the tools themselves; bash runs yolo here -- same
-    trust decision as `akshara --yolo` (use `akshara --sandbox --build`
+    trust decision as `yantra --yolo` (use `yantra --sandbox --build`
     for the bwrap-confined variant instead)
   * exit code doubles as a CI gate: green build -> 0, anything else -> 1
 
@@ -53,18 +53,18 @@ from pathlib import Path
 
 from rich.console import Console
 
-from akshara.builder import (
+from yantra.builder import (
     BUILD_SYSTEM,
     BuildSpec,
     default_checks,
     run_build,
 )
-from akshara.cli.render import Renderer
-from akshara.config import default_model, load_settings
-from akshara.permissions import yolo
-from akshara.providers import get_provider
-from akshara.tools import default_registry
-from akshara.agent import Agent
+from yantra.cli.render import Renderer
+from yantra.config import default_model, load_settings
+from yantra.permissions import yolo
+from yantra.providers import get_provider
+from yantra.tools import default_registry
+from yantra.agent import Agent
 
 PRESETS: dict[str, dict] = {
     "unitconv": {
@@ -182,7 +182,7 @@ def main() -> None:
     args = parser.parse_args()
 
     console = Console()
-    workspace = Path(tempfile.mkdtemp(prefix="akshara-build-"))
+    workspace = Path(tempfile.mkdtemp(prefix="yantra-build-"))
 
     # Repair jobs start from a seeded BROKEN project; the library then
     # checksums every test file so "make it green" cannot be satisfied by
@@ -208,7 +208,7 @@ def main() -> None:
 
     console.print(f"[bold]{args.provider}[/bold] · {factory(workspace).model} · "
                   f"workspace {workspace}\n[dim]gate: yolo (autonomous "
-                  "build -- bash unsandboxed; try `akshara --sandbox "
+                  "build -- bash unsandboxed; try `yantra --sandbox "
                   "--build`)[/dim]\n")
 
     try:

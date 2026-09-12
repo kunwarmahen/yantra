@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start.sh — start Akshara in a few common ways without memorizing flags.
+# start.sh — start Yantra in a few common ways without memorizing flags.
 #
 #   ./start.sh               show a numbered menu and pick one
 #   ./start.sh local         free & private — runs on your machine (Ollama)
@@ -7,7 +7,7 @@
 #   ./start.sh web           the chat UI in your browser
 #   ./start.sh local-web     local model + browser UI together
 #
-# Everything typed after the preset goes straight to akshara, so the rest
+# Everything typed after the preset goes straight to yantra, so the rest
 # of the CLI keeps working exactly as the README describes:
 #
 #   ./start.sh local --yolo
@@ -33,9 +33,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # Bookkeeping for the background browser UI (gitignored).
-WEB_PID_FILE=".akshara/web-ui.pid"
-WEB_PORT_FILE=".akshara/web-ui.port"
-WEB_LOG_FILE=".akshara/web-ui.log"
+WEB_PID_FILE=".yantra/web-ui.pid"
+WEB_PORT_FILE=".yantra/web-ui.port"
+WEB_LOG_FILE=".yantra/web-ui.log"
 
 # Read ONE variable out of .env without sourcing it (values may carry a
 # trailing "# comment", which sourcing would choke on). Empty if absent.
@@ -84,7 +84,7 @@ command -v uv >/dev/null 2>&1 || {
 
 # --- the browser UI, running in the background ------------------------------
 # 'web-start' detaches the server so the terminal stays yours; a pid file in
-# .akshara/ remembers it so web-stop/web-status can find it again.
+# .yantra/ remembers it so web-stop/web-status can find it again.
 
 web_is_running() {
     [[ -f "$WEB_PID_FILE" ]] || return 1
@@ -93,7 +93,7 @@ web_is_running() {
     [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
 }
 
-# Find --port N (or --port=N) among launch arguments; default matches akshara.
+# Find --port N (or --port=N) among launch arguments; default matches yantra.
 # Empty output = "no --port given" — callers then fall back to their default.
 web_port_from_args() {
     local prev="" a
@@ -168,16 +168,16 @@ http://127.0.0.1:$(cat "$WEB_PORT_FILE" 2>/dev/null || echo 8321)"
             check_ollama
             flags=(--provider ollama)
             ;;
-        auto) ;; # no --provider: akshara guesses from .env, like './start.sh web'
+        auto) ;; # no --provider: yantra guesses from .env, like './start.sh web'
     esac
     flags+=(--web)
 
     local port
     if ! port="$(pick_port "$(web_port_from_args "$@")")"; then return 1; fi
 
-    mkdir -p .akshara
+    mkdir -p .yantra
     echo "---- $(date '+%Y-%m-%d %H:%M:%S') starting: ${flags[*]} $*" >>"$WEB_LOG_FILE"
-    nohup uv run akshara "${flags[@]}" "$@" >>"$WEB_LOG_FILE" 2>&1 &
+    nohup uv run yantra "${flags[@]}" "$@" >>"$WEB_LOG_FILE" 2>&1 &
     local pid=$!
     echo "$pid" >"$WEB_PID_FILE"
     echo "$port" >"$WEB_PORT_FILE"
@@ -231,7 +231,7 @@ http://127.0.0.1:$(cat "$WEB_PORT_FILE" 2>/dev/null || echo '?')"
         # started in the foreground. Say so instead of a bare "stopped".
         rm -f "$WEB_PID_FILE" "$WEB_PORT_FILE"
         echo "not managed here — but SOMETHING is already serving on port $probe_port,"
-        echo "probably an 'akshara --web' started by hand. This script can't stop that one;"
+        echo "probably an 'yantra --web' started by hand. This script can't stop that one;"
         echo "find its terminal (or kill its pid) or just use it as-is."
     else
         rm -f "$WEB_PID_FILE" "$WEB_PORT_FILE"
@@ -249,9 +249,9 @@ web_logs() {
 # The container lives in the podman daemon, so its "stop" and "is it up?"
 # are asked of podman itself — no pid file needed.
 
-CONTAINER_NAME="localhost/akshara-web"   # image name (podman's localhost/ tag)
-CONTAINER_ID="akshara-web"               # running container name
-CONTAINER_PORT_FILE=".akshara/akshara-web.port"
+CONTAINER_NAME="localhost/yantra-web"   # image name (podman's localhost/ tag)
+CONTAINER_ID="yantra-web"               # running container name
+CONTAINER_PORT_FILE=".yantra/yantra-web.port"
 
 # podman, or docker if the host prefers that (README documents both).
 container_engine() {
@@ -264,7 +264,7 @@ container_engine() {
     fi
 }
 
-# True (0) if a container named akshara-web is RUNNING.
+# True (0) if a container named yantra-web is RUNNING.
 container_is_up() {
     local eng
     eng="$(container_engine)" || return 1
@@ -545,7 +545,7 @@ web_manage() {
 
 usage() {
     cat <<'EOF'
-Start Akshara with one command:
+Start Yantra with one command:
 
   ./start.sh              menu — pick a setup by number
   ./start.sh local        free & private — Ollama on this machine, no key
@@ -570,7 +570,7 @@ The same UI can also run inside a container (podman/docker):
   ./start.sh container-status   is it running? is the image built?
   ./start.sh container-logs     watch its output
 
-Anything after a preset or command passes through to akshara:
+Anything after a preset or command passes through to yantra:
 
   ./start.sh local --yolo            no permission prompts (careful)
   ./start.sh cloud --resume          restore the newest checkpoint
@@ -585,11 +585,11 @@ every road above picks them up — terminal, browser, and the container.
 Inside a session: /skills lists them, /skills off NAME pulls one.
 
 Keys and models come from .env — edit it to change them, or override on
-the command line like any akshara flag.
+the command line like any yantra flag.
 EOF
 }
 
-# Turn a preset name into the akshara arguments that express it.
+# Turn a preset name into the yantra arguments that express it.
 # Prints nothing on an unknown name (caller reports that).
 flags_for() {
     case "$1" in
@@ -618,7 +618,7 @@ flags_for() {
 
 menu_text() {
     cat <<'EOF'
-How do you want to run Akshara?
+How do you want to run Yantra?
 
   1) local      free & private — Ollama on this machine, no key needed
   2) cloud      use the API key already in your .env
@@ -699,4 +699,4 @@ if [[ ${#flags[@]} -eq 0 ]]; then
     exit 1
 fi
 
-exec uv run akshara "${flags[@]}" "$@"
+exec uv run yantra "${flags[@]}" "$@"

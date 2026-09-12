@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import pytest
 
-from akshara.agent import Agent
-from akshara.permissions import yolo
-from akshara.tools.base import Tool, ToolRegistry
-from akshara.tools.selector import (
+from yantra.agent import Agent
+from yantra.permissions import yolo
+from yantra.tools.base import Tool, ToolRegistry
+from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
     CORE_PINS,
     DEFAULT_TOOLS_PER_TURN,
@@ -19,7 +19,7 @@ from akshara.tools.selector import (
     enable_selection,
     query_from_transcript,
 )
-from akshara.types import (Message, ModelResponse, TextBlock, ToolCall, ToolResult, Usage)
+from yantra.types import (Message, ModelResponse, TextBlock, ToolCall, ToolResult, Usage)
 
 from conftest import ScriptedProvider
 
@@ -226,7 +226,7 @@ class TestEnableSelection:
 
 
 class TestRegistryUnregister:
-    """unregister exists for the operator kill-switch: AKSHARA_DISABLED_TOOLS
+    """unregister exists for the operator kill-switch: YANTRA_DISABLED_TOOLS
     pulls tools BEFORE catalog building, so a disabled tool is never sent,
     suggested, or pinned."""
 
@@ -341,7 +341,7 @@ class TestLoopIntegration:
 
     def test_no_catalog_keeps_full_registry(self):
         """Without a catalog everything is byte-identical to before."""
-        from akshara.tools.base import ToolRegistry as R
+        from yantra.tools.base import ToolRegistry as R
         registry = R()
         for i in range(30):
             registry.register(_mk(f"t{i}", f"tool {i}"))
