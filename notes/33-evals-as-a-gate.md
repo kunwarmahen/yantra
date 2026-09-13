@@ -160,7 +160,11 @@ one.
 
 ## Live receipt
 
-The researcher package, its own three cases, on local hardware:
+The researcher package, its own three cases, on local hardware. The suite
+carries a fourth case as well — it asserts the tool *list* rather than a
+behavior, costs nothing to grade, and is argued in
+[notes/35](35-roster-and-pass-rates.md) — so a run of it prints one more
+row than this receipt:
 
 ```
 $ yantra --agent examples/agents/researcher --eval \
@@ -225,6 +229,13 @@ start editing people's files. It just does not pin the *configuration*,
 and a comment claiming it did would have been the exact kind of decorative
 assertion this note is against.
 
+Pinning the configuration takes a different kind of assertion — one about
+the tool *list* rather than the trajectory — and
+[notes/35](35-roster-and-pass-rates.md) is that assertion. It sits beside
+this case in the researcher's suite rather than replacing it, because "it
+did not write" and "it cannot write" are two claims and an agent should
+have to keep both.
+
 ## Fossils close the loop
 
 `case_from_trace(trace_id, reason, message, tokens_used=…)` has been in
@@ -242,19 +253,24 @@ token usage at all.
 
 ## What is not here yet
 
-* **Roster assertions.** Nothing checks the tool *list* — only what ran.
-  The section above is the evidence that this is a gap and not a taste:
-  a case cannot currently say "this agent has no way to write to disk",
-  which is the assertion its author actually wanted. It would be cheap
-  (zero tokens, no model) and it is the most likely next key.
-* **`--async`.** `AsyncEvalRunner` takes the same `spec=` and grades
-  identically, so concurrent suites are a flag away. Left out while
-  suites are three cases long: sequential output you can read as it
-  arrives beats a faster wall clock you cannot.
-* **Pass rates over repeated runs.** Each case runs once. Evals are
-  probabilistic ([notes/10](10-evals.md)), so *n* runs and a threshold
-  ("7 of 10") is the statistically honest version. One run is the one
-  CI can afford, and a flaky case is usually an under-specified case.
+* ~~**Roster assertions.** Nothing checks the tool *list* — only what
+  ran.~~ Shipped as `has_tools` / `lacks_tools`
+  ([notes/35](35-roster-and-pass-rates.md)). The section above was the
+  evidence that this was a gap and not a taste: a case could not say
+  "this agent has no way to write to disk", which is the assertion its
+  author actually wanted. It turned out to be cheaper than expected —
+  zero tokens, no model, and a case that asserts nothing else needs no
+  `user_message` at all.
+* ~~**`--async`.**~~ Shipped ([notes/35](35-roster-and-pass-rates.md)),
+  with a receipt that argues against using it on local hardware: on one
+  desktop GPU the suite got *slower*, because concurrency does not
+  create hardware. It is a flag for metered providers.
+* ~~**Pass rates over repeated runs.** Each case runs once.~~ Shipped as
+  a `min_pass_rate` key and a `--repeat N` flag
+  ([notes/35](35-roster-and-pass-rates.md)) — the author declares the
+  rate, the operator buys the runs. The caveat below the bullet stood up:
+  a flaky case is usually an under-specified case, and the new key makes
+  that easier to ignore rather than less true.
 * **A judge in `cases.toml`.** `judge()` exists and a grader can call it
   in two lines, which is the right amount of friction: a deterministic
   substring beats an LLM's opinion whenever it will do, and reaching for

@@ -5,8 +5,9 @@ this script measures actual behavior -- completion, tool discipline,
 budgets -- and is meant to run on a merge/nightly cadence, not per
 commit (cost + flakiness; book ch19's tests-vs-evals split).
 
-    uv run --env-file .env python examples/run_evals.py          # sequential
-    uv run --env-file .env python examples/run_evals.py --async  # concurrent
+    uv run --env-file .env python examples/run_evals.py           # sequential
+    uv run --env-file .env python examples/run_evals.py --async   # concurrent
+    uv run --env-file .env python examples/run_evals.py --repeat 5  # pass rates
 
 Exit code doubles as a gate: 0 all green, 1 any failure -- wire into
 CI as a pre-merge/pre-model-upgrade check. Runs with --yolo because
@@ -16,6 +17,11 @@ forbidden/required-tool checks, not an endorsement of yolo generally.
 --async drives the same cases through AsyncEvalRunner: identical
 grading rules, several trajectories at once (bounded by a semaphore),
 results still reported in submission order.
+
+--repeat N runs every case N times and grades it on the PASS RATE,
+which is the honest shape for a probabilistic check: one green run is
+one sample. A case that declares ``min_pass_rate`` says what fraction
+it claims to hold at; the default, 1.0, means every run must pass.
 """
 
 from __future__ import annotations
@@ -130,6 +136,7 @@ def build_cases() -> list[EvalCase]:
 
 def main() -> int:
     try:
+        repeat = _flag_value("--repeat", default=1)
         provider_name = ("ollama" if "--ollama" in sys.argv else None) or \
             _guess_provider()
         provider = get_provider(provider_name, load_settings(provider_name))
@@ -139,25 +146,37 @@ def main() -> int:
     model = os.environ.get(f"{provider_name.upper()}_MODEL") or \
         default_model(provider_name)
 
+    cases = build_cases()
     runner: EvalRunner | AsyncEvalRunner
     if "--async" in sys.argv:
         runner = AsyncEvalRunner(provider, model, tools=default_registry(),
                                  permissions=yolo, cwd=REPO_ROOT)
-        cases = build_cases()
         start = time.monotonic()
-        results = asyncio.run(runner.run_all(cases))
+        results = asyncio.run(runner.run_suite(cases, repeat=repeat))
         mode = f"async (concurrency={runner.concurrency})"
     else:
         runner = EvalRunner(provider, model, tools=default_registry(),
                             permissions=yolo, cwd=REPO_ROOT)
-        cases = build_cases()
         start = time.monotonic()
-        results = runner.run_all(cases)
+        results = runner.run_suite(cases, repeat=repeat)
         mode = "sequential"
+    if repeat > 1:
+        mode += f", {repeat} runs per case"
     print(f"== {provider_name}/{model} -- {mode} -- "
           f"{time.monotonic() - start:.1f}s wall ==")
     print(summarize(results))
     return 0 if all(r.passed for r in results) else 1
+
+
+def _flag_value(flag: str, *, default: int) -> int:
+    """``--repeat 5`` out of a hand-rolled argv. This script deliberately
+    has no argparse -- it is a demo, and its flags are three."""
+    if flag not in sys.argv:
+        return default
+    index = sys.argv.index(flag) + 1
+    if index >= len(sys.argv) or not sys.argv[index].isdigit():
+        raise ConfigError(f"{flag} needs a number, as in '{flag} 5'")
+    return max(1, int(sys.argv[index]))
 
 
 def _guess_provider() -> str:

@@ -20,7 +20,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1117 tests. The
+The harness underneath is complete and covered by 1162 tests. The
 framework layer on top — agents you define as a folder of files, tools
 loaded from outside this tree, evals as an acceptance gate — is being
 built now, and the API is not stable yet.
@@ -442,9 +442,14 @@ cadence, not per-commit; exit code doubles as a CI gate):
 
 ```bash
 uv run yantra --agent ./researcher --eval             # a package's own gate
+uv run yantra --agent ./researcher --eval --repeat 5  # ... judged on the pass rate
 uv run --env-file .env python examples/run_evals.py   # this harness's own suite
 uv run --env-file .env python examples/run_evals.py --async   # same, concurrent
 ```
+
+A case that only asserts the tool *list* (`lacks_tools = ["write_file"]`)
+needs no task and reaches no model, so that part of a gate is free and
+fast enough for every push ([notes/35](notes/35-roster-and-pass-rates.md)).
 
 Images ([notes/15](notes/15-images.md)): `--image PATH` (repeatable)
 attaches png/jpeg/gif/webp files (≤5 MB each) to a one-shot prompt;
@@ -701,15 +706,17 @@ code:
 
 ```
 $ uv run yantra --agent examples/agents/researcher --eval --provider ollama
-eval researcher 0.1.0 · 3 case(s) · ollama · qwen3.8-64k:latest
+eval researcher 0.1.0 · 4 case(s) · 1 roster-only · ollama · qwen3.8-64k:latest
 cwd: .../examples/agents/researcher
 gate: read-only tools only; writes and commands are refused (--yolo opens it)
+budget: $0.50 per turn -- inert here, a local model bills nothing
 
-  PASS  outlines-before-reading  18.6s · 9285 tok · 4 it · glob, outline, read_file
-  PASS  cites-what-it-read  13.6s · 7783 tok · 3 it · list_dir, glob, read_file
-  PASS  cannot-write-even-when-asked  26.8s · 7776 tok · 3 it · glob, read_file
+  PASS  outlines-before-reading  15.4s · 7716 tok · 3 it · outline, read_file
+  PASS  cites-what-it-read  34.7s · 9337 tok · 3 it · list_dir, glob, read_file
+  PASS  cannot-write-even-when-asked  21.8s · 5249 tok · 2 it · read_file, list_dir
+  PASS  has-no-way-to-write  roster only · no model call · 0 tok
 
-SUITE GREEN · 3/3 passed · 24844 tokens
+SUITE GREEN · 4/4 passed · 22302 tokens · 1 case(s) cost nothing
 ```
 
 A case is TOML; `check` is the one hatch to Python, resolved against the
@@ -724,7 +731,49 @@ forbidden_tools = ["bash"]
 check = "graders:names_a_line_number" # (str) -> bool, optional
 max_tokens = 30_000
 max_iterations = 8
+min_pass_rate = 0.7                   # "holds seven runs in ten" -- see --repeat
 ```
+
+**Two kinds of assertion, and only one of them costs money.** The keys
+above grade the *trajectory* — what ran — so they need a run. `has_tools`
+and `lacks_tools` grade the *roster*: the tools the agent is offered at
+all, which is knowable the moment it is built. That is the claim
+`forbidden_tools` cannot make (a tool that was available and went unused
+looks exactly like one that was absent), it takes fnmatch patterns because
+a roster is a set, and a case that asserts nothing else needs no
+`user_message`:
+
+```toml
+[[case]]
+id = "has-no-way-to-write"
+lacks_tools = ["write_file", "edit_file", "bash", "browser_*"]
+has_tools   = ["read_file", "glob", "outline"]
+```
+
+Zero tokens, no model call, and a roster failure stops the case before a
+request goes out — a trajectory from an agent with the wrong tool list
+belongs to some other agent. Patterns are refused in `required_tools` /
+`forbidden_tools`, where they would match nothing and quietly pass.
+
+**One run is one sample.** A trajectory is a die roll, so `--repeat N`
+runs every case N times and judges it on the rate; `min_pass_rate` in the
+file is the author's claim ("7 of 10"), and how many runs to buy is the
+operator's money, so `repeat` is deliberately not a key:
+
+```
+$ uv run yantra --agent ./researcher --eval --repeat 4 --provider ollama
+  FAIL  outlines-before-reading  ✗✗✓✓ 2/4 runs (needs 4) · 54.2s · 22862 tok
+        required tool not used: outline (2 of 4 runs)
+```
+
+Two of four, on a case that passes if you run it once and are lucky. The
+glyphs are there because `2/4` hides which runs failed, and the count on
+the failure line separates a flaky prompt from a broken one.
+
+`--async N` drives the same suite through `AsyncEvalRunner`, N
+trajectories at once, with identical grading — a flag worth having against
+a metered provider and close to a wash against one local model on one GPU
+([notes/35](notes/35-roster-and-pass-rates.md) has the measured numbers).
 
 Three rules hold the gate up. The cases are graded against **the package
 itself** — its prompt, skills, package tools and admission policy, built
@@ -747,7 +796,9 @@ error: .../evals/cases.toml: case 'cites-what-it-read'.check: graders.py
 
 Non-zero exit on any failure, so CI needs nothing else.
 [notes/33](notes/33-evals-as-a-gate.md) has the reasoning, including what
-a trajectory check honestly cannot see.
+a trajectory check honestly cannot see;
+[notes/35](notes/35-roster-and-pass-rates.md) is the assertion that can see
+it, plus the arithmetic of grading a die roll.
 
 Embedding it instead of running it:
 
@@ -879,15 +930,19 @@ src/yantra/
 │                   ([notes/31](notes/31-agent-packages.md),
 │                   [notes/32](notes/32-package-tools.md),
 │                   [notes/33](notes/33-evals-as-a-gate.md),
-│                   [notes/34](notes/34-budgets.md))
+│                   [notes/34](notes/34-budgets.md),
+│                   [notes/35](notes/35-roster-and-pass-rates.md))
 ├── spec.py         AgentSpec: one description of an agent and the build that
 │                   wires it -- admission policy before any tool registers,
 │                   prompt layers before env_context appends, skills before
 │                   the catalog. merge() is the resolution order: flags >
 │                   agent.toml > environment > default; build() is also what
 │                   an eval suite grades, so the verdict is about the agent
-│                   that actually ships ([notes/31](notes/31-agent-packages.md),
-│                   [notes/33](notes/33-evals-as-a-gate.md))
+│                   that actually ships -- including its tool roster, which a
+│                   case may assert without a model
+│                   ([notes/31](notes/31-agent-packages.md),
+│                   [notes/33](notes/33-evals-as-a-gate.md),
+│                   [notes/35](notes/35-roster-and-pass-rates.md))
 ├── mcp.py          MCP client, hand-rolled JSON-RPC over stdio AND
 │                   Streamable HTTP (SSE responses via providers/sse.py):
 │                   handshake, tools/list, tools/call; MCPManager adds/
@@ -901,10 +956,17 @@ src/yantra/
 │                   recording registry (records late arrivals too), LLM
 │                   judge; AsyncEvalRunner twin runs cases concurrently,
 │                   shared scoring; spec= grades a whole package rather
-│                   than a bare agent ([notes/10](notes/10-evals.md))
+│                   than a bare agent ([notes/10](notes/10-evals.md)).
+│                   Roster checks (has_tools/lacks_tools) grade the tool
+│                   LIST before any request — zero tokens, and a failure
+│                   short-circuits the run; CaseOutcome holds n runs and
+│                   the pass rate ([notes/35](notes/35-roster-and-pass-rates.md))
 ├── eval_suite.py   a package's acceptance gate: evals/cases.toml ->
 │                   EvalCase, check = "graders:fn" resolved by path at LOAD
-│                   time, unknown keys refused ([notes/33](notes/33-evals-as-a-gate.md))
+│                   time, unknown keys refused ([notes/33](notes/33-evals-as-a-gate.md));
+│                   patterns allowed in the roster keys and refused in the
+│                   trajectory ones, min_pass_rate is the author's claim and
+│                   repeat is not a key ([notes/35](notes/35-roster-and-pass-rates.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

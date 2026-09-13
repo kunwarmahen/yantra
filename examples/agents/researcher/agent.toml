@@ -7,9 +7,12 @@
 #
 #   yantra --agent examples/agents/researcher --eval
 #
-# evals/cases.toml is this package's acceptance gate -- three behaviors it
-# promises, graded against this file's own prompt and tool list, exit
-# non-zero if any of them has stopped being true (notes/33).
+# evals/cases.toml is this package's acceptance gate -- the behaviors this
+# package promises, graded against this file's own prompt and tool list,
+# exit non-zero if any of them has stopped being true (notes/33). One of
+# its cases asserts the [tools] list below rather than a behavior, which
+# costs no tokens and goes red the moment somebody adds write_file to it
+# (notes/35).
 #
 # Every key below is optional. What is NOT here is as deliberate as what
 # is: no provider and no model, so this package runs against whatever you

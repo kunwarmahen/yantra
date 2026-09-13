@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import fnmatch
 import sys
 import time
@@ -30,7 +31,7 @@ from yantra.config import (
 )
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
 from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
-from yantra.evals import EvalRunner
+from yantra.evals import AsyncEvalRunner, CaseOutcome, EvalRunner
 from yantra.images import load_image_block
 from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
@@ -112,6 +113,21 @@ def build_parser() -> argparse.ArgumentParser:
                              f"({SUITE_DIR}/{CASES}) and exit non-zero on "
                              "failure; the package is named the usual way "
                              "(--agent DIR, or ./agent.toml)")
+    parser.add_argument("--async", dest="eval_async", nargs="?", type=int,
+                        const=4, default=None, metavar="N",
+                        help="with --eval: drive the suite through "
+                             "AsyncEvalRunner, N trajectories at once "
+                             "(default 4). Identical grading; lines land in "
+                             "completion order and the final report stays in "
+                             "file order")
+    parser.add_argument("--repeat", type=int, default=1, metavar="N",
+                        help="with --eval: run every case N times and judge "
+                             "it on the PASS RATE. A trajectory is a die "
+                             "roll, so one green run is one sample; a case's "
+                             "own min_pass_rate says what fraction it claims "
+                             "to hold at, and this buys the evidence. "
+                             "Roster-only cases still run once -- they reach "
+                             "no model")
     parser.add_argument("--browse-login", metavar="URL", dest="browse_login",
                         default=None,
                         help="one-time LOGIN SETUP for the browser_* tools: "
@@ -390,33 +406,63 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
         budget_note = "\nbudget: " + ceiling.describe()
         if ceiling.metered:  # the inert line already says it cannot fire
             budget_note += " -- a case that costs more goes red"
-    console.print(f"[bold]eval[/bold] {escape(label)} · {len(cases)} case(s) · "
+    # What the run will cost, before it starts. A roster-only case is
+    # counted separately because it is the one kind that is free -- it
+    # grades the tool LIST, which is knowable without a model.
+    plan = f"{len(cases)} case(s)"
+    free_cases = sum(1 for c in cases if not c.needs_a_model)
+    if free_cases:
+        plan += f" · {free_cases} roster-only"
+    if args.repeat > 1:
+        plan += f" · {args.repeat} runs each"
+    console.print(f"[bold]eval[/bold] {escape(label)} · {plan} · "
                   f"{provider_name} · {model}\n[dim]cwd: {cwd}\n"
-                  f"gate: {gate_note}{budget_note}[/dim]\n")
+                  f"gate: {gate_note}{budget_note}[/dim]")
+    if args.eval_async is not None:
+        console.print(f"[dim]mode: async, {args.eval_async} trajectories at "
+                      f"once -- lines land as cases finish, not in file "
+                      f"order[/dim]")
+    if args.repeat > 1:
+        console.print(f"[dim]runs: {args.repeat} per case; a case reports "
+                      f"once all of its runs are in[/dim]")
+    else:
+        # A declared rate that cannot be honoured is worth saying out loud:
+        # at one run, 0.7 and 1.0 grade identically, and an author who wrote
+        # 0.7 believed they had bought something.
+        claimed = sum(1 for c in cases if c.min_pass_rate < 1)
+        if claimed:
+            console.print(f"[dim]note: {claimed} case(s) declare a "
+                          f"min_pass_rate below 1.0; one run each can only "
+                          f"grade them all-or-nothing -- --repeat N buys the "
+                          f"evidence[/dim]")
+    console.print()
 
-    runner = EvalRunner(
-        get_provider(provider_name, settings, cache_control=bool(spec.cache)),
-        model, tools=default_registry(sandbox), permissions=gate,
-        cwd=cwd, spec=spec, provider_name=provider_name,
-    )
-    results = []
+    provider = get_provider(provider_name, settings,
+                            cache_control=bool(spec.cache))
+    tools = default_registry(sandbox)
+
+    def report(outcome: CaseOutcome) -> None:
+        _eval_outcome_line(console, outcome)
+
     try:
-        for case in cases:
+        if args.eval_async is not None:
+            runner = AsyncEvalRunner(
+                provider, model, tools=tools, permissions=gate, cwd=cwd,
+                spec=spec, provider_name=provider_name,
+                concurrency=args.eval_async,
+            )
+            outcomes = asyncio.run(runner.run_suite(
+                cases, repeat=args.repeat, on_outcome=report))
+        else:
+            runner = EvalRunner(
+                provider, model, tools=tools, permissions=gate,
+                cwd=cwd, spec=spec, provider_name=provider_name,
+            )
             # Printed as each case lands rather than in one table at the
             # end: a live suite is minutes of silence otherwise, and the
             # first red is the one you want to see soonest.
-            result = runner.run_case(case)
-            results.append(result)
-            mark = "[green]PASS[/green]" if result.passed else "[red]FAIL[/red]"
-            tools = ", ".join(result.tool_calls_seen) or "no tools"
-            console.print(f"  {mark}  {escape(result.case_id)}  "
-                          f"[dim]{result.duration_seconds:.1f}s · "
-                          f"{result.tokens_used} tok · "
-                          f"{result.iterations_used} it · "
-                          f"{escape(tools)}[/dim]")
-            for failure in result.failures:
-                console.print(f"        {failure}", style="red",
-                              markup=False, highlight=False)
+            outcomes = runner.run_suite(cases, repeat=args.repeat,
+                                        on_outcome=report)
     except KeyboardInterrupt:
         console.print("\n[yellow](cancelled -- no verdict)[/yellow]")
         return 130
@@ -426,13 +472,52 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    passed = sum(1 for r in results if r.passed)
-    verdict = ("[bold green]SUITE GREEN[/bold green]" if passed == len(results)
+    passed = sum(1 for o in outcomes if o.passed)
+    verdict = ("[bold green]SUITE GREEN[/bold green]" if passed == len(outcomes)
                else "[bold red]SUITE RED[/bold red]")
-    spent = sum(r.tokens_used for r in results)
-    console.print(f"\n{verdict} · {passed}/{len(results)} passed · "
-                  f"{spent} tokens")
-    return 0 if passed == len(results) else 1
+    spent = sum(o.tokens_used for o in outcomes)
+    runs = sum(o.attempts for o in outcomes)
+    tally = f"{passed}/{len(outcomes)} passed"
+    if runs != len(outcomes):
+        tally += f" · {runs} runs"
+    console.print(f"\n{verdict} · {tally} · {spent} tokens"
+                  + (f" · {free_cases} case(s) cost nothing" if free_cases
+                     else ""))
+    return 0 if passed == len(outcomes) else 1
+
+
+def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
+    """One case's verdict, plus a line per distinct failure.
+
+    Three shapes, because three things are worth different detail: a case
+    that reached no model has no trajectory to describe, a repeated case is
+    a RATE (and which runs failed, in order, is half the diagnosis), and a
+    single run is the one-line receipt this gate has always printed.
+    """
+    mark = "[green]PASS[/green]" if outcome.passed else "[red]FAIL[/red]"
+    if not outcome.ran_model:
+        # Two different things reach no model, and conflating them would
+        # misreport both: a case whose only assertions are about the roster,
+        # and a case with a task whose roster assertion failed before the
+        # task was paid for.
+        detail = ("roster only · no model call · 0 tok" if outcome.passed
+                  else "roster failed · no model call · 0 tok")
+    elif outcome.attempts > 1:
+        needed = ("" if outcome.min_pass_rate >= 1
+                  else f" (needs {outcome.required_passes})")
+        detail = (f"{outcome.marks} {outcome.passes}/{outcome.attempts} "
+                  f"runs{needed} · {outcome.duration_seconds:.1f}s · "
+                  f"{outcome.tokens_used} tok")
+    else:
+        run = outcome.runs[-1]
+        detail = (f"{run.duration_seconds:.1f}s · {run.tokens_used} tok · "
+                  f"{run.iterations_used} it · "
+                  f"{', '.join(run.tool_calls_seen) or 'no tools'}")
+    console.print(f"  {mark}  {escape(outcome.case_id)}  "
+                  f"[dim]{escape(detail)}[/dim]")
+    for failure in outcome.failures:
+        console.print(f"        {failure}", style="red",
+                      markup=False, highlight=False)
 
 
 def _browse_login(url: str, console: Console) -> int:
@@ -575,6 +660,19 @@ def main(argv: list[str] | None = None) -> int:
                       or args.web):
         print("error: --eval runs the package's suite and reports a verdict; "
               "drop --build/--prompt/PROMPT/--web", file=sys.stderr)
+        return 2
+    if args.repeat < 1:
+        print(f"error: --repeat must be at least 1 (got {args.repeat}); a "
+              f"suite that runs nothing passes everything", file=sys.stderr)
+        return 2
+    if args.eval_async is not None and args.eval_async < 1:
+        print(f"error: --async must be at least 1 (got {args.eval_async})",
+              file=sys.stderr)
+        return 2
+    if (args.eval_async is not None or args.repeat != 1) and not args.eval:
+        print("error: --async and --repeat belong to --eval -- they say how "
+              "an acceptance suite is driven, and a session has one "
+              "trajectory", file=sys.stderr)
         return 2
     if args.build and (args.prompt or args.prompt_positional):
         print("error: --build takes the spec itself; drop --prompt/PROMPT",

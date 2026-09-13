@@ -19,7 +19,8 @@ deterministic, and run on every commit -- they prove the MACHINERY works
 the BEHAVIOR is still there. Run them before sharing a package, after
 editing a prompt, and before switching models -- not on every push.
 `notes/10-evals.md` argues the split; `notes/33-evals-as-a-gate.md`
-argues this surface.
+argues this surface, and `notes/35-roster-and-pass-rates.md` argues the
+two assertions that came after it.
 
 ## Run one that already exists
 
@@ -70,6 +71,7 @@ forbidden_tools = ["bash", "write_file"]   # must not have
 max_tokens      = 30000                    # cost ceiling
 max_iterations  = 8                        # model round-trip ceiling
 check           = "graders:names_a_line_number"   # optional, see below
+min_pass_rate   = 0.7                      # "holds 7 runs in 10" -- see --repeat
 ```
 
 Reach for `required_tools` / `forbidden_tools` first. They grade the
@@ -80,8 +82,69 @@ agent that answered without reading anything is broken and got lucky.
 Keys that do NOT exist here, and why: `system` (the package's own prompt
 is the thing under test -- a case that replaced it would grade some other
 agent), `setup` (per-case Python wiring is a library feature, not a
-package one). Unknown keys are errors, so a typo can never quietly turn
-an assertion into decoration.
+package one), `repeat` (how many times the gate runs is paid for by
+whoever runs it -- declare `min_pass_rate` and let them pass `--repeat N`).
+Unknown keys are errors, so a typo can never quietly turn an assertion
+into decoration.
+
+## Asserting the tool LIST, for free
+
+The keys above all need a run. These two do not:
+
+```toml
+[[case]]
+id = "has-no-way-to-write"
+description = "not 'it did not write' -- 'it cannot'"
+lacks_tools = ["write_file", "edit_file", "bash", "browser_*"]
+has_tools   = ["read_file", "glob", "outline"]
+```
+
+`has_tools` / `lacks_tools` grade the ROSTER: the tools the agent is
+offered at all. Note what is missing from that case -- there is no
+`user_message`, because there is nothing for a model to do. It costs zero
+tokens and finishes in milliseconds, which makes it the one kind of eval
+case a gate can afford to run on every push.
+
+Use it for the claim `forbidden_tools` cannot make. A tool that was
+available and went unused looks exactly like a tool that was never there,
+so "it did not write" and "it cannot write" are two separate assertions
+and a package usually wants both. Two rules worth knowing:
+
+* **Patterns work here and nowhere else.** `lacks_tools = ["browser_*"]`
+  is fnmatch, like `tools.allow`, because a roster is a set. A pattern in
+  `required_tools` / `forbidden_tools` is refused at load time -- those
+  grade a list of names that executed, so `write_*` would match nothing
+  and pass silently.
+* **A roster failure stops the case.** No request goes out, and nothing is
+  spent: an agent with the wrong tool list is not the agent the case
+  describes, so its trajectory would be about something else.
+
+What a roster check cannot see: MCP tools (`--eval` opens no servers, so
+`mcp__*` is an empty set) and anything a prompt talks the model into or
+out of -- that is what the trajectory keys are for.
+
+## Running a case more than once
+
+A trajectory is a die roll. `--repeat N` runs every case N times and
+judges it on the pass RATE:
+
+```bash
+uv run yantra --agent ./my-agent --eval --repeat 5
+uv run yantra --agent ./my-agent --eval --repeat 10 --async 4   # concurrently
+```
+
+A case passes when its passes reach `min_pass_rate` of its runs, rounded
+UP (0.7 of ten runs is seven, not six). The default is 1.0 -- every run
+must pass -- so one run at the default is exactly the old behaviour.
+
+Read the rate as a description, not a target. A case that passes seven
+times in ten is sometimes a genuinely probabilistic behavior and is more
+often a case whose instruction left the model two reasonable routes.
+Lowering the threshold until a suite goes green is how a real regression
+gets waved through; if you are tuning it downward, edit the case instead.
+
+Roster-only cases are never repeated -- they reach no model, so n runs
+would be n copies of one fact.
 
 ## Graders: checking the answer text
 
@@ -144,6 +207,8 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--provider ollama` | local model instead of a cloud key; `--model TAG` picks one |
 | `--yolo` | let the suite write files and run commands |
 | `--cwd DIR` | run the cases somewhere other than the package folder |
+| `--repeat N` | run every case N times, judge it on the pass rate |
+| `--async N` | N trajectories at once (default 4); identical grading |
 
 **About `--yolo`.** By default the suite auto-approves read-only tools
 and REFUSES everything that writes or executes, because nobody is sitting
@@ -193,22 +258,34 @@ Against a local model the ceiling is inert (nothing is billed), so a
 suite that runs green on Ollama tells you nothing about whether it fits
 the package's budget on a metered one.
 
+**About `--async`.** Worth it against a metered provider, where the
+concurrency belongs to somebody else's fleet. Close to a wash against one
+local model on one GPU -- the card was the bottleneck, not the client --
+and lines then land in completion order, which is harder to read. Measured
+both ways in `notes/35-roster-and-pass-rates.md`.
+
 ## The limit to remember
 
 `forbidden_tools` grades what EXECUTED, not what was AVAILABLE. Adding
 `write_file` to a package's `tools.allow` does not necessarily turn a
 "cannot write" case red -- if the prompt still tells the model it cannot
 modify anything, the model will go along with it and the tool sits there
-unused. These cases pin BEHAVIOR, not CONFIGURATION. For configuration,
-read `agent.toml` -- `tools.allow` is a complete whitelist and says so
-plainly.
+unused. Those cases pin BEHAVIOR.
+
+For CONFIGURATION, write the roster assertion beside it: `lacks_tools =
+["write_file"]` goes red the moment the key appears in `tools.allow`, with
+no model involved. Keep both -- "it did not write" and "it cannot write"
+are two claims, and a prompt regression breaks the first while a manifest
+edit breaks the second.
 
 ## Before you say you are done
 
 * Run the suite for real and paste what came back -- a receipt beats a
   claim about what should happen. Against Ollama when you can: it is free
   and roughly half this project's readers run local models.
-* Green once is not green. Evals are probabilistic; a case that passes
-  four times out of five is an under-specified case, not a flaky model.
+* Green once is not green. Evals are probabilistic, so confirm a new case
+  with `--repeat 5` before trusting it. If it comes back four out of five,
+  that is usually an under-specified case rather than a flaky model --
+  rewrite the case before reaching for `min_pass_rate`.
 * If you added a case for a bug, confirm it goes RED against the broken
   version before you call it a regression test.

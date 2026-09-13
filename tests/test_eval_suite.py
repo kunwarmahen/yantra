@@ -11,6 +11,12 @@ built a bare agent would report a verdict on a prompt, skill set and
 tool list that nobody ships -- so the tests that matter most here are
 the ones proving the package's own prompt, its own tools, and its own
 admission policy are what ran.
+
+The third is that the free checks must stay free. A roster assertion that
+quietly spent a model call, or a roster FAILURE that paid for a
+trajectory nobody will read, would be the whole point of the key thrown
+away -- so several of these assert on tokens being zero rather than on a
+verdict.
 """
 
 from __future__ import annotations
@@ -20,7 +26,15 @@ import pytest
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 from yantra.errors import ConfigError
 from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
-from yantra.evals import EvalCase, EvalRunner, recording_registry
+from yantra.evals import (
+    CaseOutcome,
+    EvalCase,
+    EvalResult,
+    EvalRunner,
+    recording_registry,
+    roster_failures,
+    roster_of,
+)
 from yantra.package import MANIFEST, load_package
 from yantra.permissions import allow_read_only, yolo
 from yantra.tools import default_registry
@@ -347,12 +361,318 @@ class TestTheSuiteGradesThePackage:
         assert len(result.failures) == 3
 
 
+class TestRosterAssertionsInTheFormat:
+    """has_tools / lacks_tools: the keys that grade the tool LIST.
+
+    The reason they exist is in this file already: a forbidden_tools case
+    stays green when the tool is added to tools.allow, because nothing
+    executed. That is a real limit of trajectory checks, not a bug, and
+    these are the keys that cover it.
+    """
+
+    def test_roster_keys_round_trip(self, tmp_path):
+        case, = load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                                  'user_message = "hi"\n'
+                                  'has_tools = ["read_file"]\n'
+                                  'lacks_tools = ["bash"]\n'))
+        assert case.has_tools == ["read_file"]
+        assert case.lacks_tools == ["bash"]
+
+    def test_a_roster_only_case_needs_no_user_message(self, tmp_path):
+        """The whole point of the key: this case costs nothing to grade."""
+        case, = load_cases(_suite(tmp_path, '[[case]]\nid = "cannot-write"\n'
+                                  'lacks_tools = ["write_file"]\n'))
+        assert case.user_message == ""
+        assert case.needs_a_model is False
+
+    def test_roster_keys_take_patterns(self, tmp_path):
+        case, = load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                                  'lacks_tools = ["browser_*"]\n'))
+        assert case.lacks_tools == ["browser_*"]
+
+    def test_a_pattern_in_a_trajectory_key_is_refused(self, tmp_path):
+        """A pattern would match nothing in a list of names that RAN, so the
+        case would be green and would have checked nothing -- exactly the
+        failure mode this format exists to prevent."""
+        with pytest.raises(ConfigError) as exc:
+            load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                              'user_message = "hi"\n'
+                              'forbidden_tools = ["write_*"]\n'))
+        assert "takes exact tool names, not patterns" in str(exc.value)
+        assert "has_tools/lacks_tools" in str(exc.value)
+
+    def test_a_trajectory_key_without_a_task_is_refused(self, tmp_path):
+        """A message-less case never runs, so required_tools on one is a
+        check that would never be performed."""
+        with pytest.raises(ConfigError) as exc:
+            load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                              'lacks_tools = ["bash"]\n'
+                              'required_tools = ["read_file"]\n'
+                              'max_tokens = 10\n'))
+        assert "grade a trajectory that never happens" in str(exc.value)
+        assert "max_tokens, required_tools" in str(exc.value)
+
+    def test_a_case_with_neither_a_task_nor_a_roster_claim_is_refused(self,
+                                                                     tmp_path):
+        with pytest.raises(ConfigError, match="has no user_message"):
+            load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                              'description = "asserts nothing"\n'))
+
+
+class TestPassRateInTheFormat:
+    """min_pass_rate: the author's claim, and what it may not be."""
+
+    def test_a_rate_round_trips_and_defaults_to_one(self, tmp_path):
+        loose, = load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                                   'user_message = "hi"\n'
+                                   'min_pass_rate = 0.7\n'))
+        assert loose.min_pass_rate == 0.7
+        strict, = load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                                    'user_message = "hi"\n'))
+        assert strict.min_pass_rate == 1.0
+
+    def test_an_integer_one_is_a_rate_too(self, tmp_path):
+        case, = load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                                  'user_message = "hi"\nmin_pass_rate = 1\n'))
+        assert case.min_pass_rate == 1.0
+
+    def test_a_rate_out_of_range_says_it_is_a_fraction(self, tmp_path):
+        """'7 of 10' written as 7 is the mistake worth catching, because 7
+        would otherwise read as a threshold nothing can ever meet."""
+        with pytest.raises(ConfigError) as exc:
+            load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                              'user_message = "hi"\nmin_pass_rate = 7\n'))
+        assert "nine cases in ten is 0.9, not 9" in str(exc.value)
+
+    def test_a_rate_of_zero_is_refused(self, tmp_path):
+        with pytest.raises(ConfigError, match="greater than 0"):
+            load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                              'user_message = "hi"\nmin_pass_rate = 0\n'))
+
+    def test_repeat_is_not_the_authors_key(self, tmp_path):
+        """How many times the gate runs is paid for by whoever runs it."""
+        with pytest.raises(ConfigError, match="operator's money"):
+            load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
+                              'user_message = "hi"\nrepeat = 5\n'))
+
+
+class TestTheRosterIsGradedFree:
+    """Zero tokens, no model -- asserted on the provider, not on a verdict.
+
+    ScriptedProvider records every request it is asked for, so an empty
+    request log is proof that the gate reached no model at all. That is the
+    property the key was added for; a test that only checked pass/fail
+    would keep passing if the implementation started paying for it.
+    """
+
+    PACKAGE = ('[agent]\nname = "pkg"\n\n'
+               '[tools]\nallow = ["read_file", "list_dir"]\n')
+
+    def _runner(self, tmp_path, script=()):
+        root = _suite(tmp_path, ONE_CASE, package=self.PACKAGE)
+        provider = ScriptedProvider(list(script))
+        runner = EvalRunner(provider, "m", tools=default_registry(None),
+                            permissions=allow_read_only, cwd=root,
+                            spec=load_package(root), provider_name="anthropic")
+        return runner, provider
+
+    def test_the_roster_is_what_the_model_is_offered(self):
+        registry = default_registry(None)
+        registry.admit_only(("read_file", "list_dir", "glob"), ())
+        registry.disable("glob")
+
+        class Fake:
+            pass
+
+        agent = Fake()
+        agent.registry = registry
+        # a disabled tool is registered but never reaches the model and
+        # cannot be called, so counting it would make lacks_tools lie
+        assert roster_of(agent) == ["list_dir", "read_file"]
+
+    def test_a_satisfied_roster_case_makes_no_request(self, tmp_path):
+        runner, provider = self._runner(tmp_path)     # empty script: a model
+        result = runner.run_case(EvalCase(             # call would raise
+            id="cannot-write", description="",
+            lacks_tools=["write_file", "bash"], has_tools=["read_file"]))
+        assert result.passed and result.failures == []
+        assert (result.tokens_used, result.iterations_used) == (0, 0)
+        assert result.ran_model is False
+        assert provider.requests == []
+
+    def test_a_failed_roster_case_is_not_paid_for(self, tmp_path):
+        """A trajectory from an agent with the wrong tool list belongs to a
+        different agent, so the run is not bought."""
+        runner, provider = self._runner(tmp_path, [assistant_text("hi")])
+        result = runner.run_case(EvalCase(
+            id="x", description="", user_message="hi",
+            lacks_tools=["read_file"]))
+        assert not result.passed
+        assert result.tokens_used == 0 and result.ran_model is False
+        assert provider.requests == []
+        assert result.failures == ["on the roster and should not be: read_file"]
+
+    def test_a_missing_tool_names_the_roster_it_looked_at(self, tmp_path):
+        runner, _ = self._runner(tmp_path)
+        result = runner.run_case(EvalCase(
+            id="x", description="", has_tools=["write_file"]))
+        assert result.failures == [
+            "not on the roster: write_file (roster: list_dir, read_file)"]
+
+    def test_a_pattern_reports_every_tool_it_caught(self):
+        case = EvalCase(id="x", description="", lacks_tools=["browser_*"])
+        assert roster_failures(case, ["browser_click", "browser_open",
+                                      "read_file"]) == [
+            "on the roster and should not be: browser_* matches "
+            "browser_click, browser_open"]
+        assert roster_failures(case, ["read_file"]) == []
+
+    def test_a_long_roster_is_truncated_in_the_message(self):
+        case = EvalCase(id="x", description="", has_tools=["nope"])
+        failure, = roster_failures(case, [f"t{i}" for i in range(12)])
+        assert "+4 more" in failure
+
+    def test_roster_failures_accumulate_like_every_other_check(self):
+        case = EvalCase(id="x", description="", has_tools=["a", "b"],
+                        lacks_tools=["c"])
+        assert len(roster_failures(case, ["c"])) == 3
+
+    def test_the_admission_policy_is_what_a_roster_case_grades(self, tmp_path):
+        """The load-bearing claim: add the tool to tools.allow and the case
+        goes red on its own -- no model, no prompt to talk out of it.
+
+        This is the assertion the 'cannot write even when asked' case could
+        not make (see the researcher package's own suite).
+        """
+        for allow, expect_pass in ((["read_file"], True),
+                                   (["read_file", "write_file"], False)):
+            root = _suite(tmp_path / str(len(allow)), ONE_CASE, package=(
+                '[agent]\nname = "pkg"\n\n[tools]\nallow = '
+                + repr(allow).replace("'", '"') + "\n"))
+            runner = EvalRunner(ScriptedProvider([]), "m",
+                                tools=default_registry(None),
+                                permissions=allow_read_only, cwd=root,
+                                spec=load_package(root),
+                                provider_name="anthropic")
+            result = runner.run_case(EvalCase(
+                id="cannot-write", description="",
+                lacks_tools=["write_file"]))
+            assert result.passed is expect_pass, result.failures
+
+
+class TestPassRatesOverRepeatedRuns:
+    """n runs and a threshold: the statistically honest version of a gate.
+
+    The bias: a repeated case must not become a way to LOWER the bar by
+    accident. So the threshold rounds up, a case that fails its rate is
+    red however many runs it won, and the default (1.0 over one run) is
+    the old behaviour exactly.
+    """
+
+    def _runner(self, tmp_path, script):
+        root = _suite(tmp_path, ONE_CASE,
+                      package='[agent]\nname = "pkg"\n\n[tools]\n'
+                              'allow = ["read_file", "list_dir"]\n')
+        provider = ScriptedProvider(script)
+        return EvalRunner(provider, "m", tools=default_registry(None),
+                          permissions=allow_read_only, cwd=root,
+                          spec=load_package(root),
+                          provider_name="anthropic"), provider
+
+    def test_three_runs_of_one_case_are_three_runs(self, tmp_path):
+        runner, provider = self._runner(tmp_path, [assistant_text("done")] * 3)
+        outcome = runner.evaluate(EvalCase(id="x", description="",
+                                           user_message="hi"), repeat=3)
+        assert outcome.attempts == 3 and outcome.passes == 3
+        assert len(provider.requests) == 3       # three real trajectories
+        assert outcome.passed and outcome.marks == "✓✓✓"
+
+    def test_a_rate_below_one_tolerates_a_losing_run(self, tmp_path):
+        """The point of the key: 'this holds seven times in ten' is a claim
+        a gate can hold an agent to, and 'it passed once' is not."""
+        runner, _ = self._runner(tmp_path, [
+            assistant_tool_call("1", "read_file", {"path": "agent.toml"}),
+            assistant_text("read it"),
+            assistant_text("did not read it"),
+            assistant_tool_call("2", "read_file", {"path": "agent.toml"}),
+            assistant_text("read it"),
+        ])
+        case = EvalCase(id="x", description="", user_message="hi",
+                        required_tools=["read_file"], min_pass_rate=0.6)
+        outcome = runner.evaluate(case, repeat=3)
+        assert (outcome.passes, outcome.attempts) == (2, 3)
+        assert outcome.marks == "✓✗✓"
+        assert outcome.passed              # 2/3 >= ceil(0.6 * 3) = 2
+        assert outcome.failures == ["required tool not used: read_file "
+                                     "(1 of 3 runs)"]
+
+    def test_the_threshold_rounds_up(self):
+        """A threshold that rounded down would pass a suite its author said
+        should fail -- 0.7 of 10 is seven runs, not six."""
+        case = EvalCase(id="x", description="", user_message="hi",
+                        min_pass_rate=0.7)
+        runs = [EvalResult(case_id="x", passed=i < 6, failures=[],
+                           final_answer="", tokens_used=1, iterations_used=1,
+                           tool_calls_seen=[], duration_seconds=0.0)
+                for i in range(10)]
+        outcome = CaseOutcome.of(case, runs)
+        assert outcome.required_passes == 7
+        assert outcome.passes == 6 and not outcome.passed
+
+    def test_one_run_at_the_default_is_the_old_behaviour(self, tmp_path):
+        runner, _ = self._runner(tmp_path, [assistant_text("done")])
+        outcome = runner.evaluate(EvalCase(id="x", description="",
+                                           user_message="hi"))
+        assert outcome.attempts == 1 and outcome.passed
+        assert outcome.failures == []          # verbatim, not annotated
+        assert outcome.marks == "✓"
+
+    def test_a_roster_only_case_is_never_repeated(self, tmp_path):
+        """n copies of a free check is not a statistic. Reporting '0 of 5
+        runs' for one deterministic fact would dress it up as one."""
+        runner, provider = self._runner(tmp_path, [])
+        outcome = runner.evaluate(EvalCase(id="x", description="",
+                                           lacks_tools=["bash"]), repeat=5)
+        assert outcome.attempts == 1 and outcome.passed
+        assert provider.requests == []
+
+    def test_a_failed_roster_check_collapses_instead_of_repeating(self, tmp_path):
+        runner, _ = self._runner(tmp_path, [assistant_text("x")] * 4)
+        outcome = runner.evaluate(EvalCase(
+            id="x", description="", user_message="hi",
+            lacks_tools=["read_file"]), repeat=4)
+        assert outcome.attempts == 1 and not outcome.passed
+        assert outcome.tokens_used == 0
+
+    def test_run_suite_reports_every_case_once(self, tmp_path):
+        runner, _ = self._runner(tmp_path, [assistant_text("done")] * 4)
+        seen: list[str] = []
+        outcomes = runner.run_suite(
+            [EvalCase(id="a", description="", user_message="hi"),
+             EvalCase(id="b", description="", user_message="hi")],
+            repeat=2, on_outcome=lambda o: seen.append(o.case_id))
+        assert [o.case_id for o in outcomes] == ["a", "b"] == seen
+        assert all(o.attempts == 2 for o in outcomes)
+
+    def test_a_case_cannot_be_built_with_a_nonsense_rate(self):
+        with pytest.raises(ValueError, match="min_pass_rate"):
+            EvalCase(id="x", description="", user_message="hi",
+                     min_pass_rate=0)
+
+    def test_a_case_cannot_be_built_with_nothing_to_do(self):
+        """The library refuses it too, not only the file format: a case that
+        asserts nothing is a green case forever."""
+        with pytest.raises(ValueError, match="nothing to do"):
+            EvalCase(id="x", description="")
+
+
 class TestTheCliGate:
     """--eval, and the exit code being the whole product."""
 
     def _run(self, tmp_path, monkeypatch, argv, script=None):
         import yantra.cli.main as cli_main
         provider = ScriptedProvider(script or [assistant_text("done")])
+        self.provider = provider   # for the tests that assert on REQUESTS
         monkeypatch.setattr(cli_main, "load_settings", lambda name: object())
         monkeypatch.setattr(cli_main, "get_provider", lambda *a, **k: provider)
         return cli_main.main(argv)
@@ -433,6 +753,124 @@ class TestTheCliGate:
                   ["--agent", str(root), "--eval", "--yolo", "--provider",
                    "anthropic"])
         assert gates == [yolo]
+
+    def test_a_roster_only_suite_is_a_gate_that_costs_nothing(self, tmp_path,
+                                                              monkeypatch,
+                                                              capsys):
+        """The shape CI can afford on every push: a verdict about the tool
+        list, no model, no tokens. The empty script is the proof -- any
+        request at all would raise."""
+        root = _suite(tmp_path, '[[case]]\nid = "cannot-write"\n'
+                                'lacks_tools = ["write_file", "bash"]\n'
+                                'has_tools = ["read_file"]\n',
+                      package='[agent]\nname = "pkg"\n\n[tools]\n'
+                              'allow = ["read_file", "list_dir"]\n')
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic"], script=[])
+        assert rc == 0
+        assert self.provider.requests == []
+        out = capsys.readouterr().out
+        assert "1 roster-only" in out
+        assert "roster only · no model call · 0 tok" in out
+        assert "cost nothing" in out
+
+    def test_a_roster_assertion_can_turn_a_suite_red_for_free(self, tmp_path,
+                                                              monkeypatch,
+                                                              capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "cannot-write"\n'
+                                'lacks_tools = ["read_file"]\n',
+                      package='[agent]\nname = "pkg"\n\n[tools]\n'
+                              'allow = ["read_file"]\n')
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic"], script=[])
+        assert rc == 1
+        assert self.provider.requests == []
+        # a FAILED roster reads differently from a roster-only PASS: one is
+        # a case that had nothing to run, the other a task never paid for
+        assert "roster failed · no model call" in capsys.readouterr().out
+
+    def test_repeat_buys_one_run_per_repeat(self, tmp_path, monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n')
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--repeat", "3"],
+                       script=[assistant_text("done")] * 3)
+        assert rc == 0
+        assert len(self.provider.requests) == 3
+        out = capsys.readouterr().out
+        assert "3 runs each" in out and "✓✓✓ 3/3 runs" in out
+        assert "1/1 passed · 3 runs" in out
+
+    def test_a_case_under_its_rate_is_red_over_repeats(self, tmp_path,
+                                                       monkeypatch, capsys):
+        """Two of three runs used the tool; the case claims nine in ten."""
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n'
+                                'required_tools = ["read_file"]\n'
+                                'min_pass_rate = 0.9\n')
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--repeat", "3"],
+                       script=[assistant_tool_call("1", "read_file",
+                                                   {"path": "agent.toml"}),
+                               assistant_text("read it"),
+                               assistant_text("did not"),
+                               assistant_tool_call("2", "read_file",
+                                                   {"path": "agent.toml"}),
+                               assistant_text("read it")])
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "✓✗✓ 2/3 runs (needs 3)" in out
+        assert "required tool not used: read_file (1 of 3 runs)" in out
+
+    def test_a_declared_rate_at_one_run_says_it_cannot_be_honoured(
+            self, tmp_path, monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n'
+                                'min_pass_rate = 0.7\n')
+        self._run(tmp_path, monkeypatch,
+                  ["--agent", str(root), "--eval", "--provider", "anthropic"])
+        assert "--repeat N buys the evidence" in capsys.readouterr().out
+
+    def test_async_drives_the_same_suite_to_the_same_verdict(self, tmp_path,
+                                                            monkeypatch,
+                                                            capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "a"\nuser_message = "hi"\n\n'
+                                '[[case]]\nid = "b"\nuser_message = "hi"\n'
+                                'required_tools = ["read_file"]\n')
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--async", "2"],
+                       script=[assistant_text("done")] * 2)
+        assert rc == 1                      # case b never read anything
+        out = capsys.readouterr().out
+        assert "mode: async, 2 trajectories at once" in out
+        assert "1/2 passed" in out
+
+    def test_async_takes_a_default_width(self, tmp_path, monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n')
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--async"])
+        assert rc == 0
+        assert "async, 4 trajectories" in capsys.readouterr().out
+
+    def test_repeat_below_one_is_refused(self, tmp_path, monkeypatch, capsys):
+        """A suite that runs nothing passes everything."""
+        root = _suite(tmp_path, ONE_CASE)
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--repeat", "0"])
+        assert rc == 2
+        assert "--repeat must be at least 1" in capsys.readouterr().err
+
+    def test_repeat_and_async_belong_to_the_gate(self, tmp_path, monkeypatch,
+                                                capsys):
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--cwd", str(tmp_path), "--repeat", "3", "--provider",
+                        "anthropic", "hello"])
+        assert rc == 2
+        assert "belong to --eval" in capsys.readouterr().err
 
     def test_eval_is_its_own_mode(self, tmp_path, monkeypatch, capsys):
         root = _suite(tmp_path, ONE_CASE)

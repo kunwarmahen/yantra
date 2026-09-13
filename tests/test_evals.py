@@ -14,6 +14,7 @@ from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 
 from yantra.evals import (
     AsyncEvalRunner,
+    CaseOutcome,
     EvalCase,
     EvalResult,
     EvalRunner,
@@ -377,6 +378,121 @@ class TestAsyncRunner:
         # child's execution through the shared tool instance lands in
         # THIS case's own seen-list (conflation documented on spawn_setup)
         assert result.tool_calls_seen.count("echo") == 1
+
+
+class TestTheSuiteOverRepeatedRuns:
+    """--repeat, on both twins. A trajectory is a die roll, so the thing
+    under test here is that n rolls are reported as n rolls: the right
+    number of real requests, the union of reasons with counts, and a
+    threshold that does not quietly lower the bar.
+    """
+
+    def test_a_repeated_case_makes_one_request_per_run(self):
+        runner, provider = make_runner([assistant_text("done")] * 4)
+        outcome = runner.evaluate(case(), repeat=4)
+        assert outcome.attempts == 4 and len(provider.requests) == 4
+        assert outcome.tokens_used == sum(r.tokens_used for r in outcome.runs)
+
+    def test_each_run_lands_as_it_happens(self):
+        """n runs of a live case is minutes of silence otherwise, and the
+        operator who paid for the evidence should watch it arrive."""
+        runner, _ = make_runner([assistant_text("done")] * 3)
+        landed: list[bool] = []
+        runner.evaluate(case(), repeat=3, on_result=lambda r: landed.append(r.passed))
+        assert landed == [True, True, True]
+
+    def test_the_async_twin_grades_a_repeated_case_identically(self):
+        script = [assistant_text("done"), assistant_text("nope"),
+                  assistant_text("done")]
+        the_case = case(check_answer=lambda a: "done" in a, min_pass_rate=0.6)
+
+        sync = make_runner(list(script))[0].evaluate(the_case, repeat=3)
+
+        async def _async_one():
+            runner, _ = TestAsyncRunner.make_async_runner(list(script),
+                                                          concurrency=1)
+            return await runner.evaluate(the_case, repeat=3)
+
+        # concurrency=1 so the async twin consumes the same script in the
+        # same order -- the point is the VERDICT, not the interleaving
+        asynchronous = asyncio.run(_async_one())
+        for attr in ("attempts", "passes", "passed", "marks", "failures"):
+            assert getattr(sync, attr) == getattr(asynchronous, attr), attr
+        assert sync.passed and sync.marks == "✓✗✓"
+
+    def test_the_unit_of_async_concurrency_is_a_run_not_a_case(self):
+        """Five repeats of one case is five independent trajectories;
+        bounding by case would leave the semaphore empty."""
+        inflight = 0
+        peak = 0
+
+        class Tracked(ScriptedProvider):
+            async def astream(self, **kwargs):
+                nonlocal inflight, peak
+                inflight += 1
+                peak = max(peak, inflight)
+                try:
+                    await asyncio.sleep(0.02)
+                    async for event in super().astream(**kwargs):
+                        yield event
+                finally:
+                    inflight -= 1
+
+        provider = Tracked([assistant_text("done")] * 5)
+        registry = ToolRegistry()
+        registry.register(EchoTool())
+        runner = AsyncEvalRunner(provider, "m", tools=registry,
+                                 permissions=yolo, concurrency=3)
+        outcome, = asyncio.run(runner.run_suite([case(id="one")], repeat=5))
+        assert outcome.attempts == 5 and outcome.passed
+        assert peak > 1, "repeats of a single case never overlapped"
+        assert peak <= 3, f"semaphore leaked: {peak} runs at once"
+
+    def test_async_outcomes_come_back_in_submission_order(self):
+        delays = iter([0.15, 0.10, 0.05])
+
+        class Slow(ScriptedProvider):
+            async def astream(self, **kwargs):
+                await asyncio.sleep(next(delays))
+                async for event in super().astream(**kwargs):
+                    yield event
+
+        provider = Slow([assistant_text("done")] * 3)
+        registry = ToolRegistry()
+        registry.register(EchoTool())
+        runner = AsyncEvalRunner(provider, "m", tools=registry,
+                                 permissions=yolo)
+        finished: list[str] = []
+        outcomes = asyncio.run(runner.run_suite(
+            [case(id=cid) for cid in ("a", "b", "c")],
+            on_outcome=lambda o: finished.append(o.case_id)))
+        # a report you diff between models must not reorder itself when
+        # the network is slow; the LIVE feed may, and does
+        assert [o.case_id for o in outcomes] == ["a", "b", "c"]
+        assert finished == ["c", "b", "a"]
+
+    def test_a_case_that_fails_every_run_reports_the_count(self):
+        runner, _ = make_runner([assistant_text("nope")] * 3)
+        outcome = runner.evaluate(case(required_tools=["echo"]), repeat=3)
+        assert not outcome.passed
+        assert outcome.failures == ["required tool not used: echo "
+                                     "(3 of 3 runs)"]
+
+    def test_a_flaky_case_below_its_rate_is_still_red(self):
+        outcome = CaseOutcome.of(
+            case(min_pass_rate=0.9),
+            [_result("c1", i < 8) for i in range(10)])
+        assert (outcome.passes, outcome.required_passes) == (8, 9)
+        assert not outcome.passed and outcome.pass_rate == 0.8
+
+    def test_summarize_reports_the_rate_when_there_were_repeats(self):
+        outcome = CaseOutcome.of(case(id="flaky", min_pass_rate=0.5),
+                                 [_result("flaky", True),
+                                  _result("flaky", False, ["answer check failed"])])
+        report = summarize([outcome])
+        assert "✓ flaky: 1/2 runs · 14tok" in report
+        assert "answer check failed (1 of 2 runs)" in report
+        assert report.endswith("1/1 passed")
 
 
 class TestFossilRuleAndReporting:

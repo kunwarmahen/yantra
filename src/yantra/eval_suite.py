@@ -28,6 +28,22 @@ swapped in its own system prompt would be grading some other agent and
 reporting the verdict as this one's. What a case may vary is the task
 and the ceilings.
 
+TWO KINDS OF ASSERTION, and the cheap one is not the trajectory.
+``required_tools``/``forbidden_tools`` grade what RAN, which takes a run;
+``has_tools``/``lacks_tools`` grade the ROSTER -- what the agent is
+offered at all -- which takes nothing. "This agent has no way to write to
+disk" is the assertion an author usually means when they forbid
+``write_file``, and it is the one a trajectory can never make: a tool that
+was available and went unused looks exactly like a tool that was absent.
+A case whose only assertions are roster ones may omit ``user_message``
+entirely; it costs zero tokens and needs no model.
+
+``min_pass_rate`` is the other half of being honest about a die roll. A
+case declares the rate it claims to hold at ("7 of 10" is 0.7), and the
+OPERATOR decides how many runs to buy -- ``repeat`` is deliberately not a
+key here, because how much a gate costs to run is the money of whoever is
+running it.
+
 GRADERS RESOLVE AT LOAD TIME, never mid-run. A typo'd function name
 discovered on case seven of nine has already spent six cases' worth of
 real tokens to tell you something that was knowable before the first
@@ -65,8 +81,23 @@ CASES = "cases.toml"
 #: Every key a ``[[case]]`` may hold. Exhaustive on purpose.
 CASE_KEYS = frozenset({
     "id", "description", "user_message", "required_tools",
-    "forbidden_tools", "max_tokens", "max_iterations", "check",
+    "forbidden_tools", "has_tools", "lacks_tools", "max_tokens",
+    "max_iterations", "min_pass_rate", "check",
 })
+
+#: Keys that only mean something once a model has RUN. A case with no
+#: ``user_message`` never reaches one, so any of these on such a case is a
+#: check that would never be performed.
+TRAJECTORY_KEYS = frozenset({
+    "required_tools", "forbidden_tools", "max_tokens", "max_iterations",
+    "min_pass_rate", "check",
+})
+
+#: fnmatch metacharacters. Allowed in the roster keys (a roster is a SET,
+#: and "nothing that writes" is a shape); refused in the trajectory keys,
+#: where a pattern would silently match nothing and turn an assertion into
+#: a decoration -- the exact failure this format exists to prevent.
+GLOB_CHARS = "*?["
 
 #: Keys that exist on ``EvalCase`` and are refused here, with the reason
 #: the error will give. Naming them beats "unknown key": the author did
@@ -79,6 +110,9 @@ REFUSED_KEYS: dict[str, str] = {
              "machinery into the agent under test is no longer describing it",
     "check_answer": "spell it 'check' and point at a function: "
                     'check = "graders:your_function"',
+    "repeat": "how many times a case runs is the operator's money, not the "
+              "author's: declare min_pass_rate here and let whoever runs "
+              "the gate pass --repeat N",
 }
 
 
@@ -110,13 +144,40 @@ def _int(entry: dict[str, Any], key: str, path: Path,
     return value
 
 
-def _str_list(entry: dict[str, Any], key: str, path: Path,
-              where: str) -> list[str]:
+def _rate(entry: dict[str, Any], key: str, path: Path,
+          where: str) -> float | None:
+    """A pass rate: a number in (0, 1]. ``1`` and ``1.0`` both mean every run."""
+    value = entry.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _fail(path, f"{where}.{key} must be a number between 0 and 1 "
+                    f"(0.7 means 'seven runs in ten')")
+    if not 0 < value <= 1:
+        _fail(path, f"{where}.{key} must be greater than 0 and at most 1 "
+                    f"(got {value}); it is a FRACTION of runs, so nine "
+                    f"cases in ten is 0.9, not 9")
+    return float(value)
+
+
+def _str_list(entry: dict[str, Any], key: str, path: Path, where: str,
+              *, patterns: bool = False) -> list[str]:
     value = entry.get(key)
     if value is None:
         return []
     if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
         _fail(path, f"{where}.{key} must be a list of strings")
+    if not patterns:
+        # A pattern here would match nothing and report nothing: the
+        # trajectory is a list of names that EXECUTED, and 'write_*' is not
+        # one of them. Refusing it beats a green case that checked nothing.
+        globbed = [v for v in value if any(c in v for c in GLOB_CHARS)]
+        if globbed:
+            _fail(path, f"{where}.{key} takes exact tool names, not patterns "
+                        f"({', '.join(globbed)}): this key grades what RAN, "
+                        f"and a pattern would match nothing. For a claim "
+                        f"about the tool LIST, use has_tools/lacks_tools, "
+                        f"which do take patterns")
     return list(value)
 
 
@@ -237,17 +298,44 @@ def load_cases(where: Path) -> list[EvalCase]:
             _fail(path, f"duplicate case id {case_id!r}")
         seen_ids.add(case_id)
 
+        has_tools = _str_list(entry, "has_tools", path, where_label,
+                              patterns=True)
+        lacks_tools = _str_list(entry, "lacks_tools", path, where_label,
+                                patterns=True)
+        message = _str(entry, "user_message", path, where_label)
+        if not message and not (has_tools or lacks_tools):
+            # A roster assertion is the ONE thing a case can do without a
+            # task, because it grades the agent rather than a trajectory.
+            # Anything else with no message asserts nothing at all.
+            _fail(path, f"{where_label} has no user_message -- only a case "
+                        f"whose assertions are all about the roster "
+                        f"(has_tools/lacks_tools) may leave it out, because "
+                        f"that one needs no model")
+        if not message:
+            # Every other key grades a TRAJECTORY, and this case has none.
+            # Silently ignoring one would be a suite that checks less than
+            # its author believes -- the failure this whole format is built
+            # against -- so say which key has nothing to grade.
+            stray = sorted(set(entry) & TRAJECTORY_KEYS)
+            if stray:
+                _fail(path, f"{where_label} has no user_message, so "
+                            f"{', '.join(stray)} would grade a trajectory "
+                            f"that never happens: give the case a task, or "
+                            f"keep it to has_tools/lacks_tools")
+        rate = _rate(entry, "min_pass_rate", path, where_label)
         check = entry.get("check")
         cases.append(EvalCase(
             id=case_id,
             description=_str(entry, "description", path, where_label) or "",
-            user_message=_str(entry, "user_message", path, where_label,
-                              required=True),
+            user_message=message or "",
             required_tools=_str_list(entry, "required_tools", path, where_label),
             forbidden_tools=_str_list(entry, "forbidden_tools", path,
                                       where_label),
+            has_tools=has_tools,
+            lacks_tools=lacks_tools,
             max_tokens=_int(entry, "max_tokens", path, where_label),
             max_iterations=_int(entry, "max_iterations", path, where_label),
+            min_pass_rate=1.0 if rate is None else rate,
             check_answer=(None if check is None else
                           _grader(_str(entry, "check", path, where_label),
                                   suite, path, where_label)),

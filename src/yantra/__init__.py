@@ -27,6 +27,7 @@ from yantra.config import default_model, load_settings
 from yantra.eval_suite import find_suite, load_cases
 from yantra.evals import (
     AsyncEvalRunner,
+    CaseOutcome,
     EvalCase,
     EvalResult,
     EvalRunner,
@@ -96,6 +97,7 @@ __all__ = [
     "EvalResult",
     "EvalRunner",
     "AsyncEvalRunner",
+    "CaseOutcome",
     "case_from_trace",
     "find_suite",
     "judge",

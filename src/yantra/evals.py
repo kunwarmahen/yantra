@@ -30,6 +30,24 @@ Every real failure in production should leave a fossil in the suite:
 ``case_from_trace`` turns an observed failure into a regression case
 whose budget is observed-cost x 1.5.
 
+Two of those four classes cost money to check. One does not. The ROSTER
+-- what the agent is offered at all -- is knowable the moment the agent
+is built, so ``has_tools``/``lacks_tools`` are graded before a request
+goes out, and a case that fails one never reaches a model. That is also
+why a roster failure SHORT-CIRCUITS rather than accumulating: a trajectory
+produced by an agent whose tool list is wrong is a trajectory belonging
+to some other agent, and paying for it buys nothing. A case with only
+roster assertions needs no ``user_message`` at all -- it is a free
+assertion about configuration, which is the one thing a trajectory check
+cannot see.
+
+And because a trajectory is a DIE ROLL, one run is one sample.
+``min_pass_rate`` is the author's honest claim about a case ("7 of 10"),
+``repeat`` is the operator's decision about how much evidence to buy, and
+``CaseOutcome`` holds the n runs plus the verdict the threshold turns them
+into. Default 1.0 over one run is exactly the old behaviour, which is why
+nothing had to change to keep it.
+
 Pass ``spec=`` and the cases run against a whole agent PACKAGE instead
 of a bare agent -- its prompt, its skills, its own tools, its admission
 policy -- which is what lets a package ship the evidence that it works
@@ -41,8 +59,10 @@ acceptance gate.
 from __future__ import annotations
 
 import asyncio
+import fnmatch
+import math
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, ClassVar
@@ -58,23 +78,62 @@ from yantra.types import Message, TextBlock
 
 @dataclass(slots=True)
 class EvalCase:
-    """A golden trajectory: task + expected outcomes + scorer."""
+    """A golden trajectory: task + expected outcomes + scorer.
+
+    Two of the assertion families here are free and two are not.
+    ``required_tools``/``forbidden_tools`` grade the TRAJECTORY and need a
+    run to grade; ``has_tools``/``lacks_tools`` grade the ROSTER and need
+    only a built agent. A case that asserts nothing but the roster may
+    leave ``user_message`` empty -- there is nothing for a model to do.
+    """
 
     id: str
     description: str
-    user_message: str
+    user_message: str = ""
     system: str | None = None
     required_tools: list[str] = field(default_factory=list)
     forbidden_tools: list[str] = field(default_factory=list)
+    #: Roster assertions: fnmatch patterns against the tools the agent is
+    #: OFFERED, graded before any request. "no way to write to disk" is
+    #: ``lacks_tools = ["write_file", "edit_file", "bash"]`` -- a claim
+    #: about configuration, which no trajectory check can reach.
+    has_tools: list[str] = field(default_factory=list)
+    lacks_tools: list[str] = field(default_factory=list)
     check_answer: Callable[[str], bool] | None = None
     max_tokens: int | None = None       # input+output ceiling for the turn
     max_iterations: int | None = None   # model round-trips ceiling
+    #: The fraction of repeated runs that must pass. 1.0 -- every run --
+    #: is the default and the only honest value at n=1; a lower one is a
+    #: claim that needs ``repeat`` to mean anything (see CaseOutcome).
+    min_pass_rate: float = 1.0
     setup: Callable[[Agent], None] | None = None  # per-case agent wiring
                                       # (e.g. spawn_setup() -> sub-agents)
+
+    def __post_init__(self) -> None:
+        # A case with neither a task nor a roster assertion is a case that
+        # cannot fail, and a gate made of those reports green forever --
+        # the same bug an empty cases.toml would be (eval_suite.py).
+        if not self.user_message and not (self.has_tools or self.lacks_tools):
+            raise ValueError(
+                f"case {self.id!r} has nothing to do: give it a user_message, "
+                f"or a roster assertion (has_tools/lacks_tools), which needs "
+                f"no model")
+        if not 0 < self.min_pass_rate <= 1:
+            raise ValueError(
+                f"case {self.id!r}: min_pass_rate must be greater than 0 and "
+                f"at most 1 (got {self.min_pass_rate})")
+
+    @property
+    def needs_a_model(self) -> bool:
+        """Whether grading this case costs anything. False for a case whose
+        only assertions are about the roster."""
+        return bool(self.user_message)
 
 
 @dataclass(slots=True)
 class EvalResult:
+    """One run of one case."""
+
     case_id: str
     passed: bool
     failures: list[str]
@@ -84,6 +143,161 @@ class EvalResult:
     tool_calls_seen: list[str]
     duration_seconds: float
     error: str | None = None            # crash description, if any
+    #: False when no request was ever made -- a roster-only case, or a case
+    #: whose roster assertion failed and was not paid for.
+    ran_model: bool = True
+
+
+@dataclass(slots=True)
+class CaseOutcome:
+    """n runs of one case, and the verdict a threshold turns them into.
+
+    A trajectory is a die roll, so one run is one sample. This is the type
+    that lets a suite say "7 of 10" instead of pretending a single green
+    run settled the question -- ``passes`` over ``attempts`` against the
+    case's own ``min_pass_rate``.
+
+    The verdict is a COUNT comparison, not a float one: 7 >= 7 rather than
+    0.7 >= 0.7, because the second is a coin flip on the machine's rounding
+    and a gate that changes its mind about arithmetic is not a gate.
+    """
+
+    case_id: str
+    runs: list[EvalResult]
+    min_pass_rate: float = 1.0
+
+    @classmethod
+    def of(cls, case: EvalCase, runs: Sequence[EvalResult]) -> CaseOutcome:
+        """The outcome of running ``case``, collapsing what should not repeat.
+
+        A run that never reached a model is DETERMINISTIC -- the same
+        roster, graded the same way, n times. Reporting it as "0 of 5 runs"
+        would dress a fact up as a statistic, so only the first is kept.
+        """
+        kept = list(runs)
+        if kept and not kept[0].ran_model:
+            kept = kept[:1]
+        return cls(case_id=case.id, runs=kept,
+                   min_pass_rate=case.min_pass_rate)
+
+    @property
+    def attempts(self) -> int:
+        return len(self.runs)
+
+    @property
+    def passes(self) -> int:
+        return sum(1 for r in self.runs if r.passed)
+
+    @property
+    def required_passes(self) -> int:
+        """How many of ``attempts`` must pass. Rounded UP: a threshold that
+        rounded down would pass a suite the author said should fail."""
+        return max(1, math.ceil(round(self.min_pass_rate * self.attempts, 6)))
+
+    @property
+    def pass_rate(self) -> float:
+        return self.passes / self.attempts if self.attempts else 0.0
+
+    @property
+    def passed(self) -> bool:
+        return bool(self.attempts) and self.passes >= self.required_passes
+
+    @property
+    def ran_model(self) -> bool:
+        return any(r.ran_model for r in self.runs)
+
+    @property
+    def tokens_used(self) -> int:
+        return sum(r.tokens_used for r in self.runs)
+
+    @property
+    def duration_seconds(self) -> float:
+        return sum(r.duration_seconds for r in self.runs)
+
+    @property
+    def marks(self) -> str:
+        """The runs as one glyph each, in order -- 'PASS 4/5' hides which
+        ones, and a case that fails its first two reads differently from
+        one that fails its last two."""
+        return "".join("\u2713" if r.passed else "\u2717" for r in self.runs)
+
+    @property
+    def failures(self) -> list[str]:
+        """Why it failed, once per distinct reason.
+
+        At n=1 this is the run's own list, verbatim. Above that, each
+        distinct failure carries how OFTEN it happened: "required tool not
+        used: outline (2 of 5 runs)" is a flaky prompt, and the same line
+        at 5 of 5 is a broken one.
+        """
+        if self.attempts == 1:
+            return list(self.runs[0].failures)
+        counts: dict[str, int] = {}
+        for run in self.runs:
+            for failure in run.failures:
+                counts[failure] = counts.get(failure, 0) + 1
+        return [f"{failure} ({count} of {self.attempts} runs)"
+                for failure, count in counts.items()]
+
+    @property
+    def last_answer(self) -> str:
+        return self.runs[-1].final_answer if self.runs else ""
+
+
+def roster_of(agent: Agent | AsyncAgent) -> list[str]:
+    """The tools the agent under test is OFFERED, sorted.
+
+    ``specs()`` rather than ``names()`` on purpose: a disabled tool is
+    registered but never reaches the model and cannot be called, so
+    counting it would make ``lacks_tools`` lie in the direction that
+    matters. What this cannot see is an MCP server's tools -- they arrive
+    from a live session the host owns, and ``--eval`` opens none -- so a
+    roster assertion about ``mcp__*`` is an assertion about an empty set.
+    """
+    return sorted(spec.name for spec in agent.registry.specs())
+
+
+def roster_failures(case: EvalCase, roster: Sequence[str]) -> list[str]:
+    """Grade the roster. Zero tokens, no model, no request.
+
+    Patterns are fnmatch, like the admission policy's own
+    (``tools.allow``), because the useful form of "it cannot write" is
+    often a shape rather than a list: ``lacks_tools = ["browser_*"]``.
+    """
+    failures: list[str] = []
+    for pattern in case.has_tools:
+        if not any(fnmatch.fnmatch(name, pattern) for name in roster):
+            failures.append(f"not on the roster: {pattern} "
+                            f"(roster: {_listing(roster)})")
+    for pattern in case.lacks_tools:
+        hits = [name for name in roster if fnmatch.fnmatch(name, pattern)]
+        if hits:
+            found = _listing(hits)
+            failures.append(f"on the roster and should not be: {found}"
+                            if hits == [pattern] else
+                            f"on the roster and should not be: {pattern} "
+                            f"matches {found}")
+    return failures
+
+
+def _listing(names: Sequence[str], limit: int = 8) -> str:
+    """Tool names for an error message, truncated -- a default registry has
+    two dozen and a wall of them is not diagnostics."""
+    if not names:
+        return "nothing"
+    shown = ", ".join(names[:limit])
+    return shown if len(names) <= limit else f"{shown}, +{len(names) - limit} more"
+
+
+def _free_result(case: EvalCase, failures: list[str],
+                 duration: float) -> EvalResult:
+    """The result of a case that never reached a model: a roster-only case,
+    or one whose roster assertion failed before anything was spent."""
+    return EvalResult(
+        case_id=case.id, passed=not failures, failures=failures,
+        final_answer="", tokens_used=0, iterations_used=0,
+        tool_calls_seen=[], duration_seconds=duration, ran_model=False,
+    )
 
 
 class _RecordingTool(Tool):
@@ -245,6 +459,13 @@ class EvalRunner:
             case.setup(agent)
             agent.registry = recording_registry(agent.registry, self.seen)
         start = time.monotonic()
+        # THE FREE CHECK GOES FIRST. The roster is knowable now, so a case
+        # that asserts one either gets its verdict for nothing or stops
+        # here: a trajectory from an agent with the wrong tool list belongs
+        # to a different agent, and buying it teaches nothing.
+        free = roster_failures(case, roster_of(agent))
+        if free or not case.needs_a_model:
+            return _free_result(case, free, time.monotonic() - start)
         try:
             response = agent.run(case.user_message)
         except Exception as exc:
@@ -268,7 +489,41 @@ class EvalRunner:
                             duration)
 
     def run_all(self, cases: list[EvalCase]) -> list[EvalResult]:
+        """One run per case, flat. The old shape, kept: a caller that never
+        asked for repeats has no use for an aggregate wrapper."""
         return [self.run_case(case) for case in cases]
+
+    def evaluate(self, case: EvalCase, *, repeat: int = 1,
+                 on_result: Callable[[EvalResult], None] | None = None
+                 ) -> CaseOutcome:
+        """Run one case ``repeat`` times and apply its threshold.
+
+        ``on_result`` fires as each run lands, because n runs of a live case
+        is minutes of silence otherwise and the operator who paid for the
+        evidence should watch it arrive.
+        """
+        runs: list[EvalResult] = []
+        for _ in range(max(1, repeat)):
+            result = self.run_case(case)
+            runs.append(result)
+            if on_result is not None:
+                on_result(result)
+            if not result.ran_model:
+                break  # nothing was rolled; rolling it again changes nothing
+        return CaseOutcome.of(case, runs)
+
+    def run_suite(self, cases: list[EvalCase], *, repeat: int = 1,
+                  on_result: Callable[[EvalResult], None] | None = None,
+                  on_outcome: Callable[[CaseOutcome], None] | None = None
+                  ) -> list[CaseOutcome]:
+        """The gate: every case, ``repeat`` runs each, thresholds applied."""
+        outcomes: list[CaseOutcome] = []
+        for case in cases:
+            outcome = self.evaluate(case, repeat=repeat, on_result=on_result)
+            outcomes.append(outcome)
+            if on_outcome is not None:
+                on_outcome(outcome)
+        return outcomes
 
     def _result(self, case: EvalCase, agent: Agent, seen: list[str],
                 answer: str, tokens: int, duration: float) -> EvalResult:
@@ -311,9 +566,12 @@ class AsyncEvalRunner:
     * each case gets its OWN seen-list. The sync runner shares one and
       clears it per case (fine sequentially); concurrent cases would
       scribble on each other.
-    * ``run_all`` bounds in-flight cases with a semaphore -- golden
-      trajectories are independent but the provider behind them is not;
-      N-at-once multiplies request rate.
+    * ``run_all`` and ``run_suite`` bound in-flight work with a semaphore
+      -- golden trajectories are independent but the provider behind them
+      is not; N-at-once multiplies request rate. Under ``repeat`` the unit
+      bounded is a RUN rather than a case: five repeats of three cases is
+      fifteen independent trajectories, and bounding by case would leave
+      the semaphore half empty while one slow case finished alone.
 
     The delegate case runs here unchanged: SubagentSpawner reads only
     attributes AsyncAgent mirrors (registry/provider/model/permissions/...
@@ -351,6 +609,9 @@ class AsyncEvalRunner:
             case.setup(agent)
             agent.registry = recording_registry(agent.registry, seen)
         start = time.monotonic()
+        free = roster_failures(case, roster_of(agent))   # the sync rule, verbatim
+        if free or not case.needs_a_model:
+            return _free_result(case, free, time.monotonic() - start)
         try:
             response = await agent.run(case.user_message)
         except Exception as exc:
@@ -382,6 +643,44 @@ class AsyncEvalRunner:
         # gather preserves SUBMISSION order: results align with `cases`
         # no matter who finishes first (same contract as tool batches).
         return await asyncio.gather(*(_bounded(c) for c in cases))
+
+    async def evaluate(self, case: EvalCase, *, repeat: int = 1) -> CaseOutcome:
+        outcome, = await self.run_suite([case], repeat=repeat)
+        return outcome
+
+    async def run_suite(self, cases: list[EvalCase], *, repeat: int = 1,
+                        on_outcome: Callable[[CaseOutcome], None] | None = None
+                        ) -> list[CaseOutcome]:
+        """The gate, concurrently: every case, ``repeat`` runs each.
+
+        THE UNIT OF CONCURRENCY IS A RUN, not a case. Five repeats of three
+        cases is fifteen independent trajectories, and bounding them by case
+        would leave the semaphore half empty while one slow case finished
+        its fifth run alone.
+
+        ``on_outcome`` fires in COMPLETION order as each case's runs all
+        land, so a long suite reads as it arrives; the returned list is in
+        submission order regardless, because a report you diff between
+        models must not reorder itself when the network is slow.
+        """
+        gate = asyncio.Semaphore(self.concurrency)
+
+        async def _attempt(case: EvalCase) -> EvalResult:
+            async with gate:
+                return await self.run_case(case)
+
+        async def _one(case: EvalCase) -> CaseOutcome:
+            # A roster-only case is never launched n times: it reaches no
+            # model, so the repeats would be n copies of one fact.
+            attempts = max(1, repeat) if case.needs_a_model else 1
+            runs = await asyncio.gather(*(_attempt(case)
+                                          for _ in range(attempts)))
+            outcome = CaseOutcome.of(case, runs)
+            if on_outcome is not None:
+                on_outcome(outcome)
+            return outcome
+
+        return await asyncio.gather(*(_one(c) for c in cases))
 
 
 def judge(provider: Provider, model: str, *, question: str, answer: str,
@@ -457,14 +756,25 @@ def spawn_setup(*, max_per_session: int = 3,
     return setup
 
 
-def summarize(results: list[EvalResult]) -> str:
-    """Human-readable report: one line per case + the aggregate."""
+def summarize(results: Sequence[EvalResult | CaseOutcome]) -> str:
+    """Human-readable report: one line per case + the aggregate.
+
+    Takes either shape -- a flat ``EvalResult`` per case, or a
+    ``CaseOutcome`` holding n runs -- because the caller who bought repeats
+    should not also have to write a second reporter for them.
+    """
     lines = []
     for r in results:
         mark = "✓" if r.passed else "✗"
-        tools = ",".join(r.tool_calls_seen) if r.tool_calls_seen else "-"
-        line = (f"{mark} {r.case_id}: {r.tokens_used}tok · "
-                f"{r.iterations_used}it · {r.duration_seconds:.1f}s · "
+        # the aggregate carries the totals; the LAST run carries the shape
+        # of one trajectory (its tools, its round-trips), which is what a
+        # reader is looking at when a case failed four times out of five
+        last = r.runs[-1] if isinstance(r, CaseOutcome) else r
+        runs = (f"{r.passes}/{r.attempts} runs · "
+                if isinstance(r, CaseOutcome) and r.attempts > 1 else "")
+        tools = ",".join(last.tool_calls_seen) or "-"
+        line = (f"{mark} {r.case_id}: {runs}{r.tokens_used}tok · "
+                f"{last.iterations_used}it · {r.duration_seconds:.1f}s · "
                 f"[{tools}]")
         if r.failures:
             line += f" -- {'; '.join(r.failures)}"

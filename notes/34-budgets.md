@@ -214,7 +214,10 @@ FAIL  reads-before-answering
 That is a real finding — the agent took a more expensive route than its
 author budgeted for — but it is a different finding from "the answer was
 wrong", so `--eval` says the ceiling in its header rather than letting
-the first over-budget case read as a bug:
+the first over-budget case read as a bug (the header also counts the
+cases that need no model at all —
+[notes/35](35-roster-and-pass-rates.md) — which leaves the budget line
+below exactly as it reads here):
 
 ```
 eval researcher 0.1.0 · 3 case(s) · ollama · qwen3.8:latest
