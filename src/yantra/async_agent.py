@@ -55,6 +55,7 @@ from yantra.agent import (
     _batch_message,
     _truncate_middle,
 )
+from yantra.budget import Budget
 from yantra.context import RED, SUMMARY_PROMPT, acompact_history, estimate_history
 from yantra.errors import ToolError
 from yantra.permissions import PermissionFn, PermissionRequest, allow_read_only
@@ -103,6 +104,7 @@ class AsyncAgent:
         tool_catalog: ToolCatalog | None = None,
         tools_per_turn: int = 7,
         max_parallel_tools: int = MAX_PARALLEL_TOOLS,
+        budget: Budget | None = None,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -139,6 +141,10 @@ class AsyncAgent:
         # counters summed -- see Usage.window_tokens).
         self.last_context_tokens: int = 0
         self.last_compaction: dict | None = None
+        # Per-turn dollar ceiling -- identical contract to the sync
+        # twin's, including that sub-agents share this meter rather than
+        # each getting a fresh one (budget.py).
+        self.budget = budget
 
     # ---- public entry points ----------------------------------------------
 
@@ -153,9 +159,10 @@ class AsyncAgent:
             if isinstance(event, TurnEnd):
                 if event.response is not None:
                     return event.response
+                detail = f": {event.detail}" if event.detail else ""
                 raise RuntimeError(
                     f"turn ended without a response ({event.reason} after "
-                    f"{event.iterations} iterations)"
+                    f"{event.iterations} iterations){detail}"
                 )
         raise RuntimeError("unreachable")
 
@@ -175,6 +182,12 @@ class AsyncAgent:
         if images:
             blocks.extend(images)
         self.history.append(Message("user", blocks))
+        # One turn is one thing the agent was asked to do, so that is the
+        # unit the ceiling covers -- and the meter only listens to the
+        # agent it belongs to, which is what stops a sub-agent from
+        # clearing its parent's spend by starting a turn (budget.py).
+        if self.budget is not None:
+            self.budget.begin_turn(self)
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
             for iteration in range(1, self.max_iterations + 1):
@@ -198,11 +211,29 @@ class AsyncAgent:
                 # Window footprint, not just fresh input: a cached request
                 # bills ~nothing fresh yet still fills the window.
                 self.last_context_tokens = response.usage.window_tokens()
+                if self.budget is not None:
+                    self.budget.charge(response.usage,
+                                       response.model or self.model)
 
                 calls = response.message.tool_calls()
                 if response.stop_reason != "tool_use" or not calls:
                     yield TurnEnd(response=response, reason="end_turn",
                                   iterations=iteration)
+                    return
+
+                # The budget gate, and it sits HERE for two reasons. After
+                # the end_turn branch, because an ANSWER already paid for is
+                # never thrown away over the ceiling it crossed to arrive.
+                # Before the tools run, because those cost wall-clock time
+                # and can touch the world, and nothing was going to read
+                # their results. The outstanding calls still get synthesized
+                # results, exactly as the iteration cap does -- the history
+                # invariant does not care why a turn stopped.
+                if self.budget is not None and self.budget.exceeded():
+                    self._answer_outstanding({})
+                    yield TurnEnd(response=None, reason="over_budget",
+                                  iterations=iteration,
+                                  detail=self.budget.explain())
                     return
 
                 executed.clear()

@@ -143,6 +143,8 @@ function applyHeader(s) {
     ? `session awareness — click to cycle off ⇄ local ⇄ full\n\n${ec.block}`
     : "session awareness — click cycles off ⇄ local ⇄ full";
   $("#chip-cost").textContent = s.cost_line || "";
+  $("#chip-cost").title = "session cost — unknown slugs show no figure, "
+    + "never a guess" + (s.budget ? `\n\nbudget: ${s.budget}` : "");
   // tools chip: "N" live, "+M off" when the operator pulled some
   const off = (s.disabled_tools || []).length;
   $("#tools-count").textContent =
@@ -378,8 +380,9 @@ function addBanner(message, isError, cancelledStyle = false) {
 
 function onTurnEnd(env) {
   if (env.reason !== "end_turn") {
-    addBanner(`── turn ended: ${env.reason} (after ${env.iterations} iteration(s))`,
-              false);
+    const why = env.detail ? ` — ${env.detail}` : "";
+    addBanner(`── turn ended: ${env.reason}${why} ` +
+              `(after ${env.iterations} iteration(s))`, false);
     return;
   }
   if (env.text && env.text.trim()) {

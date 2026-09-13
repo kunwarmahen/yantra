@@ -89,6 +89,17 @@ Unknown after all four → `None`. Long-context price tiers are
 deliberately not distinguished (short-context rates used); the override
 file is the escape hatch.
 
+## What reads these dollars
+
+`/usage` was the first consumer and for a long time the only one: a
+figure you look at after the fact. [Note 34](34-budgets.md) makes the
+same arithmetic a DECISION — a per-turn ceiling the loop stops at —
+which puts weight on two rules stated above that were previously only
+about display honesty. `None` for an unknown model now refuses to build
+a ceiling instead of merely omitting a figure, and the override file
+stops being a nicety for people with a gateway: it is the only way to
+meter a model this table has never heard of.
+
 ## What the tests pin
 
 All four matching stages; override precedence (user prefix beats

@@ -55,6 +55,21 @@ allow = [
 # read a package's tools/ before you run it, the same way you would read
 # a dependency you are about to install (notes/32).
 
+[budget]
+# A turn here reads a handful of files and answers. Fifty cents is loose
+# enough that an honest research turn never notices it, and tight enough
+# that a loop -- fetch, re-read, fetch the same page again -- stops
+# instead of running to the iteration cap above with a full context
+# billed every round (notes/34).
+#
+# Read this before copying the key into a package you intend to SHARE:
+# a ceiling needs a price, so this package now refuses to run against a
+# metered model that yantra has no list price for. Local models are fine
+# (they bill nothing, and the ceiling says on screen that it is inert);
+# a gateway slug needs an entry in $YANTRA_PRICES. The cost of the key is
+# paid by whoever runs your package, not by you.
+max_usd_per_turn = 0.50
+
 [permissions]
 # web_fetch is network egress, so it asks before reaching out. Nothing
 # else here can do damage -- every other tool is read-only and

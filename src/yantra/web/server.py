@@ -377,8 +377,12 @@ class WebSession:
                     "cost_line": cost_line(self.agent),
                     "iterations": n,
                 })
-            case TurnEnd(reason=reason, response=None, iterations=n):
+            case TurnEnd(reason=reason, response=None, iterations=n,
+                         detail=detail):
+                # detail carries the numbers the reason word cannot --
+                # "over_budget" is not an answer to "over what?" (budget.py)
                 self.broadcast({"type": "turn_end", "reason": reason,
+                                "detail": detail or "",
                                 "iterations": n, "cost_line": ""})
 
     # ---- snapshots -------------------------------------------------------------
@@ -408,6 +412,12 @@ class WebSession:
             "usage": {"input": u.input_tokens, "output": u.output_tokens,
                       "cache_read": u.cache_read_tokens,
                       "cache_write": u.cache_write_tokens},
+            # The per-turn dollar ceiling, or None when there is none.
+            # A ceiling nobody can see is a ceiling nobody trusts, and the
+            # inert case (a local model) has to say so rather than imply
+            # protection by staying quiet ([notes/34]).
+            "budget": (agent.budget.describe()
+                       if getattr(agent, "budget", None) is not None else None),
             "utilization": agent.utilization(),
             # The honest numbers behind the pressure bar: what the last
             # request actually filled and how big the window is at all.

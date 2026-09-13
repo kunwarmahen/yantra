@@ -22,6 +22,7 @@ See README.md for the map and notes/ for per-topic write-ups.
 
 from yantra.agent import Agent, AgentEvent, ToolExecuted, TurnEnd
 from yantra.async_agent import AsyncAgent
+from yantra.budget import Budget
 from yantra.config import default_model, load_settings
 from yantra.eval_suite import find_suite, load_cases
 from yantra.evals import (
@@ -43,7 +44,8 @@ from yantra.permissions import (
     deny_all,
     yolo,
 )
-from yantra.pricing import ModelPrice, cost_of, price_for, session_cost
+from yantra.pricing import (ModelPrice, bills_nothing, cost_of, price_for,
+                            session_cost)
 from yantra.prompt import SystemPrompt, attach_prompt, recompose
 from yantra.providers import get_provider
 from yantra.providers.base import Provider, ProviderSettings, collect
@@ -80,6 +82,7 @@ __all__ = [
     "AgentSpec",
     "apply_payload",
     "AsyncAgent",
+    "Budget",
     "allow_read_only",
     "attach_prompt",
     "Block",
@@ -117,6 +120,7 @@ __all__ = [
     "PermissionRequest",
     "Provider",
     "recompose",
+    "bills_nothing",
     "price_for",
     "session_cost",
     "ProviderSettings",

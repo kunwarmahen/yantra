@@ -73,6 +73,7 @@ SCHEMA: dict[str, frozenset[str]] = {
     "tools": frozenset({"allow", "deny", "per_turn", "dirs"}),
     "skills": frozenset({"dirs", "disabled", "enabled"}),
     "mcp": frozenset({"name", "command", "args", "env", "url", "headers"}),
+    "budget": frozenset({"max_usd_per_turn"}),
     "permissions": frozenset({"mode"}),
     "env": frozenset({"context"}),
 }
@@ -123,6 +124,18 @@ def _bool(table: dict[str, Any], key: str, path: Path,
     if not isinstance(value, bool):
         _fail(path, f"{where}.{key} must be true or false")
     return value
+
+
+def _float(table: dict[str, Any], key: str, path: Path,
+           where: str) -> float | None:
+    """A money field. Ints are accepted and widened -- TOML reads ``1`` as
+    an int, and somebody writing a one-dollar ceiling means one dollar."""
+    value = table.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _fail(path, f"{where}.{key} must be a number (US dollars)")
+    return float(value)
 
 
 def _str_list(table: dict[str, Any], key: str, path: Path,
@@ -226,6 +239,7 @@ def load_package(where: Path) -> AgentSpec:
     model = _table(data, "model", manifest)
     tools = _table(data, "tools", manifest)
     skills = _table(data, "skills", manifest)
+    budget = _table(data, "budget", manifest)
     permissions = _table(data, "permissions", manifest)
     env = _table(data, "env", manifest)
 
@@ -293,6 +307,7 @@ def load_package(where: Path) -> AgentSpec:
         skill_dirs=skill_dirs,
         skills_disabled=_str_list(skills, "disabled", manifest, "skills") or (),
         mcp=_mcp_servers(data, manifest),
+        max_usd_per_turn=_float(budget, "max_usd_per_turn", manifest, "budget"),
         permissions_mode=_str(permissions, "mode", manifest, "permissions"),
         env_context=_str(env, "context", manifest, "env"),
         root=root,

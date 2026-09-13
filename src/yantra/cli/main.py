@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from yantra.agent import Agent
+from yantra.budget import Budget
 from yantra.builder import BUILD_SYSTEM, BuildSpec, default_checks, run_build
 from yantra.cli.render import Renderer, SubagentTee
 from yantra.cli.repl import Repl, confirm_gate
@@ -84,6 +85,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "agent.toml (prompt, tools, skills, servers, "
                              "policy). Flags here override the package. "
                              "Omitted, ./agent.toml is used when present.")
+    parser.add_argument("--max-usd", type=float, default=None,
+                        metavar="DOLLARS", dest="max_usd",
+                        help="per-TURN spending ceiling: the loop stops "
+                             "between iterations once a turn has cost this "
+                             "much, with a distinct stop reason. Overrides "
+                             "a package's [budget] max_usd_per_turn -- the "
+                             "author's number is an estimate, and you are "
+                             "the one paying. Needs a priced model (local "
+                             "models bill nothing, so it never fires)")
     parser.add_argument("--yolo", action="store_true",
                         help="skip permission prompts -- tools run without asking")
     parser.add_argument("--sandbox", action="store_true",
@@ -193,6 +203,7 @@ def _cli_spec(args) -> AgentSpec:
         cache=True if args.cache else None,
         skills=False if args.no_skills else None,
         skill_dirs=tuple(Path(d).expanduser() for d in args.skills_dir),
+        max_usd_per_turn=args.max_usd,
         permissions_mode="yolo" if args.yolo else None,
         env_context=args.env_context,
         cwd=Path(args.cwd),
@@ -365,9 +376,23 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
     cwd = Path(args.cwd).resolve() if str(args.cwd) != "." else spec.root
 
     label = f"{spec.name} {spec.version}" if spec.version else (spec.name or "")
+    # The package's own ceiling applies per case (one case is one turn), so
+    # a suite can go red on cost rather than on behaviour. Said up front,
+    # or "crashed: over_budget" three cases later reads as a bug.
+    budget_note = ""
+    if spec.max_usd_per_turn is not None:
+        try:
+            ceiling = Budget.for_model(spec.max_usd_per_turn,
+                                       provider_name=provider_name, model=model)
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        budget_note = "\nbudget: " + ceiling.describe()
+        if ceiling.metered:  # the inert line already says it cannot fire
+            budget_note += " -- a case that costs more goes red"
     console.print(f"[bold]eval[/bold] {escape(label)} · {len(cases)} case(s) · "
                   f"{provider_name} · {model}\n[dim]cwd: {cwd}\n"
-                  f"gate: {gate_note}[/dim]\n")
+                  f"gate: {gate_note}{budget_note}[/dim]\n")
 
     runner = EvalRunner(
         get_provider(provider_name, settings, cache_control=bool(spec.cache)),
@@ -659,6 +684,12 @@ def main(argv: list[str] | None = None) -> int:
     # "why is there no bash" must have an answer on screen.
     if refused := agent.registry.refused_names():
         console.print(f"[dim]package excludes: {', '.join(refused)}[/dim]")
+
+    # A ceiling nobody mentions is a ceiling nobody trusts -- and the
+    # inert case (a local model, which bills nothing) has to say so out
+    # loud, or an operator reads silence as protection.
+    if agent.budget is not None:
+        console.print(f"[dim]budget: {agent.budget.describe()}[/dim]")
 
     env_ctx = getattr(agent, "env_context", None)
     if env_ctx is not None and env_ctx.geo_error:

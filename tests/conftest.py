@@ -196,18 +196,26 @@ def _events_for(response: ModelResponse) -> Iterator[StreamEvent]:
     yield EndEvent(stop_reason=response.stop_reason, usage=response.usage)
 
 
-def assistant_text(text: str, *, usage: Usage | None = None) -> ModelResponse:
+def assistant_text(text: str, *, usage: Usage | None = None,
+                   model: str = "") -> ModelResponse:
     """Script helper: a plain end_turn answer."""
     return ModelResponse(
         message=Message("assistant", [TextBlock(text)]),
         stop_reason="end_turn",
         usage=usage or Usage(),
+        model=model,
     )
 
 
 def assistant_tool_call(call_id: str, name: str, arguments: dict,
-                        *, text_before: str = "") -> ModelResponse:
-    """Script helper: a tool_use turn (optionally with leading prose)."""
+                        *, text_before: str = "",
+                        usage: Usage | None = None,
+                        model: str = "") -> ModelResponse:
+    """Script helper: a tool_use turn (optionally with leading prose).
+
+    ``usage``/``model`` matter to anything metering a turn -- a cost
+    ceiling reads both off every response, not just the final one.
+    """
     content: list = []
     if text_before:
         content.append(TextBlock(text_before))
@@ -215,5 +223,6 @@ def assistant_tool_call(call_id: str, name: str, arguments: dict,
     return ModelResponse(
         message=Message("assistant", content),
         stop_reason="tool_use",
-        usage=Usage(),
+        usage=usage or Usage(),
+        model=model,
     )

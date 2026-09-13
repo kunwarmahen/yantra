@@ -170,6 +170,29 @@ needs a larger tree.
 * **One behavior per case.** A case that asserts five things tells you
   five things; a case that asserts one thing badly tells you nothing.
 
+## When the package has a `[budget]`
+
+A ceiling in `agent.toml` applies to eval cases too -- each case is one
+turn against a fresh agent built from the same spec. So a case whose
+trajectory costs more than `max_usd_per_turn` does not fail its grader;
+it never reaches one, and the suite reports it as a crash naming the
+dollars:
+
+```
+FAIL  reads-before-answering
+      crashed: RuntimeError: turn ended without a response (over_budget
+      after 2 iterations): spent ~$0.6000 of the $0.50 ceiling for this turn
+```
+
+That is a real result and usually a real finding -- the agent took a more
+expensive route than its author budgeted for. But check which thing broke
+before editing the case: raising `max_usd_per_turn` to make a suite green
+is how a cost regression gets waved through.
+
+Against a local model the ceiling is inert (nothing is billed), so a
+suite that runs green on Ollama tells you nothing about whether it fits
+the package's budget on a metered one.
+
 ## The limit to remember
 
 `forbidden_tools` grades what EXECUTED, not what was AVAILABLE. Adding

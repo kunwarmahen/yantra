@@ -105,8 +105,12 @@ class Renderer:
                         f"{cost} · {n} iteration(s)[/dim]"
                     )
 
-            case TurnEnd(reason=reason, response=None, iterations=n):
-                self.console.print(f"\n[yellow]── turn ended: {reason} "
+            case TurnEnd(reason=reason, response=None, iterations=n,
+                         detail=detail):
+                # detail carries the numbers a bare reason word cannot:
+                # "over_budget" is not an answer to "over what?"
+                why = f" -- {detail}" if detail else ""
+                self.console.print(f"\n[yellow]── turn ended: {reason}{why} "
                                    f"(after {n} iteration(s))[/yellow]")
 
     def _render_tool(self, name: str, args: dict, output: str,

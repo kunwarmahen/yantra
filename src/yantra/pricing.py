@@ -117,6 +117,13 @@ _PREFIXES: dict[str, ModelPrice] = {
 
 _DATE_SUFFIX = re.compile(r"-20\d{6}$")
 
+#: Providers that bill nothing: the model runs on hardware you already
+#: paid for. Kept here rather than in each caller because "is this free?"
+#: is a PRICING question, and because a missing price means two opposite
+#: things depending on the answer -- $0.00 for a local model, "we do not
+#: know, so do not guess" for a metered one (see budget.py).
+FREE_PROVIDERS = frozenset({"ollama"})
+
 # YANTRA_PRICES: path to a JSON file of overrides/additions, applied on
 # top of everything above. Shape:
 #     {"my-model": {"input": 3.0, "output": 15.0},
@@ -210,6 +217,17 @@ def price_for(model: str) -> ModelPrice | None:
                 if slug.startswith(key):
                     return table[key]
     return None
+
+
+def bills_nothing(provider_name: str) -> bool:
+    """True when this provider charges nothing for tokens (a local server).
+
+    The distinction callers need: a local model with no price entry is
+    genuinely free, while a hosted one with no price entry is simply
+    unknown, and rendering the second as $0.00 quietly teaches the wrong
+    instinct about what sessions cost.
+    """
+    return provider_name in FREE_PROVIDERS
 
 
 def cost_of(usage: Usage, price: ModelPrice) -> float:

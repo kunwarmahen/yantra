@@ -322,9 +322,11 @@ Named, so the format's refusals are as legible as its features:
   package carries the evidence that it works, and `--eval` turns it into
   an exit code. The format is this one's shape again — declarative keys,
   one narrow hatch to Python, unknown keys refused.
-* **`[budget]`** — a per-run cost ceiling. Deliberately absent rather than
-  present-and-ignored: a field that silently does nothing, in the one area
-  where someone is trusting it with their money, is worse than no field.
+* ~~**`[budget]`**~~ — shipped in [notes/34](34-budgets.md) as
+  `max_usd_per_turn`, once there was a loop hook to make it bite. Per
+  TURN rather than per run, because a turn is the only unit a package
+  author can honestly estimate; a stop rather than a cap, because the
+  price of a model call is knowable only after making it.
 * **Package registries, publishing, `extends`, version constraints.** A
   package is a folder and a git URL. That is enough for now.
 * **`[[subagent]]`** — declarable sub-agents. `subagent.py` exists and this

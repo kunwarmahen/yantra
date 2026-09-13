@@ -20,7 +20,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1082 tests. The
+The harness underneath is complete and covered by 1117 tests. The
 framework layer on top — agents you define as a folder of files, tools
 loaded from outside this tree, evals as an acceptance gate — is being
 built now, and the API is not stable yet.
@@ -87,6 +87,7 @@ uv run yantra --yolo                                 # no permission prompts (ca
                                                       #   ...and /yolo flips it back
                                                       #   mid-session (web UI: mode chip)
 uv run yantra --cache                                # prompt-cache breakpoints on
+uv run yantra --max-usd 0.50                         # stop a turn once it costs this much
 uv run yantra --resume                               # restore the newest checkpoint
 uv run yantra --env-context local                    # machine facts only (default: full)
 uv run yantra --skills-dir ~/shared-skills           # extra skills root (repeatable)
@@ -630,6 +631,9 @@ allow = ["read_file", "glob", "grep", "web_fetch", "load_skill"]
 deny  = ["browser_*"]           # fnmatch, like $YANTRA_DISABLED_TOOLS
 dirs  = ["tools"]               # your own tools; ./tools is found anyway
 
+[budget]
+max_usd_per_turn = 0.50         # a STOP, not a cap (notes/34)
+
 [permissions]
 mode = "ask"                    # ask | yolo
 
@@ -761,6 +765,58 @@ registered, prompt layers before `env_context` appends to them, skills
 before the tool catalog. `Agent.__init__` still takes its seventeen
 arguments for anyone who wants them.
 
+### A ceiling in dollars
+
+`max_iterations` caps how many round trips a turn may take, which is a
+patience limit, not a spending limit: twenty-five cheap iterations and
+twenty-five expensive ones are the same number and differ by two orders of
+magnitude on the invoice. So a turn may also carry a ceiling in the unit
+of the bill:
+
+```toml
+[budget]
+max_usd_per_turn = 0.50
+```
+
+```bash
+yantra --agent ./researcher --max-usd 0.50 "summarise the notes directory"
+```
+
+The meter is read **between iterations**, so it is a stop and not a cap —
+the only way to learn what a model call cost is to make it, and the
+overshoot is bounded by exactly one call:
+
+```
+── turn ended: over_budget -- spent ~$0.0617 of the $0.02 ceiling for this turn
+   (after 3 iteration(s))
+```
+
+The rules worth knowing before you rely on it:
+
+* **Per turn, not per session.** One turn is one thing the agent was asked
+  to do, and it is the only unit a package author can honestly estimate.
+* **A final answer is never discarded.** Crossing the line on the reply
+  itself gets you the reply; the money is spent either way. Only *further
+  tool calls* are refused.
+* **Sub-agents share the meter.** A child charges its parent's ceiling
+  rather than getting a fresh one, or delegating would be the cheap way
+  around it.
+* **Local models bill nothing**, so the ceiling is inert and says so:
+  `budget: $0.50 per turn -- inert here, a local model bills nothing`.
+  Give your own Ollama tag a price in `$YANTRA_PRICES` and it becomes
+  real — which is how you rehearse a ceiling without pointing it at an
+  account with a card behind it.
+* **A metered model nobody can price refuses to carry a ceiling**, before
+  a token is spent, rather than quietly metering $0.00:
+  `error: budget: no list price is known for 'gizmo-9', so a $0.50 ceiling
+  could never stop anything.`
+* **`--max-usd` overrides the package, up or down.** Unlike `tools.deny`,
+  which the command line cannot lift: a restriction you cannot lift is a
+  security control, a number you can lift is a guard rail.
+
+[notes/34](notes/34-budgets.md) has the reasoning, the receipts, and what
+is deliberately still missing.
+
 ## Architecture
 
 Normalization happens in exactly ONE layer: the provider adapters.
@@ -786,9 +842,12 @@ src/yantra/
 ├── sandbox.py      ToolSandbox protocol + two backends: SubprocessSandbox
 │                   (scrubbed env, legacy semantics) and BwrapSandbox (bubblewrap:
 │                   no net/fs/pid escape) + autodetect ([notes/16](notes/16-sandboxing.md))
-├── subagent.py     agent-as-tool: fresh child Agent per spawn -- budget,
-│                   one level deep, compact results, optional stream tee
-│                   ([notes/08](notes/08-sub-agents.md))
+├── subagent.py     agent-as-tool: fresh child Agent per spawn -- spawn
+│                   budget, one level deep, compact results, optional stream
+│                   tee; a child charges its PARENT's dollar meter, so
+│                   delegating is not a way around a ceiling
+│                   ([notes/08](notes/08-sub-agents.md),
+│                   [notes/34](notes/34-budgets.md))
 ├── permissions.py  PermissionRequest + gates: allow_read_only / yolo /
 │                   deny_all / trust_sandbox (auto-approves bash ONLY while
 │                   confined); SwitchableGate flips ask ⇄ yolo mid-session;
@@ -819,7 +878,8 @@ src/yantra/
 │                   named here and loaded at build time
 │                   ([notes/31](notes/31-agent-packages.md),
 │                   [notes/32](notes/32-package-tools.md),
-│                   [notes/33](notes/33-evals-as-a-gate.md))
+│                   [notes/33](notes/33-evals-as-a-gate.md),
+│                   [notes/34](notes/34-budgets.md))
 ├── spec.py         AgentSpec: one description of an agent and the build that
 │                   wires it -- admission policy before any tool registers,
 │                   prompt layers before env_context appends, skills before
@@ -849,6 +909,12 @@ src/yantra/
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
 │                   never a guess ([notes/21](notes/21-cost-accounting.md))
+├── budget.py       those dollars as a DECISION: a per-turn ceiling the loop
+│                   stops at between iterations (over_budget, with the numbers
+│                   in it). ONE meter shared with sub-agents, cleared only by
+│                   the agent it belongs to; a model nobody can price refuses
+│                   to carry a ceiling rather than counting zero
+│                   ([notes/34](notes/34-budgets.md))
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
 │   │               ModelResponse (protocol cores shared by both skins);
@@ -1047,7 +1113,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1019 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1117 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

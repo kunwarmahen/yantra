@@ -31,7 +31,7 @@ from yantra.config import default_model, load_settings
 from yantra.context import RED, estimate_history
 from yantra.errors import ImageError, RateLimitError, UserUnavailable
 from yantra.images import load_image_block
-from yantra.pricing import session_cost
+from yantra.pricing import bills_nothing, session_cost
 from yantra.prompt import recompose
 from yantra.types import ImageBlock
 from yantra.permissions import PermissionRequest, SwitchableGate, yolo
@@ -349,6 +349,8 @@ class Repl:
                              f"({ratio:.0%} of usable window; "
                              f"red zone at {int(RED * 100)}%)")
                 line += self._cost_line()
+                if self.agent.budget is not None:
+                    line += f"\nbudget: {self.agent.budget.describe()}"
                 self.console.print(line)
             case "compact":
                 stats = self.agent.compact()
@@ -754,7 +756,7 @@ class Repl:
         buckets = self.agent.usage_by_model
         if not buckets:
             return ""
-        if self.agent.provider.name == "ollama":
+        if bills_nothing(self.agent.provider.name):
             return "\ncost: $0.00 (local model)"
         total, complete = session_cost(buckets)
         if total == 0.0 and not complete:

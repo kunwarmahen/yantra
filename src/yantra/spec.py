@@ -54,6 +54,7 @@ from pathlib import Path
 
 from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
+from yantra.budget import Budget
 from yantra.config import (
     default_context_window,
     default_model,
@@ -120,6 +121,12 @@ class AgentSpec:
     # ---- servers -----------------------------------------------------------
     mcp: tuple[MCPServerConfig, ...] = ()
 
+    # ---- money -------------------------------------------------------------
+    #: A per-turn dollar ceiling the loop stops at. The author's estimate of
+    #: what one task should cost -- and therefore something the operator may
+    #: RAISE, unlike tool_deny, which is a boundary rather than a guess.
+    max_usd_per_turn: float | None = None
+
     # ---- runtime -----------------------------------------------------------
     permissions_mode: str | None = None
     #: Awareness level. None means DO NOT ATTACH -- deliberately different
@@ -177,6 +184,12 @@ class AgentSpec:
                             ("tools_per_turn", self.tools_per_turn)):
             if value is not None and value < 0:
                 raise ConfigError(f"{name} cannot be negative (got {value})")
+        if self.max_usd_per_turn is not None and self.max_usd_per_turn <= 0:
+            raise ConfigError(
+                f"budget.max_usd_per_turn must be greater than zero (got "
+                f"{self.max_usd_per_turn}); a ceiling of nothing is a "
+                f"refusal to run, not a budget"
+            )
         if self.tool_allow is not None and not self.tool_allow:
             raise ConfigError(
                 "tools.allow is present but empty, which would leave the "
@@ -271,6 +284,14 @@ class AgentSpec:
         if self.tool_dirs:
             register_tool_dirs(tools, self.tool_dirs)
 
+        # The ceiling is resolved HERE, before an agent exists, because the
+        # one failure worth catching early is a ceiling that can never fire:
+        # an operator who asked for $0.50 and got no complaint is entitled
+        # to assume they are covered (budget.py).
+        budget = (None if self.max_usd_per_turn is None
+                  else Budget.for_model(self.max_usd_per_turn,
+                                        provider_name=name, model=model_slug))
+
         optional = {
             "max_tokens": self.max_tokens,
             "max_iterations": self.max_iterations,
@@ -282,6 +303,7 @@ class AgentSpec:
             tools=tools,
             cwd=root,
             permissions=permissions,
+            budget=budget,
             context_window=(self.context_window
                             if self.context_window is not None
                             else default_context_window(name)),

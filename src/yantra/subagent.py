@@ -185,6 +185,11 @@ class SubagentSpawner:
             max_iterations=max_iterations,
             permissions=self.parent.permissions,  # cannot escalate by being a sub-agent
             context_window=self.parent.context_window,
+            # THE SAME meter, not a copy: a child that got its own fresh
+            # ceiling would turn "spend at most $0.50" into "spend $0.50
+            # per spawn", and delegating would be the cheapest way around
+            # the one limit that costs real money (budget.py).
+            budget=self.parent.budget,
         )
         if self.on_child_event is not None:
             # Stream tee: the child's raw StreamEvents are PUSHED to the

@@ -915,6 +915,20 @@ def test_state_carries_a_skills_snapshot(tmp_path):
     assert state["skills"]["loaded"] == []
 
 
+def test_state_carries_the_turn_budget_when_there_is_one():
+    from yantra.budget import Budget
+    session, agent = make_session([])
+    agent.budget = Budget(0.50)
+    client = TestClient(make_app(session))
+    assert "$0.50 per turn" in client.get("/api/state").json()["budget"]
+
+
+def test_state_reports_no_budget_when_no_ceiling_was_asked_for():
+    session, _ = make_session([])
+    client = TestClient(make_app(session))
+    assert client.get("/api/state").json()["budget"] is None
+
+
 def test_state_reports_none_when_skills_are_off():
     # --no-skills / embedders: the panel hides rather than erroring
     session, _ = make_session([])

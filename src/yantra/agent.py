@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from yantra.budget import Budget
 from yantra.context import (
     RED,
     SUMMARY_PROMPT,
@@ -64,8 +65,13 @@ class TurnEnd:
     """Terminal event of one turn."""
 
     response: ModelResponse | None  # None when capped/cancelled
-    reason: Literal["end_turn", "max_iterations", "cancelled"]
+    reason: Literal["end_turn", "max_iterations", "over_budget", "cancelled"]
     iterations: int
+    #: A sentence with the NUMBERS in it, for reasons a bare word cannot
+    #: carry. "over_budget" alone tells an operator nothing they wanted to
+    #: know -- over what, and by how much (see Budget.explain). None where
+    #: the reason already says everything, as "max_iterations" does.
+    detail: str | None = None
 
 
 AgentEvent = StreamEvent | ToolExecuted | TurnEnd
@@ -117,6 +123,7 @@ class Agent:
         tool_catalog: ToolCatalog | None = None,
         tools_per_turn: int = 7,
         interrupt_check: Callable[[], bool] | None = None,
+        budget: Budget | None = None,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -173,6 +180,11 @@ class Agent:
         # a terminal Ctrl-C already owns. Raising KeyboardInterrupt keeps the
         # resumable-history cleanup identical to every other exit path.
         self.interrupt_check = interrupt_check
+        # A per-turn dollar ceiling, or None for the usual "spend whatever
+        # the iteration cap allows". SHARED, not copied: sub-agents charge
+        # this same meter (see budget.py and subagent.py), so delegating is
+        # not a way around it.
+        self.budget = budget
 
     def _interrupted(self) -> bool:
         """Poll the host's cancel flag, if one is wired."""
@@ -192,9 +204,10 @@ class Agent:
             if isinstance(event, TurnEnd):
                 if event.response is not None:
                     return event.response
+                detail = f": {event.detail}" if event.detail else ""
                 raise RuntimeError(
                     f"turn ended without a response ({event.reason} after "
-                    f"{event.iterations} iterations)"
+                    f"{event.iterations} iterations){detail}"
                 )
         raise RuntimeError("unreachable")
 
@@ -214,6 +227,12 @@ class Agent:
         if images:
             blocks.extend(images)
         self.history.append(Message("user", blocks))
+        # One turn is one thing the agent was asked to do, so that is the
+        # unit the ceiling covers -- and the meter only listens to the
+        # agent it belongs to, which is what stops a sub-agent from
+        # clearing its parent's spend by starting a turn (budget.py).
+        if self.budget is not None:
+            self.budget.begin_turn(self)
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
             for iteration in range(1, self.max_iterations + 1):
@@ -237,11 +256,29 @@ class Agent:
                 # Window footprint, not just fresh input: a cached request
                 # bills ~nothing fresh yet still fills the window.
                 self.last_context_tokens = response.usage.window_tokens()
+                if self.budget is not None:
+                    self.budget.charge(response.usage,
+                                       response.model or self.model)
 
                 calls = response.message.tool_calls()
                 if response.stop_reason != "tool_use" or not calls:
                     yield TurnEnd(response=response, reason="end_turn",
                                   iterations=iteration)
+                    return
+
+                # The budget gate, and it sits HERE for two reasons. After
+                # the end_turn branch, because an ANSWER already paid for is
+                # never thrown away over the ceiling it crossed to arrive.
+                # Before the tools run, because those cost wall-clock time
+                # and can touch the world, and nothing was going to read
+                # their results. The outstanding calls still get synthesized
+                # results, exactly as the iteration cap does -- the history
+                # invariant does not care why a turn stopped.
+                if self.budget is not None and self.budget.exceeded():
+                    self._answer_outstanding({})
+                    yield TurnEnd(response=None, reason="over_budget",
+                                  iterations=iteration,
+                                  detail=self.budget.explain())
                     return
 
                 executed.clear()
