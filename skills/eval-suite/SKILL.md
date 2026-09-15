@@ -258,6 +258,12 @@ Against a local model the ceiling is inert (nothing is billed), so a
 suite that runs green on Ollama tells you nothing about whether it fits
 the package's budget on a metered one.
 
+The heads-up that normally precedes a budget stop does not reach the
+suite. It is advice to whoever is watching a turn, and nobody is watching
+an eval case -- what lands in the report is the crash above. To find out
+whether a case is running close to the ceiling rather than over it, run
+that one prompt by hand with `--max-usd` and read the `· budget:` line.
+
 **About `--async`.** Worth it against a metered provider, where the
 concurrency belongs to somebody else's fleet. Close to a wash against one
 local model on one GPU -- the card was the bottleneck, not the client --

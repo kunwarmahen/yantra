@@ -63,7 +63,8 @@ allow = [
 # enough that an honest research turn never notices it, and tight enough
 # that a loop -- fetch, re-read, fetch the same page again -- stops
 # instead of running to the iteration cap above with a full context
-# billed every round (notes/34).
+# billed every round (notes/34). You get one heads-up before it fires,
+# priced from the request the agent is about to send (notes/36).
 #
 # Read this before copying the key into a package you intend to SHARE:
 # a ceiling needs a price, so this package now refuses to run against a

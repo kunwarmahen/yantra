@@ -20,7 +20,13 @@ Layers, outside in:
 See README.md for the map and notes/ for per-topic write-ups.
 """
 
-from yantra.agent import Agent, AgentEvent, ToolExecuted, TurnEnd
+from yantra.agent import (
+    Agent,
+    AgentEvent,
+    BudgetWarning,
+    ToolExecuted,
+    TurnEnd,
+)
 from yantra.async_agent import AsyncAgent
 from yantra.budget import Budget
 from yantra.config import default_model, load_settings
@@ -84,6 +90,7 @@ __all__ = [
     "apply_payload",
     "AsyncAgent",
     "Budget",
+    "BudgetWarning",
     "allow_read_only",
     "attach_prompt",
     "Block",

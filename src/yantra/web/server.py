@@ -52,7 +52,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from yantra.agent import Agent, ToolExecuted, TurnEnd
+from yantra.agent import Agent, BudgetWarning, ToolExecuted, TurnEnd
 from yantra.config import default_model, load_settings
 from yantra.context import estimate_history
 from yantra.errors import ProviderError, UserUnavailable
@@ -365,6 +365,11 @@ class WebSession:
                 })
             case EndEvent(stop_reason=_, usage=_):
                 pass  # per-call usage; the TurnEnd footer carries totals
+            case BudgetWarning(detail=detail, spent=spent, max_usd=max_usd):
+                # The numbers ride along as numbers, not only inside the
+                # sentence: a browser can draw a bar, a terminal cannot.
+                self.broadcast({"type": "budget_warning", "detail": detail,
+                                "spent": spent, "max_usd": max_usd})
             case TurnEnd(reason="end_turn", response=response, iterations=n):
                 usage = response.usage if response is not None else None
                 self.broadcast({

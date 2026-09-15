@@ -25,7 +25,7 @@ from yantra.providers.base import ProviderSettings  # noqa: E402
 from yantra.session import SessionStore  # noqa: E402
 from yantra.tools.ask_user import AskUser  # noqa: E402
 from yantra.tools.base import Tool, ToolRegistry  # noqa: E402
-from yantra.types import Message, ModelResponse, TextBlock  # noqa: E402
+from yantra.types import Message, ModelResponse, TextBlock, Usage  # noqa: E402
 from yantra.web.server import WebSession, make_app  # noqa: E402
 
 
@@ -145,6 +145,33 @@ def test_message_streams_deltas_tool_results_and_footer():
         footer = envelopes[-2]
         assert footer["type"] == "state"
         assert footer["turn_active"] is False
+
+
+def test_a_budget_heads_up_reaches_the_browser_with_its_numbers():
+    """A warning the terminal shows and the tab does not is half a feature."""
+    from yantra.budget import Budget
+
+    priced = "claude-sonnet-5"  # $3.00 per 1M in -> 300k tokens is $0.90
+    session, agent = make_session([
+        assistant_tool_call("e1", "echo", {"text": "hi"},
+                            usage=Usage(input_tokens=300_000), model=priced),
+        assistant_text("done"),
+    ])
+    agent.model = priced
+    agent.budget = Budget(1.00)
+    client = TestClient(make_app(session))
+
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "state"
+        envelopes = send_and_finish(client, ws, "go")
+
+    warn = next(e for e in envelopes if e["type"] == "budget_warning")
+    assert warn["spent"] == pytest.approx(0.90)
+    assert warn["max_usd"] == 1.00
+    assert "$0.9000" in warn["detail"]
+    # Advice, not an ending: the turn still finished on its own.
+    assert next(e for e in envelopes
+                if e["type"] == "turn_end")["reason"] == "end_turn"
 
 
 def seed_history(agent: Agent) -> None:

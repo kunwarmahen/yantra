@@ -56,6 +56,55 @@ what you are metering is your own made-up number -- which is exactly what
 you want when the thing being rehearsed is whether the ceiling fires at
 all, and you would rather find out on hardware you already own.
 
+A WARNING BEFORE THE STOP, ONCE. Being stopped is a poor way to learn
+that a ceiling was close, so the meter also hands out one heads-up per
+turn (``take_warning``). It is ADVICE and nothing else: no tool is
+blocked, no call is skipped, and a turn that ignores it is not treated
+differently for having been warned.
+
+THE CEILING IS READ AND THE WARNING IS ESTIMATED, and the difference is
+the whole reason both exist. A stop costs someone the rest of their turn,
+so it is only ever made on money actually billed. A warning costs
+nothing, so it is free to guess -- and it has to, because every rule
+built on money ALREADY SPENT turns out to be nearly useless here. A
+tool-using turn does not get more expensive gradually: one ``read_file``
+pair puts eleven thousand tokens of context into the next request, and a
+real turn measured here went $0.0088, $0.0095, $0.0108, $0.0435. Nothing
+about the first three calls predicts the fourth, so "you are at 80% of
+the ceiling" and "another call like the last one would cross" both stay
+silent right through the only iteration that mattered.
+
+So the forecast is of THE CALL ABOUT TO BE MADE, not the one just
+finished, and it is taken at the top of an iteration -- the moment the
+request is assembled and its size is known. The loop sizes it
+(``Agent._forecast_tokens``, which anchors on the tokens the last
+response reported and estimates only what has been appended since) and
+this module prices it. The REPLY is not forecast at all, because nobody
+can know its length in advance. That undercounts, which is why
+``WARN_AT`` stays on as a floor: a turn whose cost is mostly output would
+otherwise creep to the ceiling with the forecast saying "fine" each
+time.
+
+``take_warning`` takes an owner for the same reason ``begin_turn`` does,
+and the reason is sharper here. A sub-agent shares the meter, so it can
+be the one to cross the line -- and its events go to the parent's TOOL
+RESULT, not to anybody's screen. A warning raised there is a warning
+delivered to nothing, and worse, a one-shot latch would then swallow the
+copy the human was going to get. So only the agent whose turn this is
+gets advised; the child's spending still counts, and the parent's very
+next iteration is where it surfaces, in the stream somebody is reading.
+
+The fraction is a constant and not a key, which is the one place this
+module departs from letting the author decide. A ceiling is a number
+somebody's money depends on, so it is configurable at three levels; the
+point at which a line of text appears costs nothing to get wrong, and a
+third way to spell the same intent is surface nobody asked for.
+
+There is one stop that can never be warned about: a charge for a model
+with no list price blinds the meter and trips ``exceeded`` in the same
+breath, so the first evidence of trouble IS the stop. Nothing can be said
+earlier, because until that charge arrived there was nothing to say.
+
 The honest limit, stated once: a meter can only count what the provider
 reports. ``Usage`` zeros are normal on some streamed calls, and a turn
 billed in silence is a turn this ceiling does not see.
@@ -66,6 +115,11 @@ from __future__ import annotations
 from yantra.errors import ConfigError
 from yantra.pricing import ModelPrice, bills_nothing, cost_of, price_for
 from yantra.types import Usage
+
+#: Fraction of the ceiling that earns a heads-up on its own. The floor
+#: under the forecast, which sees context but not the reply it will get.
+#: Deliberately not configurable; see the module docstring.
+WARN_AT = 0.8
 
 
 class Budget:
@@ -94,6 +148,9 @@ class Budget:
         #: whole module exists to refuse.
         self.unpriced_model: str | None = None
         self._owner: object | None = None
+        #: The heads-up is a ONE-SHOT per turn, and the latch belongs to
+        #: the meter so a parent and its sub-agents share it.
+        self._warned = False
 
     # ---- construction ------------------------------------------------------
 
@@ -135,6 +192,7 @@ class Budget:
         if self._owner is owner:
             self.spent = 0.0
             self.unpriced_model = None
+            self._warned = False
 
     def charge(self, usage: Usage, model: str) -> None:
         """Add one response's cost to the meter.
@@ -156,6 +214,49 @@ class Budget:
             return False
         return self.unpriced_model is not None or self.spent >= self.max_usd
 
+    def take_warning(self, owner: object, *, next_input_tokens: int = 0,
+                     model: str = "") -> str | None:
+        """The turn's one heads-up, asked at the top of every iteration.
+
+        Returns the sentence once and None forever after, which is the
+        whole contract: a loop may call this every iteration without
+        producing a wall of identical advice, and a caller that got a
+        string is the only one that will.
+
+        Two things earn it. The request about to go out is priced from
+        its context size, and if that would not fit under what is left,
+        this is the last moment anyone can be told. Failing that, the
+        turn has simply spent ``WARN_AT`` of the ceiling -- the floor
+        under a forecast that cannot see the reply it will get.
+
+        Says nothing to anyone but the agent whose turn this is -- a
+        sub-agent's events end up inside a tool result, so warning there
+        would spend the one-shot on a reader who does not exist. Says
+        nothing when the ceiling is inert (a local model bills nothing,
+        so there is nothing to approach), and nothing once the turn has
+        crossed -- by then the stop is the message, and advice about a
+        line already passed is not advice.
+        """
+        if self._owner is not owner:
+            return None
+        if not self.metered or self._warned or self.exceeded():
+            return None
+        price = price_for(model) if next_input_tokens and model else None
+        forecast = (0.0 if price is None
+                    else cost_of(Usage(input_tokens=next_input_tokens), price))
+        if (self.spent + forecast < self.max_usd
+                and self.spent < self.max_usd * WARN_AT):
+            return None
+        self._warned = True
+        left = self.max_usd - self.spent
+        if forecast and self.spent + forecast >= self.max_usd:
+            return (f"the next call carries ~{next_input_tokens:,} tokens of "
+                    f"context, about ${forecast:.4f} before the reply -- and "
+                    f"~${left:.4f} is left of the ${self.max_usd:.2f} ceiling "
+                    f"for this turn")
+        return (f"spent ~${self.spent:.4f} of the ${self.max_usd:.2f} "
+                f"ceiling for this turn -- ~${left:.4f} left")
+
     def explain(self) -> str:
         """One line saying what stopped the turn, with the numbers in it.
 
@@ -174,4 +275,5 @@ class Budget:
         if not self.metered:
             return (f"${self.max_usd:.2f} per turn -- inert here, a local "
                     f"model bills nothing")
-        return f"${self.max_usd:.2f} per turn"
+        return (f"${self.max_usd:.2f} per turn -- a heads-up once one "
+                f"more call would not fit")

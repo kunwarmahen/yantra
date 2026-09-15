@@ -9,7 +9,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from yantra.agent import ToolExecuted, TurnEnd
+from yantra.agent import BudgetWarning, ToolExecuted, TurnEnd
 from yantra.pricing import cost_of, price_for
 from yantra.types import (
     EndEvent,
@@ -85,6 +85,12 @@ class Renderer:
 
             case EndEvent(stop_reason=_, usage=usage):
                 self._turn_tokens = usage.input_tokens + usage.output_tokens
+
+            case BudgetWarning(detail=detail):
+                # Advice mid-turn: the same yellow the stop uses, because
+                # it is about the same money -- but phrased as a heading
+                # up, not as an ending (budget.py).
+                self.console.print(f"\n[yellow]· budget: {detail}[/yellow]")
 
             case TurnEnd(reason="end_turn", response=response, iterations=n):
                 self.console.print()  # close the streamed line

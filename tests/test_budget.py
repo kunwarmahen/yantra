@@ -11,6 +11,14 @@ The second bias is that stopping must not cost anything already paid
 for. A turn that crosses the line ON ITS FINAL ANSWER keeps the answer:
 the money is spent either way, and throwing the reply away turns a
 budget into a way to waste one.
+
+The third, for the heads-up before the stop: a warning is only worth
+anything if it reaches a human, and in time to matter. So the tests here
+are about where it does NOT go -- not into a sub-agent's stream (which
+lands in a tool result), not three times in one turn, never instead of
+the stop -- and about the turn shape that a fraction-of-the-ceiling rule
+misses entirely: calls that get more expensive every iteration and step
+straight over the band.
 """
 
 from __future__ import annotations
@@ -21,9 +29,9 @@ import json
 import pytest
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
-from yantra.agent import Agent, ToolExecuted, TurnEnd
+from yantra.agent import Agent, BudgetWarning, ToolExecuted, TurnEnd
 from yantra.async_agent import AsyncAgent
-from yantra.budget import Budget
+from yantra.budget import WARN_AT, Budget
 from yantra.errors import ConfigError
 from yantra.package import load_package
 from yantra.permissions import yolo
@@ -125,6 +133,130 @@ def test_explain_names_both_numbers_so_over_budget_is_an_answer():
     budget.charge(THIRTY_CENTS, PRICED)
     said = budget.explain()
     assert "$0.3000" in said and "$0.50" in said
+
+
+# ---- the heads-up ---------------------------------------------------------
+
+
+def _metered(max_usd: float, owner: object) -> Budget:
+    """A ceiling mid-turn, owned -- the state take_warning insists on."""
+    budget = Budget(max_usd)
+    budget.begin_turn(owner)
+    return budget
+
+
+def test_no_warning_while_the_call_about_to_go_out_still_fits():
+    owner = object()
+    budget = _metered(1.00, owner)
+    budget.charge(THIRTY_CENTS, PRICED)  # $0.30 spent
+    assert budget.take_warning(owner, next_input_tokens=100_000,
+                               model=PRICED) is None  # + $0.30 = $0.60
+
+
+def test_the_warning_fires_when_the_next_call_is_the_one_that_will_not_fit():
+    # 30% spent -- a fraction rule says nothing here, and nothing about
+    # the calls so far predicts this one. The assembled request does.
+    owner = object()
+    budget = _metered(1.00, owner)
+    budget.charge(THIRTY_CENTS, PRICED)
+    said = budget.take_warning(owner, next_input_tokens=300_000, model=PRICED)
+    assert said is not None
+    assert "300,000 tokens" in said, "the size that made the forecast"
+    assert "$0.9000" in said, "what that context alone costs"
+    assert "$0.7000" in said, "the number an operator acts on is what is LEFT"
+    assert "$1.00" in said
+
+
+def test_a_turn_that_creeps_up_is_warned_at_the_fraction_anyway():
+    # The shape the forecast misses: cost is mostly REPLY, which nobody
+    # can size in advance, so each next request looks affordable.
+    owner = object()
+    budget = _metered(1.00, owner)
+    penny = Usage(input_tokens=3_000)  # ~$0.009 a call
+    while budget.spent < 0.80:
+        budget.charge(penny, PRICED)
+        assert not budget.exceeded()
+    said = budget.take_warning(owner, next_input_tokens=3_000, model=PRICED)
+    assert said is not None and "left" in said
+
+
+def test_a_forecast_of_a_model_nobody_can_price_is_no_forecast_at_all():
+    owner = object()
+    budget = _metered(1.00, owner)
+    budget.charge(THIRTY_CENTS, PRICED)
+    assert budget.take_warning(owner, next_input_tokens=9_000_000,
+                               model="some-gateway/mystery-model") is None
+
+
+def test_the_warning_is_a_one_shot_so_a_long_turn_is_not_a_wall_of_it():
+    owner = object()
+    budget = _metered(1.00, owner)
+    budget.charge(Usage(input_tokens=280_000), PRICED)  # $0.84
+    assert budget.take_warning(owner) is not None
+    assert budget.take_warning(owner) is None
+    assert budget.take_warning(owner) is None
+
+
+def test_a_turn_can_be_warned_before_it_has_spent_anything():
+    # Nothing has crept anywhere and no call has been billed -- the
+    # request sitting there assembled is already too big for the ceiling.
+    owner = object()
+    budget = _metered(0.10, owner)
+    assert budget.take_warning(owner, next_input_tokens=100_000,
+                               model=PRICED) is not None
+
+
+def test_a_fresh_turn_re_arms_the_warning_for_its_owner():
+    owner = object()
+    budget = _metered(1.00, owner)
+    budget.charge(Usage(input_tokens=280_000), PRICED)
+    assert budget.take_warning(owner) is not None
+    budget.begin_turn(owner)
+    budget.charge(Usage(input_tokens=280_000), PRICED)
+    assert budget.take_warning(owner) is not None, "the latch is per TURN"
+
+
+def test_a_turn_already_over_the_ceiling_is_stopped_not_warned():
+    # The stop is the message. A warning next to it would be advice
+    # about a line the turn has already crossed.
+    owner = object()
+    budget = _metered(0.50, owner)
+    budget.charge(THIRTY_CENTS, PRICED)
+    budget.charge(THIRTY_CENTS, PRICED)
+    assert budget.exceeded()
+    assert budget.take_warning(owner) is None
+
+
+def test_a_blind_meter_stops_without_ever_having_warned():
+    """The one stop nothing can see coming: no charge, then no meter."""
+    owner = object()
+    budget = _metered(10.00, owner)
+    budget.charge(Usage(input_tokens=999_999), "some-gateway/mystery-model")
+    assert budget.take_warning(owner) is None
+    assert budget.exceeded()
+
+
+def test_an_inert_ceiling_warns_about_nothing_because_nothing_is_billed():
+    owner = object()
+    budget = Budget(0.01, metered=False)
+    budget.begin_turn(owner)
+    budget.charge(Usage(input_tokens=50_000_000), "qwen3:8b")
+    assert budget.take_warning(owner) is None
+
+
+def test_only_the_agent_whose_turn_it_is_gets_advised():
+    # A sub-agent's events go into a tool result, so warning there
+    # delivers the one-shot to nobody AND swallows the parent's copy.
+    parent, child = object(), object()
+    budget = _metered(1.00, parent)
+    budget.charge(Usage(input_tokens=280_000), PRICED)
+    assert budget.take_warning(child) is None
+    assert budget.take_warning(parent) is not None
+
+
+def test_describe_says_a_heads_up_is_part_of_the_deal():
+    assert "heads-up" in Budget(0.50).describe()
+    assert WARN_AT == 0.8
 
 
 # ---- ownership: who is allowed to clear the meter -------------------------
@@ -295,6 +427,124 @@ def test_the_async_loop_stops_on_the_same_ceiling():
     assert tool.runs == 1
 
 
+def test_the_loop_warns_once_before_it_stops():
+    # $0.30 a call against a $1.00 ceiling: nothing for three rounds,
+    # then the heads-up at the top of the fourth and the stop at the end
+    # of it. The shape an operator should see.
+    tool = CountingTool()
+    agent = _agent([_call(THIRTY_CENTS)] * 4, budget=Budget(1.00), tool=tool)
+    events = list(agent.run_streaming("go"))
+
+    warnings = [e for e in events if isinstance(e, BudgetWarning)]
+    ends = [e for e in events if isinstance(e, TurnEnd)]
+    assert len(warnings) == 1, "a long turn gets advice, not a wall of it"
+    assert warnings[0].iterations == 4
+    assert warnings[0].spent == pytest.approx(0.90)
+    assert warnings[0].max_usd == 1.00
+    assert ends[0].reason == "over_budget" and ends[0].iterations == 4
+
+
+def test_the_warning_lands_before_the_call_it_is_about():
+    """Advice about a request not yet sent, while there is still time."""
+    agent = _agent([_call(THIRTY_CENTS)] * 4, budget=Budget(1.00),
+                   tool=CountingTool())
+    kinds = [type(e).__name__ for e in agent.run_streaming("go")
+             if isinstance(e, (BudgetWarning, ToolExecuted, TurnEnd))]
+    assert kinds == ["ToolExecuted", "ToolExecuted", "ToolExecuted",
+                     "BudgetWarning", "TurnEnd"]
+
+
+def test_a_tool_result_that_blows_up_the_context_is_warned_about():
+    """The failure the fraction rule cannot see, in the loop.
+
+    Three cheap calls say nothing about the fourth: one tool result puts
+    thousands of tokens into the next request, and the price of a call is
+    mostly the price of its context. At 20% of the ceiling a fraction
+    rule is still silent; the assembled request is not.
+    """
+    class Fat(Tool):
+        name = "fat"
+        description = "return a great deal of text"
+        parameters = {"type": "object", "properties": {}}
+        read_only = True
+
+        def summary(self, args, ctx):
+            return "fat()"
+
+        def run(self, args, ctx):
+            return "x" * 20_000  # ~5k tokens of context, from one call
+
+    cheap = Usage(input_tokens=1_000)  # $0.003 a call
+    agent = _agent([assistant_tool_call("c1", "fat", {}, usage=cheap,
+                                        model=PRICED),
+                    assistant_tool_call("c2", "fat", {}, usage=cheap,
+                                        model=PRICED),
+                    assistant_text("done", usage=cheap, model=PRICED)],
+                   budget=Budget(0.015), tool=Fat())
+    events = list(agent.run_streaming("go"))
+
+    warnings = [e for e in events if isinstance(e, BudgetWarning)]
+    assert len(warnings) == 1
+    assert warnings[0].iterations == 2
+    assert warnings[0].spent == pytest.approx(0.003)
+    assert warnings[0].spent < 0.015 * 0.8, "a fraction rule says nothing here"
+    assert "tokens of context" in warnings[0].detail
+    # And the forecast was WRONG, in the direction that costs nobody
+    # anything: the calls stayed cheap and the turn finished on its own.
+    ends = [e for e in events if isinstance(e, TurnEnd)]
+    assert ends[0].reason == "end_turn", "a warning is advice, not a stop"
+
+
+def test_a_turn_that_never_gets_close_is_never_warned():
+    agent = _agent([_call(THIRTY_CENTS), assistant_text("done")],
+                   budget=Budget(10.00), tool=CountingTool())
+    events = list(agent.run_streaming("go"))
+    assert not any(isinstance(e, BudgetWarning) for e in events)
+
+
+def test_a_turn_that_finishes_near_the_ceiling_is_not_warned_after_the_fact():
+    # The gate is passed before the advice, and end_turn returns first --
+    # so an answer that lands at 90% says so in the cost footer, not in a
+    # warning about a call that is never going to happen.
+    agent = _agent([_call(THIRTY_CENTS),
+                    assistant_text("here it is", usage=Usage(input_tokens=200_000),
+                                   model=PRICED)],
+                   budget=Budget(1.00), tool=CountingTool())
+    events = list(agent.run_streaming("go"))
+    assert not any(isinstance(e, BudgetWarning) for e in events)
+    assert agent.budget.spent == pytest.approx(0.90)
+
+
+def test_a_turn_stopped_in_one_expensive_call_gets_no_warning_at_all():
+    """Nothing to warn about: the first charge is already over."""
+    agent = _agent([_call(Usage(input_tokens=400_000)), _call(THIRTY_CENTS)],
+                   budget=Budget(1.00), tool=CountingTool())
+    events = list(agent.run_streaming("go"))
+    assert not any(isinstance(e, BudgetWarning) for e in events)
+    assert [e.reason for e in events if isinstance(e, TurnEnd)] == ["over_budget"]
+
+
+def test_without_a_budget_nothing_is_ever_warned_about():
+    agent = _agent([_call(Usage(input_tokens=5_000_000)),
+                    assistant_text("done")], budget=None, tool=CountingTool())
+    assert not any(isinstance(e, BudgetWarning)
+                   for e in agent.run_streaming("go"))
+
+
+def test_the_async_loop_warns_on_the_same_line():
+    agent = _agent([_call(THIRTY_CENTS)] * 4, budget=Budget(1.00),
+                   tool=CountingTool(), cls=AsyncAgent)
+
+    async def _collect():
+        return [e async for e in agent.run_streaming("go")
+                if isinstance(e, (BudgetWarning, TurnEnd))]
+
+    events = asyncio.run(_collect())
+    assert isinstance(events[0], BudgetWarning)
+    assert events[0].iterations == 4
+    assert events[1].reason == "over_budget"
+
+
 # ---- sub-agents: the obvious way around a ceiling -------------------------
 
 
@@ -319,6 +569,55 @@ def test_a_sub_agent_charges_its_parents_meter_rather_than_a_fresh_one():
     assert parent.budget.spent == pytest.approx(0.60), (
         "0.30 means the child cleared the parent's turn; 0.30 with the "
         "child's own spend missing means it billed a meter nobody reads")
+
+
+def test_a_sub_agent_does_not_spend_the_turns_one_warning():
+    """The child's events land in a tool result; a warning there is lost."""
+    from yantra.subagent import SubagentSpawner
+
+    # The child's single reply takes the shared meter to $0.90 of $1.00.
+    parent = _agent([assistant_text("child answer",
+                                    usage=Usage(input_tokens=200_000),
+                                    model=PRICED)],
+                    budget=Budget(1.00), tool=CountingTool())
+    parent.budget.begin_turn(parent)
+    parent.budget.charge(THIRTY_CENTS, PRICED)
+
+    SubagentSpawner(parent).spawn({
+        "objective": "look something up",
+        "output_format": "one line",
+        "justification": "a self-contained lookup",
+        "tools_allowed": ["echo"],
+    })
+
+    assert parent.budget.spent == pytest.approx(0.90)
+    assert parent.budget.take_warning(parent) is not None, (
+        "the child burned the latch on a stream nobody reads")
+
+
+# ---- what the operator actually sees --------------------------------------
+
+
+def test_the_terminal_prints_the_heads_up_with_its_numbers():
+    import io
+
+    from rich.console import Console
+
+    from yantra.cli.render import Renderer
+
+    console = Console(file=io.StringIO(), width=200)
+    Renderer(console)(BudgetWarning(detail="spent ~$0.9000 of the $1.00 ceiling",
+                                    spent=0.9, max_usd=1.0, iterations=3))
+    text = console.file.getvalue()
+    assert "budget:" in text and "$0.9000" in text
+
+
+def test_the_startup_line_says_a_heads_up_is_coming():
+    # An operator who learns the warning exists only by receiving it has
+    # learned it too late to have set a different ceiling.
+    assert "heads-up" in Budget(0.50).describe()
+    assert "inert" in Budget(0.50, metered=False).describe(), (
+        "and a ceiling that can never fire must not promise a warning")
 
 
 # ---- the manifest ---------------------------------------------------------

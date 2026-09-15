@@ -61,6 +61,29 @@ class ToolExecuted:
 
 
 @dataclass(slots=True)
+class BudgetWarning:
+    """The turn is close to its dollar ceiling and about to buy another call.
+
+    The odd one out in this union: every other event reports that
+    something HAPPENED, and this one reports that something is likely to.
+    Nothing is required of a consumer that receives it -- no tool was
+    blocked, no call was skipped, the turn goes on exactly as it would
+    have -- which is exactly why it is an event and not a stop.
+
+    At most once per turn, at the top of an iteration: the request has
+    been assembled and priced, and has not been sent. ``spent`` and
+    ``max_usd`` ride along as numbers so a UI can draw them; ``detail``
+    is the sentence, which also carries the forecast (see budget.py).
+    """
+
+    #: The sentence, with the numbers in it (``Budget.take_warning``).
+    detail: str
+    spent: float
+    max_usd: float
+    iterations: int
+
+
+@dataclass(slots=True)
 class TurnEnd:
     """Terminal event of one turn."""
 
@@ -74,7 +97,7 @@ class TurnEnd:
     detail: str | None = None
 
 
-AgentEvent = StreamEvent | ToolExecuted | TurnEnd
+AgentEvent = StreamEvent | ToolExecuted | BudgetWarning | TurnEnd
 
 
 def _truncate_middle(text: str, cap: int = MAX_TOOL_RESULT_CHARS) -> str:
@@ -172,6 +195,9 @@ class Agent:
         # counters summed -- see Usage.window_tokens) -- the honest context
         # signal (the chars/4 heuristic in context.py is only a proxy).
         self.last_context_tokens: int = 0
+        #: How many messages the last request carried, so the budget's
+        #: forecast can price only what has arrived since.
+        self._sent_through = 0
         self.last_compaction: dict | None = None
         # Cooperative cancellation for hosts where the loop runs on a worker
         # thread that no signal can reach (the web UI's cancel button). When
@@ -237,10 +263,27 @@ class Agent:
         try:
             for iteration in range(1, self.max_iterations + 1):
                 self._begin_iteration()
+                messages = self._before_model_call(self.history)
+                # Advice, and the ONLY moment it can be given: the request
+                # is assembled, so its size -- and therefore roughly its
+                # price -- is known, and nothing has been billed for it
+                # yet. The meter latches and answers only its owner, so
+                # this fires once per turn and never from inside a
+                # sub-agent (budget.py).
+                if self.budget is not None:
+                    advice = self.budget.take_warning(
+                        self, next_input_tokens=self._forecast_tokens(messages),
+                        model=self.model)
+                    if advice is not None:
+                        yield BudgetWarning(detail=advice,
+                                            spent=self.budget.spent,
+                                            max_usd=self.budget.max_usd,
+                                            iterations=iteration)
+                self._sent_through = len(messages)
                 response = collect(
                     self._tee(
                         self.provider.stream(
-                            messages=self._before_model_call(self.history),
+                            messages=messages,
                             system=self.system,
                             tools=self._specs_for_request(),
                             model=self.model,
@@ -304,6 +347,29 @@ class Agent:
             raise
 
     # ---- context management ------------------------------------------------
+
+    def _forecast_tokens(self, messages: list[Message]) -> int:
+        """How big the request about to go out is, in input tokens.
+
+        ANCHORED ON WHAT WAS BILLED, estimating only the delta. The last
+        response reported its own window footprint, so the only unknown
+        is what has been appended since -- which is exactly where the
+        surprises live: one tool result can be thousands of tokens, and
+        that is what makes a turn's next call cost five times its last
+        (budget.py).
+
+        Before any response has arrived there is nothing to anchor on and
+        this falls back to the chars/4 proxy, which counts the transcript
+        but not the system prompt or the tool schemas -- so the very
+        first call of a turn reads LOW. That is the honest shape of the
+        error: the forecast understates at the start of a turn, when
+        almost nothing has been spent, and is at its most accurate deep
+        into one, which is when anyone needs it.
+        """
+        if self.last_context_tokens and self._sent_through <= len(messages):
+            return (self.last_context_tokens
+                    + estimate_history(messages[self._sent_through:]))
+        return estimate_history(messages)
 
     def _begin_iteration(self) -> None:
         """Re-pick the visible tool set for this model call.

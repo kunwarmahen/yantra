@@ -100,6 +100,13 @@ a ceiling instead of merely omitting a figure, and the override file
 stops being a nicety for people with a gateway: it is the only way to
 meter a model this table has never heard of.
 
+[Note 36](36-a-warning-before-the-stop.md) then does the one thing this
+note forbids, deliberately: it prices a call that has not happened yet,
+from an *estimate* of how many tokens it will carry. The rule here —
+never show a guess as a figure — holds because a figure is read as a
+fact. A warning is read as a warning, and being wrong about one costs a
+line of text rather than a wrong number in somebody's accounts.
+
 ## What the tests pin
 
 All four matching stages; override precedence (user prefix beats

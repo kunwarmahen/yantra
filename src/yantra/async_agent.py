@@ -50,6 +50,7 @@ from yantra.agent import (
     INTERRUPTED_MESSAGE,
     MAX_PARALLEL_TOOLS,
     AgentEvent,
+    BudgetWarning,
     ToolExecuted,
     TurnEnd,
     _batch_message,
@@ -140,6 +141,9 @@ class AsyncAgent:
         # Provider-reported size of the last request (all four usage
         # counters summed -- see Usage.window_tokens).
         self.last_context_tokens: int = 0
+        #: How many messages the last request carried, so the budget's
+        #: forecast can price only what has arrived since.
+        self._sent_through = 0
         self.last_compaction: dict | None = None
         # Per-turn dollar ceiling -- identical contract to the sync
         # twin's, including that sub-agents share this meter rather than
@@ -192,10 +196,27 @@ class AsyncAgent:
         try:
             for iteration in range(1, self.max_iterations + 1):
                 self._begin_iteration()
+                messages = await self._before_model_call(self.history)
+                # Advice, and the ONLY moment it can be given: the request
+                # is assembled, so its size -- and therefore roughly its
+                # price -- is known, and nothing has been billed for it
+                # yet. The meter latches and answers only its owner, so
+                # this fires once per turn and never from inside a
+                # sub-agent (budget.py).
+                if self.budget is not None:
+                    advice = self.budget.take_warning(
+                        self, next_input_tokens=self._forecast_tokens(messages),
+                        model=self.model)
+                    if advice is not None:
+                        yield BudgetWarning(detail=advice,
+                                            spent=self.budget.spent,
+                                            max_usd=self.budget.max_usd,
+                                            iterations=iteration)
+                self._sent_through = len(messages)
                 response = await acollect(
                     self._atee(
                         self.provider.astream(
-                            messages=await self._before_model_call(self.history),
+                            messages=messages,
                             system=self.system,
                             tools=self._specs_for_request(),
                             model=self.model,
@@ -260,6 +281,14 @@ class AsyncAgent:
             raise
 
     # ---- context management ------------------------------------------------
+
+    def _forecast_tokens(self, messages: list[Message]) -> int:
+        """Input size of the request about to go out -- deliberate twin of
+        ``Agent._forecast_tokens`` (see there for the reasoning)."""
+        if self.last_context_tokens and self._sent_through <= len(messages):
+            return (self.last_context_tokens
+                    + estimate_history(messages[self._sent_through:]))
+        return estimate_history(messages)
 
     def _begin_iteration(self) -> None:
         """Re-pick this model call's visible tool set -- deliberate twin of

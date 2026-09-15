@@ -93,6 +93,7 @@ function route(env) {
     case "ask":                showAskModal(env); break;
     case "resolved":           closeModalIf(env.id); break;
 
+    case "budget_warning": onBudgetWarning(env); break;
     case "turn_end":       onTurnEnd(env); break;
     case "turn_error":     addBanner(env.message, true); break;
     case "turn_cancelled": addBanner("turn cancelled", false, true); break;
@@ -374,6 +375,16 @@ function addBanner(message, isError, cancelledStyle = false) {
   el.className = isError ? "banner banner-error"
     : cancelledStyle ? "banner-cancelled" : "banner";
   el.textContent = message;
+  transcript.append(el);
+  scrollDown();
+}
+
+function onBudgetWarning(env) {
+  // Mid-turn advice, not an ending: the turn goes on around it, so it
+  // renders as its own banner and the transcript keeps flowing.
+  const el = document.createElement("div");
+  el.className = "banner banner-warn";
+  el.textContent = `budget: ${env.detail}`;
   transcript.append(el);
   scrollDown();
 }

@@ -75,7 +75,7 @@ The only way to find out what a model call costs is to make it.
 
 So the meter is read *between* iterations, and the overshoot is bounded
 by exactly one call. A $0.50 ceiling can end a turn at $0.53. The live
-run below ended a $0.02 ceiling at $0.0617, because the iteration that
+run below ended a $0.02 ceiling at $0.0785, because the iteration that
 crossed the line was the one that had just read two long files into
 context.
 
@@ -102,7 +102,7 @@ invariant ([notes/05](05-agent-loop.md)) does not care why a turn ended.
 The stop has its own reason, so nothing has to infer it from a silence:
 
 ```
-── turn ended: over_budget -- spent ~$0.0617 of the $0.02 ceiling for this turn
+── turn ended: over_budget -- spent ~$0.0785 of the $0.02 ceiling for this turn
    (after 3 iteration(s))
 ```
 
@@ -244,25 +244,39 @@ $ YANTRA_PRICES=prices.json yantra --provider ollama --model qwen3.8:latest \
 
 agent: researcher 0.1.0 -- examples/agents/researcher
 package tools: outline
-budget: $0.02 per turn
+budget: $0.02 per turn -- a heads-up once one more call would not fit
 skills: 5 loaded -- eval-suite, new-tool, notes-entry, repo-survey, source-brief
 · qwen3.8:latest
 
 · thinking
-I'm going to pull up both notes to see what they contain.
-→ read_file()
-→ read_file()
+The user is asking me to read notes/33 and notes/32, and then summarize how
+they are related. First, let me find these files.
+→ glob()
+→ list_dir()
+
+· qwen3.8:latest
 
 · thinking
-Both notes have been fully loaded. Next, summarize how they relate. Medium
-length -- should I load the source-brief skill? The instruction says "if it's
-longer than 2 paragraphs, load the source-brief skill." My summary will go
-beyond 2 paragraphs. Okay, let's load the skill.
+I found both notes. Let me read them.
+→ read_file()
+→ read_file()
+
+· budget: the next call carries ~11,189 tokens of context, about $0.0336 before
+the reply -- and ~$0.0003 is left of the $0.02 ceiling for this turn
+· qwen3.8:latest
+
+· thinking
+Both notes are short and fully read. My answer will run past a couple of
+paragraphs and draws on two sources, so let me load the source-brief skill.
 → load_skill()
 
-── turn ended: over_budget -- spent ~$0.0617 of the $0.02 ceiling for this turn
+── turn ended: over_budget -- spent ~$0.0785 of the $0.02 ceiling for this turn
    (after 3 iteration(s))
 ```
+
+The `· budget:` line is the heads-up, priced from the request that was
+about to go out — [note 36](36-a-warning-before-the-stop.md) is why it
+exists and why it is not a percentage.
 
 Read the last two lines together, because they are the design working.
 The model *asked* for `load_skill` on iteration three. It never ran. The
@@ -316,9 +330,13 @@ kept.
   `EvalCase.max_tokens` already covers tokens for the one place they are
   the better unit ([notes/33](33-evals-as-a-gate.md)) — a regression case
   whose ceiling has to stay stable while prices move.
-* **A warning before the stop.** Nothing says "you are at 80% of this
+* ~~**A warning before the stop.** Nothing says "you are at 80% of this
   turn's budget"; you find out by being stopped. A `TurnEnd` is a poor
-  place to learn it and the loop has no other channel for advice yet.
+  place to learn it and the loop has no other channel for advice yet.~~
+  Shipped in [note 36](36-a-warning-before-the-stop.md) — though not as
+  an 80% rule, which that note measures and throws away: a tool-using
+  turn leaps straight over the band. The loop forecasts the call it is
+  about to make instead, and `BudgetWarning` is the channel for advice.
 * **Counting what the provider does not report.** `Usage` zeros are
   normal on some streamed calls ([notes/21](21-cost-accounting.md)), and
   a turn billed in silence is a turn this meter does not see. Not

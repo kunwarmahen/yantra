@@ -90,11 +90,13 @@ def build_parser() -> argparse.ArgumentParser:
                         metavar="DOLLARS", dest="max_usd",
                         help="per-TURN spending ceiling: the loop stops "
                              "between iterations once a turn has cost this "
-                             "much, with a distinct stop reason. Overrides "
-                             "a package's [budget] max_usd_per_turn -- the "
-                             "author's number is an estimate, and you are "
-                             "the one paying. Needs a priced model (local "
-                             "models bill nothing, so it never fires)")
+                             "much, with a distinct stop reason, and says so "
+                             "once beforehand when the next call will not "
+                             "fit. Overrides a package's [budget] "
+                             "max_usd_per_turn -- the author's number is an "
+                             "estimate, and you are the one paying. Needs a "
+                             "priced model (local models bill nothing, so it "
+                             "never fires)")
     parser.add_argument("--yolo", action="store_true",
                         help="skip permission prompts -- tools run without asking")
     parser.add_argument("--sandbox", action="store_true",

@@ -838,9 +838,25 @@ the only way to learn what a model call cost is to make it, and the
 overshoot is bounded by exactly one call:
 
 ```
-── turn ended: over_budget -- spent ~$0.0617 of the $0.02 ceiling for this turn
+── turn ended: over_budget -- spent ~$0.0785 of the $0.02 ceiling for this turn
    (after 3 iteration(s))
 ```
+
+You get one heads-up before that, priced from the request the agent is
+about to send rather than from what it has already spent:
+
+```
+· budget: the next call carries ~11,189 tokens of context, about $0.0336 before
+the reply -- and ~$0.0003 is left of the $0.02 ceiling for this turn
+```
+
+The percentage version of that warning does not work, and
+[notes/36](notes/36-a-warning-before-the-stop.md) measures why: a tool
+result lands in the context and the next call costs four times the last
+one, so a turn goes from 58% of its ceiling to 145% in a single step
+without ever being seen inside the band. The forecast is an estimate, on
+purpose — the *stop* is only ever made on money actually billed, and a
+warning that is wrong costs a line of text.
 
 The rules worth knowing before you rely on it:
 
@@ -861,12 +877,17 @@ The rules worth knowing before you rely on it:
   a token is spent, rather than quietly metering $0.00:
   `error: budget: no list price is known for 'gizmo-9', so a $0.50 ceiling
   could never stop anything.`
+* **A sub-agent never spends the turn's one warning.** It shares the
+  meter, but its events go into a tool result rather than to your screen,
+  so the heads-up surfaces on the parent's next iteration instead.
 * **`--max-usd` overrides the package, up or down.** Unlike `tools.deny`,
   which the command line cannot lift: a restriction you cannot lift is a
   security control, a number you can lift is a guard rail.
 
 [notes/34](notes/34-budgets.md) has the reasoning, the receipts, and what
-is deliberately still missing.
+is deliberately still missing;
+[notes/36](notes/36-a-warning-before-the-stop.md) is the warning, and the
+version of it that had to be thrown away first.
 
 ## Architecture
 
@@ -882,7 +903,10 @@ src/yantra/
 ├── config.py       env vars -> ProviderSettings (+ .env auto-load)
 ├── agent.py        THE LOOP: model -> tool calls -> results -> repeat; optional
 │                   per-turn tool selection (top-K sent; exact-name calls admitted);
-│                   interrupt_check hook — hosts cancel mid-stream, same unwind as Ctrl-C
+│                   interrupt_check hook — hosts cancel mid-stream, same unwind as Ctrl-C;
+│                   BudgetWarning — the one event that reports what is about to
+│                   happen rather than what did
+│                   ([notes/36](notes/36-a-warning-before-the-stop.md))
 ├── async_agent.py  the loop's async twin: same rules, awaited -- one event
 │                   loop drives K independent conversations ([notes/11](notes/11-async.md));
 │                   batch width capped by max_parallel_tools (semaphore inside
@@ -975,8 +999,11 @@ src/yantra/
 │                   stops at between iterations (over_budget, with the numbers
 │                   in it). ONE meter shared with sub-agents, cleared only by
 │                   the agent it belongs to; a model nobody can price refuses
-│                   to carry a ceiling rather than counting zero
-│                   ([notes/34](notes/34-budgets.md))
+│                   to carry a ceiling rather than counting zero. The stop is
+│                   READ off the meter, the heads-up before it is ESTIMATED
+│                   from the request about to go out -- only one of them can
+│                   afford to be wrong ([notes/34](notes/34-budgets.md),
+│                   [notes/36](notes/36-a-warning-before-the-stop.md))
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
 │   │               ModelResponse (protocol cores shared by both skins);
