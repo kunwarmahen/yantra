@@ -59,7 +59,8 @@ from yantra.agent import (
 from yantra.budget import Budget
 from yantra.context import RED, SUMMARY_PROMPT, acompact_history, estimate_history
 from yantra.errors import ToolError
-from yantra.permissions import PermissionFn, PermissionRequest, allow_read_only
+from yantra.permissions import (PermissionFn, PermissionRequest,
+                                adecide, allow_read_only, denial_text)
 from yantra.providers.base import Provider, acollect
 from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
                                 coerce_arguments)
@@ -381,11 +382,15 @@ class AsyncAgent:
     async def _execute_batch(self, calls: list[ToolCall]) -> list[ToolResult]:
         """Run a whole batch; returned list aligns with ``calls`` positionally.
 
-        Gates SEQUENTIAL (they may own the terminal), execution CONCURRENT
-        via gather, results in SUBMISSION order -- the exact contract of
-        the sync ThreadPoolExecutor path, minus the pool.
+        Gates SEQUENTIAL (they may own the terminal -- or a human), execution
+        CONCURRENT via gather, results in SUBMISSION order -- the exact
+        contract of the sync ThreadPoolExecutor path, minus the pool.
+
+        The gates are awaited one at a time ON PURPOSE. A gate that reaches
+        a person can take minutes, and three questions arriving at once in
+        a chat window is not a permission prompt, it is a pile.
         """
-        results: list[ToolResult | None] = [self._gate(c) for c in calls]
+        results: list[ToolResult | None] = [await self._gate(c) for c in calls]
         pending = [(i, c) for i, c in enumerate(calls) if results[i] is None]
 
         if len(pending) <= 1:  # fast path: nothing to parallelize
@@ -441,9 +446,15 @@ class AsyncAgent:
             _batch_message([r for r in results if r is not None]))
         raise cancelled
 
-    def _gate(self, call: ToolCall) -> ToolResult | None:
+    async def _gate(self, call: ToolCall) -> ToolResult | None:
         """Permission stage. Returns an error ToolResult to block the call,
-        or None when approved. Never runs the tool."""
+        or None when approved. Never runs the tool.
+
+        A coroutine rather than the sync twin's plain method: this is the
+        one place a host may need to suspend for a human who is not at
+        this keyboard, and doing it inline would block the event loop --
+        and with it every other conversation the process is holding.
+        """
         try:
             tool = self._get_visible_tool(call.name)
         except KeyError as exc:
@@ -472,11 +483,15 @@ class AsyncAgent:
             summarize=lambda args: tool.summary(args, self.ctx),
         )
         try:
-            allowed = self.permissions(request)
+            # Awaitable-TOLERANT: a plain function answers inline exactly as
+            # before; an async gate suspends here and nothing else stops.
+            allowed = await adecide(self.permissions, request)
+        except asyncio.CancelledError:
+            raise  # a dropped connection is not a denial
         except Exception as exc:
             return ToolResult(call.id, f"permission gate failed: {exc}", is_error=True)
         if not allowed:
-            return ToolResult(call.id, "Permission denied by user.", is_error=True)
+            return ToolResult(call.id, denial_text(request), is_error=True)
         if request.arguments is not call.arguments:
             # The gate EDITED the arguments before approving (identity
             # check: same dict means untouched). Adoption happens here --

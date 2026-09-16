@@ -177,6 +177,10 @@ waits instead of making any request faster.
 
 * No async REPL/CLI: interactive input() is inherently blocking; a true
   async terminal would need a different input architecture entirely.
+* ~~The permission gate is called inline, so a gate that waits for a human
+  blocks the event loop~~ — fixed in
+  [notes/37](37-a-gate-that-can-wait.md): the gate may now be awaited, and
+  a gate that suspends stops only its own conversation.
 * MCP sessions remain sync (subprocess + reader thread). An asyncio
   MCP transport would be a new session class, not a conversion.
 * The async loop trusts `provider.astream`; there is no automatic

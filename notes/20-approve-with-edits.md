@@ -61,3 +61,13 @@ the inline editor, the human amended it, the panel re-previewed tagged
 the amended form. Best detail: the model then told the user its
 original command had been changed before running — the edit reached
 execution, history, AND the model's own awareness.
+
+## Where this went next
+
+The mutable-request decision at the top of this note turned out to have a
+second use. [Note 37](37-a-gate-that-can-wait.md) lets a gate write
+`request.reason` while REFUSING, exactly as it writes `arguments` while
+approving — so the model reads why it was blocked instead of the
+hardcoded "Permission denied by user.", which was a guess about a person
+who may not exist. The same note makes the gate awaitable, which is what
+lets one live somewhere other than this keyboard.

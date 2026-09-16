@@ -45,9 +45,13 @@ from yantra.images import load_image_block
 from yantra.mcp import MCPServerConfig, MCPSession, connect_mcp, register_mcp
 from yantra.package import MANIFEST, find_manifest, load_package
 from yantra.permissions import (
+    DENIED,
     PermissionFn,
     PermissionRequest,
+    adecide,
     allow_read_only,
+    decide,
+    denial_text,
     deny_all,
     yolo,
 )
@@ -91,13 +95,17 @@ __all__ = [
     "AsyncAgent",
     "Budget",
     "BudgetWarning",
+    "adecide",
     "allow_read_only",
     "attach_prompt",
     "Block",
     "collect",
     "default_model",
     "default_registry",
+    "decide",
+    "denial_text",
     "deny_all",
+    "DENIED",
     "discover_tools",
     "EndEvent",
     "EvalCase",

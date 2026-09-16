@@ -30,7 +30,8 @@ from yantra.context import (
     estimate_history,
 )
 from yantra.errors import ToolError
-from yantra.permissions import PermissionFn, PermissionRequest, allow_read_only
+from yantra.permissions import (PermissionFn, PermissionRequest,
+                                allow_read_only, decide, denial_text)
 from yantra.providers.base import Provider, collect
 from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
                                 coerce_arguments)
@@ -597,11 +598,16 @@ class Agent:
             summarize=lambda args: tool.summary(args, self.ctx),
         )
         try:
-            allowed = self.permissions(request)
+            # decide(), not self.permissions(): an async gate handed to the
+            # SYNCHRONOUS agent raises here instead of being approved as a
+            # truthy coroutine (permissions.decide).
+            allowed = decide(self.permissions, request)
         except Exception as exc:
             return ToolResult(call.id, f"permission gate failed: {exc}", is_error=True)
         if not allowed:
-            return ToolResult(call.id, "Permission denied by user.", is_error=True)
+            # The gate may have written why; the default blames a user,
+            # which is only true when there was one.
+            return ToolResult(call.id, denial_text(request), is_error=True)
         if request.arguments is not call.arguments:
             # The gate EDITED the arguments before approving (identity
             # check: same dict means untouched). Adoption happens here --

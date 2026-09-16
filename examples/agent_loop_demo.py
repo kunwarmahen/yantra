@@ -19,8 +19,12 @@ The two channels of an agent turn:
   in execution order, AFTER all of a response's stream events.
 
 The permission gate is just a callable: here we reuse the CLI's y/n
-prompt factory, or pass deny_all to watch the model recover from
-"Permission denied by user." arriving as DATA.
+prompt factory, or pass deny_all to watch the model recover from a
+refusal arriving as DATA rather than as an exception. deny_all writes a
+reason into the request, so what the model reads is "this session denies
+every tool call" -- true, and more useful than the default sentence about
+a user who in this demo is not being asked at all
+(examples/async_gate_demo.py has the version where a real person is).
 """
 
 from __future__ import annotations

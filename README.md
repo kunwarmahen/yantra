@@ -560,6 +560,28 @@ async def main():
 asyncio.run(main())
 ```
 
+A gate may be async, which is what lets the person who approves a tool
+call be somewhere other than this keyboard. It suspends only its own
+conversation — the other three keep running:
+
+```python
+async def ask_the_owner(request):                 # a gate that WAITS
+    answer = await send_to_chat(request.summary)  # minutes, if they are out
+    if not answer.approved:
+        request.reason = "your owner refused this: bash is off in chat."
+    return answer.approved
+
+agent = AsyncAgent(provider, model="claude-sonnet-4-5",
+                   tools=default_registry(), permissions=ask_the_owner)
+```
+
+`request.reason` is what the model reads in place of the default
+`Permission denied by user.` — a sentence that is only true when there
+was a user. Plain (non-async) gates keep working in both agents
+unchanged; the synchronous `Agent` rejects an async gate outright rather
+than treating the coroutine it gets back as a yes. See
+[notes/37](notes/37-a-gate-that-can-wait.md).
+
 Demos: [`examples/one_shot.py`](examples/one_shot.py) (request JSON → raw
 response JSON → normalized response), [`examples/stream_demo.py`](examples/stream_demo.py)
 (raw SSE events), [`examples/tool_round_trip.py`](examples/tool_round_trip.py)
@@ -576,7 +598,11 @@ broken one without touching its checksummed tests — and the demo
 independently re-verifies; exit code doubles as a CI gate),
 [`examples/cache_demo.py`](examples/cache_demo.py) (prompt-cache hit,
 measured live), [`examples/hooks_demo.py`](examples/hooks_demo.py)
-(watch every tool execution without touching the loop).
+(watch every tool execution without touching the loop),
+[`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
+gate that waits several seconds for a person while a second conversation
+runs to completion in the same event loop — and refuses with a sentence
+the model quotes back).
 
 ## Agent packages
 
@@ -927,7 +953,15 @@ src/yantra/
 │                   deny_all / trust_sandbox (auto-approves bash ONLY while
 │                   confined); SwitchableGate flips ask ⇄ yolo mid-session;
 │                   approve-with-edits: a gate may rewrite arguments
-│                   pre-approval ([notes/20](notes/20-approve-with-edits.md))
+│                   pre-approval ([notes/20](notes/20-approve-with-edits.md)).
+│                   A gate may also be ASYNC -- adecide() awaits one, so a
+│                   gate that waits for a person suspends instead of
+│                   freezing every other conversation; decide() REFUSES
+│                   one in the sync agent rather than reading a truthy
+│                   coroutine as approval. A gate may write
+│                   request.reason, and the model reads that instead of
+│                   "Permission denied by user."
+│                   ([notes/37](notes/37-a-gate-that-can-wait.md))
 ├── context.py      compaction: mask old tool results, then summarize (red
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes

@@ -306,9 +306,11 @@ def test_close_during_yield_replays_whole_batch_faithfully():
     assert results["a"] == ToolResult("a", "echo:a")
     # 'b' is bomb -- NOT read_only, so the default allow_read_only gate
     # denied it during the up-front gating pass. That denial IS its real
-    # result; batches gate+execute fully before yielding anything.
-    assert results["b"] == ToolResult("b", "Permission denied by user.",
-                                      is_error=True)
+    # result; batches gate+execute fully before yielding anything. The
+    # text is the gate's own reason, not the "by user" default: nobody
+    # was asked, and the model is told that rather than the other thing.
+    assert results["b"].tool_call_id == "b" and results["b"].is_error
+    assert "nobody is available to ask" in results["b"].content.lower()
     assert_history_resumable(agent)
 
 
