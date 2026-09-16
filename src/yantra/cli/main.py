@@ -977,6 +977,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         mcp_manager.shutdown()
+        # Symmetry with the line above: this process opened a connection
+        # pool and gives it back, rather than leaving it to interpreter
+        # teardown ([notes/38](../notes/38-giving-it-back.md)).
+        agent.provider.close()
 
 
 if __name__ == "__main__":

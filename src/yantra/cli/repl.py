@@ -894,12 +894,17 @@ class Repl:
         self.console.print(f"[green]{summary}[/green]")
 
     def _switch_provider(self, name: str) -> None:
+        outgoing = self.agent.provider
         try:
             settings = load_settings(name)
             self.agent.provider = get_provider(name, settings)
         except Exception as exc:
             self.console.print(f"[red]{exc}[/red]")
-            return
+            return  # the old provider is still in use -- do NOT close it
+        # The swap succeeded, so nothing points at the old connection pool
+        # any more. Switching back and forth used to leave one behind each
+        # time ([notes/38](../notes/38-giving-it-back.md)).
+        outgoing.close()
         # Model slugs are per-provider namespaces: carrying the old slug
         # over would ask provider B for a model it may not have.
         try:

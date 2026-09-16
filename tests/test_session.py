@@ -131,6 +131,86 @@ class TestRoundTrip:
         assert not open_ids
 
 
+class TestHistoryOnly:
+    """The conversation without the identity.
+
+    The bias: a HOST rebuilds its agent every turn from a package on
+    disk, so a restore that quietly reinstates the checkpoint's system
+    prompt and model makes editing that package look broken. Every test
+    here asserts on the identity fields the restore must NOT touch --
+    a test that only checked the history would pass either way.
+    """
+
+    def test_history_and_usage_come_back_but_identity_does_not(self, store):
+        original = make_agent(full_history(), model="old-model",
+                              system="the prompt as it was last week",
+                              usage=Usage(input_tokens=101, output_tokens=22))
+        store.save(original, provider_name="anthropic")
+
+        # The agent the host just built from today's package.
+        live = make_agent(model="new-model", system="today's prompt")
+        live.max_iterations = 7
+        summary = apply_payload(live, store.load_latest(), history_only=True)
+
+        assert_histories_equal(original.history, live.history)
+        assert live.total_usage == original.total_usage
+        assert live.model == "new-model"
+        assert live.system == "today's prompt"
+        assert live.max_iterations == 7
+        assert "history only" in summary
+
+    def test_the_provider_object_is_left_alone(self, store):
+        """The pointed version of the above: a host that already resolved
+        its provider (one connection pool, not one per turn) must not have
+        it swapped underneath by a restore."""
+        rebuilt = []
+        original = make_agent(full_history())
+        store.save(original, provider_name="anthropic")
+
+        live = make_agent()
+        before = live.provider
+        apply_payload(live, store.load_latest(), history_only=True,
+                      settings_loader=lambda name: rebuilt.append(name),
+                      provider_factory=lambda name, settings: "NEW")
+        assert live.provider is before
+        assert rebuilt == []          # not even consulted
+
+    def test_the_summary_says_when_the_checkpoint_disagrees(self, store):
+        store.save(make_agent(full_history(), model="old-model"),
+                   provider_name="anthropic")
+        live = make_agent(model="new-model")
+        summary = apply_payload(live, store.load_latest(), history_only=True)
+        assert "checkpoint was anthropic/old-model" in summary
+
+    def test_it_stays_quiet_when_they_agree(self, store):
+        store.save(make_agent(full_history(), model="m1"),
+                   provider_name="anthropic")
+        summary = apply_payload(make_agent(model="m1"), store.load_latest(),
+                                history_only=True)
+        assert "checkpoint was" not in summary
+
+    def test_a_payload_with_no_identity_at_all_still_restores(self, store):
+        """A host writing its own payloads has no reason to record a
+        provider it is not going to use."""
+        store.save(make_agent(full_history()), provider_name="anthropic")
+        payload = store.load_latest()
+        del payload["provider"], payload["model"]
+        live = make_agent()
+        apply_payload(live, payload, history_only=True)
+        assert len(live.history) == 4
+
+    def test_the_default_still_restores_everything(self, store):
+        """The keyboard's contract is untouched: /load hands you back the
+        session you left, prompt and model included."""
+        store.save(make_agent(full_history(), model="old-model",
+                              system="the old prompt"),
+                   provider_name="anthropic")
+        live = make_agent(model="new-model", system="today's prompt")
+        apply_payload(live, store.load_latest())
+        assert live.model == "old-model"
+        assert live.system == "the old prompt"
+
+
 class TestVersioning:
     def test_load_latest_wins_and_versions_append(self, store):
         agent = make_agent([Message("user", [TextBlock("v1 talk")])])

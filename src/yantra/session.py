@@ -184,20 +184,49 @@ def _load_message(raw: dict) -> Message:
 
 
 def apply_payload(agent, payload: dict, *, settings_loader=None,
-                  provider_factory=None) -> str:
+                  provider_factory=None, history_only: bool = False) -> str:
     """Restore ``payload`` into ``agent`` IN PLACE. Returns a one-line
     summary for the UI.
 
     Provider/model rebuild goes through injected callables so this module
     stays decoupled from provider construction (and testable offline).
+
+    A CHECKPOINT HOLDS TWO DIFFERENT THINGS and only one of them is the
+    conversation. ``history`` and ``total_usage`` are what was SAID and
+    what it cost; ``provider``, ``model``, ``system`` and
+    ``max_iterations`` are who was saying it. Restoring both is right at a
+    keyboard -- ``/load`` should hand you back the session you left,
+    prompt and model included. It is wrong for a host that rebuilds its
+    agent every turn from a package on disk: that agent's identity comes
+    from the package, which may have been edited since the checkpoint was
+    written, and a restore that quietly reinstates last week's system
+    prompt makes editing the package look broken.
+
+    ``history_only=True`` restores the conversation and leaves the
+    identity alone. Usage rides with the history rather than the identity
+    on purpose: it is the record of what this thread has spent, and a
+    host that dropped it would restart every cost readout at zero.
     """
-    provider_name = payload["provider"]
-    model = payload["model"]
+    provider_name = payload.get("provider") if history_only else payload["provider"]
+    model = payload.get("model") if history_only else payload["model"]
+    if history_only:
+        # Deliberately BEFORE any identity write, so there is exactly one
+        # place to look when asking what this flag does.
+        return _apply_history(agent, payload, provider_name, model)
     if provider_factory is not None and settings_loader is not None:
         agent.provider = provider_factory(provider_name, settings_loader(provider_name))
     agent.model = model
     agent.system = payload.get("system")
     agent.max_iterations = payload.get("max_iterations", 25)
+    n_msgs = _restore_conversation(agent, payload)
+    u = agent.total_usage
+    return (f"restored {n_msgs} message(s), "
+            f"{u.input_tokens}in/{u.output_tokens}out · "
+            f"{provider_name}/{model}")
+
+
+def _restore_conversation(agent, payload: dict) -> int:
+    """What was SAID and what it cost. The half both paths always want."""
     usage = payload.get("total_usage") or {}
     agent.total_usage = Usage(
         input_tokens=usage.get("input_tokens", 0),
@@ -207,8 +236,18 @@ def apply_payload(agent, payload: dict, *, settings_loader=None,
     )
     agent.history.clear()
     agent.history.extend(_load_message(m) for m in payload.get("history", []))
-    n_msgs = len(agent.history)
+    return len(agent.history)
+
+
+def _apply_history(agent, payload: dict, provider_name, model) -> str:
+    """The conversation without the identity -- see ``history_only``."""
+    n_msgs = _restore_conversation(agent, payload)
     u = agent.total_usage
-    return (f"restored {n_msgs} message(s), "
-            f"{u.input_tokens}in/{u.output_tokens}out · "
-            f"{provider_name}/{model}")
+    line = (f"restored {n_msgs} message(s), "
+            f"{u.input_tokens}in/{u.output_tokens}out · history only")
+    # Say it when the checkpoint disagrees with the agent it is going
+    # into: silence here is how somebody spends an afternoon wondering
+    # which model actually answered.
+    if provider_name and model and (model != agent.model):
+        line += f" (checkpoint was {provider_name}/{model})"
+    return line

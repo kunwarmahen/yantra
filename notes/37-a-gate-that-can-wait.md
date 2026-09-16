@@ -8,7 +8,9 @@ terminal's y/n/e prompt, the browser's modal, `--yolo`, the read-only
 auto-approver.
 
 Then somebody embedded the harness in a service, and two sentences in
-that paragraph turned out to be assumptions rather than facts.
+that paragraph turned out to be assumptions rather than facts. (Two more
+assumptions turned up elsewhere in the same week;
+[note 38](38-giving-it-back.md) has those.)
 
 The first is **"one call"**. A function call finishes. The gate the
 service needs does not: it sends a message to a person somewhere else and

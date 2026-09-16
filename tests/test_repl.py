@@ -802,3 +802,55 @@ class TestSkillsToggle:
         repl._command("/skills off pr-review")
         assert repl._command("/pr-review do it") is False
         assert "is off" in console.file.getvalue()
+
+
+class TestProviderSwitchGivesTheOldPoolBack:
+    """A long session that flips between providers used to leave one
+    connection pool behind per flip. Asserted on the pool object rather
+    than on output: a leak has no output."""
+
+    def _repl_with(self, monkeypatch, outgoing, incoming):
+        from yantra.cli import repl as repl_module
+
+        agent = Agent(outgoing, model="m", permissions=allow_read_only)
+        monkeypatch.setattr(repl_module, "load_settings", lambda name: object())
+        monkeypatch.setattr(repl_module, "get_provider",
+                            lambda name, settings: incoming)
+        return Repl(agent, Console(file=io.StringIO(), width=100),
+                    input_fn=lambda prompt: "")
+
+    def test_the_outgoing_provider_is_closed(self, monkeypatch):
+        closed: list[str] = []
+
+        class Fake(ScriptedProvider):
+            def close(self) -> None:
+                closed.append(self.name)
+
+        outgoing, incoming = Fake([]), Fake([])
+        repl = self._repl_with(monkeypatch, outgoing, incoming)
+        repl._switch_provider("ollama")
+        assert repl.agent.provider is incoming
+        assert closed == ["scripted"]
+
+    def test_a_failed_switch_leaves_the_old_provider_OPEN(self, monkeypatch):
+        """The important half: if the new provider cannot be built, the
+        old one is still the one in use and closing it would take the
+        session down over a typo."""
+        from yantra.cli import repl as repl_module
+
+        closed: list[str] = []
+
+        class Fake(ScriptedProvider):
+            def close(self) -> None:
+                closed.append(self.name)
+
+        outgoing = Fake([])
+        agent = Agent(outgoing, model="m", permissions=allow_read_only)
+        monkeypatch.setattr(repl_module, "load_settings",
+                            lambda name: (_ for _ in ()).throw(
+                                ValueError("no key for that provider")))
+        repl = Repl(agent, Console(file=io.StringIO(), width=100),
+                    input_fn=lambda prompt: "")
+        repl._switch_provider("nonesuch")
+        assert repl.agent.provider is outgoing
+        assert closed == []

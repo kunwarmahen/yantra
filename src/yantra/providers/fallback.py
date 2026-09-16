@@ -71,6 +71,29 @@ class FallbackProvider:
         self.providers = list(providers)
         self.name = " -> ".join(p.name for p in providers)
 
+    # A composite owns nothing itself and everything through its members:
+    # closing it has to reach every venue, or the pool you forgot is the
+    # one for the provider you never actually fell back to.
+    def close(self) -> None:
+        for provider in self.providers:
+            provider.close()
+
+    async def aclose(self) -> None:
+        for provider in self.providers:
+            await provider.aclose()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info) -> None:
+        await self.aclose()
+
     def stream(
         self,
         *,

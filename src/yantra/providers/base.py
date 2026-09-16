@@ -9,6 +9,14 @@ Everything else in the harness speaks ONLY the internal types from
 ``yantra.types``. That is what will let the agent switch providers
 mid-session: history is stored in internal types, so re-pointing it at a
 different adapter requires zero translation of anything.
+
+A provider also OWNS two connection pools (one sync, one async) and is
+the thing that gives them back: ``close()`` for the sync pool,
+``aclose()`` for both, or either context-manager form. A process that
+exits does not need to care. A process that does not exit -- a service
+holding many conversations, a test suite building providers in a loop --
+does, and before this existed its only option was to reach into
+``.client`` and ``.aclient``, which was nobody's promise.
 """
 
 from __future__ import annotations
@@ -133,6 +141,40 @@ class Provider(ABC):
             transport=shared_async_transport,
             timeout=httpx.Timeout(600.0, connect=10.0),
         )
+
+    # ---- giving the pools back ------------------------------------------
+
+    def close(self) -> None:
+        """Give back the SYNC connection pool. Idempotent.
+
+        A provider opens two pools and, until this existed, gave neither
+        one back -- fine for a CLI that exits, and a slow leak in anything
+        that outlives one session and builds a provider per agent. The
+        async pool can only be closed from inside an event loop, so this
+        cannot close it: see ``aclose``, which closes both.
+        """
+        self.client.close()
+
+    async def aclose(self) -> None:
+        """Give back BOTH pools. The one an async host wants.
+
+        Async first, then the sync pool, so a host that never touched the
+        sync side still only writes one line at shutdown.
+        """
+        await self.aclient.aclose()
+        self.client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc_info) -> None:
+        await self.aclose()
 
     @abstractmethod
     def stream(

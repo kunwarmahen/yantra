@@ -582,6 +582,31 @@ unchanged; the synchronous `Agent` rejects an async gate outright rather
 than treating the coroutine it gets back as a yes. See
 [notes/37](notes/37-a-gate-that-can-wait.md).
 
+Two more things matter only if your process does not exit. A provider
+owns two HTTP connection pools and gives them back on request — one file
+descriptor per provider, otherwise, for as long as the process lives:
+
+```python
+provider.close()                 # the sync pool
+await provider.aclose()          # both (an AsyncClient needs a live loop)
+
+with get_provider("anthropic", load_settings("anthropic")) as provider:
+    ...                          # async with ... also works
+```
+
+And a checkpoint holds two different things: the conversation
+(`history`, `total_usage`) and the agent's identity (`provider`, `model`,
+`system`, `max_iterations`). `/load` at a keyboard wants both.
+
+```python
+apply_payload(agent, payload, history_only=True)   # conversation only
+```
+
+A host that rebuilds its agent every turn from a package on disk wants
+only the conversation — its identity comes from the package, which may
+have been edited since the checkpoint was written. See
+[notes/38](notes/38-giving-it-back.md).
+
 Demos: [`examples/one_shot.py`](examples/one_shot.py) (request JSON → raw
 response JSON → normalized response), [`examples/stream_demo.py`](examples/stream_demo.py)
 (raw SSE events), [`examples/tool_round_trip.py`](examples/tool_round_trip.py)
@@ -966,7 +991,12 @@ src/yantra/
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes
 │                   to one path serialize instead of racing
-├── session.py      SQLite checkpoints: append-only versions, /save /load --resume
+├── session.py      SQLite checkpoints: append-only versions, /save /load --resume.
+│                   A checkpoint holds the conversation AND the agent's
+│                   identity; apply_payload(history_only=True) restores only
+│                   the first, for a host that rebuilds its agent each turn
+│                   from a package on disk
+│                   ([notes/38](notes/38-giving-it-back.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (base / env / skills):
 │                   each owner writes one named layer, attach_prompt captures
 │                   the operator's --system exactly once, recompose() rebuilds
@@ -1041,13 +1071,19 @@ src/yantra/
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
 │   │               ModelResponse (protocol cores shared by both skins);
-│   │               cache_control opt-in lives here ([notes/13](notes/13-caching.md))
+│   │               cache_control opt-in lives here ([notes/13](notes/13-caching.md)).
+│   │               Owns two connection pools and gives them back: close()
+│   │               (sync), aclose() (both -- an AsyncClient can only be
+│   │               closed from inside a loop), or either context-manager
+│   │               form ([notes/38](notes/38-giving-it-back.md))
 │   ├── retry.py    retry: backoff+jitter, budgets, Retry-After -- two notches:
 │   │               the OPENING freely retried, a 200 stream that dies BEFORE
 │   │               its first event re-opened under the same budgets; after
 │   │               ANY event forwarded, never (sync + async twins)
 │   ├── fallback.py opening-only failover across providers (retry fixes
-│                   time problems, fallback fixes place problems)
+│                   time problems, fallback fixes place problems); closing one
+│                   closes EVERY provider it holds, including the venue it
+│                   never fell back to
 │   ├── sse.py      hand-rolled SSE framing (incremental UTF-8, CRLF/CR/LF, comments)
 │   ├── anthropic.py  Messages-dialect adapter (encode request / decode stream)
 │   ├── openai.py     chat-completions-dialect adapter behind the same interface

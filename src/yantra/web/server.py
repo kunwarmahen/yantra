@@ -591,11 +591,13 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     async def set_provider(req: Request) -> dict[str, Any]:
         require_idle()
         name = (await req.json()).get("provider")
+        outgoing = session.agent.provider
         try:
             settings = load_settings(name)
             session.agent.provider = get_provider(name, settings)
         except Exception as exc:
             raise HTTPException(400, str(exc)) from exc
+        outgoing.close()  # require_idle() above: nothing is mid-request
         # Model slugs are per-provider namespaces (same rule as the REPL's
         # /provider): carrying the old slug over would ask provider B for a
         # model it may not have.

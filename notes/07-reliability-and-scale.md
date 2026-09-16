@@ -64,6 +64,11 @@ URL: first turn fails over to the real backend transparently; answer,
 streaming, and usage all come from the fallback with no caller-visible
 error.
 
+A `FallbackProvider` holds every provider it was given, so closing it
+closes all of them — including the venue it never fell back to, which is
+the connection pool a hand-written shutdown forgets
+([notes/38](38-giving-it-back.md)).
+
 ## Parallel tools: gates sequential, execution concurrent
 
 Everything-parallel policy with two non-negotiables:
@@ -126,6 +131,13 @@ and every thinking-assisted tool loop 400s after `/load`.
 sqlite3 gotcha that bit the tests: passing a bare string as `execute()`
 params iterates it PER CHARACTER ("107 bindings supplied"). Params go in
 tuples, always.
+
+A checkpoint holds the conversation AND the agent's identity (model,
+system prompt, iteration cap), and `apply_payload` restores both — right
+for `/load` at a keyboard, wrong for a host that rebuilds its agent each
+turn from a package that may have been edited since.
+`history_only=True` restores the conversation and leaves the identity
+alone ([notes/38](38-giving-it-back.md)).
 
 ## Compaction: mask before summarize
 

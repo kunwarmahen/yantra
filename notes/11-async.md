@@ -189,6 +189,11 @@ waits instead of making any request faster.
 * `to_thread` uses the interpreter's default pool; thousands of truly
   simultaneous blocking tools would queue there (as they would in any
   thread-based design).
+* ~~A provider opens two connection pools and gives back neither~~ —
+  `close()` and `aclose()` arrived in
+  [notes/38](38-giving-it-back.md). An async host wants `aclose()`: the
+  async pool can only be closed from inside a running loop, so the
+  synchronous `close()` cannot reach it.
 
 ## The width cap: `max_parallel_tools`
 
