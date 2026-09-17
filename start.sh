@@ -43,8 +43,11 @@ env_from_dotenv() {
     sed -nE "s/^[[:space:]]*$1=([^#[:space:]]*).*/\1/p" .env 2>/dev/null | head -1
 }
 
-# Which cloud dialect can we actually authenticate with? Mirrors the CLI's
-# own guess: Anthropic key first, then OpenAI-style. Empty string = none.
+# Which cloud dialect can we actually authenticate with? Mirrors the KEY rungs
+# of the CLI's own ladder: Anthropic key first, then OpenAI-style, then
+# Responses. Deliberately not the CLI's YANTRA_PROVIDER / OLLAMA_* rungs -- the
+# caller here asked for the cloud preset by name, and the local preset passes
+# --provider ollama outright. Empty string = no cloud key anywhere.
 pick_cloud_provider() {
     if [[ -n "${ANTHROPIC_API_KEY:-}${ANTHROPIC_AUTH_TOKEN:-}" ]] \
         || [[ -n "$(env_from_dotenv ANTHROPIC_API_KEY)" ]] \

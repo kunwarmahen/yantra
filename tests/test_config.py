@@ -23,6 +23,7 @@ from yantra.config import (
     default_context_window,
     default_tool_select,
     disabled_tool_patterns,
+    guess_provider,
 )
 
 
@@ -172,3 +173,81 @@ class TestBrowserProfileEnv:
     def test_absolute_passes_through(self, monkeypatch, tmp_path):
         monkeypatch.setenv("YANTRA_BROWSER_PROFILE", str(tmp_path))
         assert browser_profile() == tmp_path
+
+
+class TestGuessProvider:
+    """What bare ``yantra`` runs against when nothing said.
+
+    The local road has no key to find, so a ladder made only of keys
+    could never see it -- and the keyless setup that the tutorial tells
+    half its readers to build died at the doorstep. Two rungs answer
+    that: an outright ``YANTRA_PROVIDER``, and an ``OLLAMA_*`` line
+    somebody wrote by hand. Nothing here touches the network: a local
+    server that happens to be listening is still not a declaration.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_credentials(self, monkeypatch):
+        for var in ("YANTRA_PROVIDER", "ANTHROPIC_API_KEY",
+                    "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY",
+                    "RESPONSES_API_KEY", "OLLAMA_MODEL",
+                    "OLLAMA_BASE_URL", "OLLAMA_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+
+    def test_key_ladder_order_is_unchanged(self, monkeypatch):
+        monkeypatch.setenv("RESPONSES_API_KEY", "sk-r")
+        assert guess_provider() == "responses"
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-o")
+        assert guess_provider() == "openai"
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-a")
+        assert guess_provider() == "anthropic"
+
+    def test_auth_token_counts_as_an_anthropic_key(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "tok")
+        assert guess_provider() == "anthropic"
+
+    @pytest.mark.parametrize("var, value", [
+        ("OLLAMA_MODEL", "qwen3.8:latest"),
+        ("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+        ("OLLAMA_API_KEY", "proxy-secret"),
+    ])
+    def test_an_ollama_line_is_a_declaration(self, monkeypatch, var, value):
+        monkeypatch.setenv(var, value)
+        assert guess_provider() == "ollama"
+
+    def test_ollama_comes_from_a_copied_env_file(self, monkeypatch):
+        # the exact shape .env.example leaves behind once its Ollama
+        # block is uncommented and no key is ever filled in
+        _write_env(
+            "ANTHROPIC_API_KEY=\n"
+            "OPENAI_API_KEY=\n"
+            "OLLAMA_MODEL=qwen3.8:latest    # default; any pulled tag\n"
+        )
+        assert guess_provider() == "ollama"
+
+    def test_a_key_still_outranks_ollama_config(self, monkeypatch):
+        monkeypatch.setenv("OLLAMA_MODEL", "qwen3.8:latest")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-a")
+        assert guess_provider() == "anthropic"
+
+    def test_declaration_outranks_every_key(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-a")
+        monkeypatch.setenv("YANTRA_PROVIDER", "  Ollama  ")
+        assert guess_provider() == "ollama"
+
+    def test_unknown_declaration_fails_loudly(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_PROVIDER", "llama.cpp")
+        with pytest.raises(ConfigError, match="YANTRA_PROVIDER must be one of"):
+            guess_provider()
+
+    def test_blank_declaration_is_template_residue(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_PROVIDER", "   ")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-o")
+        assert guess_provider() == "openai"
+
+    def test_nothing_declared_names_both_roads(self):
+        with pytest.raises(ConfigError) as exc:
+            guess_provider()
+        message = str(exc.value)
+        assert "ANTHROPIC_API_KEY" in message
+        assert "ollama" in message

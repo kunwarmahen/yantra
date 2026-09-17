@@ -34,7 +34,7 @@ And then:
 
 ```
 $ yantra --agent . --eval
-error: no API key found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) ...
+error: no provider found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) ...
 ```
 
 Grading a roster means **building** the agent, and an agent takes a

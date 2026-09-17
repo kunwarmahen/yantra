@@ -73,6 +73,14 @@ python-dotenv dependency); real environment variables still win.
 | `{PREFIX}_MODEL` | default model slug |
 | `{PREFIX}_CONTEXT_WINDOW` | window assumption for compaction (default 200000 cloud / 8192 ollama) |
 
+Bare `uv run yantra` — no `--provider` — resolves one of them: an outright
+`YANTRA_PROVIDER` first, then whichever API key is present (Anthropic,
+OpenAI, Responses, in that order), and failing all of those an `OLLAMA_*`
+line in the environment or `.env`. The local road has no key to be found
+by, so a model tag or base URL written down by hand is how a keyless setup
+declares itself; nothing probes the network to decide
+([notes/45](notes/45-the-road-with-no-key.md)).
+
 Any OpenAI-compatible gateway works as `OPENAI_BASE_URL`; gateways that
 also speak the Messages dialect work under `ANTHROPIC_BASE_URL`; the
 Responses dialect (`RESPONSES_*`) targets OpenAI directly, OpenRouter's
@@ -83,7 +91,7 @@ surface ([notes/19](notes/19-responses-api.md)).
 
 ```bash
 uv run yantra --agent ./researcher                   # run an AGENT PACKAGE (see below)
-uv run yantra                                        # REPL (provider auto-guessed from keys)
+uv run yantra                                        # REPL (provider resolved from .env)
 uv run yantra --provider openai                      # pick a dialect explicitly
 uv run yantra --provider ollama                      # LOCAL models (localhost:11434, no key)
 uv run yantra --provider ollama --model qwen3.8      # any tag you have pulled
@@ -1111,7 +1119,10 @@ src/yantra/
 ├── errors.py       ProviderError family (terminal for the turn) vs ToolError
 │                   family (become data the model reads) vs UserUnavailable
 │                   (control-flow BaseException: nobody home to ask)
-├── config.py       env vars -> ProviderSettings (+ .env auto-load)
+├── config.py       env vars -> ProviderSettings (+ .env auto-load); resolves
+│                   which provider a flagless run uses — YANTRA_PROVIDER, then a
+│                   key, then an OLLAMA_* line, never a network probe
+│                   ([notes/45](notes/45-the-road-with-no-key.md))
 ├── agent.py        THE LOOP: model -> tool calls -> results -> repeat; optional
 │                   per-turn tool selection (top-K sent; exact-name calls admitted);
 │                   interrupt_check hook — hosts cancel mid-stream, same unwind as Ctrl-C;

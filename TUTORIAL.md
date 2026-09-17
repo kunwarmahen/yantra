@@ -105,8 +105,21 @@ The cloud road needs one line:
 ANTHROPIC_API_KEY=sk-...
 ```
 
-and then `uv run yantra` guesses the provider from whichever key it
-finds.
+and then bare `uv run yantra` — no flag — runs against it.
+
+Bare `uv run yantra` works on the local road too, but a key ladder cannot
+see a road whose whole point is having no key, so you say so in `.env`:
+
+```
+YANTRA_PROVIDER=ollama         # ends the question outright
+OLLAMA_MODEL=qwen3.8:latest    # or just this: a tag typed by hand is a declaration
+```
+
+The full order it resolves in: `YANTRA_PROVIDER`, then whichever API key
+is present (Anthropic, OpenAI, Responses), then any `OLLAMA_*` line. A
+`--provider` flag beats all of it, and nothing is probed over the network
+— a local server that happens to be listening is not a declaration
+([notes/45](notes/45-the-road-with-no-key.md)).
 
 One trap worth knowing before it bites you: for OpenAI-dialect providers
 — which includes Ollama — `{PREFIX}_BASE_URL` **includes** the `/v1`
@@ -1702,6 +1715,7 @@ Most carry a live receipt from a real run.
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) | the ceiling, the warning, and the two readers of one meter |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) | a gate that waits; a clock and a machine-readable word |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
+| [45](notes/45-the-road-with-no-key.md) | the road with no key, and how it says its name |
 | [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) | a package that declares its children, and the gate that watches their tool lists |
 
 ### dvara — the door

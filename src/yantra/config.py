@@ -244,22 +244,46 @@ def disabled_tool_patterns() -> list[str]:
 
 
 def guess_provider() -> str:
-    """Whichever provider the environment already has a key for.
+    """Whichever provider the environment already declares.
 
     Lives here rather than in the CLI because an AgentSpec with no
     provider declared has to answer the same question, and two copies of
-    this ladder would drift the day a fourth dialect arrives. Ollama is
-    never guessed: it needs no key, so "a local server might be running"
-    is not evidence that a local model is what you meant.
+    this ladder would drift the day a fourth dialect arrives.
+
+    The ladder, top rung first:
+
+    * ``YANTRA_PROVIDER`` -- say it outright and nothing is guessed. The
+      one answer that works for a local model, because "no key" is the
+      whole point of the local road and a key ladder can never see it.
+    * a key: ``ANTHROPIC_API_KEY`` (or ``ANTHROPIC_AUTH_TOKEN``), then
+      ``OPENAI_API_KEY``, then ``RESPONSES_API_KEY``.
+    * an ``OLLAMA_*`` line someone put in the environment or uncommented
+      in ``.env``. A local server that happens to be listening is still
+      never evidence -- nothing is probed here -- but a model tag or base
+      URL written down by hand IS a statement of intent, and it is the
+      only one a keyless setup can make. It ranks below the keys so that
+      a machine holding both keeps answering the way it always has.
     """
     _load_dotenv()  # .env fills gaps; real env vars already set would win anyway
+    declared = os.environ.get("YANTRA_PROVIDER", "").strip().lower()
+    if declared:
+        if declared not in _DEFAULTS:
+            raise ConfigError(
+                f"YANTRA_PROVIDER must be one of "
+                f"{'|'.join(sorted(_DEFAULTS))}, got {declared!r}"
+            )
+        return declared
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
         return "anthropic"
     if os.environ.get("OPENAI_API_KEY"):
         return "openai"
     if os.environ.get("RESPONSES_API_KEY"):
         return "responses"
+    if any(os.environ.get(f"OLLAMA_{suffix}")
+           for suffix in ("MODEL", "BASE_URL", "API_KEY")):
+        return "ollama"
     raise ConfigError(
-        "no API key found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) in the "
-        "environment or .env -- or run a local model with: yantra --provider ollama"
+        "no provider found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) in the "
+        "environment or .env -- or run a local model with: yantra --provider "
+        "ollama (YANTRA_PROVIDER=ollama in .env makes that the default)"
     )

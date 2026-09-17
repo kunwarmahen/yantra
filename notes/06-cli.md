@@ -121,6 +121,13 @@ flag is omitted, each provider answers with its own default (cloud
 window feeds auto-compaction's red-zone math, so a wrong guess silently
 disables compaction on small local models.
 
+`--provider ollama` stayed *mandatory* for a local run far longer than it
+should have, because the flagless path resolved a provider by hunting for
+an API key and the local road has none to find.
+[Note 45](45-the-road-with-no-key.md) gives that road two ways to name
+itself in `.env` — `YANTRA_PROVIDER`, or any `OLLAMA_*` line — without
+anything probing the network to decide.
+
 ## Multi-line input without a readline dependency
 
 Pasting code or multi-paragraph prompts into `input()`-based REPLs
@@ -341,10 +348,14 @@ Design rules that kept it honest:
   type passes through untouched (`./start.sh local --yolo "..."`), and
   keys/models/URLs still come from `.env`. If a preset can't be
   expressed as argv, it doesn't belong in the launcher.
-* **Provider detection mirrors `_guess_provider`, not its own ideas**:
+* **Provider detection mirrors `guess_provider`, not its own ideas**:
   Anthropic key first (env beats `.env`), then OpenAI-style, then
   Responses — read out of `.env` with a line-scrape rather than
-  `source`, because values there carry trailing `# comments`.
+  `source`, because values there carry trailing `# comments`. The
+  launcher's copy covers the *cloud* rungs only, on purpose: it is what
+  the `cloud` preset asks for, and the preset that wants a local model
+  says `--provider ollama` outright rather than resolving anything
+  ([note 45](45-the-road-with-no-key.md)).
 * **Warn, don't block.** Ollama unreachable gets a two-line hint
   (`ollama serve`? `ollama pull <tag>`?) and starts anyway — maybe you
   know something curl doesn't.
