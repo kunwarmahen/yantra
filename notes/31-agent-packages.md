@@ -78,6 +78,16 @@ name    = "docs"
 url     = "https://example.invalid/mcp"
 headers = { Authorization = "Bearer ${DOCS_TOKEN}" }
 
+[[subagent]]                    # children this agent delegates to (notes/40)
+name        = "fact_checker"
+description = "Check one claim against the files here."
+prompt      = "subagents/fact_checker.md"   # or instructions = "..."
+tools       = ["read_file", "glob", "grep"]
+max_iterations = 12
+
+[budget]
+max_usd_per_turn = 0.50         # a STOP, not a cap (notes/34)
+
 [permissions]
 mode = "ask"                    # ask | yolo
 
@@ -329,5 +339,9 @@ Named, so the format's refusals are as legible as its features:
   price of a model call is knowable only after making it.
 * **Package registries, publishing, `extends`, version constraints.** A
   package is a folder and a git URL. That is enough for now.
-* **`[[subagent]]`** — declarable sub-agents. `subagent.py` exists and this
-  is tempting; deferring it may well turn out to be the wrong call.
+* ~~**`[[subagent]]`**~~ — shipped in
+  [notes/40](40-a-package-that-delegates.md), and deferring it WAS the
+  right call for the reason the note makes plain: the argument turned out
+  to be about who writes the child's tool list, and that question only
+  became answerable once `[tools]` and its admission policy existed to
+  answer it against.

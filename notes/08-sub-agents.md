@@ -134,3 +134,20 @@ Handoffs (permanent control transfer — hard to observe/reason about,
 and simulable with agent-as-tool); parallel fan-out of siblings (our
 parallel machinery would allow it — spawn inside a concurrent batch —
 but sequential-first keeps gates sane; revisit with ch17).
+
+## Where this went next
+
+Everything above is the FREEFORM route: the model writes the objective,
+picks the tool list, justifies itself, and the whole thing sits behind
+`--subagents` because that last sentence is exactly as sharp as it
+sounds. [Note 40](40-a-package-that-delegates.md) adds the other kind —
+a sub-agent a package DECLARES, whose name, instructions, tool list and
+iteration cap were written by the author in a file somebody could review.
+The model supplies one string. Same spawner, same shared budget, same
+one-level-deep rule; the difference is who chose.
+
+That note also fixed something this one had been getting away with: the
+child was always a synchronous `Agent`, even under `AsyncAgent`, which
+meant a child under a permission gate that *suspends*
+([note 37](37-a-gate-that-can-wait.md)) refused every dangerous call it
+made.

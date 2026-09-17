@@ -48,6 +48,7 @@ executing the author's Python.
 from __future__ import annotations
 
 import fnmatch
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -55,9 +56,18 @@ from typing import Any
 from yantra.errors import ConfigError
 from yantra.mcp import MCPServerConfig
 from yantra.spec import AgentSpec
+from yantra.subagent import SPAWN_TOOL_NAME, SubagentSpec
 
 #: The file that makes a directory an agent package.
 MANIFEST = "agent.toml"
+
+#: A declared sub-agent's name becomes a TOOL name the model has to type,
+#: so it lives under the same spelling rule every other tool follows.
+TOOL_NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
+
+#: The widest iteration cap a package may hand a child, matching the
+#: freeform spawn tool's: past this the right answer is a second turn.
+MAX_CHILD_ITERATIONS = 50
 
 #: Conventional locations, used when the manifest does not say otherwise.
 DEFAULT_PROMPT = "prompt.md"
@@ -73,6 +83,9 @@ SCHEMA: dict[str, frozenset[str]] = {
     "tools": frozenset({"allow", "deny", "per_turn", "dirs"}),
     "skills": frozenset({"dirs", "disabled", "enabled"}),
     "mcp": frozenset({"name", "command", "args", "env", "url", "headers"}),
+    "subagent": frozenset({"name", "description", "prompt", "instructions",
+                           "tools", "model", "max_iterations",
+                           "output_format"}),
     "budget": frozenset({"max_usd_per_turn"}),
     "permissions": frozenset({"mode"}),
     "env": frozenset({"context"}),
@@ -194,6 +207,132 @@ def _mcp_servers(data: dict[str, Any], path: Path) -> tuple[MCPServerConfig, ...
     return tuple(servers)
 
 
+def _subagents(data: dict[str, Any], root: Path, path: Path,
+               allow: tuple[str, ...] | None,
+               deny: tuple[str, ...]) -> tuple[SubagentSpec, ...]:
+    """``[[subagent]]`` entries -> specs, with the author's promises checked.
+
+    Everything decidable from the file alone is decided here, because the
+    alternative is a ToolError in front of a user, mid-turn, after the
+    spawn budget has already been charged for a child that could never
+    have run.
+    """
+    raw = data.get("subagent", [])
+    if isinstance(raw, dict):  # a single [subagent] table instead of [[...]]
+        raw = [raw]
+    if not isinstance(raw, list):
+        _fail(path, "[[subagent]] must be a list of tables")
+
+    specs: list[SubagentSpec] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            _fail(path, f"[[subagent]] entry {index} must be a table")
+        unknown = sorted(set(entry) - SCHEMA["subagent"])
+        if unknown:
+            known = ", ".join(sorted(SCHEMA["subagent"]))
+            _fail(path, f"unknown key(s) in [[subagent]] entry {index}: "
+                        f"{', '.join(unknown)} (known: {known})")
+
+        name = _str(entry, "name", path, f"subagent[{index}]")
+        if not name:
+            _fail(path, f"[[subagent]] entry {index} needs a name")
+        if not TOOL_NAME.match(name):
+            _fail(path, f"sub-agent name {name!r} is not a usable tool name; "
+                        f"the model has to type it (want lower-case letters, "
+                        f"digits and underscores, starting with a letter)")
+        if name in seen:
+            _fail(path, f"two sub-agents are both called {name!r}; one tool "
+                        f"name means one sub-agent")
+        seen.add(name)
+        where = f"subagent[{name}]"
+
+        description = _str(entry, "description", path, where)
+        if not description:
+            # Not decoration: this is the whole basis on which the model
+            # decides to delegate, and an undescribed tool is one that
+            # gets called for the wrong things or never at all.
+            _fail(path, f"sub-agent {name!r} needs a description -- it is "
+                        f"what the model reads when deciding whether to "
+                        f"hand work to it")
+
+        # The instructions: a file, or inline, never both and never
+        # neither. Same shape as [[mcp]]'s command-or-url rule, and for
+        # the same reason -- "exactly one" is checkable and "whichever
+        # one you meant" is not.
+        prompt_rel = _str(entry, "prompt", path, where)
+        inline = _str(entry, "instructions", path, where)
+        if bool(prompt_rel) == bool(inline):
+            _fail(path, f"sub-agent {name!r} needs exactly one of prompt (a "
+                        f"file) or instructions (inline text)")
+        if prompt_rel:
+            child_prompt = root / prompt_rel
+            if not child_prompt.is_file():
+                _fail(path, f"sub-agent {name!r}: prompt points at "
+                            f"{child_prompt}, which is not a file")
+            try:
+                inline = child_prompt.read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                _fail(path, f"sub-agent {name!r}: cannot read "
+                            f"{child_prompt}: {exc}")
+        if not (inline or "").strip():
+            _fail(path, f"sub-agent {name!r} has empty instructions")
+
+        tools = _str_list(entry, "tools", path, where)
+        if not tools:
+            # A child with no tools is a second opinion from the same
+            # model on a smaller prompt. Occasionally that is what someone
+            # wants, and it is never what they wrote this table for.
+            _fail(path, f"sub-agent {name!r} needs a non-empty tools list; "
+                        f"scope restriction is the point of declaring it")
+        if SPAWN_TOOL_NAME in tools:
+            _fail(path, f"sub-agent {name!r} may not delegate further; drop "
+                        f"{SPAWN_TOOL_NAME!r} from its tools list")
+        refused = [t for t in tools
+                   if any(fnmatch.fnmatch(t, pat) for pat in deny)
+                   or (allow is not None
+                       and not any(fnmatch.fnmatch(t, pat) for pat in allow))]
+        if refused:
+            # Both lists are in this one file, so this is exact rather
+            # than a guess: the package's own admission policy would turn
+            # these away, and the sub-agent would fail the first time it
+            # was called.
+            _fail(path, f"sub-agent {name!r} wants tool(s) "
+                        f"{', '.join(sorted(refused))} that this package's "
+                        f"own [tools] policy excludes; add them to "
+                        f"tools.allow or drop them from the sub-agent")
+
+        iterations = _int(entry, "max_iterations", path, where)
+        if iterations is not None and not (1 <= iterations <= MAX_CHILD_ITERATIONS):
+            _fail(path, f"sub-agent {name!r}: max_iterations must be between "
+                        f"1 and {MAX_CHILD_ITERATIONS} (got {iterations})")
+
+        specs.append(SubagentSpec(
+            name=name,
+            description=description,
+            instructions=inline or "",
+            tools=tuple(dict.fromkeys(tools)),
+            model=_str(entry, "model", path, where),
+            max_iterations=iterations if iterations is not None else 20,
+            output_format=_str(entry, "output_format", path, where),
+        ))
+
+    # ONE LEVEL DEEP, checked ACROSS the whole list rather than as each
+    # entry is read: a sub-agent may name one declared below it, and a
+    # per-entry check would pass a hierarchy written in the other order.
+    # Nested delegation compounds failure rates (three 85%-reliable agents
+    # in series is 61% end to end), and a package file is exactly where
+    # somebody would try to build one.
+    declared = {spec.name for spec in specs}
+    for spec in specs:
+        nested = sorted(declared & set(spec.tools))
+        if nested:
+            _fail(path, f"sub-agent {spec.name!r} may not delegate further, "
+                        f"but its tools list names {', '.join(nested)}; "
+                        f"sub-agents go one level deep")
+    return tuple(specs)
+
+
 def find_manifest(where: Path) -> Path | None:
     """The manifest at or inside ``where``, or None if there is none.
 
@@ -307,6 +446,10 @@ def load_package(where: Path) -> AgentSpec:
         skill_dirs=skill_dirs,
         skills_disabled=_str_list(skills, "disabled", manifest, "skills") or (),
         mcp=_mcp_servers(data, manifest),
+        subagents=_subagents(
+            data, root, manifest,
+            _str_list(tools, "allow", manifest, "tools"),
+            _str_list(tools, "deny", manifest, "tools") or ()),
         max_usd_per_turn=_float(budget, "max_usd_per_turn", manifest, "budget"),
         permissions_mode=_str(permissions, "mode", manifest, "permissions"),
         env_context=_str(env, "context", manifest, "env"),

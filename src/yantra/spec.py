@@ -69,6 +69,7 @@ from yantra.prompt import attach_prompt
 from yantra.providers import get_provider
 from yantra.skills import enable_skills
 from yantra.skills.loader import prepend_skill_path
+from yantra.subagent import DeclaredSubagent, SubagentSpawner, SubagentSpec
 from yantra.tools import default_registry
 from yantra.tools.base import ToolRegistry
 from yantra.tools.discover import register_tool_dirs
@@ -120,6 +121,14 @@ class AgentSpec:
 
     # ---- servers -----------------------------------------------------------
     mcp: tuple[MCPServerConfig, ...] = ()
+
+    # ---- delegation --------------------------------------------------------
+    #: Sub-agents the package DECLARED -- name, instructions, tool list and
+    #: iteration cap all written by the author. Each becomes one tool the
+    #: model can call with a single string. Nothing like ``spawn_subagent``,
+    #: which is the model choosing its own child's permissions and stays
+    #: behind an operator flag (subagent.py).
+    subagents: tuple[SubagentSpec, ...] = ()
 
     # ---- money -------------------------------------------------------------
     #: A per-turn dollar ceiling the loop stops at. The author's estimate of
@@ -291,6 +300,20 @@ class AgentSpec:
         budget = (None if self.max_usd_per_turn is None
                   else Budget.for_model(self.max_usd_per_turn,
                                         provider_name=name, model=model_slug))
+        # A sub-agent on its own model spends the SAME meter, so the same
+        # refusal has to cover it: a ceiling that can be priced for the
+        # parent and not for the child is a ceiling that stops the turn
+        # the first time anybody delegates, and the operator who set it
+        # would learn that at the worst possible moment.
+        if budget is not None:
+            for sub in self.subagents:
+                if sub.model:
+                    try:
+                        Budget.for_model(self.max_usd_per_turn,
+                                         provider_name=name, model=sub.model)
+                    except ConfigError as exc:
+                        raise ConfigError(
+                            f"sub-agent {sub.name!r}: {exc}") from None
 
         optional = {
             "max_tokens": self.max_tokens,
@@ -337,6 +360,27 @@ class AgentSpec:
                     registered.disable(skill_name)
                 if doomed:
                     registered.reapply()
+
+        # Declared sub-agents, and they can only go on HERE: a spawner
+        # needs its parent, and the parent is what we have just finished
+        # building. One spawner for the whole session, published on the
+        # agent, so a later --subagents (or a delegated skill) shares this
+        # spawn budget rather than opening a second one beside it.
+        if self.subagents:
+            spawner = SubagentSpawner(agent)
+            agent.subagents = spawner
+            for sub in self.subagents:
+                try:
+                    tools.register(DeclaredSubagent(sub, spawner))
+                except ValueError as exc:
+                    # The registry is loud about duplicates; say which file
+                    # is responsible, because "duplicate tool name: 'grep'"
+                    # on its own sends the reader to the wrong place.
+                    where = self.root or self.name or "this package"
+                    raise ConfigError(
+                        f"{where}: sub-agent {sub.name!r} would shadow a "
+                        f"tool of the same name ({exc}); rename the "
+                        f"sub-agent") from None
 
         # Last, because it appends to a prompt the layers above must already
         # own, and because at "full" it costs one network call.

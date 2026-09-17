@@ -780,6 +780,13 @@ def main(argv: list[str] | None = None) -> int:
     # operator is entitled to see that it happened and what it added.
     if brought := package_tool_names(agent.registry):
         console.print(f"[dim]package tools: {', '.join(brought)}[/dim]")
+    # Sub-agents the package declared, named for the same reason: each one
+    # is a tool that will spend money on a model call, and the operator
+    # should not have to read agent.toml to find out they exist.
+    if spec.subagents:
+        console.print("[dim]sub-agents: " + ", ".join(
+            f"{sub.name} ({sub.model})" if sub.model else sub.name
+            for sub in spec.subagents) + "[/dim]")
     # A tool the package's allow/deny turned away is reported, never silent:
     # "why is there no bash" must have an answer on screen.
     if refused := agent.registry.refused_names():

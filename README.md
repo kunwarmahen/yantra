@@ -676,6 +676,7 @@ researcher/
 ├── prompt.md       the system prompt
 ├── tools/          Tool subclasses this agent brings with it
 ├── skills/         procedures this agent knows
+├── subagents/      prompts for the children it delegates to
 └── evals/          the cases that say it still works
 ```
 
@@ -732,6 +733,24 @@ mode = "ask"                    # ask | yolo
 [env]
 context = "local"               # off | local | full
 ```
+
+A package may also declare the children it delegates to:
+
+```toml
+[[subagent]]
+name        = "fact_checker"
+description = "Check one claim against the files here."   # the model reads this
+prompt      = "subagents/fact_checker.md"                 # or instructions = "..."
+tools       = ["read_file", "glob", "grep"]               # NARROWER than the parent
+max_iterations = 12
+```
+
+The model then calls `fact_checker(task="...")` — one string, and nothing
+else. It does not choose the child's tools, its prompt or its iteration
+cap, which is the whole difference from `spawn_subagent`, where it
+chooses all three at call time and needs an operator flag to be allowed
+to. The child gets a fresh context window; the parent gets back only its
+final answer. See [notes/40](notes/40-a-package-that-delegates.md).
 
 `allow`/`deny` are a **standing admission policy**, not a one-time sweep:
 they also govern tools registered later — `ask_user`, `load_skill`, an MCP
@@ -1004,12 +1023,18 @@ src/yantra/
 ├── sandbox.py      ToolSandbox protocol + two backends: SubprocessSandbox
 │                   (scrubbed env, legacy semantics) and BwrapSandbox (bubblewrap:
 │                   no net/fs/pid escape) + autodetect ([notes/16](notes/16-sandboxing.md))
-├── subagent.py     agent-as-tool: fresh child Agent per spawn -- spawn
+├── subagent.py     agent-as-tool: fresh child per spawn -- spawn
 │                   budget, one level deep, compact results, optional stream
 │                   tee; a child charges its PARENT's dollar meter, so
-│                   delegating is not a way around a ceiling
+│                   delegating is not a way around a ceiling. A package may
+│                   DECLARE children ([[subagent]]): the AUTHOR writes the
+│                   tool list, the model writes one string, and a child
+│                   that can only read needs no permission prompt. An
+│                   awaited spawn builds an async child, so a gate that
+│                   suspends still works inside one
 │                   ([notes/08](notes/08-sub-agents.md),
-│                   [notes/34](notes/34-budgets.md))
+│                   [notes/34](notes/34-budgets.md),
+│                   [notes/40](notes/40-a-package-that-delegates.md))
 ├── permissions.py  PermissionRequest + gates: allow_read_only / yolo /
 │                   deny_all / trust_sandbox (auto-approves bash ONLY while
 │                   confined); SwitchableGate flips ask ⇄ yolo mid-session;
@@ -1056,12 +1081,16 @@ src/yantra/
 │                   skills/ + tools/ + evals/, parsed with tomllib, unknown keys
 │                   refused so a typo can never quietly leave a tool armed.
 │                   Reading a manifest NEVER imports anything -- tools/ is
-│                   named here and loaded at build time
+│                   named here and loaded at build time. [[subagent]] entries
+│                   are checked against the package's OWN tool policy here,
+│                   so a child wanting a tool its package excludes fails at
+│                   the file rather than mid-turn
 │                   ([notes/31](notes/31-agent-packages.md),
 │                   [notes/32](notes/32-package-tools.md),
 │                   [notes/33](notes/33-evals-as-a-gate.md),
 │                   [notes/34](notes/34-budgets.md),
-│                   [notes/35](notes/35-roster-and-pass-rates.md))
+│                   [notes/35](notes/35-roster-and-pass-rates.md),
+│                   [notes/40](notes/40-a-package-that-delegates.md))
 ├── spec.py         AgentSpec: one description of an agent and the build that
 │                   wires it -- admission policy before any tool registers,
 │                   prompt layers before env_context appends, skills before
@@ -1069,10 +1098,12 @@ src/yantra/
 │                   agent.toml > environment > default; build() is also what
 │                   an eval suite grades, so the verdict is about the agent
 │                   that actually ships -- including its tool roster, which a
-│                   case may assert without a model
+│                   case may assert without a model. Declared sub-agents are
+│                   wired here, after the agent exists, sharing one spawner
 │                   ([notes/31](notes/31-agent-packages.md),
 │                   [notes/33](notes/33-evals-as-a-gate.md),
-│                   [notes/35](notes/35-roster-and-pass-rates.md))
+│                   [notes/35](notes/35-roster-and-pass-rates.md),
+│                   [notes/40](notes/40-a-package-that-delegates.md))
 ├── mcp.py          MCP client, hand-rolled JSON-RPC over stdio AND
 │                   Streamable HTTP (SSE responses via providers/sse.py):
 │                   handshake, tools/list, tools/call; MCPManager adds/
@@ -1246,7 +1277,11 @@ Design rules worth stealing:
   budget + mandatory justification), compact results (conclusions +
   cost metadata, never transcripts). Scope restriction lives at the
   ToolRegistry level; permissions are inherited so a sub-agent cannot
-  escalate by being a sub-agent ([notes/08](notes/08-sub-agents.md)).
+  escalate by being a sub-agent ([notes/08](notes/08-sub-agents.md)). A
+  package may DECLARE a child instead, and then the author owns its tool
+  list rather than the model — which also makes "does this need a
+  permission prompt?" answerable, so a child that can only read does not
+  ask ([notes/40](notes/40-a-package-that-delegates.md)).
 * **Sync generators everywhere** — blocking tools, blocking REPL, and
   cancellation for free (generator close unwinds into socket cleanup).
 * **Async = cores + skins, not a rewrite.** Protocol logic lives in

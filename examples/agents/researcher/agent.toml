@@ -50,6 +50,10 @@ allow = [
     "outline",
     "load_skill", "run_skill",
     "todo_read", "todo_write",
+    # A declared sub-agent is a tool like any other, so it goes through
+    # the same policy -- leave it out and startup prints
+    # "package excludes: fact_checker" rather than shipping it quietly.
+    "fact_checker",
 ]
 
 # tools/ is picked up because it exists; the key is for other layouts:
@@ -57,6 +61,40 @@ allow = [
 # Loading these RUNS THEIR PYTHON as you, before any permission gate --
 # read a package's tools/ before you run it, the same way you would read
 # a dependency you are about to install (notes/32).
+
+# A sub-agent this package DECLARES. It is not spawn_subagent: the model
+# does not choose this child's tools, its instructions or its iteration
+# cap -- they are in this file, in a diff somebody could review, and the
+# model supplies one string (the claim to check).
+#
+# What it buys is a FRESH CONTEXT WINDOW. Checking a claim means reading
+# files that are of no further interest once the answer is known, and
+# doing that inline drags the whole search into the conversation the
+# parent still has to finish. The parent gets back a verdict and a quote.
+#
+# One level deep, always: a sub-agent cannot be given another sub-agent,
+# and the loader refuses a manifest that tries (notes/40).
+[[subagent]]
+name = "fact_checker"
+description = """
+Check one factual claim against the files in the working directory. Give it the claim in a single sentence; it returns a verdict and a quote with a file and line.
+"""
+prompt = "subagents/fact_checker.md"
+# NARROWER THAN THE PARENT, on purpose. No web_fetch: checking a claim
+# against the sources in front of you is a different job from going and
+# finding new ones, and a checker that can wander onto the internet is a
+# checker that comes back with something nobody cited.
+tools = ["read_file", "glob", "grep", "outline"]
+# Checking is short work. A child still looking after twelve rounds has
+# not found the file and is not about to.
+max_iterations = 12
+output_format = """
+One line: SUPPORTED / CONTRADICTED / UNSUPPORTED, then the quote with its file and line, then one sentence of reasoning.
+"""
+# model = "..."  -- a cheaper slug ON THE PARENT'S PROVIDER, if you want
+# the grunt work done somewhere else. Left unset so this package still
+# runs against whatever you have, which is the rule the rest of the file
+# follows too.
 
 [budget]
 # A turn here reads a handful of files and answers. Fifty cents is loose

@@ -348,10 +348,10 @@ class TestAsyncRunner:
         assert elapsed < 0.12
 
     def test_delegate_case_runs_through_the_async_twin_unchanged(self):
-        # spawn_setup wires a SubagentSpawner onto an ASYNC agent here;
-        # the child is a sync Agent run via to_thread inside the spawn
-        # tool's default arun -- off the loop, so this exercises the
-        # compatibility claim in AsyncEvalRunner's docstring
+        # spawn_setup wires a SubagentSpawner onto an ASYNC agent here,
+        # and the spawn is AWAITED -- so the child is an AsyncAgent on the
+        # same loop, which is the shape a service gets and therefore the
+        # shape a suite has to grade (notes/40)
         script = [
             assistant_tool_call("p1", SPAWN_TOOL_NAME, {
                 "objective": "have a child echo something",

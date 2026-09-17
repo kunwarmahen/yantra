@@ -88,3 +88,53 @@ agent can only keep while read_file and outline are on the roster.
 """
 lacks_tools = ["write_file", "edit_file", "bash", "browser_*"]
 has_tools = ["read_file", "glob", "outline"]
+
+[[case]]
+id = "delegation-works-end-to-end"
+description = """
+The sub-agent this package declares, exercised all the way through: the
+parent hands over a claim, a child runs with its own prompt and its own
+narrower tool list, and a verdict with a quote comes back. This goes red
+the day fact_checker falls out of tools.allow above, the day its prompt
+file is renamed, and the day the child's tool list stops containing
+something it needs.
+
+The task NAMES the sub-agent, and that is a deliberate retreat. The case
+this wanted to be -- "the model chooses to delegate" -- was written first
+and failed honestly against a local model, which read the one file and
+answered correctly in two iterations. It was right to. prompt.md tells
+this agent not to delegate work it was going to do anyway, so a gate that
+demanded delegation for a one-file question would be grading the model on
+disobeying its own instructions. Judgement about WHEN to delegate is a
+real thing to measure and it needs many samples of a question whose right
+answer is genuinely "go and look" (notes/35's min_pass_rate is the tool
+for that, and this suite does not buy it).
+
+What is pinned here instead is the path: that asking for the child gets a
+child, and that what comes back is evidence rather than an apology.
+"""
+user_message = """
+Use your fact_checker sub-agent to verify this claim: prompt.md tells
+this agent to outline long documents before reading them. Report its
+verdict and the evidence it found.
+"""
+required_tools = ["fact_checker"]
+check = "graders:cites_a_file"
+max_tokens = 30000
+max_iterations = 6
+
+[[case]]
+id = "the-checker-is-actually-on-the-roster"
+description = """
+The free half of the case above. A declared sub-agent goes through the
+same admission policy as every other tool, so dropping "fact_checker"
+from tools.allow above leaves the manifest valid, the package running,
+and the delegation case failing for a reason that reads like a model
+problem. This one costs nothing and names the real cause.
+
+What it CANNOT see is the child's own tool list. Roster assertions grade
+the tools this agent is offered, and fact_checker's narrower list (no
+web_fetch, on purpose) is a fact about a child that does not exist until
+somebody delegates. Widening it would go unnoticed here.
+"""
+has_tools = ["fact_checker"]

@@ -327,6 +327,17 @@ class _RecordingTool(Tool):
         self._seen.append(self._inner.name)  # execution, not merely lookup
         return self._inner.run(args, ctx)
 
+    async def arun(self, args: dict[str, Any], ctx: ToolContext) -> str:
+        """Forwarded, not inherited. The base ``arun`` pushes ``run`` onto
+        a thread, which is right for a tool that only has a blocking body
+        and WRONG for one that overrode ``arun`` with a real async
+        implementation -- that tool would silently run its synchronous
+        path under the async runner, which is the one place the difference
+        is invisible until something behaves differently in a suite than
+        it does in production."""
+        self._seen.append(self._inner.name)
+        return await self._inner.arun(args, ctx)
+
 
 class RecordingRegistry(ToolRegistry):
     """A registry that records every tool it holds -- including late arrivals.
@@ -575,9 +586,9 @@ class AsyncEvalRunner:
 
     The delegate case runs here unchanged: SubagentSpawner reads only
     attributes AsyncAgent mirrors (registry/provider/model/permissions/...
-    ), and its child is a sync Agent whose blocking run() goes through
-    the spawn tool's to_thread default arun -- off the loop, per the
-    tools doctrine in [notes/11](notes/11-async.md).
+    ), and an AWAITED spawn under an async parent builds an async child,
+    so a suite grades the same child shape production runs
+    ([notes/40](notes/40-a-package-that-delegates.md)).
     """
 
     def __init__(self, provider: Provider, model: str, *, tools: ToolRegistry,
