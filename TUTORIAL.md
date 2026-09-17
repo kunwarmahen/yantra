@@ -1192,7 +1192,8 @@ are errors too:
 
 ```
 error: ~/dvara/actors.toml: [actor.guest] has unknown key(s) max_usd_per_dayz;
-known: agents, channel, max_usd_per_day, max_usd_per_turn, permissions
+known: agents, channel, max_usd_per_day, max_usd_per_turn, permissions,
+receipt
 ```
 
 A misspelled ceiling that quietly means "no ceiling" is exactly the
@@ -1236,6 +1237,32 @@ whose thread ids collide would now share a conversation, where before it
 was the differing actor ids keeping them apart — by accident. A turn that
 arrives through a channel is keyed under `kind:thread`, so they stay two
 conversations, and keys made by naming an actor directly are untouched.
+
+### What follows the answer
+
+```toml
+receipt = "cost"        # $0.0013 under each answer
+receipt = "remaining"   # $0.0489 left today
+```
+
+Absent — the default — is silence. Two words rather than one boolean,
+because **two readers want two different numbers.** An owner is watching
+a bill accumulate and wants what the turn cost. A guest has no bill, only
+an allowance, and the one figure they can act on is what is *left* of it:
+told `$0.0013`, they would have to know their ceiling and their spend and
+subtract. That is [note 43](notes/43-a-bar-and-a-deadline.md)'s "what is
+left, not what is spent", arriving one layer up.
+
+Two rules fall out. Under a provider that bills nothing, both render
+nothing — half this book's readers run Ollama, where a receipt is a meter
+that cannot move. And a hosted model with no list price renders
+`unpriced` rather than `$0.00`, because an owner who asked for a receipt
+asked to watch a bill, and a zero there is a guess wearing a number's
+clothes.
+
+The line is a separate field, never appended to the reply text: `run.reply`
+is the archive of what the agent *said*, and a channel gets to pick how a
+footer looks in its own medium.
 
 ## 24 · Agents are named, never pathed
 
@@ -1535,7 +1562,7 @@ stops it coming back.
 ## 30 · The door itself
 
 ```
-POST /message      {actor, agent, thread, text}  -> {text, ok, run_id, cost_usd, ...}
+POST /message      {actor, agent, thread, text}  -> {text, ok, run_id, receipt, ...}
 GET  /agents                                     -> {agents: [...]}
 GET  /health
 GET  /asks?actor=                                -> {asks: [{id, tool, summary, ...}]}
@@ -1780,6 +1807,7 @@ In the dvara repository, alongside its own README:
 | `notes/03-standing-answers.md` | a rung is per turn, a rule is per call, and why patterns may widen a refusal but never a permission |
 | `notes/04-the-failure-loop.md` | a bad turn becomes a case in the package that produced it — and why only a person can say a turn *answered* badly |
 | `notes/05-one-person-two-channels.md` | an actor is a person, not a seat; and the allowance that silently doubled when it was not |
+| `notes/06-a-number-you-can-act-on.md` | what follows an answer — and why an owner and a guest want two different numbers |
 
 ### The two READMEs
 
@@ -1869,4 +1897,4 @@ If you remember nothing else:
 ---
 
 *Yantra: 1394 offline tests passing (1 skipped) — no network, no key.
-dvara: 298. Both copyright 2026 Mahen Singh, Apache License 2.0.*
+dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*
