@@ -1411,7 +1411,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 866 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1346 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1442,7 +1442,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1117 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1346 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

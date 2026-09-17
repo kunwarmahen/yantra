@@ -1,8 +1,8 @@
 """End-to-end integration: real adapters, real SSE fixtures, real loop.
 
-Phase 6's proof. A MockTransport serves the streamed tool-call fixture on
-request 1 and the plain-text fixture on request 2, so the ENTIRE pipeline
-runs without a network:
+A MockTransport serves the streamed tool-call fixture on request 1 and
+the plain-text fixture on request 2, so the ENTIRE pipeline runs without
+a network:
 
     wire bytes -> iter_sse_lines -> parse_events -> StreamEvents -> collect()
     -> Agent loop -> real tools -> history -> wire encoding of round 2
