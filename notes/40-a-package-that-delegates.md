@@ -272,19 +272,21 @@ can only read:
 ```
 → fact_checker()
 ╭─ fact_checker() ──────────────────────────────────────────────────────╮
-│ { "task": "Verify this claim: a file named prompt.md, somewhere in ... │
+│ { "task": "Verify this claim: prompt.md tells this agent to outline    │
+│   Markdown files before reading them." }                              │
 │                                                                       │
-│ **SUPPORTED**                                                         │
+│ SUPPORTED.                                                            │
 │                                                                       │
-│ > `prompt.md:19-20`: "This package brings one tool of its own:        │
-│ `outline` lists a Markdown file's headings with line numbers. Use it  │
-│ before `read_file` on anything long ..."                              │
+│ > `prompt.md:22-25`: "**Outline every Markdown file before you read   │
+│ it.** Not "if it looks long": you cannot tell how long a file is      │
+│ until you have opened it, and opening it is the cost you are trying   │
+│ to avoid. So call `outline` first, every time ..."                    │
 ╰───────────────────────────────────────────────────────────────────────╯
 ```
 
-The child ran `glob`, `grep` and two `read_file`s to produce that. None
-of it is in the parent's conversation — the parent's history contains one
-tool result, and it is the paragraph above.
+The child went and found that on its own. None of the searching is in
+the parent's conversation — the parent's history contains one tool
+result, and it is the paragraph above.
 
 And the package's own gate, still green with the new cases:
 

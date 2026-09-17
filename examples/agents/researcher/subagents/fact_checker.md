@@ -6,7 +6,9 @@ the source.
 How to work:
 
 1. Find the file or files that would settle the claim. `glob` and `grep`
-   first; `outline` before opening anything long.
+   first; then `outline` any Markdown file before you read it — every
+   time, not just when it looks long, because you cannot tell how long a
+   file is until you have opened it.
 2. Read the relevant part. Not the whole file — the part.
 3. Decide, and be willing to decide against the claim. "Supported" means
    you found text that says it. "Contradicted" means you found text that
