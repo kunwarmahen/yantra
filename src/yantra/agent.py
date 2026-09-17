@@ -31,7 +31,8 @@ from yantra.context import (
 )
 from yantra.errors import ToolError
 from yantra.permissions import (PermissionFn, PermissionRequest,
-                                allow_read_only, decide, denial_text)
+                                allow_read_only, decide, denial_code,
+                                denial_text)
 from yantra.providers.base import Provider, collect
 from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
                                 coerce_arguments)
@@ -55,10 +56,22 @@ INTERRUPTED_MESSAGE = "[turn interrupted before completion; no result was produc
 
 @dataclass(slots=True)
 class ToolExecuted:
-    """A tool call finished (successfully or not)."""
+    """A tool call finished (successfully or not) -- or never ran at all.
+
+    A REFUSED CALL IS STILL ONE OF THESE. The loop turns a denial into an
+    error ToolResult rather than an exception, so a refusal reaches a
+    consumer through the same event as a crash and a success, and that is
+    deliberate: nothing downstream has to learn a second shape.
+    """
 
     call: ToolCall
     result: ToolResult
+    #: The gate's refusal code when the gate turned this call away, None
+    #: when it ran. The sentence in ``result.content`` is written for the
+    #: MODEL and may be reworded any day; this is the token to branch on
+    #: -- a host that retries a "timeout" and never retries a "policy"
+    #: reads it here (see permissions.denial_code).
+    refusal: str | None = None
 
 
 @dataclass(slots=True)
@@ -212,6 +225,18 @@ class Agent:
         # this same meter (see budget.py and subagent.py), so delegating is
         # not a way around it.
         self.budget = budget
+        # call id -> refusal code, for calls the gate turned away in the
+        # batch now in flight. Written by _gate and drained onto the
+        # ToolExecuted events, which is the only place it is read: the
+        # code is the CALLER's copy of a refusal, and the caller is
+        # whoever is consuming this event stream.
+        self._refusals: dict[str, str] = {}
+        # call id -> refusal code, for calls the gate turned away in the
+        # batch now in flight. Written by _gate and drained onto the
+        # ToolExecuted events, which is the only place it is read: the
+        # code is the CALLER's copy of a refusal, and the caller is
+        # whoever is consuming this event stream.
+        self._refusals: dict[str, str] = {}
 
     def _interrupted(self) -> bool:
         """Poll the host's cancel flag, if one is wired."""
@@ -335,7 +360,8 @@ class Agent:
                     batch.append(result)
                     executed[call.id] = result
                 for call, result in zip(calls, results, strict=True):
-                    yield ToolExecuted(call=call, result=result)
+                    yield ToolExecuted(call=call, result=result,
+                                       refusal=self._refusals.pop(call.id, None))
                 self.history.append(_batch_message(batch))
 
             # Ran out of iterations while the model still wanted tools.
@@ -519,6 +545,7 @@ class Agent:
         in submission order regardless of completion order, so panels stay
         deterministic.
         """
+        self._refusals.clear()  # this batch's refusals only
         results: list[ToolResult | None] = [self._gate(c) for c in calls]
         pending = [(i, c) for i, c in enumerate(calls) if results[i] is None]
 
@@ -606,7 +633,10 @@ class Agent:
             return ToolResult(call.id, f"permission gate failed: {exc}", is_error=True)
         if not allowed:
             # The gate may have written why; the default blames a user,
-            # which is only true when there was one.
+            # which is only true when there was one. The token goes to the
+            # consumer, the sentence to the model -- two readers, two
+            # registers, and neither has to parse the other's.
+            self._refusals[call.id] = denial_code(request)
             return ToolResult(call.id, denial_text(request), is_error=True)
         if request.arguments is not call.arguments:
             # The gate EDITED the arguments before approving (identity

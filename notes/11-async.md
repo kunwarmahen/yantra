@@ -180,7 +180,10 @@ waits instead of making any request faster.
 * ~~The permission gate is called inline, so a gate that waits for a human
   blocks the event loop~~ — fixed in
   [notes/37](37-a-gate-that-can-wait.md): the gate may now be awaited, and
-  a gate that suspends stops only its own conversation.
+  a gate that suspends stops only its own conversation. A gate that
+  suspends can also be given a deadline
+  ([notes/39](39-a-clock-and-a-word.md)) — and only that kind can: a
+  blocking gate has already answered by the time a clock could start.
 * MCP sessions remain sync (subprocess + reader thread). An asyncio
   MCP transport would be a new session class, not a conversion.
 * The async loop trusts `provider.astream`; there is no automatic

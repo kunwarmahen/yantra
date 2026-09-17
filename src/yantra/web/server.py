@@ -57,7 +57,7 @@ from yantra.config import default_model, load_settings
 from yantra.context import estimate_history
 from yantra.errors import ProviderError, UserUnavailable
 from yantra.images import image_block_from_bytes
-from yantra.permissions import PermissionRequest
+from yantra.permissions import REFUSED_USER, PermissionRequest, refuse
 from yantra.pricing import session_cost
 from yantra.prompt import recompose
 from yantra.providers import get_provider
@@ -255,7 +255,12 @@ class WebSession:
                 if decision == "approve":
                     return True
                 if decision == "deny":
-                    return False
+                    # Same sentence and same code as the terminal gate:
+                    # a person was asked, in a browser tab, and said no.
+                    return refuse(request,
+                                  f"{request.tool_name} was denied: you "
+                                  f"said no at the approval prompt.",
+                                  code=REFUSED_USER)
                 if decision == "edit":
                     amended = answer.get("edited_args")
                     if not isinstance(amended, dict):

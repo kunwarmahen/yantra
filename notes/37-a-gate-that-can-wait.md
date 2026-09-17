@@ -183,8 +183,11 @@ and the loop uses it in place of the default. This is deliberately the
 the request is a mutable scratchpad that the gate may write on while it
 decides, and the loop reads back what it finds. No new return type, no
 `Decision` object, no signature to migrate. A gate that has a user behind
-it writes nothing and the model still reads `Permission denied by user.`,
-which for that gate is true.
+it may write nothing and let the model read `Permission denied by user.`,
+which for that gate is true. (The terminal and browser gates stopped
+relying on that default in [note 39](39-a-clock-and-a-word.md) — not
+because the sentence was wrong, but because a refusal with a person
+behind it is worth saying out loud rather than by falling through.)
 
 The most useful consumer turned out to be inside this repo, not outside
 it. `allow_read_only` is the DEFAULT gate — it is what you get in an eval
@@ -233,19 +236,21 @@ treated as a yes, because the text would still say "denied" somewhere.
 
 ## What is not here yet
 
-* **No timeout.** A gate that waits forever waits forever; the harness
-  offers no deadline and no default answer. This is deliberate — a
-  timeout that denies is a policy, and policy belongs to whoever owns the
-  conversation, not to the loop. It is the first thing a service will
-  wrap around its own gate.
+* ~~**No timeout.**~~ A gate that waits forever waits forever; the
+  harness offered no deadline and no default answer. Shipped in
+  [note 39](39-a-clock-and-a-word.md) — and the deliberate part survived
+  intact: `with_deadline` owns the stopwatch and still refuses to own the
+  verdict, so `on_timeout` has no default and a caller that does not
+  state its policy gets a `TypeError` rather than somebody else's.
 * **No way to ask the person a question other than yes/no.** The gate can
   now speak when it refuses, but it still cannot say "not like that, like
   this" except by using approve-with-edits, which needs a UI that can
-  construct arguments.
-* **The reason is a string, not a structured refusal.** A caller that
-  wants to distinguish "policy said no" from "nobody answered in time"
-  has to parse prose, or keep its own record. Adding a code is easy and
-  premature: nothing has yet needed to branch on one.
+  construct arguments. (Still true after note 39.)
+* ~~**The reason is a string, not a structured refusal.**~~ A caller that
+  wanted to distinguish "policy said no" from "nobody answered in time"
+  had to parse prose. Shipped in [note 39](39-a-clock-and-a-word.md), and
+  the deadline is what earned it: those two refusals are the first pair
+  that look identical in English and demand opposite handling.
 * **`PermissionRequest.reason` is advisory in the other direction too.**
   Nothing stops a gate from writing a reason and then approving; the loop
   simply ignores it. Enforcing that would cost a check in the hot path to

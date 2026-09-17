@@ -71,3 +71,9 @@ approving — so the model reads why it was blocked instead of the
 hardcoded "Permission denied by user.", which was a guess about a person
 who may not exist. The same note makes the gate awaitable, which is what
 lets one live somewhere other than this keyboard.
+
+[Note 39](39-a-clock-and-a-word.md) adds the third and last thing a gate
+may write on the way to a decision: `request.code`, a machine token for
+the caller beside the sentence for the model. The contract stays the one
+argued here — the request is mutable within narrow, named channels, and
+everything else about it is the loop's business.

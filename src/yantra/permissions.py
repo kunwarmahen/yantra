@@ -30,11 +30,29 @@ blocking the event loop and every other conversation on it. ``decide``
 is the synchronous twin, and it REFUSES an awaitable rather than
 approving one: a coroutine object is truthy, so the obvious "just call
 it" would auto-approve every dangerous call in the session.
+
+Beside the reason, every refusal carries a CODE -- a short machine token
+naming the cause. The reason is prose for the model; the code is a token
+for whoever wired the gates up, and the two answer different questions.
+"nobody answered in time" and "your policy forbids this" produce the same
+shape of English and demand different handling, and a caller that had to
+tell them apart by matching on a sentence would break the day someone
+improved the wording. The codes here are constants; the field is a plain
+string, so a host naming its own refusals needs no patch to this module.
+
+And a gate may carry a DEADLINE. ``with_deadline`` puts a clock on a gate
+that suspends, and it will not be built without being told what happens
+when the clock runs out -- ``on_timeout`` has no default. A deadline is a
+stopwatch, which is the library's business; what the silence MEANS is a
+policy, which is the conversation owner's. Bundling the two would have
+this module quietly deciding that unanswered means no.
 """
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+import re
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Awaitable, Callable
@@ -44,6 +62,22 @@ from collections.abc import Awaitable, Callable
 #: "yolo" approves everything.
 MODES = ("ask", "yolo")
 
+#: The refusal codes this harness issues. A code is a machine token, not
+#: a sentence: callers branch on it (a service retries a timeout and does
+#: not retry a policy), and prose that improves would break that branch.
+#: The field is a plain ``str`` -- these are the ones shipped here, and a
+#: host with refusals of its own names them without touching this module.
+REFUSED_USER = "user"  # a human was asked and said no
+REFUSED_UNATTENDED = "unattended"  # nobody was there to ask
+REFUSED_TIMEOUT = "timeout"  # somebody was asked and did not answer in time
+REFUSED_POLICY = "policy"  # a rule refused before any human saw it
+REFUSED_UNSPECIFIED = "unspecified"  # a gate said no and named no cause
+
+#: What a code is allowed to look like. Lower-case identifier-ish, so it
+#: can be a dict key, a database column value and a metric label without
+#: anybody quoting it.
+_CODE = re.compile(r"[a-z][a-z0-9_]*\Z")
+
 
 @dataclass(slots=True)
 class PermissionRequest:
@@ -51,8 +85,8 @@ class PermissionRequest:
 
     Mutable ON PURPOSE, within two narrow contracts: gates may rewrite
     ``arguments`` (and refresh ``summary``) while deciding, and may write
-    ``reason`` to explain a refusal. Everything else about the request is
-    the loop's business.
+    ``reason`` and ``code`` to explain a refusal. Everything else about
+    the request is the loop's business.
     """
 
     tool_name: str
@@ -67,6 +101,12 @@ class PermissionRequest:
     #: the MODEL. Only a refusal's reason is ever used -- it replaces the
     #: default denial text in the error ToolResult. None => the default.
     reason: str | None = None
+    #: The same answer as a machine token, addressed to whoever WIRED the
+    #: gates up rather than to the model. Never shown to the model, and
+    #: never rendered in place of the reason: it exists so an outer gate,
+    #: a renderer or a host can branch without matching on English.
+    #: None => ``REFUSED_UNSPECIFIED`` (see ``denial_code``).
+    code: str | None = None
 
 
 #: A gate receives one request per dangerous call; True => allow. The
@@ -84,6 +124,43 @@ def denial_text(request: PermissionRequest) -> str:
     return request.reason or DENIED
 
 
+def denial_code(request: PermissionRequest) -> str:
+    """The token a CALLER reads for a refused call.
+
+    Total, like ``denial_text``: a gate written before codes existed
+    still answers something, and "unspecified" is the honest word for a
+    refusal that named no cause. Never derived from the reason -- a
+    guess dressed as a token is worse than an admission.
+    """
+    return request.code or REFUSED_UNSPECIFIED
+
+
+def refuse(request: PermissionRequest, reason: str, *,
+           code: str = REFUSED_POLICY) -> bool:
+    """Record a refusal on ``request`` and answer no. ALWAYS returns False.
+
+    The return value is the point: a gate ends ``return refuse(request,
+    "...")`` and cannot write a reason and then accidentally approve.
+    (``reason`` is advisory in the other direction too -- nothing stops a
+    gate setting the attribute directly and returning True -- but nothing
+    in this repo does, and the shape above is why.)
+
+    A CODE IS A TOKEN, NOT A SENTENCE, and this is where that is
+    enforced: a full stop or a capital letter in the code field means
+    somebody put the explanation in the wrong argument, and the mistake
+    is invisible afterwards -- it surfaces as a caller whose ``==``
+    comparison silently never matches.
+    """
+    if not _CODE.match(code):
+        raise ValueError(
+            f"refusal code {code!r} is not a token; a code is matched with "
+            f"== by callers (want lower-case letters, digits and "
+            f"underscores -- the sentence goes in reason)")
+    request.reason = reason
+    request.code = code
+    return False
+
+
 def allow_read_only(request: PermissionRequest) -> bool:
     """Auto-approve tools that declared read_only; deny everything else.
 
@@ -93,11 +170,12 @@ def allow_read_only(request: PermissionRequest) -> bool:
     """
     if request.read_only:
         return True
-    request.reason = (
+    return refuse(
+        request,
         f"{request.tool_name} was denied: this session runs "
         f"unattended and auto-approves read-only tools only. Nobody is "
-        f"available to ask.")
-    return False
+        f"available to ask.",
+        code=REFUSED_UNATTENDED)
 
 
 def yolo(request: PermissionRequest) -> bool:
@@ -107,9 +185,9 @@ def yolo(request: PermissionRequest) -> bool:
 
 def deny_all(request: PermissionRequest) -> bool:
     """Deny everything. Useful for dry-runs and tests."""
-    request.reason = (f"{request.tool_name} was denied: this session "
-                      f"denies every tool call.")
-    return False
+    return refuse(request,
+                  f"{request.tool_name} was denied: this session "
+                  f"denies every tool call.")
 
 
 def decide(gate: PermissionFn, request: PermissionRequest) -> bool:
@@ -148,6 +226,75 @@ async def adecide(gate: PermissionFn, request: PermissionRequest) -> bool:
     if inspect.isawaitable(answer):
         answer = await answer
     return bool(answer)
+
+
+#: What a deadline may be told to do when it expires. Two words, and
+#: neither is a default: see ``with_deadline``.
+ON_TIMEOUT = ("deny", "allow")
+
+
+def with_deadline(inner: PermissionFn, seconds: float, *,
+                  on_timeout: str) -> PermissionFn:
+    """Put a clock on a gate that suspends, and say what the silence means.
+
+    ``on_timeout`` HAS NO DEFAULT, and that is the whole design. A
+    deadline is two separate things welded together in most harnesses: a
+    stopwatch, which is mechanism and belongs here, and a verdict on
+    silence, which is policy and belongs to whoever owns the
+    conversation. A library that shipped ``on_timeout="deny"`` as the
+    default would be deciding, on everyone's behalf, that an unanswered
+    question is a refusal -- true for a deploy, wrong for an overnight
+    batch whose owner set the deadline precisely so it would proceed.
+    So the wrapper cannot be constructed without being told.
+
+    A DEADLINE ONLY BINDS A GATE THAT SUSPENDS. If ``inner`` answers
+    inline -- any plain function, including one blocking on ``input()``
+    -- the answer is already in hand by the time this wrapper sees it and
+    there is nothing left to time. That is not a gap that can be closed
+    from here: interrupting a blocking call means a thread and a
+    cancellation story the callee never agreed to. Deadlines are for
+    gates that reach a person over a channel, which are exactly the gates
+    that had to become awaitable anyway.
+
+    On expiry the inner awaitable is CANCELLED, so a gate holding a
+    pending question learns its question is dead and can withdraw it.
+    An outer cancellation -- the turn dropped, the connection gone --
+    passes straight through as ``CancelledError`` and never becomes a
+    denial, the same rule the gate itself follows: nobody said no.
+    """
+    if on_timeout not in ON_TIMEOUT:
+        raise ValueError(f"unknown on_timeout {on_timeout!r} "
+                         f"(want one of {', '.join(ON_TIMEOUT)})")
+    if seconds <= 0:
+        raise ValueError(
+            f"a permission deadline must be positive, got {seconds!r}; "
+            f"0 does not mean 'no deadline' here -- it means every "
+            f"question expires before it can be answered (for no "
+            f"deadline, do not wrap the gate)")
+
+    async def wait(answer: Awaitable[bool],
+                   request: PermissionRequest) -> bool:
+        try:
+            async with asyncio.timeout(seconds):
+                return bool(await answer)
+        except TimeoutError:
+            if on_timeout == "allow":
+                return True
+            return refuse(
+                request,
+                f"{request.tool_name} was denied: the approval request "
+                f"went unanswered for {seconds:g} seconds and expired. "
+                f"Nobody refused it -- try a read-only route, or say what "
+                f"you need and let the person answer later.",
+                code=REFUSED_TIMEOUT)
+
+    def gate(request: PermissionRequest) -> bool | Awaitable[bool]:
+        answer = inner(request)
+        if not inspect.isawaitable(answer):
+            return answer  # answered inline; there was nothing to wait for
+        return wait(answer, request)
+
+    return gate
 
 
 def trust_sandbox(inner: PermissionFn, sandbox) -> PermissionFn:

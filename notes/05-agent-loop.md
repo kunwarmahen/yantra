@@ -28,7 +28,7 @@ ToolResult the model reads and can plan around:
 | Failure | Result content |
 |---|---|
 | unknown tool | `no such tool: 'nope'` |
-| permission denied | the gate's own reason, or `Permission denied by user.` ([notes/37](37-a-gate-that-can-wait.md)) |
+| permission denied | the gate's own reason, or `Permission denied by user.` ([notes/37](37-a-gate-that-can-wait.md)); the machine-readable cause rides the event, not the result ([notes/39](39-a-clock-and-a-word.md)) |
 | tool raised ToolError | its message (phrased for the model) |
 | tool crashed otherwise | `ValueError: boom` (type + message) |
 | gate itself crashed | `permission gate failed: ...` |

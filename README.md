@@ -582,6 +582,38 @@ unchanged; the synchronous `Agent` rejects an async gate outright rather
 than treating the coroutine it gets back as a yes. See
 [notes/37](notes/37-a-gate-that-can-wait.md).
 
+A gate that waits needs a clock, and the clock does not get to decide
+what your silence meant — so `on_timeout` has no default:
+
+```python
+from yantra import with_deadline
+
+gate = with_deadline(ask_the_owner, 30, on_timeout="deny")   # a deploy
+gate = with_deadline(ask_the_owner, 30, on_timeout="allow")  # a nightly batch
+gate = with_deadline(ask_the_owner, 30)                      # TypeError
+```
+
+On expiry the pending question is **cancelled**, so a chat window can
+withdraw it instead of offering Approve for a call that can no longer
+happen. A turn cancelled from outside still raises rather than becoming a
+denial: nobody said no. A deadline binds only a gate that *suspends* — a
+plain function has already answered by the time a clock could start.
+
+Every refusal also carries a short machine token beside the sentence, so
+a host can branch without matching on English:
+
+```python
+for event in agent.run_streaming("tidy up the logs"):
+    if isinstance(event, ToolExecuted) and event.refusal is not None:
+        metrics.increment(f"refused.{event.refusal}")   # timeout / user / ...
+```
+
+`user`, `unattended`, `timeout`, `policy`, `unspecified` ship here; the
+field is a plain string, so a host names its own. The token never reaches
+the model, and `refuse(request, reason, code=...)` — which always returns
+`False` — is how a gate writes both at once. See
+[notes/39](notes/39-a-clock-and-a-word.md).
+
 Two more things matter only if your process does not exit. A provider
 owns two HTTP connection pools and gives them back on request — one file
 descriptor per provider, otherwise, for as long as the process lives:
@@ -627,7 +659,11 @@ measured live), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation
 runs to completion in the same event loop — and refuses with a sentence
-the model quotes back).
+the model quotes back),
+[`examples/gate_deadline_demo.py`](examples/gate_deadline_demo.py) (the
+same absent owner and the same question twice, `on_timeout="deny"` then
+`"allow"` — one word apart, opposite outcomes, and the host reading the
+refusal code off the event stream).
 
 ## Agent packages
 
@@ -986,7 +1022,13 @@ src/yantra/
 │                   coroutine as approval. A gate may write
 │                   request.reason, and the model reads that instead of
 │                   "Permission denied by user."
-│                   ([notes/37](notes/37-a-gate-that-can-wait.md))
+│                   ([notes/37](notes/37-a-gate-that-can-wait.md)).
+│                   with_deadline() puts a clock on a gate that suspends
+│                   and REFUSES to guess what the silence meant --
+│                   on_timeout has no default; refuse() writes a machine
+│                   token beside the sentence, and it reaches the host on
+│                   ToolExecuted.refusal
+│                   ([notes/39](notes/39-a-clock-and-a-word.md))
 ├── context.py      compaction: mask old tool results, then summarize (red
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes

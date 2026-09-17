@@ -34,7 +34,8 @@ from yantra.images import load_image_block
 from yantra.pricing import bills_nothing, session_cost
 from yantra.prompt import recompose
 from yantra.types import ImageBlock
-from yantra.permissions import PermissionRequest, SwitchableGate, yolo
+from yantra.permissions import (REFUSED_USER, PermissionRequest,
+                                SwitchableGate, refuse, yolo)
 from yantra.providers import get_provider
 from yantra.sandbox import ToolSandbox
 from yantra.session import SessionStore, apply_payload
@@ -151,7 +152,14 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
             if answer == "y":
                 return True  # edits ride along: the loop adopts them
             if answer == "n":
-                return False
+                # The one gate where the default sentence is TRUE -- a
+                # person was asked and said no. It still carries a code,
+                # so a caller counting refusals never has to guess which
+                # of them had a human behind them.
+                return refuse(request,
+                              f"{request.tool_name} was denied: you said "
+                              f"no at the approval prompt.",
+                              code=REFUSED_USER)
             try:
                 amended = edit(request.arguments)
             except ValueError as exc:

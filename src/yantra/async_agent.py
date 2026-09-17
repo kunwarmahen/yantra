@@ -60,7 +60,8 @@ from yantra.budget import Budget
 from yantra.context import RED, SUMMARY_PROMPT, acompact_history, estimate_history
 from yantra.errors import ToolError
 from yantra.permissions import (PermissionFn, PermissionRequest,
-                                adecide, allow_read_only, denial_text)
+                                adecide, allow_read_only, denial_code,
+                                denial_text)
 from yantra.providers.base import Provider, acollect
 from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
                                 coerce_arguments)
@@ -150,6 +151,12 @@ class AsyncAgent:
         # twin's, including that sub-agents share this meter rather than
         # each getting a fresh one (budget.py).
         self.budget = budget
+        # call id -> refusal code, for calls the gate turned away in the
+        # batch now in flight. Written by _gate and drained onto the
+        # ToolExecuted events, which is the only place it is read: the
+        # code is the CALLER's copy of a refusal, and the caller is
+        # whoever is consuming this event stream.
+        self._refusals: dict[str, str] = {}
 
     # ---- public entry points ----------------------------------------------
 
@@ -268,7 +275,8 @@ class AsyncAgent:
                     batch.append(result)
                     executed[call.id] = result
                 for call, result in zip(calls, results, strict=True):
-                    yield ToolExecuted(call=call, result=result)
+                    yield ToolExecuted(call=call, result=result,
+                                       refusal=self._refusals.pop(call.id, None))
                 self.history.append(_batch_message(batch))
 
             # Ran out of iterations while the model still wanted tools.
@@ -390,6 +398,7 @@ class AsyncAgent:
         a person can take minutes, and three questions arriving at once in
         a chat window is not a permission prompt, it is a pile.
         """
+        self._refusals.clear()  # this batch's refusals only
         results: list[ToolResult | None] = [await self._gate(c) for c in calls]
         pending = [(i, c) for i, c in enumerate(calls) if results[i] is None]
 
@@ -491,6 +500,9 @@ class AsyncAgent:
         except Exception as exc:
             return ToolResult(call.id, f"permission gate failed: {exc}", is_error=True)
         if not allowed:
+            # Token to the consumer, sentence to the model -- the sync
+            # twin's contract, and the twins must not drift here.
+            self._refusals[call.id] = denial_code(request)
             return ToolResult(call.id, denial_text(request), is_error=True)
         if request.arguments is not call.arguments:
             # The gate EDITED the arguments before approving (identity
