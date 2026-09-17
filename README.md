@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1374 tests. The
+The harness underneath is complete and covered by 1383 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1246,6 +1246,12 @@ src/yantra/
 │                   patterns allowed in the roster keys and refused in the
 │                   trajectory ones, min_pass_rate is the author's claim and
 │                   repeat is not a key ([notes/35](notes/35-roster-and-pass-rates.md)).
+│                   render_case writes one back OUT -- the writer beside
+│                   the reader, so a host turning a failed production run
+│                   into a regression case is not a second implementation
+│                   of this format; a case carrying a resolved grader
+│                   RAISES rather than silently dropping the assertion
+│                   ([notes/33](notes/33-evals-as-a-gate.md)).
 │                   --case POINTS that run count at the cases that need it,
 │                   and the gate starts the package's declared MCP servers --
 │                   an unreachable one is red, never a smaller agent
@@ -1461,7 +1467,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1374 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1383 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1492,7 +1498,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1374 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1383 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

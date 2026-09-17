@@ -25,7 +25,13 @@ import pytest
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 from yantra.errors import ConfigError
-from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
+from yantra.eval_suite import (
+    CASES,
+    SUITE_DIR,
+    find_suite,
+    load_cases,
+    render_case,
+)
 from yantra.evals import (
     CaseOutcome,
     EvalCase,
@@ -1182,3 +1188,97 @@ def _named_tool(name: str) -> Tool:
             return ""
 
     return Named()
+
+
+# ---- writing a case back out ------------------------------------------------
+
+
+class TestRenderingACase:
+    """Bias: a writer that drifts from the reader beside it.
+
+    Every test here is a round trip rather than a string comparison,
+    because what matters is not what the block LOOKS like -- it is that
+    the parser one module up reads back what was written. The strings are
+    chosen to be the ones a naive quoter breaks on: an error message with
+    quotes in it, a description over several lines, a Windows path.
+    """
+
+    def roundtrip(self, tmp_path, case: EvalCase) -> EvalCase:
+        (loaded,) = load_cases(_suite(tmp_path, render_case(case)))
+        return loaded
+
+    def test_a_minimal_case_survives(self, tmp_path):
+        case = EvalCase(id="c", description="d", user_message="do the thing")
+        back = self.roundtrip(tmp_path, case)
+        assert (back.id, back.description, back.user_message) == (
+            "c", "d", "do the thing")
+
+    def test_a_description_with_quotes_and_newlines_survives(self, tmp_path):
+        text = 'crashed: KeyError: "path"\nand then again on the retry'
+        back = self.roundtrip(tmp_path, EvalCase(id="c", description=text,
+                                                 user_message="x"))
+        assert back.description == text
+
+    def test_a_message_with_a_backslash_survives(self, tmp_path):
+        text = r"read C:\Users\me\notes.txt and say what is in it"
+        back = self.roundtrip(tmp_path, EvalCase(id="c", description="d",
+                                                 user_message=text))
+        assert back.user_message == text
+
+    def test_a_value_ending_in_a_quote_does_not_run_into_the_delimiter(
+            self, tmp_path):
+        text = 'the model answered "no"\nand stopped there"'
+        back = self.roundtrip(tmp_path, EvalCase(id="c", description=text,
+                                                 user_message="x"))
+        assert back.description == text
+
+    def test_every_assertion_survives(self, tmp_path):
+        case = EvalCase(
+            id="c", description="d", user_message="x",
+            required_tools=["read_file"], forbidden_tools=["bash"],
+            has_tools=["glob"], lacks_tools=["write_*"],
+            subagent_has_tools={"fact_checker": ["read_file"]},
+            subagent_lacks_tools={"*": ["web_*"]},
+            max_tokens=3000, max_iterations=6, min_pass_rate=0.7,
+        )
+        back = self.roundtrip(tmp_path, case)
+        for key in ("required_tools", "forbidden_tools", "has_tools",
+                    "lacks_tools", "subagent_has_tools",
+                    "subagent_lacks_tools", "max_tokens", "max_iterations",
+                    "min_pass_rate"):
+            assert getattr(back, key) == getattr(case, key), key
+
+    def test_a_roster_only_case_survives_without_a_message(self, tmp_path):
+        case = EvalCase(id="c", description="d", lacks_tools=["bash"])
+        back = self.roundtrip(tmp_path, case)
+        assert back.user_message == ""
+        assert back.needs_a_model is False
+
+    def test_defaults_are_not_written_as_choices(self, tmp_path):
+        """A block full of min_pass_rate = 1.0 reads as though somebody
+        picked it."""
+        block = render_case(EvalCase(id="c", description="d",
+                                     user_message="x"))
+        for key in ("min_pass_rate", "max_tokens", "required_tools",
+                    "lacks_tools", "subagent_has_tools"):
+            assert key not in block
+
+    def test_a_case_carrying_python_refuses_to_be_written(self, tmp_path):
+        """Dropping the assertion silently would be a suite that checks
+        less than its author believes -- the failure this format exists
+        against."""
+        case = EvalCase(id="c", description="d", user_message="x",
+                        check_answer=lambda answer: True)
+        with pytest.raises(ConfigError, match="carries Python"):
+            render_case(case)
+
+    def test_two_rendered_cases_append_into_one_suite(self, tmp_path):
+        """The shape the failure loop actually uses: a block appended to a
+        file that already had cases in it."""
+        text = (render_case(EvalCase(id="one", description="d",
+                                     user_message="a"))
+                + "\n"
+                + render_case(EvalCase(id="two", description="d",
+                                       user_message="b")))
+        assert [c.id for c in load_cases(_suite(tmp_path, text))] == ["one",
+                                                                      "two"]

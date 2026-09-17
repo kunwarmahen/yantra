@@ -73,6 +73,7 @@ from __future__ import annotations
 
 import inspect
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -405,3 +406,93 @@ def load_cases(where: Path) -> list[EvalCase]:
                                   suite, path, where_label)),
         ))
     return cases
+
+
+# ---- the other direction: a case somebody can paste into a suite -----------
+
+
+def render_case(case: EvalCase) -> str:
+    """One ``EvalCase`` as a ``[[case]]`` block, ready to append to a suite.
+
+    THE WRITER LIVES BESIDE THE READER. A host that produced this text
+    itself -- a service turning a failed run into a regression case, say --
+    would be a second implementation of a format whose parser is up there,
+    and the two would drift on the first thing that needed quoting. So the
+    round trip is one module's problem and one module's test.
+
+    Only what a case actually SAYS is written. A default is not an
+    assertion, and a block full of ``min_pass_rate = 1.0`` reads as though
+    somebody chose it.
+
+    ``check_answer`` and ``setup`` hold PYTHON, which is why the manifest
+    format spells the first as ``check = "module:function"`` and refuses
+    the second outright. A resolved callable cannot be turned back into
+    the reference it came from, so rendering a case that carries one
+    RAISES rather than quietly dropping an assertion -- a suite that
+    checked less than its author believed is the failure this whole format
+    is built against.
+    """
+    if case.check_answer is not None or case.setup is not None:
+        raise ConfigError(
+            f"case {case.id!r} carries Python (check_answer or setup) and "
+            f"cannot be written back as TOML: a resolved function is not "
+            f"the 'graders:name' reference it was loaded from. Write the "
+            f"block by hand, or render a case without one")
+
+    lines = ["[[case]]", f"id = {_toml_str(case.id)}"]
+    if case.description:
+        lines.append(f"description = {_toml_str(case.description)}")
+    if case.user_message:
+        lines.append(f"user_message = {_toml_str(case.user_message)}")
+    for key in ("required_tools", "forbidden_tools", "has_tools",
+                "lacks_tools"):
+        values = getattr(case, key)
+        if values:
+            lines.append(f"{key} = {_toml_list(values)}")
+    for key in ("subagent_has_tools", "subagent_lacks_tools"):
+        table = getattr(case, key)
+        if table:
+            inner = ", ".join(f"{_toml_key(child)} = {_toml_list(patterns)}"
+                              for child, patterns in table.items())
+            lines.append(f"{key} = {{ {inner} }}")
+    if case.max_tokens is not None:
+        lines.append(f"max_tokens = {case.max_tokens}")
+    if case.max_iterations is not None:
+        lines.append(f"max_iterations = {case.max_iterations}")
+    if case.min_pass_rate != 1.0:
+        lines.append(f"min_pass_rate = {case.min_pass_rate}")
+    return "\n".join(lines) + "\n"
+
+
+def _toml_str(value: str) -> str:
+    """A TOML string, in whichever of the two forms stays readable.
+
+    A multi-line literal for anything with a newline in it, because the
+    cases people write by hand use those and a generated one that did not
+    would look foreign in the same file. Everything else is a basic
+    string. Both escape what they must: a description quoting an error
+    message is exactly where a naive quoter produces a file that no longer
+    parses.
+    """
+    if "\n" in value:
+        body = value.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+        # A leading newline after the opening delimiter is trimmed by the
+        # format, which is what makes the block line up in the file.
+        newline = "" if value.startswith("\n") else "\n"
+        # A value ending in a quote would run into the delimiter.
+        tail = "\\\n" if body.endswith('"') else ""
+        return f'"""{newline}{body}{tail}"""'
+    escaped = (value.replace("\\", "\\\\").replace('"', '\\"')
+               .replace("\t", "\\t").replace("\r", "\\r"))
+    return f'"{escaped}"'
+
+
+def _toml_key(name: str) -> str:
+    """A bare key where TOML allows one, quoted where it does not ("*")."""
+    if name and all(c.isalnum() or c in "-_" for c in name):
+        return name
+    return _toml_str(name)
+
+
+def _toml_list(values: Sequence[str]) -> str:
+    return "[" + ", ".join(_toml_str(v) for v in values) + "]"

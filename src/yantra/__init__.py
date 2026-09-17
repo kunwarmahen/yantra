@@ -30,7 +30,7 @@ from yantra.agent import (
 from yantra.async_agent import AsyncAgent
 from yantra.budget import Budget
 from yantra.config import default_model, load_settings
-from yantra.eval_suite import find_suite, load_cases
+from yantra.eval_suite import find_suite, load_cases, render_case
 from yantra.evals import (
     AsyncEvalRunner,
     CaseOutcome,
@@ -133,6 +133,7 @@ __all__ = [
     "find_suite",
     "judge",
     "load_cases",
+    "render_case",
     "summarize",
     "get_provider",
     "ImageBlock",

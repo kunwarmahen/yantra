@@ -247,9 +247,32 @@ except a script in this repo.
 Now there is. The loop closes end to end: the agent fails in front of a
 real user → the failure becomes a `[[case]]` in the package → the
 package's own gate stops it coming back → and it travels with the
-package to everyone else running it. A future service can hand a failed
-run straight to `case_from_trace`, which is why a run record carries its
+package to everyone else running it. A service can hand a failed run
+straight to `case_from_trace`, which is why a run record carries its
 token usage at all.
+
+The last step of that needed one more thing, and where it belongs was
+the whole argument. `case_from_trace` returns an `EvalCase` *object*, and
+what a host actually has to produce is TOML — which means knowing when a
+string needs escaping, when a multi-line literal reads better, and what
+happens to a description ending in a quote. Every one of those is a fact
+about a format whose reader is a hundred lines up this same file. A host
+that wrote its own would be a second implementation of `cases.toml`, and
+the two would part company on the first thing that needed quoting.
+
+So `render_case(case)` lives beside `load_cases`, and its tests are
+round trips rather than string comparisons: render it, load it back with
+the parser that will grade it, compare. A block that *looks* right and
+does not parse is the only failure that would actually reach somebody's
+package.
+
+It refuses one thing. A case carrying `check_answer` holds a resolved
+callable, and a callable cannot be turned back into the
+`"graders:name"` reference it was loaded from — so rendering one raises
+instead of quietly dropping the assertion. Silently writing out a case
+that checks less than its author believed is the failure this entire
+format exists against, and it would be a strange place to start making
+an exception.
 
 What still has nowhere to live is the TRAJECTORY.
 [Note 42](42-two-runs-of-the-same-suite.md) gave a suite run a file to be
