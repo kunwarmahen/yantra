@@ -445,6 +445,7 @@ uv run yantra --agent ./researcher --eval             # a package's own gate
 uv run yantra --agent ./researcher --eval --repeat 5  # ... judged on the pass rate
 uv run yantra --agent ./researcher --eval --case "flaky-*" --repeat 10   # aimed
 uv run yantra --agent ./researcher --eval --case "has-no-*"  # no key, no tokens
+uv run yantra --agent ./researcher --eval --report a.json --against b.json
 uv run --env-file .env python examples/run_evals.py   # this harness's own suite
 uv run --env-file .env python examples/run_evals.py --async   # same, concurrent
 ```
@@ -885,6 +886,27 @@ deterministic one — `--case "flaky-*" --repeat 10`. A filtered run says
 **SUBSET**, never SUITE: a green line under a filter is a claim about the
 cases that ran, and that line is what ends up in a pull request.
 
+**A run can be written down, so the next one has something to answer.**
+
+```
+$ uv run yantra --agent . --eval --model gemma4:12b --against runs/qwen.json
+SUITE GREEN · 6/6 passed · 24862 tokens · 2 case(s) cost nothing
+
+against researcher 0.1.0 on ollama/qwen3.8:latest, 2026-09-17T02:33:29Z (6/6 passed)
+different model: ollama/qwen3.8:latest → ollama/gemma4:12b
+  no case changed verdict or pass count
+tokens: 34991 → 24862 (-10129)
+```
+
+`--report FILE` writes the run as JSON (red runs included — that is the
+one you compare against tomorrow); `--against FILE` says what moved. It
+changes **no verdict and no exit code**: a run that got worse and is still
+green is still green. Cases are compared as counts (`7/10 → 6/10`, never
+percentages), a case present in only one run shows as `added`/`gone`
+rather than being intersected away, and comparing two different models is
+the point rather than an error. See
+[notes/42](notes/42-two-runs-of-the-same-suite.md).
+
 **The servers the package declares are under test too.** `--eval` starts
 them and their tools register as `mcp__<server>__<tool>`, so
 `has_tools = ["mcp__docs__*"]` grades something real instead of an empty
@@ -1167,6 +1189,13 @@ src/yantra/
 │                   and the gate starts the package's declared MCP servers --
 │                   an unreachable one is red, never a smaller agent
 │                   ([notes/41](notes/41-a-gate-you-can-point.md))
+├── eval_report.py  one --eval run as JSON, and what moved since the last:
+│                   a record, never a baseline (comparing changes no exit
+│                   code); counts rather than percentages; a case in only
+│                   one run survives as added/gone instead of being
+│                   intersected away; two models is the point, a different
+│                   set of CASES is the warning
+│                   ([notes/42](notes/42-two-runs-of-the-same-suite.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

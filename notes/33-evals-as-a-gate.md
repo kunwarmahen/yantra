@@ -251,6 +251,13 @@ package to everyone else running it. A future service can hand a failed
 run straight to `case_from_trace`, which is why a run record carries its
 token usage at all.
 
+What still has nowhere to live is the TRAJECTORY.
+[Note 42](42-two-runs-of-the-same-suite.md) gave a suite run a file to be
+written to, and that file holds results — verdicts, counts, failure
+lines, tokens — not the transcripts behind them. A fossil needs the
+transcript, and keeping transcripts has a privacy question attached that
+keeping verdicts does not: a trajectory contains whatever the agent read.
+
 ## What is not here yet
 
 * ~~**Roster assertions.** Nothing checks the tool *list* — only what

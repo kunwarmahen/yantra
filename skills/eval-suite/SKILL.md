@@ -171,6 +171,22 @@ uv run yantra --agent ./my-agent --eval --case "chooses-the-*" --repeat 10
 run reports as **SUBSET GREEN**, never SUITE GREEN -- it is a claim about
 the cases that ran, and it is not your package's gate.
 
+## Comparing two runs
+
+`--report FILE` writes a run down; `--against FILE` compares this one to
+it. Useful the moment you are choosing between models:
+
+```bash
+uv run yantra --agent ./my-agent --eval --model qwen3.8:latest --report qwen.json
+uv run yantra --agent ./my-agent --eval --model gemma4:12b --against qwen.json
+```
+
+The comparison is a report, not a gate: it changes no verdict and no exit
+code. Read it as counts (`7/10 → 6/10`), not percentages, and expect
+`added`/`gone` lines whenever the two runs graded different case sets --
+which `--case` guarantees. `notes/42-two-runs-of-the-same-suite.md` has
+the reasoning.
+
 ## Graders: checking the answer text
 
 Only when a trajectory check will not do. Plain functions, one argument,
@@ -236,6 +252,8 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--case PATTERN` | run only matching case ids (fnmatch, repeatable); reports as a SUBSET |
 | `--async N` | N trajectories at once (default 4); identical grading |
 | `--no-mcp` | do not start the package's declared servers (their tools are then absent) |
+| `--report FILE` | write this run as JSON, green or red |
+| `--against FILE` | print what moved since an earlier report; changes no verdict |
 
 **About `--yolo`.** By default the suite auto-approves read-only tools
 and REFUSES everything that writes or executes, because nobody is sitting

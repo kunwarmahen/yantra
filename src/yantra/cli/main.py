@@ -30,6 +30,7 @@ from yantra.config import (
     load_settings,
 )
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
+from yantra.eval_report import compare, read_report, record_run, write_report
 from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
                           OfflineProvider)
@@ -139,6 +140,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "evidence without paying for it on every "
                              "deterministic one. A filtered run reports as a "
                              "SUBSET, never as the suite's verdict")
+    parser.add_argument("--report", metavar="FILE", default=None,
+                        help="with --eval: write this run to FILE as JSON "
+                             "(green or red -- a red run is the one you will "
+                             "want to compare against tomorrow)")
+    parser.add_argument("--against", metavar="FILE", default=None,
+                        help="with --eval: compare this run to a report "
+                             "written earlier and print what moved. Changes "
+                             "no verdict and no exit code: a run that got "
+                             "worse and is still green is still green")
     parser.add_argument("--no-mcp", action="store_true", dest="no_mcp",
                         help="with --eval: do not start the MCP servers the "
                              "package declares. The agent under test is then "
@@ -429,6 +439,18 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
+    # The baseline is read BEFORE anything runs. A comparison the operator
+    # asked for and cannot have is worth discovering now, not after a
+    # suite's worth of real tokens has been spent producing the other half
+    # of it -- the same rule graders get (eval_suite.py).
+    baseline = None
+    if args.against is not None:
+        try:
+            baseline = read_report(Path(args.against))
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
     cases, filtered = _select_cases(every_case, args.case)
     if not cases:
         print(f"error: no case matches {', '.join(args.case)} -- this suite "
@@ -605,7 +627,75 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     console.print(f"\n{verdict} · {tally} · {spent} tokens"
                   + (f" · {free_cases} case(s) cost nothing" if free_cases
                      else ""))
+
+    run = record_run(outcomes, suite=label or (spec.name or "agent"),
+                     provider=provider_name, model=model, repeat=args.repeat,
+                     cases_in_suite=len(every_case),
+                     filtered=args.case or None)
+    if args.report is not None:
+        try:
+            write_report(Path(args.report), run)
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        console.print(f"[dim]report: {escape(args.report)}[/dim]")
+    if baseline is not None:
+        _render_comparison(console, compare(baseline, run))
+    # The verdict is THIS run's, and the comparison did not touch it.
     return 0 if green else 1
+
+
+def _render_comparison(console: Console, cmp) -> None:
+    """What moved between two runs, and nothing about whether that is ok.
+
+    Deliberately not a verdict: no colour on the headline, no summary
+    adjective, no exit code. The operator knows whether "12 tokens more
+    and one case fixed" is good news; a program that decided for them
+    would be wrong on the first day somebody made an honest improvement
+    that cost two tokens.
+    """
+    before, after = cmp.before, cmp.after
+    console.print(f"\n[bold]against[/bold] {escape(before.suite)} on "
+                  f"{escape(before.where)}, {escape(before.at)} "
+                  f"({before.passed}/{len(before.cases)} passed)")
+    if before.where != after.where:
+        # The most useful comparison this does -- the same suite on a
+        # cheaper model -- so it is named, not refused.
+        console.print(f"[dim]different model: {escape(before.where)} → "
+                      f"{escape(after.where)}[/dim]")
+    if not cmp.comparable:
+        console.print("[yellow]the two runs did not grade the same cases; "
+                      "added/gone below are about the SELECTION, not about "
+                      "the package[/yellow]")
+    if before.repeat != after.repeat:
+        console.print(f"[yellow]different sample sizes: {before.repeat} run(s) "
+                      f"per case then, {after.repeat} now -- the counts below "
+                      f"are not rates[/yellow]")
+
+    marks = {"fixed": "[green]fixed[/green]", "broke": "[red]broke[/red]",
+             "added": "[cyan]added[/cyan]", "gone": "[yellow]gone[/yellow]"}
+    moved = 0
+    for delta in cmp.deltas:
+        if delta.kind in marks:
+            moved += 1
+            tally = ""
+            if delta.before is not None and delta.after is not None:
+                tally = f"  {delta.before.tally} → {delta.after.tally}"
+            console.print(f"  {marks[delta.kind]}  {escape(delta.id)}{tally}")
+        elif delta.rate_moved:
+            # Same verdict, different count. A case going 9/10 -> 6/10 is
+            # still green and is the most useful line on this page.
+            moved += 1
+            word = ("[green]up[/green]" if delta.rate_direction == "up"
+                    else "[yellow]down[/yellow]")
+            console.print(f"  rate {word}  {escape(delta.id)}  "
+                          f"{delta.before.tally} → {delta.after.tally}")
+    if not moved:
+        console.print("  [dim]no case changed verdict or pass count[/dim]")
+    spent = cmp.tokens_moved
+    if spent:
+        console.print(f"[dim]tokens: {before.tokens} → {after.tokens} "
+                      f"({spent:+d})[/dim]")
 
 
 def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
@@ -792,10 +882,11 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
     if ((args.eval_async is not None or args.repeat != 1 or args.case
-         or args.no_mcp) and not args.eval):
-        print("error: --async, --repeat, --case and --no-mcp belong to "
-              "--eval -- they say how an acceptance suite is driven, and a "
-              "session has one trajectory", file=sys.stderr)
+         or args.no_mcp or args.report or args.against) and not args.eval):
+        print("error: --async, --repeat, --case, --no-mcp, --report and "
+              "--against belong to --eval -- they say how an acceptance "
+              "suite is driven, and a session has one trajectory",
+              file=sys.stderr)
         return 2
     if args.build and (args.prompt or args.prompt_positional):
         print("error: --build takes the spec itself; drop --prompt/PROMPT",

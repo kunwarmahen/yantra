@@ -263,8 +263,10 @@ smaller rather than larger.
 
 **`--case` selecting by anything but id.** Not by tag, not by "only the
 ones that need a model", not by "only the ones that failed last time".
-Tags are a taxonomy nobody has asked for; the last of those needs a store
-and is the next note's problem.
+Tags are a taxonomy nobody has asked for; the last of those needs a store,
+which [note 42](42-two-runs-of-the-same-suite.md) then built — and left
+that flag unbuilt anyway, because "last time" turns out to be a decision
+rather than a fact.
 
 **Warning when a filter excludes every roster case** (or every costly
 one). The filter is the operator's, the header says what ran, and a
@@ -287,10 +289,13 @@ and it is now unnecessary: with servers connected,
   10" is a threshold, not a confidence interval, and `--case` + `--repeat`
   makes it *cheaper* to buy ten samples without making ten samples mean
   more than they do.
-* **Comparing two runs of the same suite.** Still open, still the same
-  missing store `case_from_trace` wants from the other side, and now
-  slightly more wanted: `--case flaky-* --repeat 10` invites "was that
-  better than yesterday?", and nothing here writes anything down.
+* ~~**Comparing two runs of the same suite.**~~ Shipped in
+  [note 42](42-two-runs-of-the-same-suite.md) — `--report` writes a run
+  down and `--against` answers "was that better than yesterday?". It is a
+  store of RESULTS, so `case_from_trace`
+  ([note 33](33-evals-as-a-gate.md)) is still waiting for a store of
+  trajectories, which is a different feature with a privacy question on
+  it.
 * **MCP servers under the async runner get no special handling.** Sessions
   are synchronous ([note 11](11-async.md)), so `--eval --async` drives
   concurrent trajectories through one set of stdio pipes — one writer
