@@ -87,6 +87,7 @@ function route(env) {
                                  renderPressure(
                                    {...ui.lastState, utilization: env.utilization});
                                }
+                               mergeBudget(env);
                                break;
 
     case "permission_request": showPermissionModal(env); break;
@@ -151,7 +152,56 @@ function applyHeader(s) {
   $("#tools-count").textContent =
     (s.tools ? s.tools.length : "—") + (off ? ` · ${off} off` : "");
   renderPressure(s);
+  renderBudget(s);
   setTurnUI(s.turn_active);
+}
+
+/* Mid-turn envelopes carry a fresh meter; replayed ones do not. Merging
+   into lastState rather than re-rendering from the envelope alone keeps
+   one source of truth for the header, so a reconnect cannot leave the
+   bar showing a number from the turn before. */
+function mergeBudget(env) {
+  if (env.budget_meter == null || !ui.lastState) return;
+  ui.lastState = {...ui.lastState, budget_meter: env.budget_meter};
+  renderBudget(ui.lastState);
+}
+
+/* What is LEFT of this turn's dollar ceiling, drawn on the same bar as
+   context pressure and with the same thresholds, because they are the
+   same kind of fact: how much of something finite this turn has used.
+
+   Three states, and the third is the one worth getting right. No ceiling
+   at all: no chip. A ceiling that CANNOT fire -- a local model, which
+   bills nothing -- draws an empty bar and says "free", because a full
+   bar that will never move implies a protection nobody has. A live
+   ceiling fills, and the number beside it is what remains rather than
+   what is spent: "$0.07 left" is the figure somebody acts on. */
+function renderBudget(s) {
+  const meter = s.budget_meter;
+  $("#chip-budget").classList.toggle("hidden", meter == null);
+  if (meter == null) return;
+  const told = meter.tells_agent ? "; the agent is told when it is close" : "";
+  if (!meter.metered) {
+    $("#budget-fill").style.width = "0%";
+    $("#budget-fill").className = "ctxbar-fill";
+    $("#budget-left").textContent = "free";
+    $("#chip-budget").classList.remove("chip-ctx-danger");
+    $("#chip-budget").title =
+      `per-turn ceiling $${meter.max_usd.toFixed(2)} — inert here, a local ` +
+      `model bills nothing${told}`;
+    return;
+  }
+  const pct = meter.max_usd ? (meter.spent / meter.max_usd) * 100 : 0;
+  const left = Math.max(meter.max_usd - meter.spent, 0);
+  $("#budget-fill").style.width = `${Math.min(pct, 100)}%`;
+  $("#budget-fill").className = "ctxbar-fill"
+    + (pct >= 80 ? " danger" : pct >= 60 ? " warn" : "");
+  $("#budget-left").textContent = `$${left.toFixed(left < 0.01 ? 4 : 2)} left`;
+  $("#chip-budget").classList.toggle("chip-ctx-danger", pct >= 80);
+  $("#chip-budget").title =
+    `this turn has spent ~$${meter.spent.toFixed(4)} of its ` +
+    `$${meter.max_usd.toFixed(2)} ceiling; the turn stops between ` +
+    `iterations once it is crossed${told}`;
 }
 
 /* Context-window pressure. The bar mirrors auto-compaction's thresholds
@@ -380,6 +430,7 @@ function addBanner(message, isError, cancelledStyle = false) {
 }
 
 function onBudgetWarning(env) {
+  mergeBudget(env);
   // Mid-turn advice, not an ending: the turn goes on around it, so it
   // renders as its own banner and the transcript keeps flowing.
   const el = document.createElement("div");
@@ -390,6 +441,7 @@ function onBudgetWarning(env) {
 }
 
 function onTurnEnd(env) {
+  mergeBudget(env);   // the last charge of the turn lands here
   if (env.reason !== "end_turn") {
     const why = env.detail ? ` — ${env.detail}` : "";
     addBanner(`── turn ended: ${env.reason}${why} ` +

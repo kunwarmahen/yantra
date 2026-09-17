@@ -138,6 +138,30 @@ def _batch_message(batch: list[ToolResult]) -> Message:
     return Message("user", blocks)
 
 
+def _with_notice(messages: list[Message], notice: str) -> list[Message]:
+    """One request carrying a notice for the model, without a fossil.
+
+    APPENDED TO WHAT IS SENT, NEVER TO HISTORY. The notice is true of one
+    moment -- this turn, nearly out of budget -- and history is a record
+    of a conversation that gets replayed, resumed and checkpointed. A
+    budget notice written into it would be read back next week by a turn
+    with a full meter, and would be read back by the MODEL as something
+    the user said.
+
+    The last message before a model call is always a user message (the
+    user's own, or a batch of tool results), so the notice rides in it as
+    one more text block. A copy is made rather than mutating: the same
+    Message object is sitting in history.
+    """
+    if not messages:
+        return messages
+    last = messages[-1]
+    if last.role != "user":  # defensive: no shape here produces this today
+        return [*messages, Message("user", [TextBlock(notice)])]
+    return [*messages[:-1],
+            Message("user", [*last.content, TextBlock(notice)])]
+
+
 class Agent:
     """A conversation with tools. One Agent == one session's history."""
 
@@ -305,6 +329,12 @@ class Agent:
                                             spent=self.budget.spent,
                                             max_usd=self.budget.max_usd,
                                             iterations=iteration)
+                        # The same moment, the other reader. Opt-in, and
+                        # what it carries is a deadline rather than a
+                        # number -- budget.notice() argues why.
+                        notice = self.budget.notice()
+                        if notice is not None:
+                            messages = _with_notice(messages, notice)
                 self._sent_through = len(messages)
                 response = collect(
                     self._tee(

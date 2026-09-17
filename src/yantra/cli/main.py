@@ -99,6 +99,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "estimate, and you are the one paying. Needs a "
                              "priced model (local models bill nothing, so it "
                              "never fires)")
+    parser.add_argument("--budget-notice", action="store_true",
+                        dest="budget_notice",
+                        help="also tell the AGENT, once, when the turn is "
+                             "nearly out of budget -- so it finishes with "
+                             "what it has instead of being cut off "
+                             "mid-thought. It is told the DEADLINE, never "
+                             "the figures: a model handed a number to "
+                             "optimise starts optimising for it. Off by "
+                             "default, and yours to give rather than the "
+                             "package author's")
     parser.add_argument("--yolo", action="store_true",
                         help="skip permission prompts -- tools run without asking")
     parser.add_argument("--sandbox", action="store_true",
@@ -1017,7 +1027,14 @@ def main(argv: list[str] | None = None) -> int:
     # inert case (a local model, which bills nothing) has to say so out
     # loud, or an operator reads silence as protection.
     if agent.budget is not None:
+        # The operator's call, applied after the build because it is not
+        # part of what the PACKAGE describes (budget.notice).
+        agent.budget.notify_agent = args.budget_notice
         console.print(f"[dim]budget: {agent.budget.describe()}[/dim]")
+    elif args.budget_notice:
+        console.print("[yellow]--budget-notice does nothing without a "
+                      "ceiling: set --max-usd, or run a package with "
+                      "[budget] max_usd_per_turn[/yellow]")
 
     env_ctx = getattr(agent, "env_context", None)
     if env_ctx is not None and env_ctx.geo_error:

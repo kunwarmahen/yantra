@@ -417,7 +417,9 @@ with an MCP servers section above it — health dots, add by form or
 paste-JSON, per-server switches, remove; same powers as `/mcp`
 mid-session, and remembered servers auto-reconnect on future launches,
 a live context-pressure meter (amber at 60%, red at 80% — where
-auto-compaction starts caring), and a ■ Stop button that lands
+auto-compaction starts caring) with a per-turn **budget bar** beside it
+when there is a ceiling (`$0.07 left`, moving mid-turn; `free` where a
+local model means it can never fire), and a ■ Stop button that lands
 mid-sentence, not just between tool calls (Esc works too). The whole
 surface runs on one token-driven design system — light and dark from
 your OS or from the appearance button, in-page dialogs rather than the
@@ -1042,11 +1044,26 @@ The rules worth knowing before you rely on it:
 * **`--max-usd` overrides the package, up or down.** Unlike `tools.deny`,
   which the command line cannot lift: a restriction you cannot lift is a
   security control, a number you can lift is a guard rail.
+* **`--budget-notice` tells the AGENT too**, once, at the same moment —
+  so it finishes with what it has instead of being cut off mid-thought.
+  It is told the **deadline**, never the figures: a model handed a number
+  to optimise starts trimming the answer or budgeting its own calls, and
+  neither is the work. Off by default, and the operator's call rather than
+  the package author's, because it changes how the model behaves. The
+  notice is *sent*, never written to history — it is true of one turn, and
+  history gets replayed.
+* **The browser draws what is left.** The header carries a budget bar
+  beside the context-pressure one — same widget, same thresholds — showing
+  `$0.07 left` rather than what has been spent, and moving mid-turn rather
+  than at the end. An inert ceiling shows empty and `free`, because a full
+  bar that can never move looks like protection.
 
 [notes/34](notes/34-budgets.md) has the reasoning, the receipts, and what
 is deliberately still missing;
 [notes/36](notes/36-a-warning-before-the-stop.md) is the warning, and the
-version of it that had to be thrown away first.
+version of it that had to be thrown away first;
+[notes/43](notes/43-a-bar-and-a-deadline.md) is the bar and the deadline —
+the two readers of the same meter, wanting opposite things.
 
 ## Architecture
 
@@ -1207,8 +1224,12 @@ src/yantra/
 │                   to carry a ceiling rather than counting zero. The stop is
 │                   READ off the meter, the heads-up before it is ESTIMATED
 │                   from the request about to go out -- only one of them can
-│                   afford to be wrong ([notes/34](notes/34-budgets.md),
-│                   [notes/36](notes/36-a-warning-before-the-stop.md))
+│                   afford to be wrong. The AGENT may be told too
+│                   (--budget-notice): a DEADLINE, never a figure, because a
+│                   model handed a number to optimise optimises for it
+│                   ([notes/34](notes/34-budgets.md),
+│                   [notes/36](notes/36-a-warning-before-the-stop.md),
+│                   [notes/43](notes/43-a-bar-and-a-deadline.md))
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
 │   │               ModelResponse (protocol cores shared by both skins);
@@ -1286,8 +1307,11 @@ src/yantra/
 │                   carries human questions (permission + ask_user) to the
 │                   browser over one websocket; envelope protocol,
 │                   replay-on-reconnect, REST session controls; static/
-│                   holds the no-build vanilla-JS page
-│                   ([notes/22](notes/22-web-ui.md))
+│                   holds the no-build vanilla-JS page. The header's budget
+│                   bar shares the context meter's widget and thresholds --
+│                   same kind of fact, so it reads as one instrument
+│                   ([notes/22](notes/22-web-ui.md),
+│                   [notes/43](notes/43-a-bar-and-a-deadline.md))
 └── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich)
 ```
 

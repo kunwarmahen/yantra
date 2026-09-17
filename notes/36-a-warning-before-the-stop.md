@@ -327,14 +327,19 @@ by then it is too late to have set a different ceiling.
   the system prompt, skills roster and tool schemas come to. Fixable by
   estimating those too, or by asking the provider to count; neither is
   worth it while the error sits where it does least harm.
-* **One warning, not a running figure.** A turn that has been warned
-  tells you nothing further, however long it goes on. A live remaining-
-  budget readout belongs in the same place as the context-pressure bar
-  ([note 22](22-web-ui.md)) rather than in the event stream, and the
-  browser now has the numbers to draw one.
-* **Nothing acts on it.** The obvious next move is for the agent itself
-  to be told — a line in the context saying it has one call left, so it
-  can spend it on an answer instead of another `read_file`. That is a
-  different feature with a different risk (a model that knows it is being
-  metered starts optimising for the meter), and it wants an argument of
-  its own.
+* ~~**One warning, not a running figure.**~~ A turn that has been warned
+  told you nothing further, however long it went on. The readout this
+  bullet asked for shipped in [note 43](43-a-bar-and-a-deadline.md),
+  where it was always supposed to live: on the same bar as the
+  context-pressure one ([note 22](22-web-ui.md)), with the same
+  thresholds, showing what is LEFT rather than what is spent — and
+  drawing an inert ceiling as empty and "free" rather than as a full bar
+  that implies a protection nobody has.
+* ~~**Nothing acts on it.**~~ Shipped in
+  [note 43](43-a-bar-and-a-deadline.md), and the risk named here is
+  exactly what shaped it: the agent is told the DEADLINE and never the
+  meter, because a number is a quantity to optimise and a deadline is a
+  constraint on the shape of what remains. No digit appears in what the
+  model reads, the notice is sent rather than stored in history, and it
+  is off unless the operator asks for it — this changes how a model
+  behaves, which is not the package author's call.

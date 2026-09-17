@@ -83,6 +83,16 @@
       <span class="ctxbar"><span class="ctxbar-fill" id="ctx-fill"></span></span>
       <span id="ctx-pct"></span>
     </span>
+
+    <!-- The per-turn dollar ceiling, beside the context bar because they
+         are the same kind of fact: how much of a finite thing this turn
+         has used. Same bar, same thresholds, so the pair reads as one
+         instrument rather than two widgets. Hidden when there is no
+         ceiling at all. -->
+    <span class="chip chip-static hidden" id="chip-budget">
+      <span class="ctxbar"><span class="ctxbar-fill" id="budget-fill"></span></span>
+      <span id="budget-left"></span>
+    </span>
   </div>
 
   <span class="rail-sep" aria-hidden="true"></span>

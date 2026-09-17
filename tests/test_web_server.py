@@ -954,6 +954,64 @@ def test_state_reports_no_budget_when_no_ceiling_was_asked_for():
     session, _ = make_session([])
     client = TestClient(make_app(session))
     assert client.get("/api/state").json()["budget"] is None
+    assert client.get("/api/state").json()["budget_meter"] is None
+
+
+def test_the_ceiling_reaches_the_browser_as_numbers_too():
+    """A terminal can print the sentence; a browser can draw what is left,
+    which is why the meter is separate from the sentence rather than
+    parsed back out of it."""
+    from yantra.budget import Budget
+    session, agent = make_session([])
+    agent.budget = Budget(0.50)
+    client = TestClient(make_app(session))
+    meter = client.get("/api/state").json()["budget_meter"]
+    assert meter == {"spent": 0.0, "max_usd": 0.50, "metered": True,
+                     "tells_agent": False}
+
+
+def test_an_inert_ceiling_says_so_in_the_numbers_not_only_the_sentence():
+    """A full bar that can never move implies a protection nobody has."""
+    from yantra.budget import Budget
+    session, agent = make_session([])
+    agent.budget = Budget(0.50, metered=False)
+    client = TestClient(make_app(session))
+    assert client.get("/api/state").json()["budget_meter"]["metered"] is False
+
+
+def test_the_meter_moves_during_a_turn_not_only_at_the_end():
+    """The readout note 36 asked for: a bar that follows the spend as the
+    turn runs, which needs the numbers on mid-turn envelopes."""
+    from yantra.budget import Budget
+
+    priced = "claude-sonnet-5"      # $3.00/1M in -> 300k tokens is $0.90
+    session, agent = make_session([
+        assistant_tool_call("e1", "echo", {"text": "hi"},
+                            usage=Usage(input_tokens=300_000), model=priced),
+        assistant_text("done"),
+    ])
+    agent.model = priced
+    agent.budget = Budget(10.00)
+    client = TestClient(make_app(session))
+
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "state"
+        envelopes = send_and_finish(client, ws, "go")
+
+    mid = next(e for e in envelopes if e["type"] == "tool_result")
+    assert mid["budget_meter"]["spent"] == pytest.approx(0.90)
+    end = next(e for e in envelopes if e["type"] == "turn_end")
+    assert end["budget_meter"]["max_usd"] == 10.00
+
+
+def test_the_browser_is_told_when_the_agent_is_in_on_it():
+    """An operator must not learn their model was being coached by
+    reading a transcript."""
+    from yantra.budget import Budget
+    session, agent = make_session([])
+    agent.budget = Budget(0.50, notify_agent=True)
+    client = TestClient(make_app(session))
+    assert client.get("/api/state").json()["budget_meter"]["tells_agent"] is True
 
 
 def test_state_reports_none_when_skills_are_off():

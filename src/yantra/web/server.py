@@ -80,6 +80,20 @@ from yantra.types import (
 CANCELLED = object()  # sentinel pushed into pending queues on cancel
 
 
+def _budget_meter(agent: Agent) -> dict[str, Any] | None:
+    """The per-turn ceiling as numbers, or None when there is none.
+
+    Separate from the ``budget`` sentence rather than parsed out of it:
+    the sentence is written for a person reading one line, and a bar
+    needs two floats and the answer to "can this ever move?".
+    """
+    budget = getattr(agent, "budget", None)
+    if budget is None:
+        return None
+    return {"spent": round(budget.spent, 6), "max_usd": budget.max_usd,
+            "metered": budget.metered, "tells_agent": budget.notify_agent}
+
+
 def cost_line(agent: Agent) -> str:
     """The dollars footer, same honesty rules as the REPL's _cost_line:
     local models are free, unknown slugs show NO figure -- never $0."""
@@ -367,6 +381,12 @@ class WebSession:
                     # refills the window); the header bar follows along
                     # instead of waiting for the end-of-turn state.
                     "utilization": self.agent.utilization(),
+                    # The meter moves DURING a turn -- every model call
+                    # charges it -- so the header follows along instead of
+                    # jumping at the end. A tool result is the right
+                    # moment: the call that asked for this tool has been
+                    # billed by the time we get here.
+                    "budget_meter": _budget_meter(self.agent),
                 })
             case EndEvent(stop_reason=_, usage=_):
                 pass  # per-call usage; the TurnEnd footer carries totals
@@ -374,7 +394,8 @@ class WebSession:
                 # The numbers ride along as numbers, not only inside the
                 # sentence: a browser can draw a bar, a terminal cannot.
                 self.broadcast({"type": "budget_warning", "detail": detail,
-                                "spent": spent, "max_usd": max_usd})
+                                "spent": spent, "max_usd": max_usd,
+                                "budget_meter": _budget_meter(self.agent)})
             case TurnEnd(reason="end_turn", response=response, iterations=n):
                 usage = response.usage if response is not None else None
                 self.broadcast({
@@ -386,6 +407,7 @@ class WebSession:
                     "output_tokens": usage.output_tokens if usage else 0,
                     "cost_line": cost_line(self.agent),
                     "iterations": n,
+                    "budget_meter": _budget_meter(self.agent),
                 })
             case TurnEnd(reason=reason, response=None, iterations=n,
                          detail=detail):
@@ -428,6 +450,14 @@ class WebSession:
             # protection by staying quiet ([notes/34]).
             "budget": (agent.budget.describe()
                        if getattr(agent, "budget", None) is not None else None),
+            # The same ceiling AS NUMBERS, for the header's meter. A
+            # terminal can only print the sentence; a browser can draw
+            # what is left, which is the readout [notes/36] said belonged
+            # beside the context-pressure bar rather than in the event
+            # stream. None where there is no ceiling, and ``metered``
+            # false where one exists and can never fire (a local model) --
+            # a full bar that will never move is worse than no bar.
+            "budget_meter": _budget_meter(agent),
             "utilization": agent.utilization(),
             # The honest numbers behind the pressure bar: what the last
             # request actually filled and how big the window is at all.

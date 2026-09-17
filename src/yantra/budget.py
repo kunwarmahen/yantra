@@ -130,7 +130,8 @@ class Budget:
     agent's sub-agents.
     """
 
-    def __init__(self, max_usd: float, *, metered: bool = True) -> None:
+    def __init__(self, max_usd: float, *, metered: bool = True,
+                 notify_agent: bool = False) -> None:
         if max_usd <= 0:
             raise ConfigError(
                 f"a budget of ${max_usd:.2f} is not a ceiling, it is a "
@@ -151,12 +152,15 @@ class Budget:
         #: The heads-up is a ONE-SHOT per turn, and the latch belongs to
         #: the meter so a parent and its sub-agents share it.
         self._warned = False
+        #: Whether the MODEL is told, as well as the operator. Off by
+        #: default and deliberately not a package key: see ``notice``.
+        self.notify_agent = notify_agent
 
     # ---- construction ------------------------------------------------------
 
     @classmethod
     def for_model(cls, max_usd: float, *, provider_name: str,
-                  model: str) -> Budget:
+                  model: str, notify_agent: bool = False) -> Budget:
         """A ceiling for one provider and model, or a ConfigError saying why not.
 
         This is where the refusal lives: an operator who asked for a
@@ -168,9 +172,9 @@ class Budget:
             # put in $YANTRA_PRICES is a thing you asked for, and asking
             # to meter your own local model is how you try a ceiling out
             # before pointing it at an account with a card behind it.
-            return cls(max_usd, metered=True)
+            return cls(max_usd, metered=True, notify_agent=notify_agent)
         if bills_nothing(provider_name):
-            return cls(max_usd, metered=False)
+            return cls(max_usd, metered=False, notify_agent=notify_agent)
         raise ConfigError(
             f"budget: no list price is known for {model!r}, so a "
             f"${max_usd:.2f} ceiling could never stop anything. Add the "
@@ -257,6 +261,39 @@ class Budget:
         return (f"spent ~${self.spent:.4f} of the ${self.max_usd:.2f} "
                 f"ceiling for this turn -- ~${left:.4f} left")
 
+    #: What the MODEL is told when ``notify_agent`` is on. No figures in
+    #: it, on purpose -- see ``notice``.
+    NOTICE = (
+        "[budget notice] This turn is nearly out of its spending limit and "
+        "will be stopped shortly, probably after the next model call. "
+        "Finish with what you already have: give your best answer now, and "
+        "say plainly what you did not get to. Do not start new work, do not "
+        "open anything further, and do not shorten the answer itself to save "
+        "room -- the limit is on the work, not on the reply."
+    )
+
+    def notice(self) -> str | None:
+        """The sentence for the AGENT, or None when it is not to be told.
+
+        THE AGENT IS TOLD THE DEADLINE, NOT THE METER, and the missing
+        dollar figures are the entire design. A model handed "you have
+        $0.08 left" is a model that has been given a number to optimise,
+        and the two ways it optimises are both bad: it starts trimming the
+        answer to save tokens nobody asked it to save, or it reasons about
+        how much more it can afford and spends exactly that. Neither is
+        work. A deadline is different -- "stop soon and say what you
+        missed" is a constraint about the SHAPE of the remaining turn, and
+        a model can act on it without having a quantity to game.
+
+        Off unless the operator asked (``notify_agent``). It is their
+        call and not the package author's: the author estimated the
+        ceiling, but whoever is running the thing is the one who cares
+        whether the answer arrives rushed. And a warned turn still goes
+        ahead and crosses -- this changes what the model knows, never
+        what the loop does.
+        """
+        return self.NOTICE if self.notify_agent else None
+
     def explain(self) -> str:
         """One line saying what stopped the turn, with the numbers in it.
 
@@ -275,5 +312,6 @@ class Budget:
         if not self.metered:
             return (f"${self.max_usd:.2f} per turn -- inert here, a local "
                     f"model bills nothing")
+        told = " (the agent is told too)" if self.notify_agent else ""
         return (f"${self.max_usd:.2f} per turn -- a heads-up once one "
-                f"more call would not fit")
+                f"more call would not fit{told}")

@@ -55,6 +55,7 @@ from yantra.agent import (
     TurnEnd,
     _batch_message,
     _truncate_middle,
+    _with_notice,
 )
 from yantra.budget import Budget
 from yantra.context import RED, SUMMARY_PROMPT, acompact_history, estimate_history
@@ -220,6 +221,11 @@ class AsyncAgent:
                                             spent=self.budget.spent,
                                             max_usd=self.budget.max_usd,
                                             iterations=iteration)
+                        # The sync twin's rule, verbatim: sent, never
+                        # stored (agent._with_notice).
+                        notice = self.budget.notice()
+                        if notice is not None:
+                            messages = _with_notice(messages, notice)
                 self._sent_through = len(messages)
                 response = await acollect(
                     self._atee(

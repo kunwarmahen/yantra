@@ -146,6 +146,17 @@ a turn, not just between turns. The bar turns amber at 60% and red at
 ([07-reliability-and-scale.md](07-reliability-and-scale.md)); hovering
 shows the raw numbers.
 
+A second bar sits beside it when the turn has a dollar ceiling, using
+the same widget and the same thresholds
+([43-a-bar-and-a-deadline.md](43-a-bar-and-a-deadline.md)). That was the
+point of putting it there rather than inventing a separate readout: both
+answer "how much of something finite has this turn used", so one
+instrument with two strips reads better than two widgets that happen to
+be adjacent. It shows what is LEFT rather than what is spent, and a
+ceiling that can never fire — a local model, which bills nothing — draws
+an empty bar labelled `free` instead of a full one that would look like
+protection.
+
 ## Rendering the model's prose
 
 Models answer in markdown — headers, tables, fenced code — and a
