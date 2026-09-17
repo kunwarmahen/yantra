@@ -24,6 +24,13 @@ description = "Reads sources in the working directory and answers with citations
 version = "0.1.0"
 # prompt.md is picked up by convention; the key exists for other layouts.
 
+# sources/ is not a key and not a convention -- it is just a folder this
+# example ships, holding one long document for the agent to actually do
+# its job on. A package with nothing to research but its own config is a
+# demo; this one has a 217-line reference with thirty headings in it,
+# which is what makes "outline before you read" worth obeying and what
+# the eval case measures.
+
 [model]
 # A research turn reads a lot of files before it answers.
 max_iterations = 20

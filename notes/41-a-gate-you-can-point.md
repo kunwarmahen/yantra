@@ -239,6 +239,63 @@ SUITE RED · 0/1 passed
 Red, and the header says why. A flag that made the suite pass by removing
 what it checks would be worse than no flag.
 
+## The first thing it found
+
+`--case` plus `--repeat` earned itself within an hour of existing, on
+this repo's own worked example.
+
+The researcher package's suite had a case called
+`outlines-before-reading`. It had been passing. Then a full run went red
+on it, which could equally have been a regression, a bad roll, or the
+model having a bad day — and before this note there was no cheap way to
+tell, because finding out meant running the whole suite several times.
+
+```
+$ yantra --agent . --eval --case "outlines-before-reading" --repeat 5
+  FAIL  outlines-before-reading  ✗✓✓✗✗ 2/5 runs
+        required tool not used: outline (3 of 5 runs)
+```
+
+Two in five. Not a regression — a case that had been claiming 1.0 while
+holding at about 0.4, and getting away with it because one run is one
+sample. Running the same five rolls against the package as it stood
+before that week's work gave **1 of 5**, which settled the other
+question: nothing recent had broken it, and it had never really worked.
+
+The temptation at that point is `min_pass_rate = 0.4`, and
+[note 35](35-roster-and-pass-rates.md) already refused it in advance:
+*lowering the threshold until a suite goes green is how a real regression
+gets waved through; if you are tuning it downward, edit the case
+instead.*
+
+So the case was wrong, and reading it showed why in one line. The
+package's prompt said to outline a file *"before `read_file` on anything
+long"* — and **nothing tells a model how long a file is until it has
+opened it**, which is exactly the cost the instruction exists to avoid.
+The model was being graded on a judgement it had no way to make, and
+half the time it guessed the other way. It was not misbehaving; the
+instruction was unfollowable.
+
+Two edits, measured separately, each five runs:
+
+| | result | tokens |
+|---|---|---|
+| as it was | `✗✓✓✗✗` 2/5 | 37,730 |
+| prompt sharpened ("outline every Markdown file, full stop") | `✓✓✓✓✓` 5/5 | 45,913 |
+| …and pointed at a 217-line document instead of a 52-line one | `✓✓✓✓✓` 5/5 | 31,242 |
+
+The prompt fix is what made the case pass. The repointing is what made
+it *worth* passing — and the token column is the argument: on a short
+file, outlining first costs an extra call (45,913), and on a long one it
+saves the whole document (31,242). A case that demonstrated the
+instruction on a file where obeying it was a net loss was testing
+compliance, not value.
+
+None of that is a feature of this note. What this note contributed is
+that the whole diagnosis cost five runs of one case instead of five runs
+of six, twice — and that the flag was there at the moment somebody wanted
+to know, rather than being the thing they wished they had.
+
 ## The tradeoff
 
 **A suite now starts subprocesses and opens sockets.** A gate that was

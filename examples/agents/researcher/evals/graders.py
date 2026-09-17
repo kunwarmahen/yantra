@@ -22,7 +22,8 @@ import re
 
 #: Files this package ships. Naming one is what "cite your source" means
 #: when the source is on disk.
-SHIPPED = ("agent.toml", "prompt.md", "SKILL.md", "outline.py", "cases.toml")
+SHIPPED = ("agent.toml", "prompt.md", "SKILL.md", "outline.py", "cases.toml",
+           "rate-limiting.md")
 
 
 def cites_a_file(answer: str) -> bool:

@@ -19,13 +19,23 @@
 [[case]]
 id = "outlines-before-reading"
 description = """
-prompt.md tells this agent to outline a long document before spending a
+prompt.md tells this agent to outline a Markdown file before spending a
 read_file on it. An instruction the model ignores is an instruction the
 package does not really have -- so the gate holds it.
+
+Pointed at sources/rate-limiting.md, which is 217 lines and thirty-odd
+headings, because that is where the instruction is worth obeying: an
+outline costs a handful of tokens and the whole document costs several
+thousand. The case used to ask about the 52-line SKILL.md and failed four
+runs in five against a local model -- correctly, as it turned out, since
+the prompt then said to outline "anything long" and nothing tells a model
+how long a file is until it has opened it. The prompt now says to outline
+every Markdown file, full stop, and the case asks about a file where
+anybody would.
 """
 user_message = """
-Which section of skills/source-brief/SKILL.md covers how confident you
-are in an answer? Name the section and the line it starts on.
+Which section of sources/rate-limiting.md covers what a client should do
+when it is throttled? Name the section and the line it starts on.
 """
 required_tools = ["outline"]
 check = "graders:names_a_line_number"

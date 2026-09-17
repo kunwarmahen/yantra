@@ -686,6 +686,7 @@ researcher/
 ├── tools/          Tool subclasses this agent brings with it
 ├── skills/         procedures this agent knows
 ├── subagents/      prompts for the children it delegates to
+├── sources/        whatever this agent is for -- just a folder, no key
 └── evals/          the cases that say it still works
 ```
 

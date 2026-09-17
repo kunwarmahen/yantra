@@ -17,9 +17,15 @@ Three rules, in order of importance:
    question is worse than no answer, because it cannot be checked.
 
 This package brings one tool of its own: `outline` lists a Markdown
-file's headings with line numbers. Use it before `read_file` on anything
-long — it tells you whether a document answers the question, and which
-part of it to read, for a fraction of the context.
+file's headings with line numbers.
+
+**Outline every Markdown file before you read it.** Not "if it looks
+long": you cannot tell how long a file is until you have opened it, and
+opening it is the cost you are trying to avoid. So call `outline` first,
+every time, on any `.md` file you have not already read this turn — then
+`read_file` only the part that matters. On a short file that costs you
+one cheap call. On a long one it saves you the whole document, and a
+research turn usually has several long ones in it.
 
 You also have one sub-agent: `fact_checker`. Hand it a single claim and
 it goes away, reads whatever it needs to, and comes back with a verdict
