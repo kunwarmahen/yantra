@@ -1192,11 +1192,50 @@ are errors too:
 
 ```
 error: ~/dvara/actors.toml: [actor.guest] has unknown key(s) max_usd_per_dayz;
-known: agents, max_usd_per_day, max_usd_per_turn, permissions
+known: agents, channel, max_usd_per_day, max_usd_per_turn, permissions
 ```
 
 A misspelled ceiling that quietly means "no ceiling" is exactly the
 failure a ceiling exists to prevent.
+
+### An actor is a person, not a seat
+
+The same file says where a person can be *reached*, which is the half
+that lets a bot be a client of this rather than a second roster:
+
+```toml
+[[actor.owner.channel]]
+kind = "telegram"
+id   = 8675309       # a number is fine; stored and compared as text
+```
+
+A channel adapter does not carry its own `{chat_id: actor}` table — it
+hands over the identity it has, and this file says whose it is. That is
+the same sentence as the section title, extended one step: half an
+assignment living in a bot's environment is half an assignment nobody
+diffs.
+
+The argument for one actor instead of two is not the tidiness. Write the
+same person down twice — `mahen` and `mahen_tg` — and their
+`max_usd_per_day = 2.00` is now **$4.00**, because the allowance is a sum
+over runs keyed by actor id. A ceiling that doubles when you install a
+bot is not a ceiling. The pending-questions queue and the agent whitelist
+split the same way, and neither is as bad as that.
+
+So: one person, one allowance, one queue, several doors — and a question
+raised anywhere is delivered to every channel they hold, answerable from
+any of them. dvara checks that a `(kind, id)` pair belongs to at most one
+actor, and otherwise never branches on which channel `kind` names.
+
+```bash
+dvara say --as telegram:8675309 --agent greeter "who are you?"
+```
+
+One thing joining the actor *creates*, rather than fixes: two channels
+whose thread ids collide would now share a conversation, where before it
+was the differing actor ids keeping them apart — by accident. A turn that
+arrives through a channel is keyed under `kind:thread`, so they stay two
+conversations, and keys made by naming an actor directly are untouched.
 
 ## 24 · Agents are named, never pathed
 
@@ -1509,12 +1548,24 @@ DVARA_TOKEN=$(openssl rand -hex 24) dvara serve --port 8765
 
 Every request carries `Authorization: Bearer $DVARA_TOKEN`. **The token
 authenticates the caller, not the person.** A caller is a channel adapter
-running inside the owner's trust boundary, and it is the adapter's job to
-map its channel's identity onto an actor. The `actor` field in the body is
-an assertion *by a trusted caller* — which is precisely why the token is
-mandatory rather than optional. A service with no token refuses to start,
-binds to localhost unless told otherwise, and compares the token in
-constant time.
+running inside the owner's trust boundary. The `actor` field in the body
+is an assertion *by a trusted caller* — which is precisely why the token
+is mandatory rather than optional. A service with no token refuses to
+start, binds to localhost unless told otherwise, and compares the token
+in constant time.
+
+An adapter may instead send the identity it actually has, and let the
+roster map it — the form it cannot get wrong:
+
+```
+POST /message   {"channel": {"kind": "telegram", "id": 8675309}, ...}
+             -> {..., "actor": "owner"}
+```
+
+Exactly one of `actor` or `channel` per request, on all three endpoints
+that name a person. Both is a `400`: honouring it would mean picking a
+winner, and then a bridge with a stale hard-coded actor id either quietly
+overrules the roster or quietly does not.
 
 A refusal comes back as a `200` with a reason, not a `500`. A channel
 adapter has to be able to deliver "you are not on this list" as a message;
@@ -1726,6 +1777,9 @@ In the dvara repository, alongside its own README:
 |---|---|
 | `notes/01-the-door.md` | the three nouns, the security rules, and why a daily allowance is enforced by a per-turn ceiling that shrinks |
 | `notes/02-a-question-that-can-wait.md` | escalation, and why a deadline that denies belongs in the service rather than in the framework |
+| `notes/03-standing-answers.md` | a rung is per turn, a rule is per call, and why patterns may widen a refusal but never a permission |
+| `notes/04-the-failure-loop.md` | a bad turn becomes a case in the package that produced it — and why only a person can say a turn *answered* badly |
+| `notes/05-one-person-two-channels.md` | an actor is a person, not a seat; and the allowance that silently doubled when it was not |
 
 ### The two READMEs
 
@@ -1769,9 +1823,14 @@ and gaps, and each one is argued in the note that owns it.
 * **Locks are never evicted** — one `asyncio.Lock` per session key the
   process has ever served. A few hundred bytes against a correctness
   property.
-* **One actor per channel.** The same person on Telegram and over HTTP is
-  two actor ids today, with two separate queues of questions. One actor
-  with several channel identities is right, and is a table.
+* **No preferred channel, and no taking a question back.** A person
+  reachable three ways gets the question three times, in no order, and
+  answering on one leaves the other two sitting there. Ranking channels
+  means a second deadline inside the first; retracting means every
+  adapter implements editing.
+* **A channel identity cannot be added without a restart.** The roster is
+  read once, and its reverse index is built with it. Fine for a file one
+  person edits; a papercut the first time a guest is added at a party.
 * **A package edited on disk changes a live conversation's next turn.**
   Desirable when you are fixing a prompt, alarming when a conversation
   changes personality mid-sentence. Pinning a package version per thread is
@@ -1809,5 +1868,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1383 offline tests passing (1 skipped) — no network, no key.
-dvara: 161. Both copyright 2026 Mahen Singh, Apache License 2.0.*
+*Yantra: 1394 offline tests passing (1 skipped) — no network, no key.
+dvara: 298. Both copyright 2026 Mahen Singh, Apache License 2.0.*
