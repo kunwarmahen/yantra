@@ -171,6 +171,13 @@ is what prompted the key in the first place.
   many tools go out per turn ([note 17](17-tool-selection.md)), the roster
   here is the full admitted set, not the narrowed catalog. The wider set is
   the right thing for a claim about what the agent *can* do.
+* ~~**A declared sub-agent's list is out of reach.**~~ It was, and
+  [note 44](44-a-ceiling-and-a-floor.md) closed it with
+  `subagent_has_tools` / `subagent_lacks_tools`. Worth reading for what
+  the two keys turn out to be: the roster above is a CEILING over a
+  package, because a child is built out of the parent's registry and
+  cannot exceed it, and the new pair is the only way to assert the FLOOR
+  each declared child was given.
 
 ## Part two: one run is one sample
 

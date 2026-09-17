@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1346 tests. The
+The harness underneath is complete and covered by 1374 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -459,6 +459,9 @@ uv run --env-file .env python examples/run_evals.py --async   # same, concurrent
 A case that only asserts the tool *list* (`lacks_tools = ["write_file"]`)
 needs no task and reaches no model, so that part of a gate is free and
 fast enough for every push ([notes/35](notes/35-roster-and-pass-rates.md)).
+`subagent_lacks_tools = { "*" = ["web_*"] }` is the same claim about the
+sub-agents a package declares, which the parent's own roster cannot reach
+([notes/44](notes/44-a-ceiling-and-a-floor.md)).
 
 Images ([notes/15](notes/15-images.md)): `--image PATH` (repeatable)
 attaches png/jpeg/gif/webp files (≤5 MB each) to a one-shot prompt;
@@ -762,6 +765,11 @@ chooses all three at call time and needs an operator flag to be allowed
 to. The child gets a fresh context window; the parent gets back only its
 final answer. See [notes/40](notes/40-a-package-that-delegates.md).
 
+That `tools` line is a promise, and an eval case can hold it to it:
+`subagent_lacks_tools = { fact_checker = ["web_*"] }` costs no tokens and
+goes red the day somebody widens the child
+([notes/44](notes/44-a-ceiling-and-a-floor.md)).
+
 `allow`/`deny` are a **standing admission policy**, not a one-time sweep:
 they also govern tools registered later — `ask_user`, `load_skill`, an MCP
 server's tools — so an agent that says it does not get `bash` never gets
@@ -870,6 +878,28 @@ Zero tokens, no model call, and a roster failure stops the case before a
 request goes out — a trajectory from an agent with the wrong tool list
 belongs to some other agent. Patterns are refused in `required_tools` /
 `forbidden_tools`, where they would match nothing and quietly pass.
+
+**The roster above is a ceiling; a declared sub-agent has a floor.** A
+child is built out of the parent's registry and cannot exceed it, so
+`lacks_tools = ["bash"]` already covers every `[[subagent]]` a package
+declares. What it cannot say is that a fact-checker was deliberately kept
+*narrower* than the package around it — so `subagent_has_tools` and
+`subagent_lacks_tools` ask the same two questions of a named child
+([notes/44](notes/44-a-ceiling-and-a-floor.md)):
+
+```toml
+[[case]]
+id = "the-checker-is-actually-on-the-roster"
+has_tools = ["fact_checker"]
+subagent_has_tools   = { fact_checker = ["read_file", "outline"] }
+subagent_lacks_tools = { "*" = ["web_*", "write_file", "edit_file", "bash"] }
+```
+
+Also free. The key is a sub-agent's NAME, or `"*"` for every child the
+package declares — patterns are refused there, and naming a child that is
+not declared is a *failure* rather than a vacuous pass, so renaming a
+sub-agent turns its assertions red instead of quietly grading nothing.
+Tool patterns work in the values, as above.
 
 **Zero tokens now means zero setup.** A run whose selected cases are all
 roster ones resolves no provider at all — no key, no `.env`, no local
@@ -1106,10 +1136,14 @@ src/yantra/
 │                   tool list, the model writes one string, and a child
 │                   that can only read needs no permission prompt. An
 │                   awaited spawn builds an async child, so a gate that
-│                   suspends still works inside one
+│                   suspends still works inside one. resolve_child_tools is
+│                   the ONE definition of what a child would be offered --
+│                   a disabled tool is unreachable, not present -- shared by
+│                   the spawn, the refusal, read_only and the eval assertion
 │                   ([notes/08](notes/08-sub-agents.md),
 │                   [notes/34](notes/34-budgets.md),
-│                   [notes/40](notes/40-a-package-that-delegates.md))
+│                   [notes/40](notes/40-a-package-that-delegates.md),
+│                   [notes/44](notes/44-a-ceiling-and-a-floor.md))
 ├── permissions.py  PermissionRequest + gates: allow_read_only / yolo /
 │                   deny_all / trust_sandbox (auto-approves bash ONLY while
 │                   confined); SwitchableGate flips ask ⇄ yolo mid-session;
@@ -1197,6 +1231,11 @@ src/yantra/
 │                   LIST before any request — zero tokens, and a failure
 │                   short-circuits the run; CaseOutcome holds n runs and
 │                   the pass rate ([notes/35](notes/35-roster-and-pass-rates.md)).
+│                   subagent_has_tools/subagent_lacks_tools grade a
+│                   DECLARED child's list, keyed by name or "*" -- the
+│                   parent's roster is a ceiling over the package and
+│                   cannot see the floor each child was given
+│                   ([notes/44](notes/44-a-ceiling-and-a-floor.md))
 │                   OfflineProvider is what a roster-only run builds against
 │                   -- build() unchanged, every method raising, so the free
 │                   gate needs no key
@@ -1210,7 +1249,12 @@ src/yantra/
 │                   --case POINTS that run count at the cases that need it,
 │                   and the gate starts the package's declared MCP servers --
 │                   an unreachable one is red, never a smaller agent
-│                   ([notes/41](notes/41-a-gate-you-can-point.md))
+│                   ([notes/41](notes/41-a-gate-you-can-point.md)).
+│                   subagent_has_tools/subagent_lacks_tools are tables keyed
+│                   by a child's NAME (or "*"); a pattern key is refused and
+│                   an undeclared child is a failure, because either one
+│                   would grade nothing and report green
+│                   ([notes/44](notes/44-a-ceiling-and-a-floor.md))
 ├── eval_report.py  one --eval run as JSON, and what moved since the last:
 │                   a record, never a baseline (comparing changes no exit
 │                   code); counts rather than percentages; a case in only
@@ -1378,7 +1422,9 @@ Design rules worth stealing:
   package may DECLARE a child instead, and then the author owns its tool
   list rather than the model — which also makes "does this need a
   permission prompt?" answerable, so a child that can only read does not
-  ask ([notes/40](notes/40-a-package-that-delegates.md)).
+  ask ([notes/40](notes/40-a-package-that-delegates.md)), and makes that
+  list something a free eval case can grade
+  ([notes/44](notes/44-a-ceiling-and-a-floor.md)).
 * **Sync generators everywhere** — blocking tools, blocking REPL, and
   cancellation for free (generator close unwinds into socket cleanup).
 * **Async = cores + skins, not a rewrite.** Protocol logic lives in
@@ -1415,7 +1461,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1346 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1374 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1446,7 +1492,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1346 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1374 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

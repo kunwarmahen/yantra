@@ -57,7 +57,7 @@ from it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -137,6 +137,38 @@ class SubagentSpec:
     model: str | None = None
     max_iterations: int = 20
     output_format: str | None = None
+
+
+def resolve_child_tools(registry: ToolRegistry,
+                        tools: Sequence[str]) -> tuple[list[str], list[str]]:
+    """A child's declared tool list, split into (offered, unreachable).
+
+    ONE DEFINITION OF A CHILD'S ROSTER, because three callers need it and
+    a second copy would drift apart from this one in a direction nobody
+    would notice: the registry a spawn builds, the ``read_only`` property
+    a permission gate consults before asking anybody anything, and the
+    roster assertion an eval case grades without spawning at all.
+
+    UNREACHABLE IS NOT ONLY "NO SUCH TOOL". A tool the operator DISABLED
+    this session is still registered and still listed by ``names()``, and
+    only ``get()`` knows the difference -- so a child's list naming one
+    used to surface as a KeyError thrown from inside a tool call, or from
+    inside a property a permission prompt was in the middle of reading.
+    It is unreachable, which is the answer all three callers want and a
+    better sentence than the traceback.
+
+    Duplicates collapse, in first-mention order. Two mentions of one tool
+    in one author's list is a typo, not a collision, and the freeform
+    route has always deduplicated it silently.
+    """
+    offered: list[str] = []
+    unreachable: list[str] = []
+    for name in dict.fromkeys(tools):
+        if name in registry and not registry.is_disabled(name):
+            offered.append(name)
+        else:
+            unreachable.append(name)
+    return offered, unreachable
 
 
 @dataclass(slots=True)
@@ -236,9 +268,22 @@ class SubagentSpawner:
 
     def _child_registry(self, allowed: list[str]) -> ToolRegistry:
         """The child's WHOLE tool set -- scope restriction as a fact about
-        the registry, not a sentence in a prompt."""
+        the registry, not a sentence in a prompt.
+
+        A list this session cannot supply is a ToolError rather than the
+        KeyError it used to be: the parent is mid-turn, and the difference
+        between a tool result it can read and an exception out of a tool
+        call is whether the model gets to say something sensible next.
+        """
+        offered, unreachable = resolve_child_tools(self.parent.registry,
+                                                   allowed)
+        if unreachable:
+            raise ToolError(
+                f"cannot build this sub-agent: it needs "
+                f"{', '.join(unreachable)}, which this session does not "
+                f"offer (unknown here, or disabled by the operator)")
         registry = ToolRegistry()
-        for name in allowed:
+        for name in offered:
             registry.register(self.parent.registry.get(name))
         return registry
 
@@ -325,8 +370,8 @@ class SubagentSpawner:
                 f"missing required argument 'task' -- say what you want "
                 f"{spec.name} to do, in one self-contained instruction "
                 f"(it sees nothing else from this conversation)")
-        missing = [t for t in spec.tools
-                   if t not in set(self.parent.registry.names())]
+        registry = self.parent.registry
+        _, missing = resolve_child_tools(registry, spec.tools)
         if missing:
             # The author's list, checked at the only moment it CAN be
             # checked: MCP tools and package tools register after the
@@ -335,8 +380,9 @@ class SubagentSpawner:
             # tools.allow).
             raise ToolError(
                 f"sub-agent {spec.name!r} needs tool(s) {missing}, which "
-                f"this agent does not have; available: "
-                f"{sorted(self.parent.registry.names())}")
+                f"this session does not offer -- unknown here, or disabled "
+                f"by the operator; available: "
+                f"{sorted(n for n in registry.names() if not registry.is_disabled(n))}")
         return objective
 
     # ---- the two spawns, sync and async ------------------------------------
@@ -598,14 +644,17 @@ class DeclaredSubagent(Tool):
 
         Computed at CALL time, not construction: MCP tools register after
         the agent is built, so a list naming one would be judged against a
-        registry that had not met it yet. A name the registry does not
-        know counts as unsafe -- the same pessimism MCP's own
-        ``readOnlyHint`` gets, and for the same reason.
+        registry that had not met it yet. A tool this session cannot
+        supply counts as unsafe -- the same pessimism MCP's own
+        ``readOnlyHint`` gets, and for the same reason. It is also the
+        honest answer for a child that can no longer be built at all: the
+        spawn is about to refuse, and refusing is not a read-only act.
         """
         registry = self.spawner.parent.registry
-        known = set(registry.names())
-        return all(name in known and registry.get(name).read_only
-                   for name in self.declared.tools)
+        offered, unreachable = resolve_child_tools(registry,
+                                                   self.declared.tools)
+        return not unreachable and all(registry.get(name).read_only
+                                       for name in offered)
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         remaining = self.spawner.max_per_session - self.spawner.spawned

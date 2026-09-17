@@ -38,6 +38,14 @@ was available and went unused looks exactly like a tool that was absent.
 A case whose only assertions are roster ones may omit ``user_message``
 entirely; it costs zero tokens and needs no model.
 
+``subagent_has_tools``/``subagent_lacks_tools`` are the same claim about a
+DECLARED CHILD, keyed by its name. They exist because the parent's roster
+is a ceiling and not a floor: a child is built from the parent's registry,
+so ``lacks_tools = ["bash"]`` has always covered the whole package, while
+a fact-checker deliberately kept off the network sits well inside a
+ceiling that permits ``web_fetch`` -- and widening it moved nothing any
+assertion could see.
+
 ``min_pass_rate`` is the other half of being honest about a die roll. A
 case declares the rate it claims to hold at ("7 of 10" is 0.7), and the
 OPERATOR decides how many runs to buy -- ``repeat`` is deliberately not a
@@ -69,7 +77,7 @@ from pathlib import Path
 from typing import Any
 
 from yantra.errors import ConfigError
-from yantra.evals import EvalCase
+from yantra.evals import EVERY_CHILD, EvalCase
 from yantra.tools.discover import load_module_file
 
 #: The conventional suite directory inside a package.
@@ -81,9 +89,17 @@ CASES = "cases.toml"
 #: Every key a ``[[case]]`` may hold. Exhaustive on purpose.
 CASE_KEYS = frozenset({
     "id", "description", "user_message", "required_tools",
-    "forbidden_tools", "has_tools", "lacks_tools", "max_tokens",
-    "max_iterations", "min_pass_rate", "check",
+    "forbidden_tools", "has_tools", "lacks_tools", "subagent_has_tools",
+    "subagent_lacks_tools", "max_tokens", "max_iterations", "min_pass_rate",
+    "check",
 })
+
+#: The roster keys: everything gradeable with no model and no request.
+#: Named as a set because three places ask the same question -- may this
+#: case omit ``user_message``, does it assert anything at all, and which
+#: keys does the "no task" error tell the author to keep.
+ROSTER_KEYS = ("has_tools", "lacks_tools", "subagent_has_tools",
+               "subagent_lacks_tools")
 
 #: Keys that only mean something once a model has RUN. A case with no
 #: ``user_message`` never reaches one, so any of these on such a case is a
@@ -179,6 +195,47 @@ def _str_list(entry: dict[str, Any], key: str, path: Path, where: str,
                         f"about the tool LIST, use has_tools/lacks_tools, "
                         f"which do take patterns")
     return list(value)
+
+
+def _child_table(entry: dict[str, Any], key: str, path: Path,
+                 where: str) -> dict[str, list[str]]:
+    """``{ fact_checker = ["web_*"] }`` -> the same, checked.
+
+    A TABLE rather than a flat list of ``child:tool`` strings, because the
+    two rosters are two objects and one namespace holding both would make
+    ``lacks_tools`` ambiguous about which it meant -- the question this
+    key exists to answer.
+
+    The KEY is a child's name or ``*``; patterns are refused there for the
+    reason ``subagent_failures`` gives (a key matching no child is a case
+    that checked nothing). The VALUES are tool patterns, exactly as in
+    ``has_tools``, because "nothing that writes" is a shape.
+    """
+    value = entry.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        _fail(path, f"{where}.{key} must be a table keyed by sub-agent name: "
+                    f'{key} = {{ fact_checker = ["web_*"] }}')
+    table: dict[str, list[str]] = {}
+    for child, patterns in value.items():
+        if child != EVERY_CHILD and any(c in child for c in GLOB_CHARS):
+            _fail(path, f"{where}.{key} takes a sub-agent NAME, not a pattern "
+                        f"({child}): a key matching no child would assert "
+                        f'nothing. Use "{EVERY_CHILD}" for every declared '
+                        f"sub-agent, or name them one at a time")
+        if not isinstance(patterns, list) \
+                or any(not isinstance(v, str) for v in patterns):
+            _fail(path, f"{where}.{key}.{child} must be a list of tool names "
+                        f"or patterns")
+        if not patterns:
+            # An empty list is a child named and then asked nothing. It
+            # reads as caution and grades as decoration.
+            _fail(path, f"{where}.{key}.{child} is empty: naming a sub-agent "
+                        f"and asserting nothing about it is a check that "
+                        f"cannot fail")
+        table[child] = list(patterns)
+    return table
 
 
 def _grader(reference: str, suite: Path, path: Path, where: str):
@@ -302,15 +359,20 @@ def load_cases(where: Path) -> list[EvalCase]:
                               patterns=True)
         lacks_tools = _str_list(entry, "lacks_tools", path, where_label,
                                 patterns=True)
+        subagent_has = _child_table(entry, "subagent_has_tools", path,
+                                    where_label)
+        subagent_lacks = _child_table(entry, "subagent_lacks_tools", path,
+                                      where_label)
         message = _str(entry, "user_message", path, where_label)
-        if not message and not (has_tools or lacks_tools):
+        if not message and not (has_tools or lacks_tools
+                                or subagent_has or subagent_lacks):
             # A roster assertion is the ONE thing a case can do without a
             # task, because it grades the agent rather than a trajectory.
             # Anything else with no message asserts nothing at all.
             _fail(path, f"{where_label} has no user_message -- only a case "
                         f"whose assertions are all about the roster "
-                        f"(has_tools/lacks_tools) may leave it out, because "
-                        f"that one needs no model")
+                        f"({', '.join(ROSTER_KEYS)}) may leave it out, "
+                        f"because that one needs no model")
         if not message:
             # Every other key grades a TRAJECTORY, and this case has none.
             # Silently ignoring one would be a suite that checks less than
@@ -321,7 +383,7 @@ def load_cases(where: Path) -> list[EvalCase]:
                 _fail(path, f"{where_label} has no user_message, so "
                             f"{', '.join(stray)} would grade a trajectory "
                             f"that never happens: give the case a task, or "
-                            f"keep it to has_tools/lacks_tools")
+                            f"keep it to {', '.join(ROSTER_KEYS)}")
         rate = _rate(entry, "min_pass_rate", path, where_label)
         check = entry.get("check")
         cases.append(EvalCase(
@@ -333,6 +395,8 @@ def load_cases(where: Path) -> list[EvalCase]:
                                       where_label),
             has_tools=has_tools,
             lacks_tools=lacks_tools,
+            subagent_has_tools=subagent_has,
+            subagent_lacks_tools=subagent_lacks,
             max_tokens=_int(entry, "max_tokens", path, where_label),
             max_iterations=_int(entry, "max_iterations", path, where_label),
             min_pass_rate=1.0 if rate is None else rate,

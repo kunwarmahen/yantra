@@ -142,9 +142,16 @@ from tools.allow above leaves the manifest valid, the package running,
 and the delegation case failing for a reason that reads like a model
 problem. This one costs nothing and names the real cause.
 
-What it CANNOT see is the child's own tool list. Roster assertions grade
-the tools this agent is offered, and fact_checker's narrower list (no
-web_fetch, on purpose) is a fact about a child that does not exist until
-somebody delegates. Widening it would go unnoticed here.
+The second half is about the CHILD'S OWN list, which is a different
+object. agent.toml gives fact_checker four read-only tools and no
+web_fetch, on purpose -- checking a claim against the sources in front of
+you is a different job from going and finding new ones. The parent's
+lacks_tools cannot make that claim: a child is built out of the parent's
+registry, so the parent's list is a CEILING over the whole package, and
+web_fetch is inside it. Deleting "no web_fetch" from the comment in
+agent.toml and adding it to the child's tools is a one-word diff that
+used to change what this package can reach and pass every case here.
 """
 has_tools = ["fact_checker"]
+subagent_has_tools = { fact_checker = ["read_file", "outline"] }
+subagent_lacks_tools = { "*" = ["web_*", "write_file", "edit_file", "bash"] }

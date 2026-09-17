@@ -617,6 +617,44 @@ on every push. Note that a filtered run says **SUBSET**, never SUITE: a
 green line under a filter is a claim about the cases that ran, and that
 line is what ends up in a pull request.
 
+### The roster is a ceiling; a sub-agent has a floor
+
+The researcher declares a `fact_checker` (Act IV), and its tool list is
+deliberately narrower than the package's: no `web_fetch`, because
+checking a claim against the files in front of you is a different job
+from going and finding new ones.
+
+`lacks_tools` cannot pin that. A child is built out of the parent's
+registry and cannot exceed it — so the parent's list is a **ceiling**
+over the whole package, `web_fetch` is inside it, and moving the child up
+to meet it changes nothing the assertion can see. The **floor** each
+child was given needs its own key:
+
+```toml
+[[case]]
+id = "the-checker-is-actually-on-the-roster"
+has_tools = ["fact_checker"]
+subagent_has_tools   = { fact_checker = ["read_file", "outline"] }
+subagent_lacks_tools = { "*" = ["web_*", "write_file", "edit_file", "bash"] }
+```
+
+Also free. The key is a sub-agent's name, or `"*"` for every child the
+package declares — which is the form worth reaching for, because it
+covers the sub-agent somebody adds later without anybody updating the
+case. Naming a child that is not declared is a *failure*, not a pass:
+otherwise renaming a sub-agent would leave a green case that quietly
+checked nothing.
+
+Add `web_fetch` to the child's list in `agent.toml` and the gate says so
+in under a second, with no model involved:
+
+```
+  FAIL  the-checker-is-actually-on-the-roster  roster failed · no model call · 0 tok
+        on fact_checker's roster and should not be: web_* matches web_fetch
+```
+
+Full reasoning in [notes/44](notes/44-a-ceiling-and-a-floor.md).
+
 ### One run is one sample
 
 A trajectory is a die roll. `--repeat N` runs every case N times and
@@ -1623,8 +1661,10 @@ mine/
 ```
 
 Write one roster case first (`lacks_tools`, costs nothing), then one
-behaviour case. Run the gate. Drop the directory into a dvara root and
-say something to it.
+behaviour case. If the package declares a sub-agent, add
+`subagent_lacks_tools = { "*" = [...] }` — also free, and it is the only
+thing watching the child's list. Run the gate. Drop the directory into a
+dvara root and say something to it.
 
 ---
 
@@ -1658,11 +1698,11 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) | a package brings its own tools |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) | the ceiling, the warning, and the two readers of one meter |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) | a gate that waits; a clock and a machine-readable word |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
-| [40](notes/40-a-package-that-delegates.md) | a package that declares its children |
+| [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) | a package that declares its children, and the gate that watches their tool lists |
 
 ### dvara — the door
 
@@ -1755,5 +1795,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1346 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1374 offline tests passing (1 skipped) — no network, no key.
 dvara: 161. Both copyright 2026 Mahen Singh, Apache License 2.0.*

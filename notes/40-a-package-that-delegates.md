@@ -373,13 +373,15 @@ nobody can read and nobody can review, which is the opposite of what
 
 ## What is not here yet
 
-* **A roster assertion cannot see a child's tool list.**
-  `has_tools`/`lacks_tools` grade the tools the *agent* is offered
-  ([note 35](35-roster-and-pass-rates.md)), and a child's list is a fact
-  about something that does not exist until somebody delegates. Widening
-  `fact_checker` to include `web_fetch` goes unnoticed by the gate — the
-  one change to a package's boundaries with no automatic alarm on it, and
-  the sharpest gap this note leaves open.
+* ~~**A roster assertion cannot see a child's tool list.**~~ Shipped in
+  [note 44](44-a-ceiling-and-a-floor.md) as `subagent_has_tools` /
+  `subagent_lacks_tools`, keyed by the child's name. The argument turned
+  out to be sharper than "add a key": the parent's roster is a CEILING
+  over the whole package — a child is built out of the parent's registry,
+  so `lacks_tools = ["bash"]` always covered every child — and what was
+  missing was any way to assert the FLOOR each child was given. Widening
+  `fact_checker` to include `web_fetch` now turns the example package's
+  gate red, in under a second, with no API key.
 * **Nothing bounds concurrent children.** Two delegations in one batch
   really do run at once — the sync loop's thread pool, the async loop's
   gather — and the ceiling on that is `max_parallel_tools`, which was

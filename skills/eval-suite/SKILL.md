@@ -131,9 +131,42 @@ declared server the gate cannot reach exits 2 rather than grading an
 agent smaller than the one you ship; `--no-mcp` skips them for offline
 CI and says loudly that it did.
 
-What a roster check still cannot see: a declared sub-agent's OWN tool
-list (`[[subagent]] tools`), and anything a prompt talks the model into
-or out of -- that is what the trajectory keys are for.
+What a roster check still cannot see: anything a prompt talks the model
+into or out of -- that is what the trajectory keys are for.
+
+## Asserting a DECLARED SUB-AGENT's list, also for free
+
+The roster above is a CEILING over the whole package. A child declared
+with `[[subagent]]` is built out of the parent's registry and cannot
+exceed it, so `lacks_tools = ["bash"]` already covers every child. What
+it cannot say is that a child was kept deliberately NARROWER than the
+package around it -- and that is the line an author moves by accident:
+
+```toml
+[[case]]
+id = "the-checker-stays-off-the-network"
+description = "fact_checker reads what is here; it does not go and find more"
+has_tools = ["fact_checker"]
+subagent_has_tools   = { fact_checker = ["read_file", "outline"] }
+subagent_lacks_tools = { "*" = ["web_*", "write_file", "edit_file", "bash"] }
+```
+
+Free, like its neighbours above: no `user_message`, no model, no key.
+Three rules:
+
+* **The key is a NAME, or `"*"` for every child the package declares.** A
+  pattern key is refused at load time. `"*"` is the one worth reaching
+  for, because it covers the sub-agent somebody adds next year without
+  anybody remembering to update the case.
+* **Naming a child that is not declared is a FAILURE.** The tempting
+  reading -- a child that does not exist cannot use `web_fetch`, so the
+  claim holds -- is a green case reporting on a typo. Rename a sub-agent
+  and its assertions go red until you update them, which is the point.
+* **Tool patterns work in the values,** exactly as in `lacks_tools`.
+
+What it grades is the DECLARATION -- what a child WOULD be offered -- not
+a child that ran. For that, put `forbidden_tools` on the case that
+actually delegates. Reasoning in `notes/44-a-ceiling-and-a-floor.md`.
 
 ## Running a case more than once
 
@@ -328,6 +361,10 @@ For CONFIGURATION, write the roster assertion beside it: `lacks_tools =
 no model involved. Keep both -- "it did not write" and "it cannot write"
 are two claims, and a prompt regression breaks the first while a manifest
 edit breaks the second.
+
+The same split applies one level down. `subagent_lacks_tools` goes red
+when a child's `tools` list grows; the delegation case's
+`forbidden_tools` goes red when a child USES something it should not.
 
 ## Before you say you are done
 

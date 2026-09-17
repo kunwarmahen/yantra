@@ -41,6 +41,13 @@ roster assertions needs no ``user_message`` at all -- it is a free
 assertion about configuration, which is the one thing a trajectory check
 cannot see.
 
+A DECLARED CHILD'S list is free in the same way and is a different object:
+``subagent_has_tools``/``subagent_lacks_tools`` grade what a package's
+``[[subagent]]`` would be offered if anybody delegated. The parent's own
+roster cannot reach it -- a child sits inside the parent's registry, so
+the parent's list is a ceiling over the whole package and says nothing
+about the floor each child was given.
+
 And because a trajectory is a DIE ROLL, one run is one sample.
 ``min_pass_rate`` is the author's honest claim about a case ("7 of 10"),
 ``repeat`` is the operator's decision about how much evidence to buy, and
@@ -62,7 +69,7 @@ import asyncio
 import fnmatch
 import math
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, ClassVar
@@ -72,7 +79,8 @@ from yantra.async_agent import AsyncAgent
 from yantra.errors import ConfigError
 from yantra.providers.base import Provider, ProviderSettings, collect
 from yantra.spec import AgentSpec
-from yantra.subagent import SpawnSubagent, SubagentSpawner
+from yantra.subagent import (DeclaredSubagent, SpawnSubagent,
+                             SubagentSpawner, resolve_child_tools)
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
 from yantra.types import Message, TextBlock
 
@@ -141,6 +149,14 @@ class EvalCase:
     #: about configuration, which no trajectory check can reach.
     has_tools: list[str] = field(default_factory=list)
     lacks_tools: list[str] = field(default_factory=list)
+    #: The same two claims about a DECLARED sub-agent's list, keyed by the
+    #: child's name (or ``"*"`` for every child this package declares).
+    #: ``{"fact_checker": ["web_*"]}`` under ``subagent_lacks_tools`` is
+    #: the assertion that widening a child goes through a gate -- which
+    #: the parent's own roster cannot make, because a child's list is a
+    #: fact about something that does not exist until somebody delegates.
+    subagent_has_tools: dict[str, list[str]] = field(default_factory=dict)
+    subagent_lacks_tools: dict[str, list[str]] = field(default_factory=dict)
     check_answer: Callable[[str], bool] | None = None
     max_tokens: int | None = None       # input+output ceiling for the turn
     max_iterations: int | None = None   # model round-trips ceiling
@@ -155,15 +171,22 @@ class EvalCase:
         # A case with neither a task nor a roster assertion is a case that
         # cannot fail, and a gate made of those reports green forever --
         # the same bug an empty cases.toml would be (eval_suite.py).
-        if not self.user_message and not (self.has_tools or self.lacks_tools):
+        if not self.user_message and not self.grades_a_roster:
             raise ValueError(
                 f"case {self.id!r} has nothing to do: give it a user_message, "
-                f"or a roster assertion (has_tools/lacks_tools), which needs "
-                f"no model")
+                f"or a roster assertion (has_tools/lacks_tools, or the "
+                f"subagent_ pair), which needs no model")
         if not 0 < self.min_pass_rate <= 1:
             raise ValueError(
                 f"case {self.id!r}: min_pass_rate must be greater than 0 and "
                 f"at most 1 (got {self.min_pass_rate})")
+
+    @property
+    def grades_a_roster(self) -> bool:
+        """Whether this case asserts anything that costs no tokens -- about
+        the agent's own tool list, or about a declared child's."""
+        return bool(self.has_tools or self.lacks_tools
+                    or self.subagent_has_tools or self.subagent_lacks_tools)
 
     @property
     def needs_a_model(self) -> bool:
@@ -319,6 +342,120 @@ def roster_failures(case: EvalCase, roster: Sequence[str]) -> list[str]:
                             if hits == [pattern] else
                             f"on the roster and should not be: {pattern} "
                             f"matches {found}")
+    return failures
+
+
+#: The one pattern a ``subagent_`` key may be: every child this package
+#: declares. Not fnmatch -- see ``subagent_failures`` on why the key is a
+#: NAME and not a pattern language.
+EVERY_CHILD = "*"
+
+
+def declared_rosters(
+        agent: Agent | AsyncAgent) -> dict[str, tuple[list[str], list[str]]]:
+    """Every sub-agent the package DECLARED, and what each would be offered:
+    ``{name: (offered, unreachable)}``.
+
+    Read off the REGISTRY rather than the spec, for the reason ``roster_of``
+    uses ``specs()``: a declared child the package's own admission policy
+    turned away is not a child, it is a line in a file, and a disabled one
+    cannot be called this session. Grading either would tell an author
+    their gate covers a delegation that cannot happen.
+    """
+    rosters: dict[str, tuple[list[str], list[str]]] = {}
+    for tool in agent.registry:
+        # UNWRAP FIRST. Every tool in a suite's registry is a recording
+        # proxy (RecordingRegistry), so an isinstance check against the
+        # raw registry finds the children and the same check inside a
+        # running suite finds none -- which reads as "this package
+        # declares no sub-agents" and passes a lacks_ assertion for the
+        # worst available reason.
+        inner = getattr(tool, "_inner", tool)
+        if not isinstance(inner, DeclaredSubagent):
+            continue
+        if agent.registry.is_disabled(tool.name):
+            continue
+        rosters[tool.name] = resolve_child_tools(agent.registry,
+                                                 inner.declared.tools)
+    return rosters
+
+
+def subagent_failures(
+        case: EvalCase,
+        children: Mapping[str, tuple[Sequence[str], Sequence[str]]],
+) -> list[str]:
+    """Grade the DECLARED children's tool lists. Free, like the roster.
+
+    THE PARENT'S ROSTER IS ALREADY A CEILING -- a child is built from the
+    parent's registry, so nothing a package excluded can reach a child by
+    way of delegation, and ``lacks_tools = ["bash"]`` has always covered
+    the whole package. What it cannot say is anything about the FLOOR: a
+    fact-checker deliberately kept off the network sits well inside a
+    ceiling that permits ``web_fetch``, and widening it moves nothing the
+    old assertions could see.
+
+    A CHILD NAMED BY AN ASSERTION MUST EXIST, in both directions. The
+    tempting reading of ``subagent_lacks_tools = {"fact_checkr": [...]}``
+    is that a child which is not there cannot use anything, so the claim
+    holds -- and that is a green case reporting on a typo. Renaming a
+    sub-agent turns its assertions red, which is precisely the alarm this
+    exists to install.
+
+    The key is a NAME, or ``*`` for every declared child. Deliberately not
+    fnmatch, though the values are: a pattern key that matched no child
+    would be the vacuous pass above wearing a disguise, and ``*`` is the
+    one generalisation worth having -- "no child of this package may
+    write to disk" covers the children added after the case was written,
+    which is the strongest form of the alarm.
+    """
+    failures: list[str] = []
+    for wanted, book in ((True, case.subagent_has_tools),
+                         (False, case.subagent_lacks_tools)):
+        for key, patterns in book.items():
+            names = (sorted(children) if key == EVERY_CHILD
+                     else [key] if key in children else [])
+            if not names:
+                failures.append(
+                    "no sub-agents are declared, so an assertion about "
+                    "every child checks nothing" if key == EVERY_CHILD else
+                    f"no sub-agent called {key!r} is declared "
+                    f"(declared: {_listing(sorted(children))})")
+                continue
+            for name in names:
+                offered, unreachable = children[name]
+                if unreachable:
+                    # Grading the rest would be grading a fiction: this
+                    # child cannot be built, so nothing it is "offered"
+                    # will ever reach a model.
+                    failures.append(
+                        f"{name} cannot be built: it declares "
+                        f"{_listing(unreachable)}, which this agent does "
+                        f"not offer")
+                    continue
+                failures.extend(_child_failures(name, offered, patterns,
+                                                wanted=wanted))
+    # One broken child named by both books says so once.
+    return list(dict.fromkeys(failures))
+
+
+def _child_failures(name: str, offered: Sequence[str],
+                    patterns: Sequence[str], *, wanted: bool) -> list[str]:
+    """``has``/``lacks`` against one child's list, phrased so the failure
+    names the child -- "not on the roster: grep" in a package with four
+    sub-agents sends the reader to the wrong file."""
+    failures: list[str] = []
+    for pattern in patterns:
+        hits = [tool for tool in offered if fnmatch.fnmatch(tool, pattern)]
+        if wanted and not hits:
+            failures.append(f"not on {name}'s roster: {pattern} "
+                            f"({name}: {_listing(offered)})")
+        elif not wanted and hits:
+            found = _listing(hits)
+            failures.append(
+                f"on {name}'s roster and should not be: {found}"
+                if hits == [pattern] else
+                f"on {name}'s roster and should not be: {pattern} "
+                f"matches {found}")
     return failures
 
 
@@ -516,7 +653,8 @@ class EvalRunner:
         # that asserts one either gets its verdict for nothing or stops
         # here: a trajectory from an agent with the wrong tool list belongs
         # to a different agent, and buying it teaches nothing.
-        free = roster_failures(case, roster_of(agent))
+        free = (roster_failures(case, roster_of(agent))
+                + subagent_failures(case, declared_rosters(agent)))
         if free or not case.needs_a_model:
             return _free_result(case, free, time.monotonic() - start)
         try:
@@ -662,7 +800,9 @@ class AsyncEvalRunner:
             case.setup(agent)
             agent.registry = recording_registry(agent.registry, seen)
         start = time.monotonic()
-        free = roster_failures(case, roster_of(agent))   # the sync rule, verbatim
+        # the sync rule, verbatim
+        free = (roster_failures(case, roster_of(agent))
+                + subagent_failures(case, declared_rosters(agent)))
         if free or not case.needs_a_model:
             return _free_result(case, free, time.monotonic() - start)
         try:
