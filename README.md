@@ -20,10 +20,11 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1162 tests. The
+The harness underneath is complete and covered by 1346 tests. The
 framework layer on top — agents you define as a folder of files, tools
-loaded from outside this tree, evals as an acceptance gate — is being
-built now, and the API is not stable yet.
+and sub-agents declared in that folder, evals as an acceptance gate you
+can run without a key — is built and in use, and the API is not stable
+yet.
 
 ## Provenance and license
 
