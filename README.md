@@ -14,6 +14,9 @@ Anthropic, any OpenAI-compatible gateway, the Responses API, or an
 Ollama box on hardware you own — the same agent, the same tools, no
 code changes.
 
+[TUTORIAL.md](TUTORIAL.md) walks the whole thing end to end — every
+layer in the order the pieces make sense, what to type to see each one
+working, and an hour-long path you can follow against a local model.
 [`notes/`](notes/) is the per-topic write-up of how every layer works;
 [notes/00-guided-tour.md](notes/00-guided-tour.md) is the plain-English
 tour, with diagrams.
