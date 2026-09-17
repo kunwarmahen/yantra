@@ -369,29 +369,30 @@ other three rows now have three ticks each instead of one.
 
 ## What is not here yet
 
-* **A keyless roster gate.** The free case costs no tokens but still needs
-  a provider resolved, because grading a roster means *building* the agent
-  and an agent takes a provider. So a CI job that only asserts tool lists
-  still wants an API key (or `--provider ollama`) to get to zero tokens.
-  Fixable, and not by duplicating `AgentSpec.build`'s assembly in a second
-  place — which is the only reason it is still open.
+* ~~**A keyless roster gate.**~~ Shipped in
+  [note 41](41-a-gate-you-can-point.md), and the constraint above is what
+  shaped it: `AgentSpec.build` runs unchanged and the PROVIDER is the part
+  that gets replaced, by one whose every method raises. A roster-only run
+  now resolves no provider at all.
 * **Statistics, rather than a fraction.** "7 of 10" is a threshold, not a
   confidence interval. Three runs of a case tell you very little and the
   gate will happily print `✓✓✓` as though they told you a lot. Proper
   intervals need more runs than anyone will pay for per push; naming the
   limit is the honest interim.
-* **A per-case run count.** `--repeat` applies to the whole suite, so one
-  genuinely probabilistic case drags every deterministic one along with
-  it. The fix is a key, and a key that spends the operator's money is
-  exactly what the section above refused — so it wants a shape nobody has
-  proposed yet.
-* **A roster assertion about MCP tools.** Covered above: `--eval` opens no
-  servers, so the set is empty and an assertion about it is vacuous.
-  Honest options are to connect them under the gate or to refuse
-  `mcp__*` in these keys outright, and both want the eval path to grow a
-  server lifecycle first.
-* **Comparing two runs of the same suite.** A pass rate invites the next
-  question — did this model do better than that one? — and nothing here
-  writes a report anywhere a later run could read. `case_from_trace`
-  ([note 33](33-evals-as-a-gate.md)) points at the same missing store from
-  the other side.
+* ~~**A per-case run count.**~~ The shape turned out not to be a count at
+  all: [note 41](41-a-gate-you-can-point.md) adds `--case PATTERN`, so the
+  operator POINTS the global run count instead of the author declaring a
+  per-case one. Nothing moved into the manifest, and `--case flaky-*
+  --repeat 10` buys ten samples of the case that needs them.
+* ~~**A roster assertion about MCP tools.**~~ Shipped in
+  [note 41](41-a-gate-you-can-point.md): the gate connects the servers the
+  manifest declares, so the assertion grades something real. It took the
+  first option of the two, and added the rule the second would not have
+  needed — a declared server the suite cannot reach is a RED suite, not a
+  smaller agent.
+* ~~**Comparing two runs of the same suite.**~~ Shipped in
+  [note 42](42-two-runs-of-the-same-suite.md): the run writes a report and
+  a later run reads one. `case_from_trace`
+  ([note 33](33-evals-as-a-gate.md)) pointed at the same missing store from
+  the other side, and still does — it is a store of RESULTS, not of
+  trajectories.

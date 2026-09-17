@@ -443,6 +443,8 @@ cadence, not per-commit; exit code doubles as a CI gate):
 ```bash
 uv run yantra --agent ./researcher --eval             # a package's own gate
 uv run yantra --agent ./researcher --eval --repeat 5  # ... judged on the pass rate
+uv run yantra --agent ./researcher --eval --case "flaky-*" --repeat 10   # aimed
+uv run yantra --agent ./researcher --eval --case "has-no-*"  # no key, no tokens
 uv run --env-file .env python examples/run_evals.py   # this harness's own suite
 uv run --env-file .env python examples/run_evals.py --async   # same, concurrent
 ```
@@ -861,6 +863,35 @@ request goes out — a trajectory from an agent with the wrong tool list
 belongs to some other agent. Patterns are refused in `required_tools` /
 `forbidden_tools`, where they would match nothing and quietly pass.
 
+**Zero tokens now means zero setup.** A run whose selected cases are all
+roster ones resolves no provider at all — no key, no `.env`, no local
+server, which is what makes this affordable on every push:
+
+```
+$ uv run yantra --agent ./researcher --eval --case "has-no-way*"
+eval researcher 0.1.0 · 1 case(s) · 1 roster-only · none · (no model needed)
+no provider resolved: every selected case grades the roster, so this run
+makes no request and needs no key
+filtered: has-no-way* -- 1 of 6 case(s); this is not the package's gate
+
+  PASS  has-no-way-to-write  roster only · no model call · 0 tok
+
+SUBSET GREEN · 1/1 passed · 5 case(s) not run · 0 tokens
+```
+
+`--case PATTERN` (fnmatch, repeatable) is how you aim `--repeat` at the
+one case that needs the evidence instead of paying for it on every
+deterministic one — `--case "flaky-*" --repeat 10`. A filtered run says
+**SUBSET**, never SUITE: a green line under a filter is a claim about the
+cases that ran, and that line is what ends up in a pull request.
+
+**The servers the package declares are under test too.** `--eval` starts
+them and their tools register as `mcp__<server>__<tool>`, so
+`has_tools = ["mcp__docs__*"]` grades something real instead of an empty
+set. A declared server the suite cannot reach exits 2 rather than grading
+a smaller agent than the one that ships; `--no-mcp` skips them for offline
+CI and says loudly that it did.
+
 **One run is one sample.** A trajectory is a die roll, so `--repeat N`
 runs every case N times and judges it on the rate; `min_pass_rate` in the
 file is the author's claim ("7 of 10"), and how many runs to buy is the
@@ -1121,13 +1152,21 @@ src/yantra/
 │                   Roster checks (has_tools/lacks_tools) grade the tool
 │                   LIST before any request — zero tokens, and a failure
 │                   short-circuits the run; CaseOutcome holds n runs and
-│                   the pass rate ([notes/35](notes/35-roster-and-pass-rates.md))
+│                   the pass rate ([notes/35](notes/35-roster-and-pass-rates.md)).
+│                   OfflineProvider is what a roster-only run builds against
+│                   -- build() unchanged, every method raising, so the free
+│                   gate needs no key
+│                   ([notes/41](notes/41-a-gate-you-can-point.md))
 ├── eval_suite.py   a package's acceptance gate: evals/cases.toml ->
 │                   EvalCase, check = "graders:fn" resolved by path at LOAD
 │                   time, unknown keys refused ([notes/33](notes/33-evals-as-a-gate.md));
 │                   patterns allowed in the roster keys and refused in the
 │                   trajectory ones, min_pass_rate is the author's claim and
-│                   repeat is not a key ([notes/35](notes/35-roster-and-pass-rates.md))
+│                   repeat is not a key ([notes/35](notes/35-roster-and-pass-rates.md)).
+│                   --case POINTS that run count at the cases that need it,
+│                   and the gate starts the package's declared MCP servers --
+│                   an unreachable one is red, never a smaller agent
+│                   ([notes/41](notes/41-a-gate-you-can-point.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

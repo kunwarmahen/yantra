@@ -69,11 +69,53 @@ from typing import Any, ClassVar
 
 from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
-from yantra.providers.base import Provider, collect
+from yantra.errors import ConfigError
+from yantra.providers.base import Provider, ProviderSettings, collect
 from yantra.spec import AgentSpec
 from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
 from yantra.types import Message, TextBlock
+
+
+class OfflineProvider(Provider):
+    """A provider for a run that will not make a request, and knows it.
+
+    Grading a ROSTER means building the agent, and building an agent takes
+    a provider -- which is how a suite of nothing but ``has_tools`` claims
+    came to need an API key to reach zero tokens. Assembling the agent by
+    hand instead was the obvious fix and the wrong one: ``AgentSpec.build``
+    owns the order things are wired in (spec.py), and a second copy of that
+    order is a second thing to keep in step.
+
+    So the provider is the part that gets replaced, and every method on it
+    raises. A roster-only run never calls one; if it ever does, the suite's
+    own accounting of which cases need a model is wrong, and that is worth
+    a loud error rather than a mysteriously empty answer.
+    """
+
+    name = "none"
+
+    def __init__(self) -> None:
+        super().__init__(ProviderSettings(api_key="", base_url=""))
+
+    def _refuse(self):
+        raise ConfigError(
+            "this eval run resolved no provider because every selected case "
+            "grades the roster, and something asked for a model anyway -- "
+            "which means a case with a user_message was counted as free")
+
+    def complete(self, **kwargs):
+        self._refuse()
+
+    def stream(self, **kwargs):
+        self._refuse()
+
+    async def acomplete(self, **kwargs):
+        self._refuse()
+
+    async def astream(self, **kwargs):
+        self._refuse()
+        yield  # pragma: no cover -- unreachable; keeps this an async generator
 
 
 @dataclass(slots=True)

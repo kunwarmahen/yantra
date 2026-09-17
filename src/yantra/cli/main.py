@@ -31,7 +31,8 @@ from yantra.config import (
 )
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
 from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
-from yantra.evals import AsyncEvalRunner, CaseOutcome, EvalRunner
+from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
+                          OfflineProvider)
 from yantra.images import load_image_block
 from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
@@ -130,6 +131,20 @@ def build_parser() -> argparse.ArgumentParser:
                              "to hold at, and this buys the evidence. "
                              "Roster-only cases still run once -- they reach "
                              "no model")
+    parser.add_argument("--case", action="append", default=[],
+                        metavar="PATTERN", dest="case",
+                        help="with --eval: run only the cases whose id "
+                             "matches (fnmatch; repeatable). This is how you "
+                             "spend --repeat N on the one case that needs the "
+                             "evidence without paying for it on every "
+                             "deterministic one. A filtered run reports as a "
+                             "SUBSET, never as the suite's verdict")
+    parser.add_argument("--no-mcp", action="store_true", dest="no_mcp",
+                        help="with --eval: do not start the MCP servers the "
+                             "package declares. The agent under test is then "
+                             "missing their tools, which the header says out "
+                             "loud -- a gate that graded a smaller agent "
+                             "quietly would be worse than no gate")
     parser.add_argument("--browse-login", metavar="URL", dest="browse_login",
                         default=None,
                         help="one-time LOGIN SETUP for the browser_* tools: "
@@ -342,8 +357,48 @@ def _build_mode(args, provider_name: str, settings, model: str,
     return 0 if result.ok else 1
 
 
-def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
-               model: str, console: Console) -> int:
+def _select_cases(cases: list, patterns: list[str]) -> tuple[list, str | None]:
+    """``--case PATTERN`` -> the cases to run, and the label for the header.
+
+    A RUN COUNT IS THE OPERATOR'S MONEY (notes/35), which is why ``repeat``
+    never became a key in cases.toml -- and which left one genuinely
+    probabilistic case dragging every deterministic one along with it under
+    ``--repeat 10``. The missing piece was never a per-case count. It was a
+    way to POINT the count: the operator says which cases to spend on, in
+    the same breath as how many runs to buy.
+    """
+    if not patterns:
+        return cases, None
+    chosen = [c for c in cases
+              if any(fnmatch.fnmatch(c.id, pat) for pat in patterns)]
+    return chosen, ", ".join(patterns)
+
+
+def _eval_mcp(spec: AgentSpec, tools, console: Console):
+    """Start the servers the package declares, or say why the agent under
+    test is smaller than the one that ships.
+
+    A SERVER THE PACKAGE DECLARED AND THE SUITE COULD NOT REACH IS A RED
+    SUITE, NOT A SMALLER AGENT. Everywhere else in this CLI an unreachable
+    MCP server is a warning -- a dead optional integration should not kill
+    an interactive session. A gate is the opposite case: its whole job is
+    to answer "does the agent that ships still work", and quietly grading
+    one with fewer tools than it ships with answers a different question
+    in the same green letters.
+
+    Registered into the runner's BASE registry, before any case copies it,
+    so the package's own admission policy still applies per case (a package
+    that narrows to a whitelist must name mcp__* to keep them).
+    """
+    manager = MCPManager(tools)
+    for cfg in spec.mcp:
+        names = manager.connect(cfg)          # MCPError propagates: see above
+        console.print(f"[dim]mcp '{cfg.name}': {len(names)} tool(s) under "
+                      f"test -- {', '.join(names)}[/dim]")
+    return manager
+
+
+def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     """--eval: run the package's own suite, and make the exit code the verdict.
 
     Builder mode's rule pointed at the agent instead of the project. An
@@ -352,8 +407,8 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
     this runs it: non-zero on any failure, which is all CI needs.
 
     The suite grades THE PACKAGE -- ``spec=`` hands the runner the same
-    AgentSpec a session would build, so the prompt, skills, package tools
-    and admission policy under test are the shipped ones.
+    AgentSpec a session would build, so the prompt, skills, package tools,
+    admission policy and declared servers under test are the shipped ones.
     """
     if spec.root is None:
         print("error: --eval runs an agent package's own suite, and no "
@@ -369,10 +424,43 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
     try:
         # Graders resolve HERE, before a single token is spent: a typo in
         # case nine must not cost eight cases to discover (eval_suite.py).
-        cases = load_cases(suite)
+        every_case = load_cases(suite)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+    cases, filtered = _select_cases(every_case, args.case)
+    if not cases:
+        print(f"error: no case matches {', '.join(args.case)} -- this suite "
+              f"has: {', '.join(c.id for c in every_case)}", file=sys.stderr)
+        return 2
+
+    # THE PROVIDER IS RESOLVED FROM WHAT THE SELECTED CASES NEED. A suite
+    # of nothing but roster assertions grades the tool LIST, which is
+    # knowable the moment the agent is built -- so it makes no request,
+    # needs no key, and now says so instead of failing at the doorstep.
+    needs_model = any(c.needs_a_model for c in cases)
+    if needs_model:
+        try:
+            provider_name = spec.provider or guess_provider()
+            settings = load_settings(provider_name)
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        model = spec.model or default_model(provider_name)
+        provider = get_provider(provider_name, settings,
+                                cache_control=bool(spec.cache))
+    else:
+        provider_name = spec.provider or "none"
+        model = spec.model or "(no model needed)"
+        provider = OfflineProvider()
+        # Two fields the build would otherwise resolve against a provider
+        # that is not there: the window is never consulted because nothing
+        # is sent, and a dollar ceiling cannot fire on a run that spends
+        # nothing (and would refuse to be BUILT against a model slug
+        # nobody can price -- notes/34, correctly, and pointlessly here).
+        spec = replace(spec, max_usd_per_turn=None,
+                       context_window=spec.context_window or 200_000)
 
     # A SUITE NEVER ASKS, AND A PACKAGE CANNOT OPEN ITS OWN GATE. Nobody
     # is sitting in front of an acceptance run, so "ask" would hang it;
@@ -420,6 +508,17 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
     console.print(f"[bold]eval[/bold] {escape(label)} · {plan} · "
                   f"{provider_name} · {model}\n[dim]cwd: {cwd}\n"
                   f"gate: {gate_note}{budget_note}[/dim]")
+    if filtered is not None:
+        # Never quiet about it. A green line under a filter is a claim
+        # about the cases that ran, and the difference between that and a
+        # gate is the whole reason the verdict word changes below too.
+        console.print(f"[yellow]filtered: {escape(filtered)} -- "
+                      f"{len(cases)} of {len(every_case)} case(s); this is "
+                      f"not the package's gate[/yellow]")
+    if not needs_model:
+        console.print("[dim]no provider resolved: every selected case grades "
+                      "the roster, so this run makes no request and needs no "
+                      "key[/dim]")
     if args.eval_async is not None:
         console.print(f"[dim]mode: async, {args.eval_async} trajectories at "
                       f"once -- lines land as cases finish, not in file "
@@ -436,12 +535,23 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
             console.print(f"[dim]note: {claimed} case(s) declare a "
                           f"min_pass_rate below 1.0; one run each can only "
                           f"grade them all-or-nothing -- --repeat N buys the "
-                          f"evidence[/dim]")
-    console.print()
+                          f"evidence (--case PATTERN points it)[/dim]")
 
-    provider = get_provider(provider_name, settings,
-                            cache_control=bool(spec.cache))
     tools = default_registry(sandbox)
+    mcp_manager = None
+    if spec.mcp and not args.no_mcp:
+        try:
+            mcp_manager = _eval_mcp(spec, tools, console)
+        except MCPError as exc:
+            print(f"error: mcp server declared by this package is "
+                  f"unreachable, so the agent under test would be smaller "
+                  f"than the one that ships: {exc}", file=sys.stderr)
+            return 2
+    elif spec.mcp:
+        console.print(f"[yellow]mcp: skipped (--no-mcp) -- "
+                      f"{len(spec.mcp)} declared server(s) are NOT under "
+                      f"test, and neither are their tools[/yellow]")
+    console.print()
 
     def report(outcome: CaseOutcome) -> None:
         _eval_outcome_line(console, outcome)
@@ -473,19 +583,29 @@ def _eval_mode(args, spec: AgentSpec, provider_name: str, settings,
         # import breaks every case, so say it once and stop.
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    finally:
+        if mcp_manager is not None:
+            mcp_manager.shutdown()
 
     passed = sum(1 for o in outcomes if o.passed)
-    verdict = ("[bold green]SUITE GREEN[/bold green]" if passed == len(outcomes)
-               else "[bold red]SUITE RED[/bold red]")
+    green = passed == len(outcomes)
+    # A FILTERED RUN IS NOT A GATE, and the word says so. "SUITE GREEN" on
+    # a run of one case out of twenty is the sentence somebody pastes into
+    # a pull request, and the exit code alone cannot correct it.
+    word = "SUBSET" if filtered is not None else "SUITE"
+    verdict = (f"[bold green]{word} GREEN[/bold green]" if green
+               else f"[bold red]{word} RED[/bold red]")
     spent = sum(o.tokens_used for o in outcomes)
     runs = sum(o.attempts for o in outcomes)
     tally = f"{passed}/{len(outcomes)} passed"
     if runs != len(outcomes):
         tally += f" · {runs} runs"
+    if filtered is not None:
+        tally += f" · {len(every_case) - len(cases)} case(s) not run"
     console.print(f"\n{verdict} · {tally} · {spent} tokens"
                   + (f" · {free_cases} case(s) cost nothing" if free_cases
                      else ""))
-    return 0 if passed == len(outcomes) else 1
+    return 0 if green else 1
 
 
 def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
@@ -671,10 +791,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --async must be at least 1 (got {args.eval_async})",
               file=sys.stderr)
         return 2
-    if (args.eval_async is not None or args.repeat != 1) and not args.eval:
-        print("error: --async and --repeat belong to --eval -- they say how "
-              "an acceptance suite is driven, and a session has one "
-              "trajectory", file=sys.stderr)
+    if ((args.eval_async is not None or args.repeat != 1 or args.case
+         or args.no_mcp) and not args.eval):
+        print("error: --async, --repeat, --case and --no-mcp belong to "
+              "--eval -- they say how an acceptance suite is driven, and a "
+              "session has one trajectory", file=sys.stderr)
         return 2
     if args.build and (args.prompt or args.prompt_positional):
         print("error: --build takes the spec itself; drop --prompt/PROMPT",
@@ -700,6 +821,21 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         spec = _resolve_spec(args)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    # An acceptance run resolves its OWN provider, and may resolve none at
+    # all: a suite of nothing but roster assertions reaches no model, and
+    # needing a key to discover that was the last thing standing between
+    # "this gate costs zero tokens" and "this gate costs zero". Dispatched
+    # before the resolution below for exactly that reason, and before any
+    # of the session wiring further down, which an acceptance run has no
+    # use for either.
+    if args.eval:
+        return _eval_mode(args, spec, console)
+
+    try:
         provider_name = spec.provider or guess_provider()
         settings = load_settings(provider_name)
     except ConfigError as exc:
@@ -710,12 +846,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.build is not None:
         return _build_mode(args, provider_name, settings, model, console)
-
-    # After the spec is resolved, because the suite belongs to the package
-    # the spec came from -- and before any of the session wiring below,
-    # none of which an acceptance run has a use for.
-    if args.eval:
-        return _eval_mode(args, spec, provider_name, settings, model, console)
 
     sandbox = autodetect() if args.sandbox else None
     if sandbox is not None:

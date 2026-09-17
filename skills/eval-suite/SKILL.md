@@ -19,8 +19,14 @@ deterministic, and run on every commit -- they prove the MACHINERY works
 the BEHAVIOR is still there. Run them before sharing a package, after
 editing a prompt, and before switching models -- not on every push.
 `notes/10-evals.md` argues the split; `notes/33-evals-as-a-gate.md`
-argues this surface, and `notes/35-roster-and-pass-rates.md` argues the
-two assertions that came after it.
+argues this surface, `notes/35-roster-and-pass-rates.md` argues the two
+assertions that came after it, and `notes/41-a-gate-you-can-point.md`
+argues running it without a key, aiming it at one case, and putting the
+package's own servers under it.
+
+Not on every push -- with one exception. A run of nothing but roster
+cases needs no key and spends nothing, so that half IS affordable on
+every push: `--eval --case "<your roster case ids>"`.
 
 ## Run one that already exists
 
@@ -119,9 +125,15 @@ and a package usually wants both. Two rules worth knowing:
   spent: an agent with the wrong tool list is not the agent the case
   describes, so its trajectory would be about something else.
 
-What a roster check cannot see: MCP tools (`--eval` opens no servers, so
-`mcp__*` is an empty set) and anything a prompt talks the model into or
-out of -- that is what the trajectory keys are for.
+MCP tools ARE visible here: `--eval` starts the servers your manifest
+declares, so `has_tools = ["mcp__docs__*"]` grades something real. A
+declared server the gate cannot reach exits 2 rather than grading an
+agent smaller than the one you ship; `--no-mcp` skips them for offline
+CI and says loudly that it did.
+
+What a roster check still cannot see: a declared sub-agent's OWN tool
+list (`[[subagent]] tools`), and anything a prompt talks the model into
+or out of -- that is what the trajectory keys are for.
 
 ## Running a case more than once
 
@@ -144,7 +156,20 @@ Lowering the threshold until a suite goes green is how a real regression
 gets waved through; if you are tuning it downward, edit the case instead.
 
 Roster-only cases are never repeated -- they reach no model, so n runs
-would be n copies of one fact.
+would be n copies of one fact. And a run whose selected cases are ALL
+roster ones resolves no provider at all: no key, no local server, zero
+tokens and zero setup.
+
+`--repeat` applies to every case, which is expensive when one case is
+probabilistic and twenty are not. Point it:
+
+```bash
+uv run yantra --agent ./my-agent --eval --case "chooses-the-*" --repeat 10
+```
+
+`--case PATTERN` is fnmatch against case ids and repeatable. A filtered
+run reports as **SUBSET GREEN**, never SUITE GREEN -- it is a claim about
+the cases that ran, and it is not your package's gate.
 
 ## Graders: checking the answer text
 
@@ -208,7 +233,9 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--yolo` | let the suite write files and run commands |
 | `--cwd DIR` | run the cases somewhere other than the package folder |
 | `--repeat N` | run every case N times, judge it on the pass rate |
+| `--case PATTERN` | run only matching case ids (fnmatch, repeatable); reports as a SUBSET |
 | `--async N` | N trajectories at once (default 4); identical grading |
+| `--no-mcp` | do not start the package's declared servers (their tools are then absent) |
 
 **About `--yolo`.** By default the suite auto-approves read-only tools
 and REFUSES everything that writes or executes, because nobody is sitting

@@ -879,3 +879,306 @@ class TestTheCliGate:
                         "anthropic", "hello"])
         assert rc == 2
         assert "--eval runs the package's suite" in capsys.readouterr().err
+
+
+class TestPointingTheGate:
+    """--case, and the difference between a subset and a gate.
+
+    The bias: a filtered run produces a green line that looks exactly like
+    the package's verdict, and that line is what somebody pastes into a
+    pull request. So these tests read the WORD, not just the exit code.
+    """
+
+    def _run(self, tmp_path, monkeypatch, argv, script=None):
+        import yantra.cli.main as cli_main
+        provider = ScriptedProvider(script or [assistant_text("done")])
+        self.provider = provider
+        monkeypatch.setattr(cli_main, "load_settings", lambda name: object())
+        monkeypatch.setattr(cli_main, "get_provider", lambda *a, **k: provider)
+        return cli_main.main(argv)
+
+    TWO = ('[[case]]\nid = "alpha"\nuser_message = "hi"\n\n'
+           '[[case]]\nid = "beta"\nuser_message = "hi"\n')
+
+    def test_a_pattern_runs_only_the_cases_it_matches(self, tmp_path,
+                                                      monkeypatch, capsys):
+        root = _suite(tmp_path, self.TWO)
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--case", "al*"],
+                       script=[assistant_text("done")])
+        assert rc == 0
+        assert len(self.provider.requests) == 1   # beta never ran
+        out = capsys.readouterr().out
+        assert "alpha" in out and "beta" not in out
+
+    def test_a_filtered_run_is_not_the_packages_gate(self, tmp_path,
+                                                     monkeypatch, capsys):
+        root = _suite(tmp_path, self.TWO)
+        self._run(tmp_path, monkeypatch,
+                  ["--agent", str(root), "--eval", "--provider", "anthropic",
+                   "--case", "alpha"], script=[assistant_text("done")])
+        out = capsys.readouterr().out
+        assert "SUBSET GREEN" in out
+        assert "SUITE GREEN" not in out
+        assert "1 of 2 case(s)" in out
+        assert "1 case(s) not run" in out
+
+    def test_several_patterns_union(self, tmp_path, monkeypatch, capsys):
+        root = _suite(tmp_path, self.TWO)
+        self._run(tmp_path, monkeypatch,
+                  ["--agent", str(root), "--eval", "--provider", "anthropic",
+                   "--case", "alpha", "--case", "beta"],
+                  script=[assistant_text("done")] * 2)
+        assert len(self.provider.requests) == 2
+
+    def test_a_pattern_that_matches_nothing_is_an_error_not_a_pass(
+            self, tmp_path, monkeypatch, capsys):
+        """A suite that runs nothing passes everything -- the same rule an
+        empty cases.toml gets."""
+        root = _suite(tmp_path, self.TWO)
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--case", "gamma"])
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "no case matches" in err
+        assert "alpha, beta" in err            # says what there is
+
+    def test_the_point_of_it_is_repeat_on_one_case(self, tmp_path,
+                                                   monkeypatch, capsys):
+        """The leftover this closes: --repeat 10 used to drag every
+        deterministic case along with the one that needed the evidence."""
+        root = _suite(tmp_path, self.TWO)
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--provider",
+                        "anthropic", "--case", "beta", "--repeat", "3"],
+                       script=[assistant_text("done")] * 3)
+        assert rc == 0
+        assert len(self.provider.requests) == 3   # three, not six
+
+    def test_case_belongs_to_the_gate(self, tmp_path, monkeypatch, capsys):
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--cwd", str(tmp_path), "--case", "x", "--provider",
+                        "anthropic", "hello"])
+        assert rc == 2
+        assert "belong to --eval" in capsys.readouterr().err
+
+
+class TestTheGateWithoutAKey:
+    """A roster gate that costs zero tokens AND zero setup.
+
+    The bias is the one note 35 admitted and could not fix: grading a
+    roster means BUILDING the agent, and an agent takes a provider, so a
+    suite that made no request still demanded a key. These tests assert
+    that the resolution functions are never reached -- not that the run
+    happened to succeed, which a cached key in the environment would also
+    produce.
+    """
+
+    def _run_keyless(self, monkeypatch, argv):
+        """No provider resolution available at all: any attempt explodes."""
+        import yantra.cli.main as cli_main
+
+        def refuse(*args, **kwargs):
+            raise AssertionError("a roster-only run resolved a provider")
+
+        monkeypatch.setattr(cli_main, "guess_provider", refuse)
+        monkeypatch.setattr(cli_main, "load_settings", refuse)
+        monkeypatch.setattr(cli_main, "get_provider", refuse)
+        return cli_main.main(argv)
+
+    def test_a_roster_only_suite_needs_no_provider_at_all(self, tmp_path,
+                                                          monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "cannot-write"\n'
+                                'lacks_tools = ["write_file", "bash"]\n'
+                                'has_tools = ["read_file"]\n',
+                      package='[agent]\nname = "pkg"\n\n[tools]\n'
+                              'allow = ["read_file", "list_dir"]\n')
+        rc = self._run_keyless(monkeypatch, ["--agent", str(root), "--eval"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "no provider resolved" in out
+        assert "0 tokens" in out
+
+    def test_it_can_still_go_red_without_a_key(self, tmp_path, monkeypatch,
+                                               capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\n'
+                                'lacks_tools = ["read_file"]\n',
+                      package='[agent]\nname = "pkg"\n\n[tools]\n'
+                              'allow = ["read_file"]\n')
+        rc = self._run_keyless(monkeypatch, ["--agent", str(root), "--eval"])
+        assert rc == 1
+
+    def test_a_ceiling_does_not_block_a_run_that_spends_nothing(
+            self, tmp_path, monkeypatch, capsys):
+        """A ceiling refuses to be BUILT against a model nobody can price
+        (notes/34) -- correct, and beside the point when there is no model."""
+        root = _suite(tmp_path, '[[case]]\nid = "x"\n'
+                                'has_tools = ["read_file"]\n',
+                      package='[agent]\nname = "pkg"\n\n'
+                              '[budget]\nmax_usd_per_turn = 0.5\n')
+        rc = self._run_keyless(monkeypatch, ["--agent", str(root), "--eval"])
+        assert rc == 0
+
+    def test_filtering_down_to_roster_cases_drops_the_key_requirement(
+            self, tmp_path, monkeypatch, capsys):
+        """The two features compose: --case can turn a suite that needs a
+        model into a run that does not."""
+        root = _suite(tmp_path, '[[case]]\nid = "costly"\nuser_message = "hi"\n'
+                                '\n[[case]]\nid = "free"\n'
+                                'has_tools = ["read_file"]\n')
+        rc = self._run_keyless(monkeypatch,
+                               ["--agent", str(root), "--eval",
+                                "--case", "free"])
+        assert rc == 0
+        assert "SUBSET GREEN" in capsys.readouterr().out
+
+    def test_one_case_needing_a_model_still_needs_the_key(self, tmp_path,
+                                                          monkeypatch, capsys):
+        """No half measures: the resolution is per RUN, so one trajectory
+        case brings the whole requirement back."""
+        import yantra.cli.main as cli_main
+        root = _suite(tmp_path, '[[case]]\nid = "costly"\nuser_message = "hi"\n'
+                                '\n[[case]]\nid = "free"\n'
+                                'has_tools = ["read_file"]\n')
+        monkeypatch.setattr(cli_main, "guess_provider",
+                            lambda: (_ for _ in ()).throw(
+                                ConfigError("no API key found")))
+        rc = cli_main.main(["--agent", str(root), "--eval"])
+        assert rc == 2
+        assert "no API key found" in capsys.readouterr().err
+
+    def test_the_offline_provider_refuses_loudly_rather_than_answering(self):
+        """If the accounting is ever wrong, it must be an error and not a
+        mysteriously empty answer."""
+        from yantra.evals import OfflineProvider
+        with pytest.raises(ConfigError, match="resolved no provider"):
+            OfflineProvider().complete(messages=[], system=None, tools=[],
+                                       model="m")
+
+
+class TestTheServersUnderTheGate:
+    """Declared MCP servers, and why an unreachable one is RED.
+
+    The bias here is the one that made `has_tools = ["mcp__*"]` vacuous
+    before: --eval opened no servers, so the assertion graded an empty set
+    and passed by being about nothing. Fixing that creates the opposite
+    risk -- a server that fails to start leaves an agent with fewer tools
+    than it ships with, and grading THAT green is the failure this whole
+    format exists to prevent. So the tests read the exit code on the
+    unreachable path, not just the output.
+    """
+
+    WITH_SERVER = ('[agent]\nname = "pkg"\n\n'
+                   '[[mcp]]\nname = "tiny"\ncommand = "true"\n')
+
+    def _run(self, tmp_path, monkeypatch, argv, *, tools=("echo",),
+             fails: str | None = None):
+        import yantra.cli.main as cli_main
+        from yantra.mcp import MCPError
+
+        opened: list[str] = []
+        closed: list[str] = []
+
+        class FakeManager:
+            def __init__(self, registry, **kwargs):
+                self.registry = registry
+
+            def connect(self, cfg, **kwargs):
+                if fails is not None:
+                    raise MCPError(fails)
+                names = []
+                for tool in tools:
+                    name = f"mcp__{cfg.name}__{tool}"
+                    self.registry.register(_named_tool(name))
+                    names.append(name)
+                opened.append(cfg.name)
+                return names
+
+            def shutdown(self):
+                closed.extend(opened)
+
+        monkeypatch.setattr(cli_main, "MCPManager", FakeManager)
+        monkeypatch.setattr(cli_main, "guess_provider",
+                            lambda: "anthropic")
+        monkeypatch.setattr(cli_main, "load_settings", lambda name: object())
+        monkeypatch.setattr(cli_main, "get_provider",
+                            lambda *a, **k: ScriptedProvider([]))
+        self.opened, self.closed = opened, closed
+        return cli_main.main(argv)
+
+    def test_a_declared_servers_tools_are_on_the_roster(self, tmp_path,
+                                                        monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\n'
+                                'has_tools = ["mcp__tiny__*"]\n',
+                      package=self.WITH_SERVER)
+        rc = self._run(tmp_path, monkeypatch, ["--agent", str(root), "--eval"])
+        assert rc == 0
+        assert self.opened == ["tiny"]
+        assert "1 tool(s) under test" in capsys.readouterr().out
+
+    def test_an_unreachable_server_is_red_not_a_smaller_agent(self, tmp_path,
+                                                              monkeypatch,
+                                                              capsys):
+        """Everywhere else in this CLI a dead server is a warning. A gate
+        is the one place it cannot be."""
+        root = _suite(tmp_path, '[[case]]\nid = "x"\n'
+                                'has_tools = ["mcp__tiny__*"]\n',
+                      package=self.WITH_SERVER)
+        rc = self._run(tmp_path, monkeypatch, ["--agent", str(root), "--eval"],
+                       fails="connection refused")
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "smaller than the one that ships" in err
+        assert "connection refused" in err
+
+    def test_no_mcp_says_the_agent_under_test_is_smaller(self, tmp_path,
+                                                         monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\n'
+                                'has_tools = ["mcp__tiny__*"]\n',
+                      package=self.WITH_SERVER)
+        rc = self._run(tmp_path, monkeypatch,
+                       ["--agent", str(root), "--eval", "--no-mcp"])
+        assert rc == 1                      # the assertion fails, honestly
+        out = capsys.readouterr().out
+        assert "NOT under test" in out
+        assert self.opened == []
+
+    def test_the_servers_are_closed_when_the_run_ends(self, tmp_path,
+                                                      monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\n'
+                                'has_tools = ["mcp__tiny__*"]\n',
+                      package=self.WITH_SERVER)
+        self._run(tmp_path, monkeypatch, ["--agent", str(root), "--eval"])
+        assert self.closed == ["tiny"]
+
+    def test_the_packages_own_policy_still_governs_them(self, tmp_path,
+                                                        monkeypatch, capsys):
+        """A whitelist is COMPLETE, MCP tools included -- connecting a
+        server does not smuggle its tools past the package's own list."""
+        root = _suite(tmp_path, '[[case]]\nid = "x"\n'
+                                'lacks_tools = ["mcp__tiny__*"]\n',
+                      package=self.WITH_SERVER
+                      + '\n[tools]\nallow = ["read_file"]\n')
+        rc = self._run(tmp_path, monkeypatch, ["--agent", str(root), "--eval"])
+        assert rc == 0                      # they were refused admission
+
+
+def _named_tool(name: str) -> Tool:
+    """A minimal registry-fillable Tool under an exact name."""
+    class Named(Tool):
+        read_only = True
+
+        def __init__(self) -> None:
+            self.name = name
+            self.description = "a tool from a server"
+            self.parameters = {"type": "object", "properties": {}}
+
+        def summary(self, args, ctx):
+            return name
+
+        def run(self, args, ctx):
+            return ""
+
+    return Named()
