@@ -548,17 +548,19 @@ the cases that say so, and one command turns them into an exit code:
 
 ```
 $ uv run yantra --agent examples/agents/researcher --eval --provider ollama
-eval researcher 0.1.0 · 4 case(s) · 1 roster-only · ollama · qwen3.8-64k:latest
+eval researcher 0.1.0 · 6 case(s) · 2 roster-only · ollama · qwen3.8:latest
 cwd: .../examples/agents/researcher
 gate: read-only tools only; writes and commands are refused (--yolo opens it)
 budget: $0.50 per turn -- inert here, a local model bills nothing
 
-  PASS  outlines-before-reading  15.4s · 7716 tok · 3 it · outline, read_file
-  PASS  cites-what-it-read  34.7s · 9337 tok · 3 it · list_dir, glob, read_file
-  PASS  cannot-write-even-when-asked  21.8s · 5249 tok · 2 it · read_file, list_dir
+  PASS  outlines-before-reading  10.3s · 9228 tok · 3 it · outline, list_dir, read_file
+  PASS  cites-what-it-read  14.8s · 10269 tok · 3 it · list_dir, read_file
+  PASS  cannot-write-even-when-asked  27.9s · 9154 tok · 3 it · glob, read_file
   PASS  has-no-way-to-write  roster only · no model call · 0 tok
+  PASS  delegation-works-end-to-end  20.5s · 5596 tok · 2 it · fact_checker, glob, grep, read_file
+  PASS  the-checker-is-actually-on-the-roster  roster only · no model call · 0 tok
 
-SUITE GREEN · 4/4 passed · 22302 tokens · 1 case(s) cost nothing
+SUITE GREEN · 6/6 passed · 34247 tokens · 2 case(s) cost nothing
 ```
 
 A case is TOML. `check` is the one hatch to Python, resolved against the
@@ -567,7 +569,7 @@ package's own `evals/graders.py`:
 ```toml
 [[case]]
 id = "outlines-before-reading"
-user_message = "Which section of SKILL.md covers confidence, and on what line?"
+user_message = "Which section of sources/rate-limiting.md covers throttled clients, and on what line?"
 required_tools = ["outline"]          # what ACTUALLY executed, not what was offered
 forbidden_tools = ["bash"]
 check = "graders:names_a_line_number" # (str) -> bool, optional
