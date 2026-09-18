@@ -1756,7 +1756,66 @@ those at exit, so the process sat there wanting a keypress nobody had a
 reason to give. The fix is not a bigger hammer on the thread; it is
 `loop.add_reader`, and not using one.
 
-## 33 · Embedding it
+## 33 · What decided this
+
+Three questions an owner asks months later, when the thing that could
+have answered them has gone.
+
+**Which rule stopped that — and which one has never done anything?** The
+asymmetry is the problem: a deny announces itself, because the model is
+told and the turn changes shape. An allow is invisible *by construction*
+— the call simply runs, exactly as it would have if you had been woken up
+and said yes. So a policy file fills with lines you cannot tell apart by
+looking:
+
+```
+$ dvara rules
+policy.toml  ·  3 rule(s)  ·  calls settled over the last 30 days
+      2  allow  write_file path=haiku.txt
+      1  deny   write_file path=*.env|*/.ssh/*
+      ·  allow  bash command=git status|git diff
+```
+
+A rule is named by what it **says** — a hash of tool, verdict and
+patterns — not by where it sits, so inserting a line at the top does not
+shuffle the counts. Edit a rule and it starts at zero, which is right:
+you changed the standing answer.
+
+**Where were you when you approved this?** This is the one that sent a
+feature back into the framework. A gate's answer and the `ToolExecuted`
+it produces had nothing joining them, so a host could only pair them by
+counting — which *works*, because gates run once per call in submission
+order. That is three properties of the loop that no caller was ever
+promised, and a drift in any of them files one person's approval against
+a different call: wrong, confident, and silent. So `PermissionRequest`
+carries the `call_id` it is deciding (§16), and the two halves of a turn
+meet on a string neither had to agree about:
+
+```
+write_file[rule:c0a621fc] -> write_file[rule:c0a621fc] -> read_file
+```
+
+Only the interesting ones are recorded. A call the rung simply allowed —
+`read_file` above — says nothing, because "nothing in particular decided
+this" nine times in ten is a field nobody reads.
+
+**And which version of the agent was that?** Agents are rebuilt per turn
+(§28), so a package edited on disk takes effect on a live conversation's
+next turn. Desirable when you are fixing a prompt; alarming when a
+conversation changes personality mid-sentence. The resolution is not to
+choose: **the alarming part was never the change, it was that nothing
+said it happened.**
+
+```
+2026-09-18 03:18  owner/scribe  end_turn  $0.0007  'write API_KEY=hunter2 into…'
+                  scribe changed after this turn: 0.1.0 -> 0.2.0
+```
+
+Pinning a version per thread is the alternative, and it is refused for a
+reason rather than for want of a decision: a pinned thread is a
+conversation that does not get the prompt fix you made *because of it*.
+
+## 34 · Embedding it
 
 ```python
 from pathlib import Path
@@ -1785,7 +1844,7 @@ print(reply.text, reply.cost_usd)
 | `http.py` | the endpoints and a bearer token (`[http]` extra) |
 | `telegram.py` | the long poll, the 4096-character cap and the button |
 | `claim.py` | one dvara per state directory, and why |
-| `cli.py` | `agents`, `say`, `runs`, `case`, `telegram`, `serve` |
+| `cli.py` | `agents`, `say`, `runs`, `rules`, `case`, `telegram`, `serve` |
 | `errors.py` | `Refused` (answer the person) vs `ConfigProblem` (tell the owner) |
 
 ---
@@ -1967,6 +2026,7 @@ In the dvara repository, alongside its own README:
 | `notes/07-four-thousand-and-ninety-six.md` | the Telegram bot: a cap measured in units nobody counts by hand, a poll loop that must not wait, and an approval that has to be a button |
 | `notes/08-what-the-turn-actually-did.md` | the trajectory on a run — names and not arguments, and why the service describes a turn but will not judge one |
 | `notes/09-a-process-you-walk-away-from.md` | one dvara per state directory, a roster you can edit while it runs, and the fix that would have hidden the bug |
+| `notes/10-what-decided-this.md` | counting the standing answer that leaves no trace by working, and why counting by ORDER is the wrong thing to depend on |
 
 ### The two READMEs
 
@@ -2022,10 +2082,13 @@ and gaps, and each one is argued in the note that owns it.
   the lock serializing one conversation and the queue of pending
   questions are in memory, so a second one is refused rather than made to
   work. `serve --telegram` is how one process does both jobs.
-* **A package edited on disk changes a live conversation's next turn.**
-  Desirable when you are fixing a prompt, alarming when a conversation
-  changes personality mid-sentence. Pinning a package version per thread is
-  a column plus a great deal of explaining.
+* **A package edited on disk changes a live conversation's next turn** —
+  desirable when you are fixing a prompt, alarming when a conversation
+  changes personality mid-sentence. Settled as a decision rather than left
+  as a consequence: the edit applies, and the version is recorded on every
+  Run, so the change appears in the ledger instead of being guessed at.
+  Pinning a version per thread stays refused, because a pinned thread is
+  one that does not get the prompt fix you made *because of it*.
 
 ---
 
