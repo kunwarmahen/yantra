@@ -290,10 +290,12 @@ the convenient one.
   solution: nothing in the gate layer knew about turns, so the request
   now SAYS which turn it belongs to — `turn_id` beside `call_id`, for
   the same reason that one exists.
-* **Still no way to ask a question other than yes/no.** Unchanged from
-  note 37. The gate can now say why it refused and how long it waited; it
-  still cannot say *"not like that, like this"* except through
-  approve-with-edits, which needs a UI that can construct arguments.
+* **Still no way to ask a question other than yes/no**, though the part
+  this bullet actually complained about is gone: *"not like that, like
+  this"* is a sentence the person types at the prompt now, and the model
+  reads it verbatim ([note 56](56-not-like-that-like-this.md)). A gate
+  that wants to POSE a question and receive something other than a bool
+  is still unbuilt, and is `ask_user`-shaped rather than gate-shaped.
 * **A code cannot carry structured detail.** `timeout` does not say how
   long it waited, and a caller that wants the number reads it from its
   own configuration. A code plus a payload is a bigger type than anything

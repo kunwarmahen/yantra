@@ -498,6 +498,8 @@ function showPermissionModal(env) {
     <details><summary>raw arguments</summary>
       <pre class="args">${esc(JSON.stringify(env.arguments ?? {}, null, 2))}</pre>
     </details>
+    <input id="deny-reason" class="deny-reason" type="text"
+           placeholder="optional: say why not, or what to do instead">
     <div class="modal-actions">
       <button class="m-btn" data-act="edit">edit</button>
       <button class="m-btn danger" data-act="deny">deny</button>
@@ -508,6 +510,15 @@ function showPermissionModal(env) {
     // Enter approves only while THIS modal is up and no edit box is open
     if (ui.modalId !== env.id || e.key !== "Enter") return;
     if ($("#modal textarea")) return;
+    // Enter inside the reason box denies WITH that sentence rather than
+    // approving: a person who has just typed "no, use staging" and hit
+    // Enter did not mean yes.
+    if (document.activeElement === $("#deny-reason")) {
+      e.preventDefault();
+      document.removeEventListener("keydown", onKey);
+      const said = $("#deny-reason").value;
+      if (said.trim()) { answer({ decision: "deny", reason: said }); return; }
+    }
     e.preventDefault();
     answer({ decision: "approve" });
   };
@@ -516,7 +527,13 @@ function showPermissionModal(env) {
     const act = e.target?.dataset?.act;
     if (!act) return;
     if (act === "approve") { document.removeEventListener("keydown", onKey); answer({ decision: "approve" }); }
-    if (act === "deny") { document.removeEventListener("keydown", onKey); answer({ decision: "deny" }); }
+    if (act === "deny") {
+      document.removeEventListener("keydown", onKey);
+      // Whatever the person typed rides along with the no: the model
+      // reads it instead of "Permission denied by user." An empty box is
+      // a plain no, not a refusal that says nothing.
+      answer({ decision: "deny", reason: $("#deny-reason")?.value ?? "" });
+    }
     if (act === "edit") renderEditBox(env, answer, onKey);
   };
 }

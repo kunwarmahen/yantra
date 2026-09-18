@@ -756,6 +756,25 @@ pre.md-code {
 /* Refused, not broken: the gate's colour is the one the approval modal
    uses, so a call somebody turned away reads as a decision. */
 .tool-card.refused .tool-status { background: var(--warn-soft); color: var(--warn); }
+
+/* "not like that, like this": the sentence a person types instead of a
+   bare no. Quiet by default -- the common answer is still approve. */
+.deny-reason {
+  width: 100%;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.deny-reason:focus {
+  outline: none;
+  border-color: var(--warn-line);
+  background: var(--surface-1);
+}
 .tool-card.refused { border-color: var(--warn-line); }
 .tool-card:not(.error) .tool-status.ok { background: var(--ok-soft); color: var(--ok); }
 

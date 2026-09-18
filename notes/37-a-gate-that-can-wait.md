@@ -242,10 +242,14 @@ treated as a yes, because the text would still say "denied" somewhere.
   intact: `with_deadline` owns the stopwatch and still refuses to own the
   verdict, so `on_timeout` has no default and a caller that does not
   state its policy gets a `TypeError` rather than somebody else's.
-* **No way to ask the person a question other than yes/no.** The gate can
-  now speak when it refuses, but it still cannot say "not like that, like
-  this" except by using approve-with-edits, which needs a UI that can
-  construct arguments. (Still true after note 39.)
+* **No way to ask the person a question other than yes/no.** Half of
+  this is closed: ~~"not like that, like this"~~ is a person's own
+  sentence now, typed at the prompt and read by the model
+  ([note 56](56-not-like-that-like-this.md)) instead of hand-edited into
+  an arguments dict. What is still true is the other half — a gate
+  cannot POSE a question ("staging or prod?") and receive an answer that
+  is not a bool, and that shape probably belongs to `ask_user` rather
+  than to the smallest interface in the harness.
 * ~~**The reason is a string, not a structured refusal.**~~ A caller that
   wanted to distinguish "policy said no" from "nobody answered in time"
   had to parse prose. Shipped in [note 39](39-a-clock-and-a-word.md), and

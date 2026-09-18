@@ -185,13 +185,26 @@ Before any tool that could change something runs, you are asked:
 ```
 agent wants to run write_file:
   NEW FILE notes.txt (3 lines)
-approve? [y/N/e]
+run it? [y/n/e/s] (n):
 ```
 
-The `e` is the interesting one. A gate may **rewrite the arguments**
-before approving, and the loop notices the swap and runs the edited form.
-So approval is a review step rather than a rubber stamp
+The `e` and the `s` are the interesting ones. A gate may **rewrite the
+arguments** before approving, and the loop notices the swap and runs the
+edited form — so approval is a review step rather than a rubber stamp
 ([notes/20](notes/20-approve-with-edits.md)).
+
+And `s` refuses it **in your own words**:
+
+```
+run it? [y/n/e/s] (n): s
+no, because (or why not): not in the repo root -- try /tmp/scratch instead
+```
+
+The model reads that sentence, attributed, in place of "Permission
+denied by user." — and builds the call you asked for instead. Editing the
+arguments dict by hand is fine for a wrong path and hopeless for "use the
+staging database", which is a sentence you produce in two seconds.
+([notes/56](notes/56-not-like-that-like-this.md))
 
 The preview is built by the tool itself, with the same context execution
 will get — for an edit it is a real unified diff. What you approve is
@@ -2100,7 +2113,7 @@ Most carry a live receipt from a real run.
 | [11](notes/11-async.md) | one event loop, many conversations |
 | [12](notes/12-builder.md) [18](notes/18-builder-mode.md) | an agent that builds a project, and verification that does not trust it |
 | [13](notes/13-caching.md) [21](notes/21-cost-accounting.md) | prompt caching; token counters into dollars |
-| [14](notes/14-hooks.md) [20](notes/20-approve-with-edits.md) | hooks watch, gates decide; the gate that talks back |
+| [14](notes/14-hooks.md) [20](notes/20-approve-with-edits.md) [56](notes/56-not-like-that-like-this.md) | hooks watch, gates decide; the gate that talks back, and the person who can |
 | [15](notes/15-images.md) [27](notes/27-read-image.md) | images in, and the loop growing eyes |
 | [16](notes/16-sandboxing.md) [17](notes/17-tool-selection.md) | containment; the tool cliff and BM25 |
 | [19](notes/19-responses-api.md) | the third dialect |
@@ -2227,5 +2240,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1543 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1558 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

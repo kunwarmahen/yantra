@@ -247,8 +247,10 @@ class WebSession:
     # ---- the two interactive surfaces ----------------------------------------
 
     def permission_gate(self):
-        """PermissionFn for the browser: y/n/e with full edit round-trips,
-        mirroring cli/repl.py's confirm_gate loop beat for beat."""
+        """PermissionFn for the browser: approve / deny / deny-with-a-reason
+        / edit, with full edit round-trips -- mirroring cli/repl.py's
+        confirm_gate loop beat for beat, including the sentence a person
+        types instead of a bare no (notes/56)."""
 
         def gate(request: PermissionRequest) -> bool:
             if request.read_only:
@@ -269,8 +271,17 @@ class WebSession:
                 if decision == "approve":
                     return True
                 if decision == "deny":
-                    # Same sentence and same code as the terminal gate:
-                    # a person was asked, in a browser tab, and said no.
+                    # Same three shapes as the terminal gate: a bare no,
+                    # or a no with a sentence the person typed, which
+                    # reaches the model attributed and verbatim in place
+                    # of "Permission denied by user." (notes/56).
+                    said = answer.get("reason")
+                    said = said.strip() if isinstance(said, str) else ""
+                    if said:
+                        return refuse(request,
+                                      f"{request.tool_name} was denied. The "
+                                      f"person said: {said}",
+                                      code=REFUSED_USER)
                     return refuse(request,
                                   f"{request.tool_name} was denied: you "
                                   f"said no at the approval prompt.",

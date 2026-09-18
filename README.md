@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1543 tests. The
+The harness underneath is complete and covered by 1558 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1336,7 +1336,10 @@ src/yantra/
 │                   deny_all / trust_sandbox (auto-approves bash ONLY while
 │                   confined); SwitchableGate flips ask ⇄ yolo mid-session;
 │                   approve-with-edits: a gate may rewrite arguments
-│                   pre-approval ([notes/20](notes/20-approve-with-edits.md)).
+│                   pre-approval ([notes/20](notes/20-approve-with-edits.md));
+│                   and a refusal may carry the PERSON's own sentence, which
+│                   both frontends can now produce
+│                   ([notes/56](notes/56-not-like-that-like-this.md)).
 │                   A gate may also be ASYNC -- adecide() awaits one, so a
 │                   gate that waits for a person suspends instead of
 │                   freezing every other conversation; decide() REFUSES
@@ -1615,7 +1618,13 @@ Design rules worth stealing:
   falls out of one deliberate mutability: a gate may REPLACE
   `request.arguments` before answering True; the loop notices the swap by
   identity and adopts the edited form — so approval is a review step, not
-  a rubber stamp ([notes/20](notes/20-approve-with-edits.md)). A request
+  a rubber stamp ([notes/20](notes/20-approve-with-edits.md)). A person
+  can also refuse **in their own words** — `s` at the terminal prompt, a
+  text box beside the browser's deny button — and the sentence reaches
+  the model attributed, in place of "Permission denied by user.": editing
+  an arguments dict by hand is fine for a wrong path and hopeless for
+  "use the staging database"
+  ([notes/56](notes/56-not-like-that-like-this.md)). A request
   also carries the `call_id` it is deciding, so a host that RECORDS
   decisions can match one to the `ToolExecuted` it produced — calls in an
   iteration run concurrently, so nothing else can pair them.
@@ -1697,7 +1706,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1543 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1558 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1728,7 +1737,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1543 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1558 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

@@ -121,14 +121,23 @@ def terminal_editor(args: dict[str, Any]) -> dict[str, Any] | None:
 
 def confirm_gate(console: Console, editor: EditFn | None = None):
     """The CLI's PermissionFn: show exactly what will happen, default No --
-    and 'e' amends the call before approving (approve-with-edits).
+    'e' amends the call before approving (approve-with-edits), and 's'
+    refuses it in your own words.
 
-    The loop: preview -> y/n/e. Editing swaps ``request.arguments`` for
+    The loop: preview -> y/n/e/s. Editing swaps ``request.arguments`` for
     the amended dict, re-renders the summary through the tool's own
     ``summary()`` (pre-bound by the agent loop as ``summarize``), tags
     the panel *(edited)*, and asks again -- so what you approve is what
     runs, now literally. A cancelled or unparseable edit never denies:
     it returns to the prompt.
+
+    's' IS THE ANSWER THAT IS NOT YES OR NO. "Not like that, like this"
+    was sayable only through the editor, which asks a person to write a
+    valid arguments dict by hand -- fine for a path, hopeless for "use
+    the staging database instead". Saying it in English costs one line
+    and hands the model something it can act on; the sentence reaches it
+    verbatim, attributed, in place of "Permission denied by user."
+    (notes/56).
 
     Read-only tools never prompt -- a tool that declared itself
     side-effect-free (the same flag allow_read_only trusts) has nothing
@@ -147,10 +156,27 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
                 request.summary,
                 title=f"approve {request.tool_name}(){' (edited)' if edited else ''}?",
                 border_style="yellow", title_align="left"))
-            answer = Prompt.ask("run it?", choices=["y", "n", "e"],
+            answer = Prompt.ask("run it?", choices=["y", "n", "e", "s"],
                                 default="n").lower()
             if answer == "y":
                 return True  # edits ride along: the loop adopts them
+            if answer == "s":
+                said = console.input("no, because (or why not): ").strip()
+                if not said:
+                    # An empty sentence is a plain no, not a refusal that
+                    # says nothing: the model reading "" would be worse
+                    # off than the model reading the default.
+                    return refuse(request,
+                                  f"{request.tool_name} was denied: you "
+                                  f"said no at the approval prompt.",
+                                  code=REFUSED_USER)
+                # ATTRIBUTED, always. The model has to be able to tell a
+                # person's instruction from the harness's own voice --
+                # one is worth arguing with and the other is not.
+                return refuse(request,
+                              f"{request.tool_name} was denied. The person "
+                              f"said: {said}",
+                              code=REFUSED_USER)
             if answer == "n":
                 # The one gate where the default sentence is TRUE -- a
                 # person was asked and said no. It still carries a code,
