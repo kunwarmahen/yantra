@@ -261,12 +261,6 @@ class Agent:
         # code is the CALLER's copy of a refusal, and the caller is
         # whoever is consuming this event stream.
         self._refusals: dict[str, str] = {}
-        # call id -> refusal code, for calls the gate turned away in the
-        # batch now in flight. Written by _gate and drained onto the
-        # ToolExecuted events, which is the only place it is read: the
-        # code is the CALLER's copy of a refusal, and the caller is
-        # whoever is consuming this event stream.
-        self._refusals: dict[str, str] = {}
 
     def _interrupted(self) -> bool:
         """Poll the host's cancel flag, if one is wired."""
