@@ -1695,7 +1695,68 @@ Nothing is sent with a `parse_mode`, because Markdown mode makes the
 answer comes back as a 400. And somebody who is not in `actors.toml` gets
 **silence**, while you get the line that says how to add them.
 
-## 32 · Embedding it
+## 32 · Leaving it running
+
+The difference between a service and a program you run is what happens
+when nobody is watching the terminal. Three things.
+
+**One dvara per state directory**, and a second one is refused. The
+visible symptom of running two is SQLite contention — `database is
+locked` — and fixing *that* is three lines and the worst available
+outcome, because it silences the only signal while leaving the real
+problem alone. **A SERVICE IS A PROCESS.** The lock that serializes two
+messages in one conversation (§28) and the queue of questions waiting for
+a person (§27) both live in memory, so two processes would both rehydrate
+one checkpoint, both save, and lose a turn without anything raising at
+all.
+
+```
+$ dvara --state ~/dvara/state say --actor owner --agent greeter "hello"
+error: another dvara is already using ~/dvara/state (pid 3641987 running
+dvara serve). A service is a PROCESS, not a directory: …
+```
+
+It is an `flock`, not a pid file, because **the kernel releases it** — a
+service killed with `SIGKILL` leaves no stale lock and no "is 4032 still
+the same process?" heuristic to get wrong. A refusal needs a way out, so
+a bot *and* an HTTP surface is one process:
+
+```bash
+dvara serve --telegram researcher
+```
+
+And a command that only *reads* — `runs`, `case`, `agents` — claims
+nothing, because looking at your own ledger while the bot answers
+somebody is the most ordinary thing an owner does.
+
+**Edit the actors file while it runs.** It is reread when it changes, so
+adding the guest standing in front of you holding your bot's @handle is
+one edit and no restart. What decides the feature is the failure case:
+**A BAD FILE KEEPS THE LAST GOOD ONE.** An owner adding somebody at
+midnight who leaves a bracket off is one typo away from a service that
+refuses everybody — including themselves, including the person who would
+fix it — so a file that has stopped parsing is a complaint on their
+terminal and nothing more:
+
+```
+~/dvara/actors.toml: Expected ']' at the end of a table declaration
+  -- keeping the roster already loaded; nothing changed for anybody
+     talking right now
+```
+
+At *startup* the opposite is right, and that is what happens there: a
+broken file is exit 2 and nothing serves. The difference between the two
+answers is whether there is already something to lose. The parsers decide
+none of it — they parse, and the host decides — which is the same
+division as the ask deadline in §27.
+
+**And a question you can walk away from.** A terminal question that times
+out used to leave a thread parked in `input()`, and the interpreter joins
+those at exit, so the process sat there wanting a keypress nobody had a
+reason to give. The fix is not a bigger hammer on the thread; it is
+`loop.add_reader`, and not using one.
+
+## 33 · Embedding it
 
 ```python
 from pathlib import Path
@@ -1723,6 +1784,7 @@ print(reply.text, reply.cost_usd)
 | `runs.py` | every turn that happened, what it cost, and which tools it called |
 | `http.py` | the endpoints and a bearer token (`[http]` extra) |
 | `telegram.py` | the long poll, the 4096-character cap and the button |
+| `claim.py` | one dvara per state directory, and why |
 | `cli.py` | `agents`, `say`, `runs`, `case`, `telegram`, `serve` |
 | `errors.py` | `Refused` (answer the person) vs `ConfigProblem` (tell the owner) |
 
@@ -1904,6 +1966,7 @@ In the dvara repository, alongside its own README:
 | `notes/06-a-number-you-can-act-on.md` | what follows an answer — and why an owner and a guest want two different numbers |
 | `notes/07-four-thousand-and-ninety-six.md` | the Telegram bot: a cap measured in units nobody counts by hand, a poll loop that must not wait, and an approval that has to be a button |
 | `notes/08-what-the-turn-actually-did.md` | the trajectory on a run — names and not arguments, and why the service describes a turn but will not judge one |
+| `notes/09-a-process-you-walk-away-from.md` | one dvara per state directory, a roster you can edit while it runs, and the fix that would have hidden the bug |
 
 ### The two READMEs
 
@@ -1947,16 +2010,18 @@ and gaps, and each one is argued in the note that owns it.
   one's clothes.
 * **Locks are never evicted** — one `asyncio.Lock` per session key the
   process has ever served. A few hundred bytes against a correctness
-  property.
+  property, and the reason two dvaras may not share a state directory:
+  that lock is in memory, so a second process does not see it.
 * **No preferred channel, and no taking a question back.** A person
   reachable three ways gets the question three times, in no order, and
   answering on one leaves the other two sitting there — the bot edits the
   copy that was pressed, and only that one. Ranking channels
   means a second deadline inside the first; retracting means every
   adapter implements editing.
-* **A channel identity cannot be added without a restart.** The roster is
-  read once, and its reverse index is built with it. Fine for a file one
-  person edits; a papercut the first time a guest is added at a party.
+* **Two dvaras may not share a state directory.** A service is a process:
+  the lock serializing one conversation and the queue of pending
+  questions are in memory, so a second one is refused rather than made to
+  work. `serve --telegram` is how one process does both jobs.
 * **A package edited on disk changes a live conversation's next turn.**
   Desirable when you are fixing a prompt, alarming when a conversation
   changes personality mid-sentence. Pinning a package version per thread is
