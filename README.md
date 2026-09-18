@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1479 tests. The
+The harness underneath is complete and covered by 1495 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -618,6 +618,30 @@ withdraw it instead of offering Approve for a call that can no longer
 happen. A turn cancelled from outside still raises rather than becoming a
 denial: nobody said no. A deadline binds only a gate that *suspends* — a
 plain function has already answered by the time a clock could start.
+
+A clock per question is the right unit for the question and the wrong
+one for the turn: five dangerous calls at thirty seconds each is a turn
+that sits for two and a half minutes without anybody refusing anything.
+The person who wrote `30` was describing their patience, and patience
+does not multiply by however many tools the model decided to try:
+
+```python
+from yantra import with_wait_budget
+
+gate = with_wait_budget(ask_the_owner, 30, on_timeout="deny")  # 30s per TURN
+```
+
+The allowance is spent down across the turn, and what is left becomes the
+next question's deadline. **Once it is gone nothing is asked at all** —
+posting a question the wrapper will not wait for means somebody reads a
+prompt, decides, taps Approve, and learns the call was refused before
+they were asked. The two refusals carry different codes for that reason:
+`timeout` means somebody was asked and did not answer, `out_of_time`
+means nobody was asked. The gate learns where a turn begins because the
+request says so (`turn_id`, beside `call_id`) rather than by inferring it
+from timing or call counts, which would reset the budget at the wrong
+moment and never raise. See
+[notes/51](notes/51-a-turns-worth-of-waiting.md).
 
 Every refusal also carries a short machine token beside the sentence, so
 a host can branch without matching on English:
@@ -1291,7 +1315,13 @@ src/yantra/
 │                   on_timeout has no default; refuse() writes a machine
 │                   token beside the sentence, and it reaches the host on
 │                   ToolExecuted.refusal
-│                   ([notes/39](notes/39-a-clock-and-a-word.md))
+│                   ([notes/39](notes/39-a-clock-and-a-word.md)).
+│                   with_wait_budget() is the same clock on the TURN: the
+│                   allowance is spent down across a batch, nothing is
+│                   asked once it is gone (out_of_time, not timeout), and
+│                   the request carries turn_id so the wrapper is told
+│                   where a turn begins rather than inferring it
+│                   ([notes/51](notes/51-a-turns-worth-of-waiting.md))
 ├── context.py      compaction: mask old tool results, then summarize (red
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes
@@ -1622,7 +1652,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1479 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1495 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1653,7 +1683,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1479 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1495 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

@@ -313,6 +313,71 @@ def test_the_id_matches_the_result_the_decision_produced(registry):
     assert [r.tool_call_id for r in results] == list(decided)
 
 
+def test_a_gate_is_told_which_turn_is_asking(registry):
+    """The other thing a stream of questions does not say.
+
+    A gate budgeting how long it may keep somebody waiting has to know
+    where one turn ends and the next begins, and the alternatives are
+    inference: a gap in timing, a count of calls, a guess. Every one of
+    those resets the budget at the wrong moment and none of them raises.
+    """
+    turns = []
+
+    def gate(request: PermissionRequest) -> bool:
+        turns.append(request.turn_id)
+        return True
+
+    def script():
+        return [
+            ModelResponse(
+                message=Message("assistant", [
+                    ToolCall("a", "writer", {"text": "one"}),
+                    ToolCall("b", "writer", {"text": "two"}),
+                ]),
+                stop_reason="tool_use",
+            ),
+            assistant_text("done"),
+        ]
+
+    agent = Agent(ScriptedProvider(script() + script()), model="m",
+                  tools=registry, permissions=gate)
+    agent.run("write twice")
+    agent.run("and again")
+
+    assert len(turns) == 4
+    assert turns[0] == turns[1]           # one turn, two calls
+    assert turns[2] == turns[3]
+    assert turns[0] != turns[2]           # two turns
+    assert all(turns)                     # and never empty inside a turn
+
+
+def test_two_agents_are_never_the_same_turn(registry):
+    """A sub-agent's turn is not its parent's: a budget that confused the
+    two would let a child spend the person's patience for them."""
+    seen = []
+
+    def gate(request: PermissionRequest) -> bool:
+        seen.append(request.turn_id)
+        return True
+
+    def one_call():
+        return [
+            ModelResponse(
+                message=Message("assistant",
+                                [ToolCall("a", "writer", {"text": "x"})]),
+                stop_reason="tool_use",
+            ),
+            assistant_text("done"),
+        ]
+
+    for _ in range(2):
+        Agent(ScriptedProvider(one_call()), model="m", tools=registry,
+              permissions=gate).run("write")
+    assert seen[0] != seen[1]
+
+
 def test_a_request_built_by_hand_still_works():
-    """Defaulted, not required: a host driving a gate directly has no call."""
+    """Defaulted, not required: a host driving a gate directly has no call
+    and belongs to no turn."""
     assert request_for("reader").call_id == ""
+    assert request_for("reader").turn_id == ""

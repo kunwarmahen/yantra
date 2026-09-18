@@ -16,6 +16,7 @@ The rules that make it robust (see notes/05-agent-loop.md):
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -236,6 +237,11 @@ class Agent:
         #: How many messages the last request carried, so the budget's
         #: forecast can price only what has arrived since.
         self._sent_through = 0
+        #: Which turn is running, for anything that has to tell one turn
+        #: from the next (permissions.with_wait_budget). "" until the
+        #: first one starts: a gate driven before any turn belongs to no
+        #: turn, which is what the empty string says.
+        self._turn_id = ""
         self.last_compaction: dict | None = None
         # Cooperative cancellation for hosts where the loop runs on a worker
         # thread that no signal can reach (the web UI's cancel button). When
@@ -309,6 +315,13 @@ class Agent:
         # clearing its parent's spend by starting a turn (budget.py).
         if self.budget is not None:
             self.budget.begin_turn(self)
+        # The same unit, named, for anything downstream that needs to know
+        # where one turn ends and the next begins -- a gate budgeting how
+        # long it may keep somebody waiting cannot infer that from a
+        # stream of questions (permissions.with_wait_budget). Fresh and
+        # opaque: an agent and its sub-agents are different turns, and a
+        # counter could repeat across two agents where a uuid cannot.
+        self._turn_id = uuid.uuid4().hex
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
             for iteration in range(1, self.max_iterations + 1):
@@ -654,6 +667,9 @@ class Agent:
             # ToolExecuted it becomes, without counting on the order of
             # somebody else's loop (see PermissionRequest.call_id).
             call_id=call.id,
+            # Which turn is asking, so a gate can budget a turn's worth of
+            # waiting rather than a question's (permissions.py).
+            turn_id=self._turn_id,
             # Closed over so an edit-and-reapprove UI can re-render the
             # preview for amended args (approve-with-edits).
             summarize=lambda args: tool.summary(args, self.ctx),

@@ -47,6 +47,7 @@ from yantra.mcp import MCPServerConfig, MCPSession, connect_mcp, register_mcp
 from yantra.package import MANIFEST, find_manifest, load_package
 from yantra.permissions import (
     DENIED,
+    REFUSED_OUT_OF_TIME,
     REFUSED_POLICY,
     REFUSED_TIMEOUT,
     REFUSED_UNATTENDED,
@@ -62,6 +63,7 @@ from yantra.permissions import (
     deny_all,
     refuse,
     with_deadline,
+    with_wait_budget,
     yolo,
 )
 from yantra.pricing import (ModelPrice, bills_nothing, cost_of, price_for,
@@ -118,6 +120,8 @@ __all__ = [
     "DENIED",
     "refuse",
     "with_deadline",
+    "with_wait_budget",
+    "REFUSED_OUT_OF_TIME",
     "REFUSED_POLICY",
     "REFUSED_TIMEOUT",
     "REFUSED_UNATTENDED",

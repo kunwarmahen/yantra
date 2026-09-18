@@ -53,6 +53,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Awaitable, Callable
@@ -72,6 +73,8 @@ REFUSED_UNATTENDED = "unattended"  # nobody was there to ask
 REFUSED_TIMEOUT = "timeout"  # somebody was asked and did not answer in time
 REFUSED_POLICY = "policy"  # a rule refused before any human saw it
 REFUSED_UNSPECIFIED = "unspecified"  # a gate said no and named no cause
+REFUSED_OUT_OF_TIME = "out_of_time"  # this turn's budget for waiting was gone
+                                     # before the question could be asked
 
 #: What a code is allowed to look like. Lower-case identifier-ish, so it
 #: can be a dict key, a database column value and a metric label without
@@ -116,6 +119,18 @@ class PermissionRequest:
     #: test or by a host driving a gate directly is still a valid one, and
     #: "" reads as what it is -- no call behind this.
     call_id: str = ""
+    #: Which TURN this call belongs to. The gate layer has no other way to
+    #: know: it sees a stream of questions and nothing marks where one
+    #: thing the agent was asked to do ends and the next begins. Told for
+    #: the same reason ``call_id`` is told -- a wrapper could infer turns
+    #: from timing or from call ordering, and inferring silently produces
+    #: a budget that resets at the wrong moment rather than an error.
+    #:
+    #: "" is a request with no turn behind it (a test, a host driving a
+    #: gate directly). ``with_wait_budget`` treats each of those as its
+    #: own turn, because letting an unstamped question eat a real turn's
+    #: allowance would be worse than not budgeting it at all.
+    turn_id: str = ""
     #: tool.summary(args, ctx) with the context pre-bound by the loop, so
     #: an edit-and-reapprove UI can re-render the preview for amended args.
     #: None => the UI falls back to showing raw JSON.
@@ -316,6 +331,106 @@ def with_deadline(inner: PermissionFn, seconds: float, *,
         if not inspect.isawaitable(answer):
             return answer  # answered inline; there was nothing to wait for
         return wait(answer, request)
+
+    return gate
+
+
+def with_wait_budget(inner: PermissionFn, seconds: float, *,
+                     on_timeout: str) -> PermissionFn:
+    """A ceiling on how long ONE TURN may spend waiting for a person.
+
+    ``with_deadline`` puts a clock on each question, which is the right
+    unit for the question and the wrong unit for the turn: five dangerous
+    calls in one batch, a thirty-second deadline, and a turn can sit for
+    two and a half minutes without anybody having refused anything. The
+    person who set "thirty seconds" was describing their patience, and
+    patience does not multiply by the number of things the model decided
+    to try.
+
+    So the allowance is spent DOWN across a turn. Each awaited answer is
+    timed against whatever is left, and what remains becomes the next
+    question's deadline. The turn is the unit because a turn is one thing
+    the agent was asked to do -- the same unit the dollar ceiling uses
+    (notes/34), for the same reason.
+
+    NOTHING IS ASKED ONCE THE ALLOWANCE IS GONE. The verdict is returned
+    without calling ``inner`` at all, and the refusal code says which
+    happened: ``timeout`` means somebody was asked and did not answer,
+    ``out_of_time`` means nobody was asked because this turn had no
+    waiting left to do. Posting a question the wrapper will not wait for
+    is how a person ends up answering a prompt that has already been
+    decided against them.
+
+    The tradeoff, stated: a question that would have been answered in one
+    second can be refused because earlier questions in the same turn ate
+    the budget. That is what a ceiling IS, and the alternative -- a fresh
+    deadline per call -- is the behaviour this exists to replace.
+
+    ``on_timeout`` has no default, for ``with_deadline``'s reason exactly:
+    a stopwatch is mechanism and belongs here, a verdict on silence is
+    policy and belongs to whoever owns the conversation.
+
+    Like ``with_deadline``, this only binds a gate that SUSPENDS. An
+    answer that arrives inline was never waited for, so it costs nothing
+    and cannot be timed out.
+    """
+    if on_timeout not in ON_TIMEOUT:
+        raise ValueError(f"unknown on_timeout {on_timeout!r} "
+                         f"(want one of {', '.join(ON_TIMEOUT)})")
+    if seconds <= 0:
+        raise ValueError(
+            f"a turn's waiting budget must be positive, got {seconds!r}; "
+            f"0 does not mean 'no budget' here -- it means no question in "
+            f"any turn is ever asked (for no budget, do not wrap the gate)")
+
+    #: One mutable cell, closed over: which turn the remaining allowance
+    #: belongs to, and how much of it is left.
+    state: dict[str, Any] = {"turn": None, "left": seconds}
+
+    def spent_out(request: PermissionRequest, code: str) -> bool:
+        """The verdict, with the two causes phrased as the two things they
+        are. Reached only when the allowance is gone, which is why both
+        sentences can say so."""
+        if on_timeout == "allow":
+            return True
+        asked = ("the approval request went unanswered"
+                 if code == REFUSED_TIMEOUT else
+                 "nobody was asked, because this turn had no waiting left")
+        return refuse(
+            request,
+            f"{request.tool_name} was denied: {asked}. This turn may spend "
+            f"{seconds:g} seconds in total waiting for approval, and that "
+            f"is now spent. Nobody refused it -- try a read-only route, or "
+            f"say what you need and let the person answer in their own "
+            f"time.",
+            code=code)
+
+    async def wait(answer: Awaitable[bool], request: PermissionRequest,
+                   allowance: float) -> bool:
+        started = time.monotonic()
+        try:
+            async with asyncio.timeout(allowance):
+                return bool(await answer)
+        except TimeoutError:
+            return spent_out(request, REFUSED_TIMEOUT)
+        finally:
+            # Deducted in a finally so a question that was CANCELLED from
+            # outside -- the turn dropped, the connection gone -- still
+            # costs what it actually waited. An outer cancellation is not
+            # a denial and passes straight through (with_deadline's rule).
+            state["left"] = max(0.0, state["left"]
+                                - (time.monotonic() - started))
+
+    def gate(request: PermissionRequest) -> bool | Awaitable[bool]:
+        # An unstamped request is its own turn: see PermissionRequest.
+        if request.turn_id != state["turn"] or not request.turn_id:
+            state["turn"], state["left"] = request.turn_id, seconds
+        if state["left"] <= 0:
+            return spent_out(request, REFUSED_OUT_OF_TIME)
+        answer = inner(request)
+        if not inspect.isawaitable(answer):
+            return answer  # answered inline; nothing was waited for
+        return wait(answer, request, state["left"])
 
     return gate
 

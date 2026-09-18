@@ -284,9 +284,12 @@ the convenient one.
 
 ## What is not here yet
 
-* **No turn-level budget of waiting.** See the tradeoff above: a turn
-  with five refused calls waits five deadlines. The unit that would fix
-  it is a turn, and nothing in the gate layer knows about turns.
+* ~~**No turn-level budget of waiting.**~~ Shipped in
+  [note 51](51-a-turns-worth-of-waiting.md) as `with_wait_budget`. The
+  second half of this bullet was the whole problem and the whole
+  solution: nothing in the gate layer knew about turns, so the request
+  now SAYS which turn it belongs to — `turn_id` beside `call_id`, for
+  the same reason that one exists.
 * **Still no way to ask a question other than yes/no.** Unchanged from
   note 37. The gate can now say why it refused and how long it waited; it
   still cannot say *"not like that, like this"* except through

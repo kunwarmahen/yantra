@@ -2076,7 +2076,7 @@ Most carry a live receipt from a real run.
 | [32](notes/32-package-tools.md) | a package brings its own tools |
 | [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
-| [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) | a gate that waits; a clock and a machine-readable word |
+| [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
 | [45](notes/45-the-road-with-no-key.md) | the road with no key, and how it says its name |
 | [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) [50](notes/50-the-rest-of-what-a-child-is.md) | a package that declares its children, and the gate that watches what they were given |
@@ -2192,5 +2192,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1479 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1495 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*
