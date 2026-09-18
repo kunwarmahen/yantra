@@ -298,6 +298,9 @@ the convenient one.
   long it waited, and a caller that wants the number reads it from its
   own configuration. A code plus a payload is a bigger type than anything
   has needed.
-* **Nothing reads the code in this repo's own frontends.** The terminal
-  and the browser both render the sentence, which is the right thing for
-  a human to see. The token is for hosts, and this repo is not one.
+* ~~**Nothing reads the code in this repo's own frontends.**~~ Shipped in
+  [note 52](52-the-word-for-what-happened.md). The second sentence of
+  this bullet was wrong: a terminal IS a host, and it was drawing a
+  refused call as a crashed one — same red panel, same word — when a
+  refused call never ran at all. Both frontends now read the code, and
+  the terminal tallies a turn's refusals by cause.

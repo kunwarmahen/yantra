@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from rich.console import Console, Group
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
@@ -32,11 +33,17 @@ class Renderer:
         self._turn_tokens = 0
         self._thinking_seen: set[int] = set()
         self._in_thinking = False
+        #: refusal code -> how many calls it turned away this turn. Kept
+        #: per turn because that is the unit a person reads a transcript
+        #: in: "three refused, two of them by me" is a different story
+        #: from "three refused, none of them by me" (notes/52).
+        self._refused: dict[str, int] = {}
 
     def __call__(self, event) -> None:
         match event:
             case StartEvent(model=model):
                 self._turn_tokens = 0
+                self._refused.clear()
                 self._thinking_seen.clear()
                 self._in_thinking = False
                 self.console.print(f"[dim]· {model}[/dim]")
@@ -78,10 +85,13 @@ class Renderer:
             case ToolCallDelta():
                 pass  # argument fragments; shown in full in the result panel
 
-            case ToolExecuted(call=call, result=result):
+            case ToolExecuted(call=call, result=result, refusal=refusal):
+                if refusal is not None:
+                    self._refused[refusal] = self._refused.get(refusal, 0) + 1
                 self._render_tool(call.name, call.arguments, result.content,
                                   result.is_error,
-                                  image_count=len(result.images))
+                                  image_count=len(result.images),
+                                  refusal=refusal)
 
             case EndEvent(stop_reason=_, usage=usage):
                 self._turn_tokens = usage.input_tokens + usage.output_tokens
@@ -110,6 +120,7 @@ class Renderer:
                         f"{response.usage.output_tokens} out"
                         f"{cost} · {n} iteration(s)[/dim]"
                     )
+                self._render_refusals()
 
             case TurnEnd(reason=reason, response=None, iterations=n,
                          detail=detail):
@@ -118,11 +129,43 @@ class Renderer:
                 why = f" -- {detail}" if detail else ""
                 self.console.print(f"\n[yellow]── turn ended: {reason}{why} "
                                    f"(after {n} iteration(s))[/yellow]")
+                self._render_refusals()
+
+    def _render_refusals(self) -> None:
+        """One line per turn, grouped by cause, or nothing at all.
+
+        Grouped BY CODE rather than listed per call, because the question
+        a person has at the end of a turn is not which calls were refused
+        -- the panels above said that -- it is whether anything was
+        refused for a reason that was not them.
+        """
+        if not self._refused:
+            return
+        counts = " · ".join(f"{code} {n}" for code, n
+                            in sorted(self._refused.items()))
+        total = sum(self._refused.values())
+        self.console.print(f"[dim]── {total} call(s) refused: "
+                           f"{counts}[/dim]")
 
     def _render_tool(self, name: str, args: dict, output: str,
-                     is_error: bool, image_count: int = 0) -> None:
-        style = "red" if is_error else "cyan"
-        title = f"{name}()" + ("  [error]" if is_error else "")
+                     is_error: bool, image_count: int = 0,
+                     refusal: str | None = None) -> None:
+        # A REFUSAL IS NOT A CRASH, and up to here both drew the same red
+        # panel saying "error". The gate's code is the one thing that can
+        # tell them apart -- and can tell "you said no" from "nobody
+        # answered in time", which are different enough that a person
+        # rereads the transcript looking for the difference (notes/52).
+        style = "yellow" if refusal is not None else ("red" if is_error
+                                                      else "cyan")
+        # ESCAPED, because a Panel title is rendered as markup and
+        # "[error]" is a tag as far as rich is concerned -- it has been
+        # silently swallowing that word for as long as it has been here,
+        # leaving a red border and two spaces where the label should be.
+        title = f"{name}()"
+        if refusal is not None:
+            title += escape(f"  [refused: {refusal}]")
+        elif is_error:
+            title += escape("  [error]")
         preview = output[:RESULT_PREVIEW_CHARS]
         if len(output) > RESULT_PREVIEW_CHARS:
             preview += f"\n[... {len(output) - RESULT_PREVIEW_CHARS} more chars ...]"

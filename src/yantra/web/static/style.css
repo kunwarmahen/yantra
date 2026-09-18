@@ -753,6 +753,10 @@ pre.md-code {
 }
 .tool-card.running .tool-status { background: var(--accent-soft); color: var(--accent); }
 .tool-card.error   .tool-status { background: var(--danger-soft); color: var(--danger); }
+/* Refused, not broken: the gate's colour is the one the approval modal
+   uses, so a call somebody turned away reads as a decision. */
+.tool-card.refused .tool-status { background: var(--warn-soft); color: var(--warn); }
+.tool-card.refused { border-color: var(--warn-line); }
 .tool-card:not(.error) .tool-status.ok { background: var(--ok-soft); color: var(--ok); }
 
 .tool-body {

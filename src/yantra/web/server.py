@@ -370,13 +370,20 @@ class WebSession:
                 self.broadcast({"type": "redacted_thinking", "chars": len(data)})
             case ToolCallStart(index=_, id=_, name=name):
                 self.broadcast({"type": "tool_start", "name": name})
-            case ToolExecuted(call=call, result=result):
+            case ToolExecuted(call=call, result=result, refusal=refusal):
                 self.broadcast({
                     "type": "tool_result",
                     "name": call.name,
                     "arguments": call.arguments,
                     "output": result.content,
                     "is_error": result.is_error,
+                    # A REFUSAL IS NOT A CRASH. Both arrive as error
+                    # results (agent.py), and a browser that draws them
+                    # the same way tells somebody their tool broke when
+                    # what happened is that they said no -- or that
+                    # nobody answered in time, which is a third thing
+                    # again (notes/52).
+                    "refusal": refusal,
                     # Pressure moves during a turn too (each iteration
                     # refills the window); the header bar follows along
                     # instead of waiting for the end-of-turn state.
@@ -510,6 +517,10 @@ class WebSession:
                             "text": message.text()})
             for call in message.tool_calls():
                 result = results_by_id.get(call.id, {})
+                # No "refusal" key on a replayed call: the code lives on
+                # the EVENT, not in history, and a reconnect that invented
+                # one would be worse than a reconnect that shows the error
+                # result the model actually saw.
                 out.append({"type": "tool_result", "name": call.name,
                             "arguments": call.arguments,
                             "output": result.get("output", ""),

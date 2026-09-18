@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1495 tests. The
+The harness underneath is complete and covered by 1505 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -642,6 +642,27 @@ request says so (`turn_id`, beside `call_id`) rather than by inferring it
 from timing or call counts, which would reset the budget at the wrong
 moment and never raise. See
 [notes/51](notes/51-a-turns-worth-of-waiting.md).
+
+Both frontends read that token rather than drawing every refusal as a
+crash. A refused call **never ran** — it is not an error, and `user` and
+`timeout` are a decision and an absence:
+
+```
+╭─ bash()  [refused: user] ───────────────────────────╮
+│ { "command": "rm -rf build" }                       │
+│ Permission denied by user.                          │
+╰─────────────────────────────────────────────────────╯
+
+── 3 call(s) refused: timeout 1 · user 2
+```
+
+Yellow rather than red (the colour the approval prompt uses — this is the
+same conversation), one tally per turn grouped by cause, and the browser
+gets the code itself in the `tool_result` envelope rather than a
+sentence. A *replayed* call carries no code: history holds the error
+result the model saw and never held the gate's reason for it, and
+inventing one after the fact would be guessing at somebody's decision.
+See [notes/52](notes/52-the-word-for-what-happened.md).
 
 Every refusal also carries a short machine token beside the sentence, so
 a host can branch without matching on English:
@@ -1549,7 +1570,11 @@ src/yantra/
 │                   same kind of fact, so it reads as one instrument
 │                   ([notes/22](notes/22-web-ui.md),
 │                   [notes/43](notes/43-a-bar-and-a-deadline.md))
-└── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich)
+└── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
+                    a refused call reads as a DECISION, not a crash --
+                    yellow, the gate's code in the title, and one tally per
+                    turn grouped by cause
+                    ([notes/52](notes/52-the-word-for-what-happened.md)))
 ```
 
 Design rules worth stealing:
@@ -1652,7 +1677,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1495 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1505 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1683,7 +1708,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1495 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1505 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

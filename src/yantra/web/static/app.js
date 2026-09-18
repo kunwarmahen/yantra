@@ -382,9 +382,14 @@ function fillToolCard(env) {
     card = ui.openToolCard;
   }
   card.classList.remove("running");
-  card.classList.toggle("error", !!env.is_error);
+  // A refusal is not a crash: the gate turned this call away, and the
+  // code says which kind — you said no, nobody answered, a policy did it.
+  // Drawing both as "error" tells somebody their tool broke.
+  const refusal = env.refusal ?? null;
+  card.classList.toggle("error", !!env.is_error && !refusal);
+  card.classList.toggle("refused", !!refusal);
   card.querySelector(".tool-status").textContent =
-    env.is_error ? "error" : "ok";
+    refusal ? `refused · ${refusal}` : (env.is_error ? "error" : "ok");
   card.querySelector(".tool-name").textContent = `${env.name}()`;
 
   const body = document.createElement("div");
