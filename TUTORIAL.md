@@ -2122,5 +2122,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1394 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1397 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*
