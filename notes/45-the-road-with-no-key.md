@@ -91,9 +91,13 @@ And with nothing declared at all, the error that is still correct:
 ```
 $ uv run yantra
 error: no provider found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) in the
-environment or .env -- or run a local model with: yantra --provider ollama
-(YANTRA_PROVIDER=ollama in .env makes that the default)
+environment or .env -- or run a local model with: yantra --provider local
+(YANTRA_PROVIDER=local in .env makes that the default)
 ```
+
+(The word it names there is `local` rather than `ollama` since
+[note 54](54-the-word-for-a-road.md) — same road, and the word most of
+its users would reach for.)
 
 ## Why the Ollama rung sits at the bottom
 
