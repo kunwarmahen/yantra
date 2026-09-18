@@ -239,6 +239,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "lookup to ipinfo.io) into the system prompt, "
                              "plus a try-tools-before-asking policy line. "
                              "Default from $YANTRA_ENV_CONTEXT (full)")
+    parser.add_argument("--tool-pack", action="append", default=[],
+                        metavar="NAME", dest="tool_pack",
+                        help="load the tools an INSTALLED distribution "
+                             "publishes under the 'yantra.tools' entry-point "
+                             "group (repeatable). Named rather than "
+                             "discovered: an agent whose tool list depended "
+                             "on what happens to be in the virtualenv would "
+                             "be a different agent on every machine. A name "
+                             "nothing publishes is an error")
     parser.add_argument("--skills-dir", action="append", default=[],
                         metavar="DIR", dest="skills_dir",
                         help="extra directory to load skills from (repeatable). "
@@ -270,6 +279,7 @@ def _cli_spec(args) -> AgentSpec:
         cache=True if args.cache else None,
         skills=False if args.no_skills else None,
         skill_dirs=tuple(Path(d).expanduser() for d in args.skills_dir),
+        tool_packs=tuple(args.tool_pack),
         max_usd_per_turn=args.max_usd,
         permissions_mode="yolo" if args.yolo else None,
         env_context=args.env_context,
@@ -1201,6 +1211,11 @@ def main(argv: list[str] | None = None) -> int:
     # operator is entitled to see that it happened and what it added.
     if brought := package_tool_names(agent.registry):
         console.print(f"[dim]package tools: {', '.join(brought)}[/dim]")
+    # The same disclosure for tools that arrived by pip. Named by PACK
+    # rather than by tool: what the operator is being told is whose code
+    # ran, and the tools themselves are in the roster like any other.
+    if spec.tool_packs:
+        console.print(f"[dim]tool packs: {', '.join(spec.tool_packs)}[/dim]")
     # Sub-agents the package declared, named for the same reason: each one
     # is a tool that will spend money on a model call, and the operator
     # should not have to read agent.toml to find out they exist.

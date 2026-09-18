@@ -66,12 +66,14 @@ builds an agent from it.
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata as metadata
 import importlib.util
 import inspect
 import sys
 import types
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Any
 
 from yantra.errors import ConfigError
 from yantra.tools.base import Tool, ToolRegistry
@@ -239,6 +241,114 @@ def register_tool_dirs(registry: ToolRegistry,
                 ) from None
             if tool.name in registry:
                 admitted.append(tool.name)
+    return admitted
+
+
+#: The entry-point group a distribution publishes tools under. One group,
+#: named after this project, because a tool pack is a thing you install
+#: FOR Yantra rather than a thing that happens to contain Tool subclasses.
+ENTRY_POINT_GROUP = "yantra.tools"
+
+
+def _tools_from_entry_point(entry) -> list[Tool]:
+    """One entry point -> the tools it names.
+
+    Two shapes, both declarative, and the second is why a pack is worth
+    having at all:
+
+    * ``name = "yourpack.tools:Weather"`` -- one ``Tool`` subclass.
+    * ``name = "yourpack.tools"`` -- a MODULE, and every concrete ``Tool``
+      subclass defined in it, exactly as a ``tools/`` directory works.
+
+    A CALLABLE IS NOT A SHAPE HERE. An entry point that resolved to a
+    factory would run somebody's code with arguments nobody can read, at
+    a moment nobody chose, to produce a tool list that is not written
+    down anywhere. The two forms above are both readable from the
+    installed metadata without executing anything but an import.
+    """
+    try:
+        target = entry.load()
+    except Exception as exc:
+        raise ConfigError(
+            f"tool pack {entry.value!r} ({entry.name}) failed to import: "
+            f"{type(exc).__name__}: {exc}") from None
+    where = Path(f"<{entry.value}>")
+    if inspect.isclass(target) and issubclass(target, Tool):
+        if inspect.isabstract(target):
+            raise ConfigError(
+                f"tool pack {entry.value!r} names an abstract Tool subclass")
+        return [_instantiate(target, where)]
+    if isinstance(target, types.ModuleType):
+        classes = _tool_classes(target)
+        if not classes:
+            raise ConfigError(
+                f"tool pack {entry.value!r} defines no Tool subclass "
+                f"(a module entry point loads every concrete Tool in it)")
+        return [_instantiate(cls, where) for cls in classes]
+    raise ConfigError(
+        f"tool pack {entry.value!r} is neither a Tool subclass nor a "
+        f"module: an entry point names a class or a module, never a "
+        f"factory, so what a pack ships can be read from its metadata")
+
+
+def entry_point_packs() -> dict[str, list[Any]]:
+    """Installed distributions publishing ``yantra.tools``, by NAME.
+
+    A listing, not a load: nothing here imports anything, so a host can
+    show an operator what is installed and available without running it.
+    """
+    packs: dict[str, list[Any]] = {}
+    for entry in metadata.entry_points(group=ENTRY_POINT_GROUP):
+        dist = getattr(entry, "dist", None)
+        name = getattr(dist, "name", None) or entry.name
+        packs.setdefault(name, []).append(entry)
+    return packs
+
+
+def register_tool_packs(registry: ToolRegistry,
+                        names: Iterable[str]) -> list[str]:
+    """Load the named installed packs into ``registry``; return what was
+    admitted.
+
+    NAMED, NEVER AMBIENT. Every installed distribution publishing the
+    group could be loaded automatically, and that is exactly the thing
+    this refuses: an agent's tool list would then depend on what happens
+    to be in the virtualenv, so the same package would have different
+    tools on two machines and the manifest would not say why. A pack is
+    named in ``agent.toml`` (or on the command line) in one line, and
+    that line is the record.
+
+    A NAME THAT IS NOT INSTALLED IS AN ERROR, for tools/ directories'
+    reason: an author who wrote the line believes they shipped the tool,
+    and an agent quietly missing it is the failure this whole area
+    exists to prevent.
+
+    Admission still applies afterwards -- these go through ``register``
+    like everything else, so a pack a package's own ``tools.allow`` does
+    not name is turned away and listed in ``refused_names()``.
+    """
+    available = entry_point_packs()
+    admitted: list[str] = []
+    for name in names:
+        entries = available.get(name)
+        if entries is None:
+            installed = ", ".join(sorted(available)) or "none"
+            raise ConfigError(
+                f"tool pack {name!r} is not installed: nothing publishing "
+                f"{ENTRY_POINT_GROUP!r} is called that (installed: "
+                f"{installed}). Install it into the same environment as "
+                f"the agent, or drop the line that asks for it")
+        for entry in entries:
+            for tool in _tools_from_entry_point(entry):
+                try:
+                    registry.register(tool)
+                except ValueError:
+                    raise ConfigError(
+                        f"tool pack {name}: tool {tool.name!r} is already "
+                        f"registered -- a pack may not shadow another tool "
+                        f"(exclude the original with tools.deny)") from None
+                if tool.name in registry:
+                    admitted.append(tool.name)
     return admitted
 
 

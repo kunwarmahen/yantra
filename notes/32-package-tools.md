@@ -345,10 +345,14 @@ honesty goes.
 
 ## What is not here yet
 
-* **pip-installable tool packs** via `[project.entry-points."yantra.tools"]`
-  and `importlib.metadata` — about twenty lines, and the way a tool reaches
-  people who are not sharing a directory with you. Left out until somebody
-  wants it: a folder and a git URL is still enough.
+* ~~**pip-installable tool packs**~~ — shipped in
+  [note 53](53-a-tool-that-arrives-by-pip.md) as
+  `[project.entry-points."yantra.tools"]`, read with `importlib.metadata`.
+  The twenty-line estimate was right about the loading and wrong about
+  the decision: a pack is loaded only when NAMED (`packs = [...]`, or
+  `--tool-pack`), because loading whatever happens to be installed would
+  make an agent's tool list a fact about the virtualenv rather than
+  something its manifest states.
 * **Recursive discovery.** `tools/a/b/c.py` is not loaded. Flat is legible,
   and a tool directory large enough to need subfolders is probably a
   library that should be `pip install`ed and imported.

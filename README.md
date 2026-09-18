@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1505 tests. The
+The harness underneath is complete and covered by 1519 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -795,6 +795,7 @@ max_iterations = 20             # provider/model left open on purpose
 allow = ["read_file", "glob", "grep", "web_fetch", "load_skill"]
 deny  = ["browser_*"]           # fnmatch, like $YANTRA_DISABLED_TOOLS
 dirs  = ["tools"]               # your own tools; ./tools is found anyway
+packs = ["tide-pack"]           # tools somebody pip-installed (notes/53)
 
 [budget]
 max_usd_per_turn = 0.50         # a STOP, not a cap (notes/34)
@@ -1546,7 +1547,13 @@ src/yantra/
 │   │               load_module_file() lends the same discipline to a
 │   │               package's evals/graders.py
 │   │               ([notes/32](notes/32-package-tools.md),
-│   │               [notes/33](notes/33-evals-as-a-gate.md))
+│   │               [notes/33](notes/33-evals-as-a-gate.md)).
+│   │               register_tool_packs() is the same thing arriving by
+│   │               PIP: the "yantra.tools" entry-point group, loaded only
+│   │               for the distributions a manifest NAMES -- an agent
+│   │               whose roster depended on what is installed would be a
+│   │               different agent on every machine
+│   │               ([notes/53](notes/53-a-tool-that-arrives-by-pip.md))
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
 │   │               description, transcript-derived query, core pins +
 │   │               list_available_tools discovery hatch ([notes/17](notes/17-tool-selection.md))
@@ -1677,7 +1684,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1505 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1519 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1708,7 +1715,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1505 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1519 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

@@ -532,6 +532,34 @@ There is deliberately **no `@tool` decorator**. The hand-written schema is
 what makes the model call your tool correctly; generating one from type
 hints throws that away. ([notes/32](notes/32-package-tools.md))
 
+A tool worth writing is usually worth writing once, though, and copying
+`tools/tides.py` between six repositories is how six copies drift. So a
+tool can also arrive by **pip**. The publishing side is one table in the
+pack's own `pyproject.toml`:
+
+```toml
+[project.entry-points."yantra.tools"]
+tides = "tidepack.tools"          # a module: every Tool in it. Or ":Tides"
+```
+
+and the using side is one line, in the manifest or on the command line:
+
+```bash
+uv run yantra --provider ollama --tool-pack tide-pack "tides at Whitby today?"
+```
+```toml
+[tools]
+packs = ["tide-pack"]
+```
+
+**Named, never ambient.** Loading every installed distribution that
+publishes the group would make your agent's tool list a fact about your
+virtualenv — different tools on your colleague's machine, and nothing in
+`agent.toml` to say why. A name nothing publishes is an error that lists
+what *is* installed, and startup prints `tool packs: tide-pack`, because
+pip-installed code is still somebody else's code running as you.
+([notes/53](notes/53-a-tool-that-arrives-by-pip.md))
+
 ## 12 · A package that delegates
 
 ```toml
@@ -2073,7 +2101,7 @@ Most carry a live receipt from a real run.
 | [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) | the self-reliance tools, one note each |
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
-| [32](notes/32-package-tools.md) | a package brings its own tools |
+| [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
 | [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
@@ -2192,5 +2220,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1505 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1519 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

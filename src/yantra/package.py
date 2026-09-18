@@ -80,7 +80,7 @@ SCHEMA: dict[str, frozenset[str]] = {
     "agent": frozenset({"name", "description", "version", "prompt"}),
     "model": frozenset({"provider", "model", "max_tokens", "max_iterations",
                         "context_window", "cache"}),
-    "tools": frozenset({"allow", "deny", "per_turn", "dirs"}),
+    "tools": frozenset({"allow", "deny", "per_turn", "dirs", "packs"}),
     "skills": frozenset({"dirs", "disabled", "enabled"}),
     "mcp": frozenset({"name", "command", "args", "env", "url", "headers"}),
     "subagent": frozenset({"name", "description", "prompt", "instructions",
@@ -420,6 +420,12 @@ def load_package(where: Path) -> AgentSpec:
                 _fail(manifest, f"tools.dirs entry {directory} is not a "
                                 f"directory")
 
+    # Installed distributions publishing the yantra.tools entry-point
+    # group. NAMED, never ambient -- see tools/discover.py on why loading
+    # whatever happens to be in the virtualenv is the wrong default. Not
+    # imported here either, for tools.dirs' reason.
+    tool_packs = tuple(_str_list(tools, "packs", manifest, "tools") or ())
+
     declared_dirs = _str_list(skills, "dirs", manifest, "skills")
     if declared_dirs is None:
         conventional = root / DEFAULT_SKILLS
@@ -449,6 +455,7 @@ def load_package(where: Path) -> AgentSpec:
         tool_deny=_str_list(tools, "deny", manifest, "tools") or (),
         tools_per_turn=_int(tools, "per_turn", manifest, "tools"),
         tool_dirs=tool_dirs,
+        tool_packs=tool_packs,
         skills=skills_on,
         skill_dirs=skill_dirs,
         skills_disabled=_str_list(skills, "disabled", manifest, "skills") or (),

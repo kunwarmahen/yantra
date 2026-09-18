@@ -72,7 +72,8 @@ from yantra.skills.loader import prepend_skill_path
 from yantra.subagent import DeclaredSubagent, SubagentSpawner, SubagentSpec
 from yantra.tools import default_registry
 from yantra.tools.base import ToolRegistry
-from yantra.tools.discover import register_tool_dirs
+from yantra.tools.discover import (register_tool_dirs,
+                                   register_tool_packs)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +114,12 @@ class AgentSpec:
     #: its Python -- see tools/discover.py on where a package path may
     #: legitimately come from.
     tool_dirs: tuple[Path, ...] = ()
+    #: Installed distributions publishing ``yantra.tools`` entry points --
+    #: the way a tool reaches somebody who is not sharing a directory with
+    #: you. Named one by one: an agent whose tool list depended on what
+    #: happened to be installed would be a different agent on every
+    #: machine (tools/discover.py).
+    tool_packs: tuple[str, ...] = ()
 
     # ---- skills ------------------------------------------------------------
     skills: bool | None = None
@@ -292,6 +299,11 @@ class AgentSpec:
         # did not, so it happens here, where a human asked for this agent.
         if self.tool_dirs:
             register_tool_dirs(tools, self.tool_dirs)
+        # And the same step for code that arrived by pip rather than by
+        # being in the directory. Same admission policy, same loudness
+        # about collisions; the only difference is where it came from.
+        if self.tool_packs:
+            register_tool_packs(tools, self.tool_packs)
 
         # The ceiling is resolved HERE, before an agent exists, because the
         # one failure worth catching early is a ceiling that can never fire:
