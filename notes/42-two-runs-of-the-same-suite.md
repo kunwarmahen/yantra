@@ -261,7 +261,10 @@ twice.
   dollars rather than tokens to mean anything financial. Nobody has asked
   yet, and doing it wrong — pricing both sides with today's table — would
   quietly rewrite history every time a vendor changes a price.
-* **The store still cannot answer "which cases failed last time".**
-  `--case failed` would be the natural flag and needs the CLI to read a
-  report as an INPUT to selection rather than only as a comparison, which
-  is a small change and a decision about which report is "last time".
+* ~~**The store still cannot answer "which cases failed last time".**~~
+  Shipped in [note 46](46-the-cases-that-were-red.md) as `--failed FILE`
+  — the same file, read at the other end of a run. It is a named file
+  rather than the `--case failed` this bullet guessed at: a suite may
+  hold a case *called* `failed`, and one string with two meanings picks
+  the wrong one silently. "Which report is last time" stayed the
+  operator's decision; with no `FILE` it is the one `--against` names.

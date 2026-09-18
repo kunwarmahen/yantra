@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1397 tests. The
+The harness underneath is complete and covered by 1408 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -958,6 +958,34 @@ rather than being intersected away, and comparing two different models is
 the point rather than an error. See
 [notes/42](notes/42-two-runs-of-the-same-suite.md).
 
+**And a report can choose the next run, not only judge it.** `--failed
+FILE` runs the cases that were red in a report written earlier; with no
+`FILE`, the one `--against` names:
+
+```
+$ uv run yantra --agent . --eval --failed --against runs/red.json
+filtered: red in runs/red.json -- 2 of 6 case(s); this is not the package's gate
+
+  PASS  delegation-works-end-to-end  23.0s · 8423 tok · 3 it · fact_checker, …
+  PASS  the-checker-is-actually-on-the-roster  roster only · no model call · 0 tok
+
+SUBSET GREEN · 2/2 passed · 4 case(s) not run · 8423 tokens
+
+against researcher 0.1.0 on ollama/qwen3.8:27b (4/6 passed)
+  fixed  delegation-works-end-to-end  0/1 → 1/1
+  fixed  the-checker-is-actually-on-the-roster  0/1 → 1/1
+tokens: 47236 → 8423 (-38813)
+```
+
+It is spelled as a file rather than as `--case failed`, because a suite
+may hold a case *called* `failed` and a selection that quietly runs
+something other than what was asked for looks exactly like success. A red
+id the suite no longer has is named (`not in this suite any more: …`) and
+the rest still run; a report with nothing red exits 0 without resolving a
+provider; a report whose red cases have *all* vanished is exit 2, because
+a run of nothing passes everything. See
+[notes/46](notes/46-the-cases-that-were-red.md).
+
 **The servers the package declares are under test too.** `--eval` starts
 them and their tools register as `mcp__<server>__<tool>`, so
 `has_tools = ["mcp__docs__*"]` grades something real instead of an empty
@@ -1284,7 +1312,9 @@ src/yantra/
 │                   one run survives as added/gone instead of being
 │                   intersected away; two models is the point, a different
 │                   set of CASES is the warning
-│                   ([notes/42](notes/42-two-runs-of-the-same-suite.md))
+│                   ([notes/42](notes/42-two-runs-of-the-same-suite.md),
+│                   [notes/46](notes/46-the-cases-that-were-red.md) reads
+│                   one back as the SELECTION for the next run: --failed)
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -1487,7 +1517,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1397 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1408 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1518,7 +1548,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1397 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1408 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

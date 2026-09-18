@@ -150,6 +150,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "evidence without paying for it on every "
                              "deterministic one. A filtered run reports as a "
                              "SUBSET, never as the suite's verdict")
+    parser.add_argument("--failed", metavar="FILE", nargs="?", const="",
+                        default=None, dest="failed",
+                        help="with --eval: run only the cases that were RED "
+                             "in FILE, a report an earlier --report wrote. "
+                             "With no FILE, the report --against names. A "
+                             "green report leaves nothing to re-run; a case "
+                             "that has since left the suite is named rather "
+                             "than dropped")
     parser.add_argument("--report", metavar="FILE", default=None,
                         help="with --eval: write this run to FILE as JSON "
                              "(green or red -- a red run is the one you will "
@@ -394,6 +402,24 @@ def _select_cases(cases: list, patterns: list[str]) -> tuple[list, str | None]:
     return chosen, ", ".join(patterns)
 
 
+def _failed_cases(cases: list, prior) -> tuple[list, list[str]]:
+    """``--failed FILE`` -> the cases that were red in that report, and the
+    ids it named that this suite no longer has.
+
+    THE REPORT IS AN INPUT, NOT ONLY AN ANSWER. ``--against`` made a report
+    something to be compared with; the question an operator asks first is
+    smaller and more practical -- *re-run the ones that broke* -- and it
+    needs the same file read at the other end of the run. Nothing else
+    about selection changes: the ids come out of the file, the cases come
+    out of the suite, and an id in one and not the other is reported rather
+    than reconciled.
+    """
+    red = [c.id for c in prior.cases if not c.passed]
+    known = {c.id for c in cases}
+    return ([c for c in cases if c.id in set(red)],
+            [i for i in red if i not in known])
+
+
 def _eval_mcp(spec: AgentSpec, tools, console: Console):
     """Start the servers the package declares, or say why the agent under
     test is smaller than the one that ships.
@@ -461,11 +487,52 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
 
-    cases, filtered = _select_cases(every_case, args.case)
+    # --failed [FILE]: the same file, read at the other end. Resolved
+    # BEFORE the provider, because a report full of green is a run that
+    # never has to happen.
+    pool, filters = every_case, list(args.case)
+    if args.failed is not None:
+        source = args.failed or args.against
+        if not source:
+            print("error: --failed with no FILE means the report --against "
+                  "names, and there is no --against; pass --failed FILE or "
+                  "add --against FILE", file=sys.stderr)
+            return 2
+        try:
+            prior = (baseline if source == args.against and baseline is not None
+                     else read_report(Path(source)))
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        pool, gone = _failed_cases(every_case, prior)
+        if gone:
+            # Loudly, and without stopping: a case that was renamed is the
+            # commonest reason, and the run the operator asked for is still
+            # worth having.
+            console.print(f"[yellow]not in this suite any more: "
+                          f"{escape(', '.join(gone))} -- red in "
+                          f"{escape(source)}, and gone since[/yellow]")
+        if not pool:
+            if gone:
+                print(f"error: every case that was red in {source} has since "
+                      f"left this suite; there is nothing to re-run",
+                      file=sys.stderr)
+                return 2
+            console.print(f"[green]every case in {escape(source)} passed[/green] "
+                          f"[dim]-- nothing to re-run[/dim]")
+            return 0
+        filters.append(f"red in {source}")
+
+    cases, _ = _select_cases(pool, args.case)
     if not cases:
-        print(f"error: no case matches {', '.join(args.case)} -- this suite "
-              f"has: {', '.join(c.id for c in every_case)}", file=sys.stderr)
+        print(f"error: no case matches {', '.join(args.case)} -- "
+              + (f"the cases that were red are: "
+                 f"{', '.join(c.id for c in pool)}" if args.failed is not None
+                 else f"this suite has: "
+                      f"{', '.join(c.id for c in every_case)}"),
+              file=sys.stderr)
         return 2
+    filtered = " · ".join(filters) if filters else None
 
     # THE PROVIDER IS RESOLVED FROM WHAT THE SELECTED CASES NEED. A suite
     # of nothing but roster assertions grades the tool LIST, which is
@@ -641,7 +708,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     run = record_run(outcomes, suite=label or (spec.name or "agent"),
                      provider=provider_name, model=model, repeat=args.repeat,
                      cases_in_suite=len(every_case),
-                     filtered=args.case or None)
+                     filtered=filters or None)
     if args.report is not None:
         try:
             write_report(Path(args.report), run)
@@ -892,9 +959,11 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
     if ((args.eval_async is not None or args.repeat != 1 or args.case
-         or args.no_mcp or args.report or args.against) and not args.eval):
-        print("error: --async, --repeat, --case, --no-mcp, --report and "
-              "--against belong to --eval -- they say how an acceptance "
+         or args.no_mcp or args.report or args.against
+         or args.failed is not None) and not args.eval):
+        print("error: --async, --repeat, --case, --failed, --no-mcp, "
+              "--report and --against belong to --eval -- they say how an "
+              "acceptance "
               "suite is driven, and a session has one trajectory",
               file=sys.stderr)
         return 2

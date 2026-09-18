@@ -713,6 +713,22 @@ rather than being intersected away, and comparing two different models is
 the point rather than an error.
 ([notes/42](notes/42-two-runs-of-the-same-suite.md))
 
+And then the file answers the question you actually asked first — *what
+broke, and is it fixed?* `--failed FILE` runs the cases that report
+recorded as red, and with no `FILE` it uses the one `--against` names, so
+the fix-and-check loop is one line:
+
+```bash
+uv run yantra --agent . --eval --failed --against runs/red.json
+```
+
+On the example package that is 8,423 tokens instead of 47,236 to re-check
+a one-line edit. It is a subset like any other — `SUBSET GREEN` means the
+broken things are not broken now, not that the package is green. A report
+with nothing red in it exits 0 without resolving a provider; a red id the
+suite no longer has is named rather than dropped.
+([notes/46](notes/46-the-cases-that-were-red.md))
+
 ### Three rules that hold the gate up
 
 * Cases are graded against **the package itself** — its prompt, skills,
@@ -2004,7 +2020,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) | a package brings its own tools |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) | the ceiling, the warning, and the two readers of one meter |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) | a gate that waits; a clock and a machine-readable word |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
@@ -2122,5 +2138,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1397 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1408 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*
