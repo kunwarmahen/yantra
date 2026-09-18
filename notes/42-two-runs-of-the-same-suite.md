@@ -259,12 +259,13 @@ twice.
 * **No way to compare more than two runs.** Three models side by side is
   the obvious next ask, and it is a table rather than a pair, which is a
   different rendering problem than this one.
-* **Cost is measured in tokens, not dollars.** The report stores token
-  counts; the ceiling machinery ([note 34](34-budgets.md)) knows how to
-  price them per model, and a comparison across two models would want
-  dollars rather than tokens to mean anything financial. Nobody has asked
-  yet, and doing it wrong — pricing both sides with today's table — would
-  quietly rewrite history every time a vendor changes a price.
+* ~~**Cost is measured in tokens, not dollars.**~~ Shipped in
+  [note 48](48-what-the-run-cost.md), and the trap this bullet named is
+  what shaped it: the figure is priced when the run HAPPENS and stored,
+  never recomputed at read time, so a vendor's new price page cannot
+  rewrite an old report. Pricing at write time turned out to be the only
+  correct version anyway — a report keeps one token total, and the four
+  rates that make up a trajectory's cost exist only while it is running.
 * ~~**The store still cannot answer "which cases failed last time".**~~
   Shipped in [note 46](46-the-cases-that-were-red.md) as `--failed FILE`
   — the same file, read at the other end of a run. It is a named file

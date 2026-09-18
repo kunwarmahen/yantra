@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1432 tests. The
+The harness underneath is complete and covered by 1446 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -950,7 +950,16 @@ tokens: 34991 → 24862 (-10129)
 ```
 
 `--report FILE` writes the run as JSON (red runs included — that is the
-one you compare against tomorrow); `--against FILE` says what moved. It
+one you compare against tomorrow), with **what each case cost in dollars,
+priced on the day it ran and never recomputed** — a vendor's new price
+page may not rewrite an old report, and the four rates that make up a
+trajectory's cost (input, output, cache read, cache write) exist only
+while it is running. Zero and unknown stay different numbers: a local
+model records `0.0` and prints nothing, an unpriced hosted model records
+nothing at all, and neither is rendered as `$0.00`
+([notes/48](notes/48-what-the-run-cost.md)). `--against FILE` says what
+moved — `cost: $1.2500 → $0.0421 (-1.2079)`, which is the only line that
+means anything when the two runs used different models. It
 changes **no verdict and no exit code**: a run that got worse and is still
 green is still green. Cases are compared as counts (`7/10 → 6/10`, never
 percentages), a case present in only one run shows as `added`/`gone`
@@ -1349,7 +1358,11 @@ src/yantra/
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
-│                   never a guess ([notes/21](notes/21-cost-accounting.md))
+│                   never a guess ([notes/21](notes/21-cost-accounting.md)).
+│                   cost_now prices ONE run for storing -- 0.0 for a
+│                   provider that bills nothing, None for a model nobody
+│                   priced, and those are different numbers
+│                   ([notes/48](notes/48-what-the-run-cost.md))
 ├── budget.py       those dollars as a DECISION: a per-turn ceiling the loop
 │                   stops at between iterations (over_budget, with the numbers
 │                   in it). ONE meter shared with sub-agents, cleared only by
@@ -1548,7 +1561,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1432 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1446 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1579,7 +1592,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1432 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1446 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

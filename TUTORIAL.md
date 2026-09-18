@@ -724,7 +724,12 @@ tokens: 34991 → 24862 (-10129)
 ```
 
 `--report FILE` writes the run as JSON — red runs included, since that is
-the one you compare against tomorrow. `--against FILE` says what moved,
+the one you compare against tomorrow — and each case carries what it cost
+in dollars, priced the day it ran so that a vendor's new price page
+cannot rewrite it. A local run records a real `0.0` and prints no figure;
+an unpriced hosted model records nothing, because zero and unknown are
+different numbers ([notes/48](notes/48-what-the-run-cost.md)).
+`--against FILE` says what moved,
 and changes **no verdict and no exit code**: a run that got worse and is
 still green is still green. Cases are compared as counts (`7/10 → 6/10`,
 never percentages), a case present in only one run shows as `added`/`gone`
@@ -2040,7 +2045,7 @@ Most carry a live receipt from a real run.
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) | a package brings its own tools |
 | [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) | the acceptance gate, and everything that grew on it |
-| [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) | the ceiling, the warning, and the two readers of one meter |
+| [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) | a gate that waits; a clock and a machine-readable word |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
 | [45](notes/45-the-road-with-no-key.md) | the road with no key, and how it says its name |
@@ -2157,5 +2162,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1432 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1446 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

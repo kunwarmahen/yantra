@@ -78,6 +78,7 @@ from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
 from yantra.confidence import wilson_bounds
 from yantra.errors import ConfigError
+from yantra.pricing import cost_now
 from yantra.providers.base import Provider, ProviderSettings, collect
 from yantra.spec import AgentSpec
 from yantra.subagent import (DeclaredSubagent, SpawnSubagent,
@@ -212,6 +213,10 @@ class EvalResult:
     #: False when no request was ever made -- a roster-only case, or a case
     #: whose roster assertion failed and was not paid for.
     ran_model: bool = True
+    #: What this run cost, priced when it RAN (notes/48). 0.0 on a provider
+    #: that bills nothing; None when the model has no known price, which is
+    #: not the same thing and is never rendered as $0.00.
+    usd: float | None = None
 
 
 @dataclass(slots=True)
@@ -307,6 +312,17 @@ class CaseOutcome:
     @property
     def duration_seconds(self) -> float:
         return sum(r.duration_seconds for r in self.runs)
+
+    @property
+    def usd(self) -> float | None:
+        """What all the runs cost together, or None when nothing was priced.
+
+        A run with no price contributes nothing rather than zero: mixing
+        the two would make an unpriced case look free, which is the one
+        reading pricing.py refuses everywhere else.
+        """
+        priced = [r.usd for r in self.runs if r.usd is not None]
+        return sum(priced) if priced else None
 
     @property
     def marks(self) -> str:
@@ -667,6 +683,15 @@ class EvalRunner:
             context_window=self.context_window, cwd=self.cwd, extra=extra,
         )
 
+    def _usd(self, agent) -> float | None:
+        """What this trajectory cost, in dollars, priced NOW.
+
+        Here rather than in the report, because here is the only place the
+        full ``Usage`` still exists -- the report keeps one token total,
+        and cache reads and writes are billed at their own rates.
+        """
+        return cost_now(agent.total_usage, self.provider_name, self.model)
+
     def run_case(self, case: EvalCase) -> EvalResult:
         self.seen.clear()
         agent = self._agent(case, self.seen)
@@ -701,6 +726,7 @@ class EvalRunner:
                 tool_calls_seen=list(self.seen),
                 duration_seconds=time.monotonic() - start,
                 error=f"{type(exc).__name__}: {exc}",
+                usd=self._usd(agent),
             )
         duration = time.monotonic() - start
         answer = response.message.text().strip()
@@ -768,7 +794,7 @@ class EvalRunner:
             case_id=case.id, passed=not failures, failures=failures,
             final_answer=answer, tokens_used=tokens,
             iterations_used=iterations, tool_calls_seen=seen,
-            duration_seconds=duration,
+            duration_seconds=duration, usd=EvalRunner._usd(self, agent),
         )
 
     @staticmethod
@@ -847,6 +873,7 @@ class AsyncEvalRunner:
                 tool_calls_seen=list(seen),
                 duration_seconds=time.monotonic() - start,
                 error=f"{type(exc).__name__}: {exc}",
+                usd=EvalRunner._usd(self, agent),
             )
         answer = response.message.text().strip()
         tokens = agent.total_usage.input_tokens + agent.total_usage.output_tokens

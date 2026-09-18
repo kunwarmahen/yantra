@@ -251,6 +251,31 @@ def cost_of(usage: Usage, price: ModelPrice) -> float:
     ) / 1_000_000
 
 
+def cost_now(usage: Usage, provider_name: str | None, model: str
+             ) -> float | None:
+    """Dollars for one run, priced AGAINST TODAY'S TABLE, for storing.
+
+    The caller that matters is the eval report (notes/48), which writes
+    the figure down and never recomputes it: a run costs what it cost on
+    the day it ran, and re-pricing an old report with a new table would
+    quietly rewrite history every time a vendor moved a number.
+
+    Three answers, and the middle one is the reason this is not just
+    ``cost_of``:
+
+    * ``0.0`` -- a provider that bills nothing (a local server). Free is a
+      fact, not a missing price.
+    * ``None`` -- a hosted model with no price entry. Unknown, and the
+      caller omits the figure rather than printing $0.00, which would
+      teach exactly the wrong instinct about what a suite costs.
+    * a float -- the weighted sum, same arithmetic as everywhere else.
+    """
+    if provider_name and bills_nothing(provider_name):
+        return 0.0
+    price = price_for(model)
+    return cost_of(usage, price) if price is not None else None
+
+
 def session_cost(usage_by_model: dict[str, Usage]) -> tuple[float, bool]:
     """(dollars, fully_priced) over per-model session buckets.
 

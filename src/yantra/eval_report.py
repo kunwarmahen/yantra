@@ -30,6 +30,14 @@ nothing refuses to compare across them. What IS named loudly is a
 comparison against a run that graded a different set of cases: a subset
 (``--case``) or a suite somebody has since edited.
 
+DOLLARS ARE WRITTEN DOWN, NEVER RECOMPUTED. A run costs what it cost on
+the day it ran, so the figure is priced at write time and stored beside
+the tokens (notes/48). Re-pricing an old report against today's table
+would rewrite history every time a vendor moves a number, and would do it
+silently, in the one file somebody keeps precisely because it does not
+change. A report from before this key existed has no figure, which reads
+correctly as "nobody wrote one down".
+
 JSON, one object, with a format tag. A report is written by one version
 of this program and read by another -- possibly months later, by a CI job
 nobody has looked at since -- so an unreadable file has to say so rather
@@ -67,6 +75,10 @@ class CaseRecord:
     seconds: float
     ran_model: bool
     failures: list[str] = field(default_factory=list)
+    #: Dollars, priced on the day this ran (notes/48). ``None`` means the
+    #: model had no known price -- or that the report predates this key,
+    #: which reads the same way and correctly: nobody wrote a figure down.
+    usd: float | None = None
 
     @property
     def tally(self) -> str:
@@ -109,6 +121,22 @@ class SuiteRun:
         return sum(c.tokens for c in self.cases)
 
     @property
+    def usd(self) -> float | None:
+        """What the run cost, or None when no case carried a figure."""
+        priced = [c.usd for c in self.cases if c.usd is not None]
+        return sum(priced) if priced else None
+
+    @property
+    def fully_priced(self) -> bool:
+        """Whether every case that reached a model carried a figure.
+
+        False is the honest half-answer: a suite run across a priced model
+        and an unpriced one has a total that is real and incomplete, and
+        saying so beats both hiding it and implying it is everything.
+        """
+        return all(c.usd is not None for c in self.cases if c.ran_model)
+
+    @property
     def green(self) -> bool:
         return bool(self.cases) and self.passed == len(self.cases)
 
@@ -133,6 +161,7 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
             passes=o.passes, min_pass_rate=o.min_pass_rate,
             tokens=o.tokens_used, seconds=round(o.duration_seconds, 3),
             ran_model=o.ran_model, failures=list(o.failures),
+            usd=getattr(o, "usd", None),
         ) for o in outcomes],
     )
 
@@ -159,6 +188,7 @@ def write_report(path: Path, run: SuiteRun) -> None:
             "passes": c.passes, "min_pass_rate": c.min_pass_rate,
             "tokens": c.tokens, "seconds": c.seconds,
             "ran_model": c.ran_model, "failures": c.failures,
+            "usd": c.usd,
         } for c in run.cases],
     }
     try:
@@ -206,6 +236,7 @@ def read_report(path: Path) -> SuiteRun:
                 passes=c["passes"], min_pass_rate=c["min_pass_rate"],
                 tokens=c["tokens"], seconds=c["seconds"],
                 ran_model=c["ran_model"], failures=list(c.get("failures", [])),
+                usd=c.get("usd"),
             ) for c in raw["cases"]],
         )
     except (KeyError, TypeError) as exc:
@@ -253,6 +284,15 @@ class CaseDelta:
         if self.before is None or self.after is None:
             return 0
         return self.after.tokens - self.before.tokens
+
+    @property
+    def usd_moved(self) -> float | None:
+        """The difference in dollars, or None when either side has none."""
+        if self.before is None or self.after is None:
+            return None
+        if self.before.usd is None or self.after.usd is None:
+            return None
+        return self.after.usd - self.before.usd
 
     @property
     def movement_is_evidence(self) -> bool:
@@ -309,6 +349,15 @@ class Comparison:
     @property
     def tokens_moved(self) -> int:
         return self.after.tokens - self.before.tokens
+
+    @property
+    def usd_moved(self) -> float | None:
+        """Dollars then against dollars now, or None when one side has no
+        figure to compare -- an unpriced model, or a report written before
+        anybody wrote costs down."""
+        if self.before.usd is None or self.after.usd is None:
+            return None
+        return self.after.usd - self.before.usd
 
 
 def compare(before: SuiteRun, after: SuiteRun) -> Comparison:

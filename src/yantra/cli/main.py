@@ -705,7 +705,16 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
         tally += f" · {runs} runs"
     if filtered is not None:
         tally += f" · {len(every_case) - len(cases)} case(s) not run"
-    console.print(f"\n{verdict} · {tally} · {spent} tokens"
+    cost = ""
+    priced = [o.usd for o in outcomes if o.usd is not None]
+    if priced and sum(priced) > 0:
+        # Omitted entirely at $0: a local run bills nothing, and printing
+        # "$0.0000" beside a two-minute suite reads as a broken meter
+        # rather than as the free road working (notes/48).
+        cost = f" · ${sum(priced):.4f}"
+        if any(o.usd is None for o in outcomes if o.ran_model):
+            cost += " (priced models only)"
+    console.print(f"\n{verdict} · {tally} · {spent} tokens{cost}"
                   + (f" · {free_cases} case(s) cost nothing" if free_cases
                      else ""))
     _evidence_note(console, outcomes)
@@ -786,6 +795,18 @@ def _render_comparison(console: Console, cmp) -> None:
     if spent:
         console.print(f"[dim]tokens: {before.tokens} → {after.tokens} "
                       f"({spent:+d})[/dim]")
+    moved_usd = cmp.usd_moved
+    if moved_usd is not None and (before.usd or after.usd):
+        # Each side priced on the day it ran, so this is what the two runs
+        # ACTUALLY cost rather than what today's table says they would
+        # (notes/48). It is also the only figure that means anything when
+        # the two runs used different models.
+        console.print(f"[dim]cost: ${before.usd:.4f} → ${after.usd:.4f} "
+                      f"({moved_usd:+.4f})[/dim]")
+    elif before.usd is None and after.usd is not None:
+        console.print("[dim]cost: that run recorded no dollar figure "
+                      "(unpriced model, or written before costs were "
+                      "kept)[/dim]")
 
 
 def _evidence_note(console: Console, outcomes) -> None:
