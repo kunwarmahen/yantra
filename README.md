@@ -1405,7 +1405,10 @@ Design rules worth stealing:
   falls out of one deliberate mutability: a gate may REPLACE
   `request.arguments` before answering True; the loop notices the swap by
   identity and adopts the edited form — so approval is a review step, not
-  a rubber stamp ([notes/20](notes/20-approve-with-edits.md)).
+  a rubber stamp ([notes/20](notes/20-approve-with-edits.md)). A request
+  also carries the `call_id` it is deciding, so a host that RECORDS
+  decisions can match one to the `ToolExecuted` it produced — calls in an
+  iteration run concurrently, so nothing else can pair them.
 * **Gates decide, hooks watch.** Observational `on_before_tool` /
   `on_after_tool` callbacks bracket every real execution (errors
   included) but can veto nothing — denial stays the gate's job. A

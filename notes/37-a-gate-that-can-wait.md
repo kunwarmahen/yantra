@@ -251,6 +251,16 @@ treated as a yes, because the text would still say "denied" somewhere.
   had to parse prose. Shipped in [note 39](39-a-clock-and-a-word.md), and
   the deadline is what earned it: those two refusals are the first pair
   that look identical in English and demand opposite handling.
+* ~~**A gate cannot tell which call it is deciding.**~~ Never written
+  down here, and it should have been. A host that only approves or
+  refuses needs nothing from the id; one that RECORDS what happened had
+  to pair a decision with the `ToolExecuted` it produced by COUNTING —
+  which works, and is the wrong thing to depend on. It rests on three
+  invariants of this loop (gates sequential, one gate per call, results
+  in submission order), none of them promised to callers, and a drift in
+  any of them does not raise: it files one person's approval against a
+  different call. `PermissionRequest.call_id` closes it, defaulted so a
+  request built by hand is still a valid one.
 * **`PermissionRequest.reason` is advisory in the other direction too.**
   Nothing stops a gate from writing a reason and then approving; the loop
   simply ignores it. Enforcing that would cost a check in the hot path to

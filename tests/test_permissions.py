@@ -251,3 +251,68 @@ def test_summarize_is_supplied_and_rebinds_previews():
     assert seen[0].summarize is not None
     assert seen[0].summarize({"q": 2}) == 'echo {"q": 2}'
     assert seen[0].summary == 'echo {"q": 1}'
+
+
+# ---- the call behind the request --------------------------------------------
+
+
+def test_a_gate_is_told_which_call_it_is_deciding(registry):
+    """The seam a host that RECORDS decisions should not do without.
+
+    Approving or refusing needs nothing from the id. Writing down "you
+    approved this call, from your phone, at 14:02" needs it — and the
+    alternative is counting, which works right up until it does not:
+    gates being sequential, one gate per call, and results arriving in
+    submission order are three properties of this loop that no caller was
+    ever promised, and a drift in any of them files one person's approval
+    against a different call without raising anything.
+    """
+    seen = []
+
+    def gate(request: PermissionRequest) -> bool:
+        seen.append((request.tool_name, request.call_id))
+        return True
+
+    provider = ScriptedProvider([
+        ModelResponse(
+            message=Message("assistant", [
+                ToolCall("call-a", "writer", {"text": "one"}),
+                ToolCall("call-b", "writer", {"text": "two"}),
+            ]),
+            stop_reason="tool_use",
+        ),
+        assistant_text("done"),
+    ])
+    agent = Agent(provider, model="m", tools=registry, permissions=gate)
+    agent.run("write twice")
+
+    assert seen == [("writer", "call-a"), ("writer", "call-b")]
+
+
+def test_the_id_matches_the_result_the_decision_produced(registry):
+    """One call in, one result out, and the id is the thread between them."""
+    decided = {}
+
+    def gate(request: PermissionRequest) -> bool:
+        decided[request.call_id] = request.tool_name
+        return False
+
+    provider = ScriptedProvider([
+        ModelResponse(
+            message=Message("assistant",
+                            [ToolCall("c7", "writer", {"text": "x"})]),
+            stop_reason="tool_use",
+        ),
+        assistant_text("refused, then."),
+    ])
+    agent = Agent(provider, model="m", tools=registry, permissions=gate)
+    agent.run("write")
+
+    results = [b for m in agent.history for b in (m.content or [])
+               if type(b).__name__ == "ToolResult"]
+    assert [r.tool_call_id for r in results] == list(decided)
+
+
+def test_a_request_built_by_hand_still_works():
+    """Defaulted, not required: a host driving a gate directly has no call."""
+    assert request_for("reader").call_id == ""

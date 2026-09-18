@@ -650,6 +650,10 @@ class Agent:
             arguments=call.arguments,
             summary=summary,
             read_only=tool.read_only,
+            # So a host that records decisions can match this one to the
+            # ToolExecuted it becomes, without counting on the order of
+            # somebody else's loop (see PermissionRequest.call_id).
+            call_id=call.id,
             # Closed over so an edit-and-reapprove UI can re-render the
             # preview for amended args (approve-with-edits).
             summarize=lambda args: tool.summary(args, self.ctx),

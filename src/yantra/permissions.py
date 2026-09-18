@@ -87,12 +87,35 @@ class PermissionRequest:
     ``arguments`` (and refresh ``summary``) while deciding, and may write
     ``reason`` and ``code`` to explain a refusal. Everything else about
     the request is the loop's business.
+
+    ``call_id`` is the loop's business in the other direction: it is the
+    only thing here that lets a host correlate a DECISION with the
+    ``ToolExecuted`` that decision produced. Everything else describes
+    what is being asked; this says which asking it is.
     """
 
     tool_name: str
     arguments: dict[str, Any]
     summary: str  # built by the tool itself: the literal command / diff
     read_only: bool
+    #: The id of the ``ToolCall`` being decided, so a gate's answer can be
+    #: matched to the ``ToolExecuted`` it produces. A host that only
+    #: approves or refuses needs nothing from this; a host that RECORDS
+    #: what happened does.
+    #:
+    #: NOT BECAUSE ORDER WOULD NOT WORK -- BECAUSE IT WOULD. Gates run
+    #: once per call in submission order and ``ToolExecuted`` is emitted
+    #: in submission order, so a host could count. That is three
+    #: invariants of somebody else's loop (gates sequential, one gate per
+    #: call, results in submission order), none of them promised to
+    #: callers, and a drift in any of them does not raise -- it silently
+    #: files one person's approval against a different call. An id is one
+    #: string and cannot drift.
+    #:
+    #: Defaulted rather than required: a ``PermissionRequest`` built by a
+    #: test or by a host driving a gate directly is still a valid one, and
+    #: "" reads as what it is -- no call behind this.
+    call_id: str = ""
     #: tool.summary(args, ctx) with the context pre-bound by the loop, so
     #: an edit-and-reapprove UI can re-render the preview for amended args.
     #: None => the UI falls back to showing raw JSON.
