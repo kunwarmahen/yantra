@@ -110,9 +110,41 @@ def _clean_value(raw: str) -> str:
     return raw
 
 
+#: Other words for a provider this harness knows by one name. "local" is
+#: the only one so far, and it earns its place: roughly half the people
+#: reading this repo think "I want to run a local model", not "I want
+#: Ollama" -- a brand they may first meet in an error message. The
+#: harness answers to both and stores the canonical one (notes/54).
+ALIASES: dict[str, str] = {"local": "ollama"}
+
+#: The manifest's word for "whatever this machine already prefers". A
+#: package that leaves ``provider`` blank behaves identically; this lets
+#: it SAY so, because a blank reads as an omission and a reviewer cannot
+#: tell a decision from a gap (notes/54).
+FOLLOW_THE_MACHINE = "auto"
+
+
+def canonical_provider(name: str) -> str:
+    """One provider's many spellings -> the one this harness uses.
+
+    Applied at every edge a name arrives through -- the flag, the
+    manifest, the environment -- rather than at the point of use, so a
+    provider name inside the harness is always the canonical one and
+    nothing downstream has to know an alias exists.
+    """
+    cleaned = name.strip().lower()
+    return ALIASES.get(cleaned, cleaned)
+
+
+def known_providers() -> list[str]:
+    """Every name a caller may use, aliases included, sorted."""
+    return sorted([*_DEFAULTS, *ALIASES])
+
+
 def load_settings(name: str) -> ProviderSettings:
     """Read <PROVIDER>_API_KEY / <PROVIDER>_BASE_URL from the environment."""
     _load_dotenv()
+    name = canonical_provider(name)
     prefix = name.upper()
     if name == "ollama":
         # A local server needs no secret. Send a placeholder so the
@@ -143,6 +175,7 @@ def load_settings(name: str) -> ProviderSettings:
 
 def default_model(name: str) -> str:
     """Explicit env override wins; otherwise a per-provider default."""
+    name = canonical_provider(name)
     env_var = f"{name.upper()}_MODEL"
     return os.environ.get(env_var, _DEFAULTS[name]["model"])
 
@@ -265,12 +298,12 @@ def guess_provider() -> str:
       a machine holding both keeps answering the way it always has.
     """
     _load_dotenv()  # .env fills gaps; real env vars already set would win anyway
-    declared = os.environ.get("YANTRA_PROVIDER", "").strip().lower()
+    declared = canonical_provider(os.environ.get("YANTRA_PROVIDER", ""))
     if declared:
         if declared not in _DEFAULTS:
             raise ConfigError(
                 f"YANTRA_PROVIDER must be one of "
-                f"{'|'.join(sorted(_DEFAULTS))}, got {declared!r}"
+                f"{'|'.join(known_providers())}, got {declared!r}"
             )
         return declared
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
@@ -285,5 +318,5 @@ def guess_provider() -> str:
     raise ConfigError(
         "no provider found: set ANTHROPIC_API_KEY (or OPENAI_API_KEY) in the "
         "environment or .env -- or run a local model with: yantra --provider "
-        "ollama (YANTRA_PROVIDER=ollama in .env makes that the default)"
+        "local (YANTRA_PROVIDER=local in .env makes that the default)"
     )

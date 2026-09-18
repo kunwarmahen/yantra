@@ -96,8 +96,15 @@ The local road needs nothing in `.env` at all:
 
 ```bash
 ollama pull qwen3.8            # or any tag you like
-uv run yantra --provider ollama --model qwen3.8
+uv run yantra --provider local --model qwen3.8
 ```
+
+`local` and `ollama` are the same road — the first is the word most
+people reach for, and meeting a brand name for the first time inside an
+error message is a poor introduction. Whichever you type, the harness
+stores `ollama`: a provider name ends up as a key in the price table and
+a column in an eval report, and two spellings there would be two models
+([notes/54](notes/54-the-word-for-a-road.md)).
 
 The cloud road needs one line:
 
@@ -111,7 +118,7 @@ Bare `uv run yantra` works on the local road too, but a key ladder cannot
 see a road whose whole point is having no key, so you say so in `.env`:
 
 ```
-YANTRA_PROVIDER=ollama         # ends the question outright
+YANTRA_PROVIDER=local          # ends the question outright ("ollama" works too)
 OLLAMA_MODEL=qwen3.8:latest    # or just this: a tag typed by hand is a declaration
 ```
 
@@ -2106,7 +2113,7 @@ Most carry a live receipt from a real run.
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
-| [45](notes/45-the-road-with-no-key.md) | the road with no key, and how it says its name |
+| [45](notes/45-the-road-with-no-key.md) [54](notes/54-the-word-for-a-road.md) | the road with no key, how it says its name, and what to call it |
 | [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) [50](notes/50-the-rest-of-what-a-child-is.md) | a package that declares its children, and the gate that watches what they were given |
 
 ### dvara — the door
@@ -2220,5 +2227,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1519 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1532 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

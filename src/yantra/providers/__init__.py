@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import httpx
 
+from yantra.config import canonical_provider
+
 from yantra.providers.anthropic import AnthropicProvider
 from yantra.providers.base import Provider, ProviderSettings
 from yantra.providers.ollama import OllamaProvider
@@ -32,7 +34,10 @@ def get_provider(
     provider constructor; unsupported options fail loudly at construction.
     """
     try:
-        cls = _REGISTRY[name]
+        # Canonical first: "local" is a word for the keyless road, and a
+        # host that passes it through should not have to know that the
+        # thing at the other end is called Ollama (config.py).
+        cls = _REGISTRY[canonical_provider(name)]
     except KeyError:
         raise KeyError(
             f"unknown provider {name!r}; known: {sorted(_REGISTRY)}"

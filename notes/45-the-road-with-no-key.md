@@ -160,13 +160,13 @@ with a config file.
   model name. `start.sh`'s local preset warns about this before starting;
   the library does not, because checking means a network call and the
   whole point of rung 3 is that it makes none.
-* **`YANTRA_PROVIDER` is not readable from a package.** An `agent.toml`
-  declares its own provider and always has; the environment variable is
-  for the bare REPL and the flagless run. A package that wants to follow
-  the machine's preference has to leave `provider` unset, which is the
-  right way round but reads as an omission rather than a choice.
-* **No way to say "local, and I don't care which tag."** Rung 3 accepts a
-  base URL alone, so `OLLAMA_BASE_URL=http://localhost:11434/v1` does
-  select Ollama with the default tag — but that is a URL standing in for
-  the word "local", which is not obvious to anyone who has not read this
-  note.
+* ~~**`YANTRA_PROVIDER` is not readable from a package.**~~ Closed in
+  [note 54](54-the-word-for-a-road.md), and the shape is the one this
+  bullet argued for: leaving `provider` unset is still the mechanism, and
+  `provider = "auto"` is a word for it, so a package that follows the
+  machine says so instead of leaving a gap a reviewer has to interpret.
+* ~~**No way to say "local, and I don't care which tag."**~~ Closed in
+  [note 54](54-the-word-for-a-road.md): `local` is now another word for
+  `ollama` wherever a provider name is accepted, so the word people
+  actually reach for no longer has to be spelled as a base URL — or as a
+  brand they may be meeting for the first time in an error message.

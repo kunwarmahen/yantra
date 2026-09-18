@@ -20,10 +20,13 @@ from yantra.errors import ConfigError
 from yantra.config import (
     _load_dotenv,
     browser_profile,
+    canonical_provider,
     default_context_window,
+    default_model,
     default_tool_select,
     disabled_tool_patterns,
     guess_provider,
+    load_settings,
 )
 
 
@@ -246,8 +249,99 @@ class TestGuessProvider:
         assert guess_provider() == "openai"
 
     def test_nothing_declared_names_both_roads(self):
+        """And names the local one with the word most of its users would
+        reach for rather than the brand (notes/54)."""
         with pytest.raises(ConfigError) as exc:
             guess_provider()
         message = str(exc.value)
         assert "ANTHROPIC_API_KEY" in message
-        assert "ollama" in message
+        assert "--provider local" in message
+        assert "YANTRA_PROVIDER=local" in message
+
+
+class TestTheWordForAProvider:
+    """One road, two words, and a blank that can say what it means.
+
+    The bias: roughly half the people reading this repo want "a local
+    model" and meet the word "Ollama" for the first time in an error
+    message. An alias is cheap; the thing that is NOT cheap is an alias
+    that leaks -- a provider name inside the harness must always be the
+    canonical one, or two spellings end up as two cache keys, two price
+    lookups and two report columns for one model. So these tests check
+    both that the alias is accepted at every edge and that it is gone
+    immediately afterwards.
+    """
+
+    def test_local_is_another_word_for_ollama(self):
+        assert canonical_provider("local") == "ollama"
+
+    def test_it_is_forgiving_about_shape(self):
+        assert canonical_provider("  LOCAL ") == "ollama"
+
+    def test_a_canonical_name_is_left_alone(self):
+        for name in ("anthropic", "openai", "responses", "ollama"):
+            assert canonical_provider(name) == name
+
+    def test_an_unknown_name_is_not_invented_into_one(self):
+        """Normalising is not guessing: a typo stays a typo and fails
+        where names are checked."""
+        assert canonical_provider("olama") == "olama"
+
+    def test_the_environment_accepts_it(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_PROVIDER", "local")
+        assert guess_provider() == "ollama"
+
+    def test_settings_accept_it_and_need_no_key(self, monkeypatch):
+        monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+        settings = load_settings("local")
+        assert settings.base_url.startswith("http://localhost:11434")
+
+    def test_the_default_model_is_the_local_one(self, monkeypatch):
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        assert default_model("local") == default_model("ollama")
+
+    def test_a_provider_can_be_built_by_the_alias(self):
+        from yantra.providers import get_provider
+        provider = get_provider("local", load_settings("local"))
+        assert provider.name == get_provider(
+            "ollama", load_settings("ollama")).name
+
+    def test_the_unknown_provider_error_lists_both_words(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_PROVIDER", "gemini")
+        with pytest.raises(ConfigError, match="local"):
+            guess_provider()
+
+
+class TestAManifestThatFollowsTheMachine:
+    def _manifest(self, tmp_path, body):
+        from yantra.package import MANIFEST
+        (tmp_path / MANIFEST).write_text(f'[agent]\nname = "p"\n{body}')
+        return tmp_path
+
+    def test_auto_means_whatever_the_machine_prefers(self, tmp_path):
+        """Identical to leaving it out -- which is the point: the package
+        can now SAY it rather than leaving a gap a reviewer has to guess
+        at."""
+        from yantra.package import load_package
+        spec = load_package(self._manifest(tmp_path,
+                                           '[model]\nprovider = "auto"\n'))
+        assert spec.provider is None
+
+    def test_a_blank_still_means_the_same_thing(self, tmp_path):
+        from yantra.package import load_package
+        assert load_package(self._manifest(tmp_path, "")).provider is None
+
+    def test_local_is_stored_canonically(self, tmp_path):
+        """Or the manifest's word would reach pricing, reports and the
+        provider registry as a second name for one road."""
+        from yantra.package import load_package
+        spec = load_package(self._manifest(tmp_path,
+                                           '[model]\nprovider = "local"\n'))
+        assert spec.provider == "ollama"
+
+    def test_a_provider_nobody_ships_is_refused_against_the_file(self,
+                                                                 tmp_path):
+        from yantra.package import load_package
+        with pytest.raises(ConfigError, match="model.provider must be one of"):
+            load_package(self._manifest(tmp_path,
+                                        '[model]\nprovider = "gemini"\n'))

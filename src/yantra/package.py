@@ -53,6 +53,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+from yantra.config import (FOLLOW_THE_MACHINE, canonical_provider,
+                          known_providers)
 from yantra.errors import ConfigError
 from yantra.mcp import MCPServerConfig
 from yantra.spec import AgentSpec
@@ -90,6 +92,39 @@ SCHEMA: dict[str, frozenset[str]] = {
     "permissions": frozenset({"mode"}),
     "env": frozenset({"context"}),
 }
+
+
+#: The provider names a manifest may declare. Read off config's own table
+#: rather than restated here: a fourth dialect must not need two edits.
+_PROVIDER_NAMES = frozenset(known_providers())
+
+
+def _provider(model: dict[str, Any], manifest: Path) -> str | None:
+    """``[model] provider`` -> a canonical name, or None for "follow the
+    machine".
+
+    Three ways to write the same thing, and all three are deliberate:
+
+    * absent -- the package does not care, and whatever the operator's
+      environment prefers wins (spec.py resolves it at build time).
+    * ``"auto"`` -- the same behaviour, SAID. A blank reads as an
+      omission, and a reviewer cannot tell a decision from a gap; a
+      package that means "follow this machine" can now write it down.
+    * a name -- ``"ollama"``, or ``"local"``, which is the same road
+      under the word most of its users would reach for (notes/54).
+    """
+    declared = _str(model, "provider", manifest, "model")
+    if declared is None:
+        return None
+    name = canonical_provider(declared)
+    if name == FOLLOW_THE_MACHINE:
+        return None
+    if name not in _PROVIDER_NAMES:
+        _fail(manifest, f"model.provider must be one of "
+                        f"{'|'.join(known_providers())} or "
+                        f"{FOLLOW_THE_MACHINE!r} (whatever the machine "
+                        f"prefers), got {declared!r}")
+    return name
 
 
 def _fail(path: Path, message: str) -> None:
@@ -444,7 +479,7 @@ def load_package(where: Path) -> AgentSpec:
         name=_str(agent, "name", manifest, "agent") or root.name,
         description=_str(agent, "description", manifest, "agent"),
         version=_str(agent, "version", manifest, "agent"),
-        provider=_str(model, "provider", manifest, "model"),
+        provider=_provider(model, manifest),
         model=_str(model, "model", manifest, "model"),
         max_tokens=_int(model, "max_tokens", manifest, "model"),
         max_iterations=_int(model, "max_iterations", manifest, "model"),

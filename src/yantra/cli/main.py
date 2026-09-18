@@ -21,6 +21,7 @@ from yantra.cli.repl import Repl, confirm_gate
 from yantra.confidence import describe, perfect_runs_needed
 from yantra.config import (
     _load_dotenv,
+    canonical_provider,
     browser_profile,
     default_env_context,
     default_model,
@@ -67,11 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
         prog="yantra",
         description="Yantra -- a from-scratch LLM agent harness (learning project).",
     )
-    parser.add_argument("--provider",
+    parser.add_argument("--provider", type=canonical_provider,
                         choices=["anthropic", "openai", "responses", "ollama"],
+                        metavar="{anthropic,openai,responses,ollama,local}",
                         help="defaults to whichever API key is set; 'responses' "
                              "speaks OpenAI's Responses API; 'ollama' runs "
-                             "local models at localhost:11434 (no key)")
+                             "local models at localhost:11434 (no key), and "
+                             "'local' is another word for it -- half the "
+                             "people reading this want a local model rather "
+                             "than a brand")
     parser.add_argument("--model", help="model slug (default from env / per-provider)")
     parser.add_argument("--system", help="system prompt")
     parser.add_argument("--max-iterations", type=int, default=None,

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1519 tests. The
+The harness underneath is complete and covered by 1532 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -93,8 +93,8 @@ surface ([notes/19](notes/19-responses-api.md)).
 uv run yantra --agent examples/agents/researcher     # run an AGENT PACKAGE (see below)
 uv run yantra                                        # REPL (provider resolved from .env)
 uv run yantra --provider openai                      # pick a dialect explicitly
-uv run yantra --provider ollama                      # LOCAL models (localhost:11434, no key)
-uv run yantra --provider ollama --model qwen3.8      # any tag you have pulled
+uv run yantra --provider local                       # LOCAL models (localhost:11434, no key)
+uv run yantra --provider local --model qwen3.8       # any tag you have pulled
 uv run yantra --yolo                                 # no permission prompts (careful)
                                                       #   ...and /yolo flips it back
                                                       #   mid-session (web UI: mode chip)
@@ -790,6 +790,8 @@ version     = "0.1.0"
 
 [model]
 max_iterations = 20             # provider/model left open on purpose
+# provider = "auto"             # ...and "auto" is the word for that (notes/54);
+                                # "local" is another word for "ollama"
 
 [tools]
 allow = ["read_file", "glob", "grep", "web_fetch", "load_skill"]
@@ -1286,7 +1288,12 @@ src/yantra/
 ├── config.py       env vars -> ProviderSettings (+ .env auto-load); resolves
 │                   which provider a flagless run uses — YANTRA_PROVIDER, then a
 │                   key, then an OLLAMA_* line, never a network probe
-│                   ([notes/45](notes/45-the-road-with-no-key.md))
+│                   ([notes/45](notes/45-the-road-with-no-key.md)).
+│                   canonical_provider() resolves "local" -> "ollama" at
+│                   every EDGE (flag, manifest, env) and never inward: a
+│                   provider name is a price-table key and a report
+│                   column, and two spellings would be two models
+│                   ([notes/54](notes/54-the-word-for-a-road.md))
 ├── agent.py        THE LOOP: model -> tool calls -> results -> repeat; optional
 │                   per-turn tool selection (top-K sent; exact-name calls admitted);
 │                   interrupt_check hook — hosts cancel mid-stream, same unwind as Ctrl-C;
@@ -1684,7 +1691,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1519 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1532 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1715,7 +1722,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1519 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1532 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
