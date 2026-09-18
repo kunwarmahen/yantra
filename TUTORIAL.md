@@ -1602,7 +1602,69 @@ the string `"no"` an approval, which is the exact shape of the bug that
 ends with a command nobody agreed to. A question put to somebody else is a
 `403`; one already answered or expired is a `404`.
 
-## 31 · Embedding it
+## 31 · A bot at the door
+
+Everything up to here was built so that this part could be small. The
+roster already says who a chat id is; the desk already knows where a
+question goes; the actors file already decides what goes under an answer.
+What a chat app adds is the medium, and the medium has three opinions.
+
+```bash
+export TELEGRAM_TOKEN=...          # BotFather gives you one per bot
+dvara --ask telegram --agent researcher
+```
+
+There is no `--token` flag: a credential on a command line is in your
+shell history and readable in every `ps` on the box. And **one bot is one
+agent** — a token is an identity with a name, a picture and an @handle, so
+a second agent is a second token and a second process rather than a prefix
+on every message you type.
+
+**A reply has a bottom at 4096, and it is measured in UTF-16.** Telegram
+counts a message in UTF-16 code units; Python counts a string in code
+points. They agree for ASCII, which is why this bug survives every test
+written by hand and appears the first time an answer has an emoji in it —
+one Python character, two of Telegram's units, and a 3000-character reply
+that is 4200 units and is rejected *whole*. So a long reply is **split,
+never truncated**: a brief cut off at the cap still reads like a finished
+answer, and the citations that would tell you otherwise are at the bottom.
+Cuts land on a blank line, then a newline, then a space.
+
+**The poll loop never awaits a turn.** A turn waiting for approval is
+released by a button press, and button presses arrive through the same
+long poll. Await the turn in the loop and the answer can only come down
+the pipe the turn is holding shut — every escalated call waits out its
+deadline and is refused for a silence that had somebody pressing the
+button. Updates become tasks; the service's per-conversation lock is
+already holding the line that matters.
+
+**An approval is a button.** §27's rule — answers do not arrive as
+messages — is not a limitation of the terminal, it is a property of the
+lock, and a chat app has exactly one other affordance:
+
+```
+  ┌─ message to chat 8675309
+  │ scribe wants to run write_file:
+  │
+  │ NEW FILE haiku.txt (2 lines)
+  │ [approve] [refuse]
+  └─
+  ← pressed: y:Rbo_PR_OLYsQsVEMGMm86A
+  ← the question now reads: ...— approved
+```
+
+The summary is Yantra's, built so that what the person approves is what
+runs. The press arrives as a `callback_query`, which does not touch the
+session lock, and the message is edited afterwards so it cannot be pressed
+twice.
+
+Two more decisions worth knowing before you point one at a real chat.
+Nothing is sent with a `parse_mode`, because Markdown mode makes the
+*model's own punctuation* a syntax error — one unmatched `*` and the whole
+answer comes back as a 400. And somebody who is not in `actors.toml` gets
+**silence**, while you get the line that says how to add them.
+
+## 32 · Embedding it
 
 ```python
 from pathlib import Path
@@ -1629,7 +1691,8 @@ print(reply.text, reply.cost_usd)
 | `asks.py` | questions waiting for a person, and the deadline on them |
 | `runs.py` | every turn that happened, including the ones that failed |
 | `http.py` | the endpoints and a bearer token (`[http]` extra) |
-| `cli.py` | `agents`, `say`, `runs`, `serve` |
+| `telegram.py` | the long poll, the 4096-character cap and the button |
+| `cli.py` | `agents`, `say`, `runs`, `case`, `telegram`, `serve` |
 | `errors.py` | `Refused` (answer the person) vs `ConfigProblem` (tell the owner) |
 
 ---
@@ -1808,6 +1871,7 @@ In the dvara repository, alongside its own README:
 | `notes/04-the-failure-loop.md` | a bad turn becomes a case in the package that produced it — and why only a person can say a turn *answered* badly |
 | `notes/05-one-person-two-channels.md` | an actor is a person, not a seat; and the allowance that silently doubled when it was not |
 | `notes/06-a-number-you-can-act-on.md` | what follows an answer — and why an owner and a guest want two different numbers |
+| `notes/07-four-thousand-and-ninety-six.md` | the Telegram bot: a cap measured in units nobody counts by hand, a poll loop that must not wait, and an approval that has to be a button |
 
 ### The two READMEs
 
@@ -1836,15 +1900,16 @@ and gaps, and each one is argued in the note that owns it.
 
 **In the service:**
 
-* **No channel.** No Telegram bot, no Slack app. Everything was built so a
-  bot is a *client* of this — it supplies a notifier and calls `answer`,
-  exactly as the terminal does — rather than a special case inside it.
+* **No Slack app, and no webhook.** The Telegram bot long-polls, which
+  needs no public address, no TLS and no reverse proxy. A second channel
+  is an adapter and three lines of TOML, because nothing in the service
+  branches on which channel a person is reachable on.
 * **No per-tool policy ladder.** Tool and argument globs → allow / deny /
   ask is a real thing to want, and inventing that dialect twice is how two
   incompatible dialects are born.
 * **No approve-with-edits over a channel.** The round trip is long enough
   that the edit and the thing being edited drift apart in a person's head.
-  Approve or refuse.
+  Two buttons: approve or refuse.
 * **No streaming, no web UI, no registry, no scheduling.** Channels are
   turn-shaped, and each of the others is a service of its own wearing this
   one's clothes.
@@ -1853,7 +1918,8 @@ and gaps, and each one is argued in the note that owns it.
   property.
 * **No preferred channel, and no taking a question back.** A person
   reachable three ways gets the question three times, in no order, and
-  answering on one leaves the other two sitting there. Ranking channels
+  answering on one leaves the other two sitting there — the bot edits the
+  copy that was pressed, and only that one. Ranking channels
   means a second deadline inside the first; retracting means every
   adapter implements editing.
 * **A channel identity cannot be added without a restart.** The roster is
