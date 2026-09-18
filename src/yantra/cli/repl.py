@@ -33,6 +33,7 @@ from yantra.errors import ImageError, RateLimitError, UserUnavailable
 from yantra.images import load_image_block
 from yantra.pricing import bills_nothing, session_cost
 from yantra.prompt import recompose
+from yantra.trace import watch
 from yantra.types import ImageBlock
 from yantra.permissions import (REFUSED_USER, PermissionRequest,
                                 SwitchableGate, refuse, yolo)
@@ -211,8 +212,14 @@ class Repl:
                  store: SessionStore | None = None,
                  input_fn: Callable[[str], str] | None = None,
                  sandbox: ToolSandbox | None = None,
-                 mcp: Any | None = None) -> None:
+                 mcp: Any | None = None,
+                 trace: Any | None = None) -> None:
         self.agent = agent
+        #: A TrajectoryLog when the operator asked for one (--trace), so
+        #: a turn that goes wrong leaves something a regression case can
+        #: be built from (notes/57). None is the usual case and costs
+        #: nothing.
+        self.trace = trace
         self.console = console
         self.store = store
         # MCPManager when the entrypoint wired one (None in tests/embedders
@@ -316,6 +323,13 @@ class Repl:
         yantra.images) ride along in the same user message -- how
         ``yantra --image shot.png "what is this?"`` works."""
         stream = self.agent.run_streaming(user_input, images=images)
+        if self.trace is not None:
+            # A TEE, not a consumer: the renderer still sees every event
+            # (trace.watch). The turn is recorded when it ends, including
+            # when it ends badly.
+            stream = watch(user_input, stream, self.trace.record,
+                           provider=getattr(self.agent.provider, "name", ""),
+                           model=self.agent.model, detail=self.trace.detail)
         spinner = self.console.status("[dim]… connecting[/dim]", spinner="dots")
         spinner.start()
         self._spinner = spinner  # _on_stream_event drops it at first delta
@@ -325,7 +339,8 @@ class Repl:
         except BaseException:
             # Deterministic cleanup on ANY abnormal exit (including
             # KeyboardInterrupt raised mid-pull): closing the generator
-            # runs the agent's outstanding-call synthesis.
+            # runs the agent's outstanding-call synthesis -- and, through
+            # the tee, records the turn that was abandoned.
             stream.close()
             raise
         finally:

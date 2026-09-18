@@ -236,7 +236,11 @@ from the other side since it was written, and this is not that store: it
 holds RESULTS — verdicts, counts, failure lines, tokens — and not the
 transcripts that produced them. Keeping transcripts is a different
 feature with a privacy question attached, because a trajectory contains
-whatever the agent read.
+whatever the agent read. That store is
+[note 57](57-a-turn-written-down.md), and the privacy question turned
+out to be its whole design: what it keeps by default is the SHAPE of a
+turn — the task, the tool names, the counts — and never the contents,
+which is also exactly what a regression case is made of.
 
 **`--against` implying `--report`.** Comparing and recording are separate
 decisions and somebody will want exactly one of them; guessing here would

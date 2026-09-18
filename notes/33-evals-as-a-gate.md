@@ -274,12 +274,15 @@ that checks less than its author believed is the failure this entire
 format exists against, and it would be a strange place to start making
 an exception.
 
-What still has nowhere to live is the TRAJECTORY.
-[Note 42](42-two-runs-of-the-same-suite.md) gave a suite run a file to be
-written to, and that file holds results — verdicts, counts, failure
-lines, tokens — not the transcripts behind them. A fossil needs the
-transcript, and keeping transcripts has a privacy question attached that
-keeping verdicts does not: a trajectory contains whatever the agent read.
+What had nowhere to live, until [note 57](57-a-turn-written-down.md),
+was the TRAJECTORY. [Note 42](42-two-runs-of-the-same-suite.md) gave a
+suite run a file to be written to, and that file holds results —
+verdicts, counts, failure lines, tokens — not the transcripts behind
+them. The privacy question attached to keeping transcripts turned out to
+be the answer rather than the obstacle: what a recorded turn keeps by
+default is its SHAPE — the task, the tool names, the counts — and a
+fossil never needed more than that, because a case asserting on the
+contents of a file goes red the day somebody edits that file.
 
 ## What is not here yet
 

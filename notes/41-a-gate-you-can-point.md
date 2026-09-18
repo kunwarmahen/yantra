@@ -353,10 +353,10 @@ and it is now unnecessary: with servers connected,
 * ~~**Comparing two runs of the same suite.**~~ Shipped in
   [note 42](42-two-runs-of-the-same-suite.md) — `--report` writes a run
   down and `--against` answers "was that better than yesterday?". It is a
-  store of RESULTS, so `case_from_trace`
-  ([note 33](33-evals-as-a-gate.md)) is still waiting for a store of
-  trajectories, which is a different feature with a privacy question on
-  it.
+  store of RESULTS; the store of trajectories `case_from_trace`
+  ([note 33](33-evals-as-a-gate.md)) was waiting for is
+  [note 57](57-a-turn-written-down.md), where the privacy question became
+  the design rather than a caveat.
 * **MCP servers under the async runner get no special handling.** Sessions
   are synchronous ([note 11](11-async.md)), so `--eval --async` drives
   concurrent trajectories through one set of stdio pipes — one writer

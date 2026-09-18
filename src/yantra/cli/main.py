@@ -34,9 +34,10 @@ from yantra.config import (
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
 from yantra.eval_report import (Matrix, SuiteRun, compare, line_up,
                                 read_report, record_run, write_report)
-from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
+from yantra.eval_suite import (CASES, SUITE_DIR, find_suite, load_cases,
+                               render_case)
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
-                          OfflineProvider)
+                          OfflineProvider, case_from_trajectory)
 from yantra.images import load_image_block
 from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
@@ -53,6 +54,7 @@ from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools import default_registry
 from yantra.tools.ask_user import AskUser, TerminalChannel
 from yantra.tools.discover import package_tool_names
+from yantra.trace import FULL, SHAPE, TrajectoryLog
 from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
     DEFAULT_TOOLS_PER_TURN,
@@ -244,6 +246,27 @@ def build_parser() -> argparse.ArgumentParser:
                              "lookup to ipinfo.io) into the system prompt, "
                              "plus a try-tools-before-asking policy line. "
                              "Default from $YANTRA_ENV_CONTEXT (full)")
+    parser.add_argument("--trace", metavar="FILE", default=None,
+                        help="append every turn of this session to FILE as "
+                             "JSONL -- the task, which tools ran, and what it "
+                             "cost. A real failure can then become a "
+                             "regression case with --fossil. Keeps the SHAPE "
+                             "of a turn and not its contents; --trace-full "
+                             "adds arguments, results and the answer, which "
+                             "is whatever the agent read")
+    parser.add_argument("--trace-full", action="store_true",
+                        dest="trace_full",
+                        help="with --trace: keep tool arguments, tool results "
+                             "and the model's answer too. Opt-in, and recorded "
+                             "in every line, because a trajectory holds "
+                             "whatever the agent read")
+    parser.add_argument("--fossil", metavar="TRACE_ID", default=None,
+                        help="with --trace FILE: print the [[case]] block for "
+                             "that recorded turn and exit -- 'every real "
+                             "failure leaves a fossil in the suite'. An id "
+                             "prefix is enough. Printed rather than written: "
+                             "a package's cases.toml belongs to its author "
+                             "(append it yourself with >>)")
     parser.add_argument("--tool-pack", action="append", default=[],
                         metavar="NAME", dest="tool_pack",
                         help="load the tools an INSTALLED distribution "
@@ -404,6 +427,49 @@ def _build_mode(args, provider_name: str, settings, model: str,
                   f" · {result.elapsed_seconds:.1f}s · {len(result.files)} files:"
                   f" {', '.join(result.files)}\ntokens: {usage}")
     return 0 if result.ok else 1
+
+
+def _trace_log(args):
+    """``--trace FILE`` -> a TrajectoryLog, or None for the usual session.
+
+    None rather than a null object, because "record nothing" should cost
+    nothing: no file handle, no per-event branch inside the tee, and no
+    file appearing in a directory nobody asked to have one in.
+    """
+    if args.trace is None:
+        return None
+    return TrajectoryLog(Path(args.trace),
+                         detail=FULL if args.trace_full else SHAPE)
+
+
+def _fossil_mode(args, console: Console) -> int:
+    """--fossil ID: a recorded turn as the case it should have left.
+
+    Printed to stdout rather than appended to the package's cases.toml.
+    A suite is the author's file -- it has comments in it, and an order,
+    and a tool that edits it silently is a tool that surprises somebody
+    at the worst moment. ``>> evals/cases.toml`` is one character more
+    and entirely theirs.
+    """
+    if args.trace is None:
+        print("error: --fossil reads a recorded turn, so it needs the file "
+              "that recorded it: --fossil ID --trace FILE", file=sys.stderr)
+        return 2
+    try:
+        trajectory = TrajectoryLog(Path(args.trace)).get(args.fossil)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    reason = (f"recorded {trajectory.at} on {trajectory.provider}/"
+              f"{trajectory.model}; ended {trajectory.outcome}")
+    case = case_from_trajectory(trajectory, reason)
+    # Written to stdout so it can be redirected; everything else this
+    # mode says goes to stderr, or a redirect would capture the advice.
+    print(render_case(case), end="")
+    print("note: assertions are the SHAPE of that turn -- its task and the "
+          "tools it used. Edit the id and description before committing; "
+          "the ceiling is what it cost x1.5.", file=sys.stderr)
+    return 0
 
 
 def _select_cases(cases: list, patterns: list[str]) -> tuple[list, str | None]:
@@ -1086,6 +1152,15 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --eval runs the package's suite and reports a verdict; "
               "drop --build/--prompt/PROMPT/--web", file=sys.stderr)
         return 2
+    if args.trace_full and args.trace is None:
+        print("error: --trace-full says what to keep, and --trace says "
+              "where; pass --trace FILE", file=sys.stderr)
+        return 2
+    if args.fossil is not None and (args.eval or args.build or args.web
+                                    or args.prompt or args.prompt_positional):
+        print("error: --fossil prints one recorded turn as a case and exits; "
+              "drop --eval/--build/--web/--prompt/PROMPT", file=sys.stderr)
+        return 2
     if args.repeat < 1:
         print(f"error: --repeat must be at least 1 (got {args.repeat}); a "
               f"suite that runs nothing passes everything", file=sys.stderr)
@@ -1140,6 +1215,12 @@ def main(argv: list[str] | None = None) -> int:
     # use for either.
     if args.eval:
         return _eval_mode(args, spec, console)
+
+    # Reading a recorded turn back needs no provider either -- it is a
+    # file and a printer -- so it goes beside the acceptance run rather
+    # than behind the session wiring.
+    if args.fossil is not None:
+        return _fossil_mode(args, console)
 
     try:
         provider_name = spec.provider or guess_provider()
@@ -1304,7 +1385,7 @@ def main(argv: list[str] | None = None) -> int:
     mcp_manager = MCPManager(agent.registry, agent=agent,
                              memory_path=remembered_path(Path(args.cwd)))
     repl = Repl(agent, console, store=store, sandbox=sandbox,
-                mcp=mcp_manager)
+                mcp=mcp_manager, trace=_trace_log(args))
 
     # MCP servers: parse errors are fatal (exit 2); connection failures
     # only warn -- a dead optional integration shouldn't kill the

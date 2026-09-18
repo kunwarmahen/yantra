@@ -1112,6 +1112,36 @@ def case_from_trace(trace_id: str, failure_reason: str, user_message: str, *,
     )
 
 
+def case_from_trajectory(trajectory, failure_reason: str,
+                        **case_kwargs: Any) -> EvalCase:
+    """A recorded turn -> the regression case it should have left behind.
+
+    ``case_from_trace`` (above) has taken these fields one at a time
+    since notes/10, and every one of them had to be typed by hand because
+    nothing wrote a turn down. ``yantra.trace`` writes turns down, so the
+    fossil rule finally has a source: a real failure becomes a case
+    without anybody transcribing it.
+
+    WHAT IT ASSERTS IS THE SHAPE, which is also all a SHAPE-level
+    trajectory kept (trace.py): the task that triggered it, the tools it
+    used, and a token ceiling of what it cost times 1.5. It does NOT
+    assert on anything the agent read -- a case built on the contents of
+    a file is a case that goes red when somebody edits that file, which
+    is the opposite of a regression test.
+
+    ``failure_reason`` stays the caller's: a turn can end cleanly and
+    still be wrong, and no recorder can tell. ``Trajectory.failed`` is
+    the cheap filter for finding candidates; a person says which ones
+    were failures.
+    """
+    return case_from_trace(
+        trajectory.id, failure_reason, trajectory.task,
+        tokens_used=trajectory.tokens,
+        required_tools=list(dict.fromkeys(trajectory.tools_used)),
+        **case_kwargs,
+    )
+
+
 def spawn_setup(*, max_per_session: int = 3,
                 default_max_iterations: int = 10) -> Callable[[Agent], None]:
     """Case.setup factory: opt ONE case's agent into sub-agents.

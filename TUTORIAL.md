@@ -853,6 +853,34 @@ it did. ([notes/33](notes/33-evals-as-a-gate.md),
 [notes/35](notes/35-roster-and-pass-rates.md),
 [notes/41](notes/41-a-gate-you-can-point.md))
 
+### Every real failure leaves a fossil
+
+The case you most want is the one a real turn just failed at. Record the
+session, then ask for the case it should have left:
+
+```bash
+uv run yantra --provider local --trace runs/today.jsonl "outline notes/30 at depth 1"
+uv run yantra --fossil 7aa97a4c --trace runs/today.jsonl >> evals/cases.toml
+```
+
+```toml
+[[case]]
+id = "trace-7aa97a4c"
+description = "recorded 2026-09-18T18:36:42Z on ollama/qwen3.8:27b; ended end_turn"
+user_message = "outline notes/30-skills.md at depth 1"
+required_tools = ["read_file"]
+max_tokens = 13140
+```
+
+A recording keeps the **shape** of a turn — the task, which tools ran,
+what it cost — and never the contents: not tool arguments, not results,
+not the answer. A trajectory holds whatever the agent *read*, and a file
+of those is a thing you would have to think about before sharing.
+`--trace-full` adds them when you need them, and every line says which
+level wrote it. The shape is also all a case wants: assert on the
+contents of a file and your case goes red the day somebody edits it.
+([notes/57](notes/57-a-turn-written-down.md))
+
 ### Embedding a package instead of running it
 
 ```python
@@ -2122,7 +2150,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
@@ -2240,5 +2268,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1558 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1589 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

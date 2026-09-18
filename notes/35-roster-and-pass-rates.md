@@ -404,5 +404,5 @@ other three rows now have three ticks each instead of one.
   [note 42](42-two-runs-of-the-same-suite.md): the run writes a report and
   a later run reads one. `case_from_trace`
   ([note 33](33-evals-as-a-gate.md)) pointed at the same missing store from
-  the other side, and still does — it is a store of RESULTS, not of
-  trajectories.
+  the other side; that one is [note 57](57-a-turn-written-down.md), and it
+  keeps the SHAPE of a turn rather than its contents.

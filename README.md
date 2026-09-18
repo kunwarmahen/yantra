@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1558 tests. The
+The harness underneath is complete and covered by 1589 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1094,6 +1094,32 @@ provider; a report whose red cases have *all* vanished is exit 2, because
 a run of nothing passes everything. See
 [notes/46](notes/46-the-cases-that-were-red.md).
 
+**Every real failure leaves a fossil in the suite** — and now without
+anybody transcribing it. `--trace FILE` appends every turn of a session
+to JSONL, and `--fossil ID` prints the case that turn should have left:
+
+```
+$ uv run yantra --provider local --trace runs/today.jsonl "outline notes/30 at depth 1"
+$ uv run yantra --fossil 7aa97a4c --trace runs/today.jsonl >> evals/cases.toml
+[[case]]
+id = "trace-7aa97a4c"
+description = "recorded 2026-09-18T18:36:42Z on ollama/qwen3.8:27b; ended end_turn"
+user_message = "outline notes/30-skills.md at depth 1"
+required_tools = ["read_file"]
+max_tokens = 13140
+```
+
+**Shape, not content, is what gets kept**: the task, the tools in call
+order, whether each worked, the counts — never tool arguments, tool
+results or the answer, because a trajectory holds whatever the *agent
+read* and a verdict does not. `--trace-full` adds them, opt-in, and every
+line records which level wrote it, so you can tell whether a file is safe
+to hand over without reading it. That is not a trade against usefulness:
+a case asserting on the contents of a file goes red the day somebody
+edits that file. The block is **printed rather than appended** — a
+suite is its author's file. See
+[notes/57](notes/57-a-turn-written-down.md).
+
 **The servers the package declares are under test too.** `--eval` starts
 them and their tools register as `mcp__<server>__<tool>`, so
 `has_tools = ["mcp__docs__*"]` grades something real instead of an empty
@@ -1484,6 +1510,16 @@ src/yantra/
 │                   line_up puts three or more runs in one TABLE -- a pair
 │                   is a difference, three is a different question
 │                   ([notes/49](notes/49-three-runs-side-by-side.md))
+├── trace.py        a TURN written down, so a real failure can become a
+│                   case: append-only JSONL, one object per turn, recorded
+│                   through a TEE (the renderer still sees every event) and
+│                   handed over in a finally, so a crashed or abandoned
+│                   turn is kept too. SHAPE, NOT CONTENT is the default --
+│                   the task, the tool names in order, the counts; never
+│                   arguments, results or the answer, which is whatever the
+│                   agent read. --trace-full opts in, and every line says
+│                   which level wrote it
+│                   ([notes/57](notes/57-a-turn-written-down.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -1706,7 +1742,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1558 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1589 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1737,7 +1773,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1558 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1589 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

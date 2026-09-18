@@ -39,6 +39,7 @@ from yantra.evals import (
     EvalResult,
     EvalRunner,
     case_from_trace,
+    case_from_trajectory,
     judge,
     summarize,
 )
@@ -76,6 +77,7 @@ from yantra.skills import Skill, SkillRegistry, enable_skills
 from yantra.spec import AgentSpec
 from yantra.tools import default_registry, discover_tools
 from yantra.tools.base import Tool, ToolContext, ToolOutput, ToolRegistry
+from yantra.trace import Trajectory, TrajectoryLog, watch
 from yantra.types import (
     Block,
     EndEvent,
@@ -135,6 +137,7 @@ __all__ = [
     "AsyncEvalRunner",
     "CaseOutcome",
     "case_from_trace",
+    "case_from_trajectory",
     "find_suite",
     "judge",
     "load_cases",
@@ -149,6 +152,9 @@ __all__ = [
     "perfect_runs_needed",
     "wilson_bounds",
     "MANIFEST",
+    "Trajectory",
+    "TrajectoryLog",
+    "watch",
     "Message",
     "ModelResponse",
     "MCPServerConfig",
