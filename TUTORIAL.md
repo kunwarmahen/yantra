@@ -1544,7 +1544,14 @@ cannot answer the owner's first question.
 $ dvara runs
 2026-09-15 17:46  guest/greeter  end_turn          $0.0584  'and again?'
 2026-09-15 17:46  guest/greeter  end_turn          $0.0468  'hello'
+2026-09-18 01:19  owner/scribe   end_turn          $0.0007  'write a haiku…'
+                  write_file -> write_file(refused)  [answered from terminal]
 ```
+
+That second line is what the turn **did**, and it is a different fact
+from how the turn ended. `end_turn` says it finished; the line under it
+says it wrote a file, tried to write it again, and was told no by
+somebody standing at a keyboard.
 
 **A turn that crashes still pays for what it spent.** Three model calls
 and then a 500 is still three model calls, and the accounting happens in
@@ -1562,6 +1569,26 @@ the shape Yantra's eval machinery turns into a case in the package that
 produced it. That is the loop the whole arc was built to close: the agent
 fails in production, the failure becomes a case, the package's own gate
 stops it coming back.
+
+**And the case can assert how the turn went**, because the row remembers.
+`required_tools` is filled from the calls that actually ran, which is
+`case_from_trace`'s own parameter finally having a source — so an agent
+that "fixes" a bad turn by doing nothing at all no longer passes:
+
+```
+  FAIL  trace-4e183287  24.8s · 2245 tok · 2 it · no tools
+        required tool not used: write_file
+```
+
+Two lines are drawn here and both are worth carrying away. **Names, never
+arguments**: `write_file` is recorded and the path it was given is not,
+because the assertions take names, a row that grows with an argument is a
+row that can hold a file, and `dvara case` prints into a file somebody
+commits. And **a trajectory is a description; a prohibition is a
+judgement** — the service watched the turn happen, so it will say what
+was called, but whether the fixed agent should stop *trying* something
+the gate refused is a line the owner writes. The refused calls are
+printed beside the block so they know what to write.
 
 ## 30 · The door itself
 
@@ -1693,7 +1720,7 @@ print(reply.text, reply.cost_usd)
 | `money.py` | package ∧ actor ∧ what is left of today |
 | `gate.py` | three rungs, and the tightest wins |
 | `asks.py` | questions waiting for a person, and the deadline on them |
-| `runs.py` | every turn that happened, including the ones that failed |
+| `runs.py` | every turn that happened, what it cost, and which tools it called |
 | `http.py` | the endpoints and a bearer token (`[http]` extra) |
 | `telegram.py` | the long poll, the 4096-character cap and the button |
 | `cli.py` | `agents`, `say`, `runs`, `case`, `telegram`, `serve` |
@@ -1876,6 +1903,7 @@ In the dvara repository, alongside its own README:
 | `notes/05-one-person-two-channels.md` | an actor is a person, not a seat; and the allowance that silently doubled when it was not |
 | `notes/06-a-number-you-can-act-on.md` | what follows an answer — and why an owner and a guest want two different numbers |
 | `notes/07-four-thousand-and-ninety-six.md` | the Telegram bot: a cap measured in units nobody counts by hand, a poll loop that must not wait, and an approval that has to be a button |
+| `notes/08-what-the-turn-actually-did.md` | the trajectory on a run — names and not arguments, and why the service describes a turn but will not judge one |
 
 ### The two READMEs
 
