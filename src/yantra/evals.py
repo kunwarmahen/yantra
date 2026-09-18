@@ -81,7 +81,7 @@ from yantra.errors import ConfigError
 from yantra.pricing import cost_now
 from yantra.providers.base import Provider, ProviderSettings, collect
 from yantra.spec import AgentSpec
-from yantra.subagent import (DeclaredSubagent, SpawnSubagent,
+from yantra.subagent import (DeclaredSubagent, SpawnSubagent, SubagentSpec,
                              SubagentSpawner, resolve_child_tools)
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
 from yantra.types import Message, TextBlock
@@ -159,6 +159,23 @@ class EvalCase:
     #: fact about something that does not exist until somebody delegates.
     subagent_has_tools: dict[str, list[str]] = field(default_factory=dict)
     subagent_lacks_tools: dict[str, list[str]] = field(default_factory=dict)
+    #: The rest of what a manifest decides about a child, keyed the same
+    #: way (notes/50). A tool list says what a child can REACH; these three
+    #: say what it was told, what it costs and how long it may go on, and
+    #: all four live in the same table and change in the same one-line
+    #: diff. Substrings rather than patterns for the prose, because a
+    #: pattern language over an instruction file invites debugging a regex
+    #: instead of reading a prompt.
+    subagent_prompt_contains: dict[str, list[str]] = field(default_factory=dict)
+    subagent_prompt_lacks: dict[str, list[str]] = field(default_factory=dict)
+    #: ``{"fact_checker": "gemma4:12b"}`` -- the slug the manifest names,
+    #: exactly. ``""`` asserts the child declares NO model of its own and
+    #: therefore runs on the parent's, which is a real claim about cost.
+    subagent_model: dict[str, str] = field(default_factory=dict)
+    #: A CEILING on a child's iteration cap, never an equality: the
+    #: dangerous edit is upward, and a case that went red when somebody
+    #: lowered a cap would be a case nobody keeps.
+    subagent_iterations_at_most: dict[str, int] = field(default_factory=dict)
     check_answer: Callable[[str], bool] | None = None
     max_tokens: int | None = None       # input+output ceiling for the turn
     max_iterations: int | None = None   # model round-trips ceiling
@@ -188,7 +205,10 @@ class EvalCase:
         """Whether this case asserts anything that costs no tokens -- about
         the agent's own tool list, or about a declared child's."""
         return bool(self.has_tools or self.lacks_tools
-                    or self.subagent_has_tools or self.subagent_lacks_tools)
+                    or self.subagent_has_tools or self.subagent_lacks_tools
+                    or self.subagent_prompt_contains
+                    or self.subagent_prompt_lacks or self.subagent_model
+                    or self.subagent_iterations_at_most)
 
     @property
     def needs_a_model(self) -> bool:
@@ -396,18 +416,14 @@ def roster_failures(case: EvalCase, roster: Sequence[str]) -> list[str]:
 EVERY_CHILD = "*"
 
 
-def declared_rosters(
-        agent: Agent | AsyncAgent) -> dict[str, tuple[list[str], list[str]]]:
-    """Every sub-agent the package DECLARED, and what each would be offered:
-    ``{name: (offered, unreachable)}``.
+def declared_children(agent: Agent | AsyncAgent
+                      ) -> dict[str, DeclaredSubagent]:
+    """Every sub-agent this package declared AND can actually call.
 
-    Read off the REGISTRY rather than the spec, for the reason ``roster_of``
-    uses ``specs()``: a declared child the package's own admission policy
-    turned away is not a child, it is a line in a file, and a disabled one
-    cannot be called this session. Grading either would tell an author
-    their gate covers a delegation that cannot happen.
+    One walk of the registry, because two readers need the same list and
+    the same two exclusions -- see ``declared_rosters`` for both.
     """
-    rosters: dict[str, tuple[list[str], list[str]]] = {}
+    children: dict[str, DeclaredSubagent] = {}
     for tool in agent.registry:
         # UNWRAP FIRST. Every tool in a suite's registry is a recording
         # proxy (RecordingRegistry), so an isinstance check against the
@@ -420,9 +436,34 @@ def declared_rosters(
             continue
         if agent.registry.is_disabled(tool.name):
             continue
-        rosters[tool.name] = resolve_child_tools(agent.registry,
-                                                 inner.declared.tools)
-    return rosters
+        children[tool.name] = inner
+    return children
+
+
+def declared_specs(agent: Agent | AsyncAgent) -> dict[str, SubagentSpec]:
+    """Every declared child's manifest entry: prompt, model, iteration cap.
+
+    The spec rather than the built child, because none of these is worth
+    building an agent to discover -- they are lines in a file, and a case
+    that grades them costs nothing and needs no key (notes/50).
+    """
+    return {name: child.declared
+            for name, child in declared_children(agent).items()}
+
+
+def declared_rosters(
+        agent: Agent | AsyncAgent) -> dict[str, tuple[list[str], list[str]]]:
+    """Every sub-agent the package DECLARED, and what each would be offered:
+    ``{name: (offered, unreachable)}``.
+
+    Read off the REGISTRY rather than the spec, for the reason ``roster_of``
+    uses ``specs()``: a declared child the package's own admission policy
+    turned away is not a child, it is a line in a file, and a disabled one
+    cannot be called this session. Grading either would tell an author
+    their gate covers a delegation that cannot happen.
+    """
+    return {name: resolve_child_tools(agent.registry, child.declared.tools)
+            for name, child in declared_children(agent).items()}
 
 
 def subagent_failures(
@@ -457,14 +498,9 @@ def subagent_failures(
     for wanted, book in ((True, case.subagent_has_tools),
                          (False, case.subagent_lacks_tools)):
         for key, patterns in book.items():
-            names = (sorted(children) if key == EVERY_CHILD
-                     else [key] if key in children else [])
+            names = _children_named(key, children)
             if not names:
-                failures.append(
-                    "no sub-agents are declared, so an assertion about "
-                    "every child checks nothing" if key == EVERY_CHILD else
-                    f"no sub-agent called {key!r} is declared "
-                    f"(declared: {_listing(sorted(children))})")
+                failures.append(_no_child(key, children))
                 continue
             for name in names:
                 offered, unreachable = children[name]
@@ -481,6 +517,98 @@ def subagent_failures(
                                                 wanted=wanted))
     # One broken child named by both books says so once.
     return list(dict.fromkeys(failures))
+
+
+def _children_named(key: str, known: Mapping[str, Any]) -> list[str]:
+    """``"*"`` or one name -> the children an assertion is about.
+
+    Empty when the name is not declared, which every caller turns into a
+    failure: A CHILD NAMED BY AN ASSERTION MUST EXIST (notes/44). The
+    tempting reading -- a child that is not there cannot be wrong -- is a
+    green case reporting on a typo.
+    """
+    if key == EVERY_CHILD:
+        return sorted(known)
+    return [key] if key in known else []
+
+
+def subagent_detail_failures(case: EvalCase,
+                             specs: Mapping[str, SubagentSpec]) -> list[str]:
+    """Grade what a manifest decided about a child BESIDE its tool list.
+
+    Note 44 gave a child's tool list a floor and a ceiling and left three
+    keys in the same table ungraded: the prompt file, the model slug and
+    the iteration cap. All four change in the same one-line diff, and the
+    tool list came first only because it is the one that changes what a
+    package can REACH.
+
+    Free, like every other roster assertion: these are lines in a file.
+    Nothing here builds a child, and a suite of nothing but these needs no
+    key and makes no request.
+
+    PROSE IS MATCHED AS A SUBSTRING, case-insensitively, and never as a
+    pattern. A prompt is written for a model to read; a key that invited
+    ``*quote*line*`` would have authors debugging a regex against an
+    instruction file, and the failure it prints ("does not mention") is
+    the only phrasing that stays true.
+    """
+    failures: list[str] = []
+    for wanted, book in ((True, case.subagent_prompt_contains),
+                         (False, case.subagent_prompt_lacks)):
+        for key, phrases in book.items():
+            names = _children_named(key, specs)
+            if not names:
+                failures.append(_no_child(key, specs))
+                continue
+            for name in names:
+                prompt = specs[name].instructions.lower()
+                for phrase in phrases:
+                    found = phrase.lower() in prompt
+                    if wanted and not found:
+                        failures.append(f"{name}'s prompt does not mention "
+                                        f"{phrase!r}")
+                    elif not wanted and found:
+                        failures.append(f"{name}'s prompt mentions {phrase!r} "
+                                        f"and should not")
+    for key, slug in case.subagent_model.items():
+        names = _children_named(key, specs)
+        if not names:
+            failures.append(_no_child(key, specs))
+            continue
+        for name in names:
+            declared = specs[name].model
+            if slug == "":
+                # "" is the claim that the child names no model of its own
+                # and therefore runs on the parent's -- a real claim about
+                # cost, and the only one the empty string can mean.
+                if declared is not None:
+                    failures.append(f"{name} declares its own model "
+                                    f"({declared}); the case says it should "
+                                    f"run on the parent's")
+            elif declared != slug:
+                failures.append(
+                    f"{name} runs on "
+                    + (f"{declared}" if declared
+                       else "the parent's model")
+                    + f", not {slug}")
+    for key, cap in case.subagent_iterations_at_most.items():
+        names = _children_named(key, specs)
+        if not names:
+            failures.append(_no_child(key, specs))
+            continue
+        for name in names:
+            declared = specs[name].max_iterations
+            if declared > cap:
+                failures.append(f"{name} may run {declared} iterations, and "
+                                f"the case allows at most {cap}")
+    return list(dict.fromkeys(failures))
+
+
+def _no_child(key: str, known: Mapping[str, Any]) -> str:
+    return ("no sub-agents are declared, so an assertion about every child "
+            "checks nothing" if key == EVERY_CHILD else
+            f"no sub-agent called {key!r} is declared "
+            f"(declared: {_listing(sorted(known))})")
 
 
 def _child_failures(name: str, offered: Sequence[str],
@@ -708,7 +836,8 @@ class EvalRunner:
         # here: a trajectory from an agent with the wrong tool list belongs
         # to a different agent, and buying it teaches nothing.
         free = (roster_failures(case, roster_of(agent))
-                + subagent_failures(case, declared_rosters(agent)))
+                + subagent_failures(case, declared_rosters(agent))
+                + subagent_detail_failures(case, declared_specs(agent)))
         if free or not case.needs_a_model:
             return _free_result(case, free, time.monotonic() - start)
         try:
@@ -857,7 +986,8 @@ class AsyncEvalRunner:
         start = time.monotonic()
         # the sync rule, verbatim
         free = (roster_failures(case, roster_of(agent))
-                + subagent_failures(case, declared_rosters(agent)))
+                + subagent_failures(case, declared_rosters(agent))
+                + subagent_detail_failures(case, declared_specs(agent)))
         if free or not case.needs_a_model:
             return _free_result(case, free, time.monotonic() - start)
         try:

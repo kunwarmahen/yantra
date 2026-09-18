@@ -670,6 +670,31 @@ in under a second, with no model involved:
         on fact_checker's roster and should not be: web_* matches web_fetch
 ```
 
+That `[[subagent]]` table decides four things, though, and the tool list
+is only the one that changes what the package can *reach*. The other
+three — the prompt file it was handed, the model it runs on, how long it
+may go on — are three more keys in the same case:
+
+```toml
+subagent_prompt_contains    = { fact_checker = ["Quote the evidence", "file and line"] }
+subagent_model              = { fact_checker = "" }
+subagent_iterations_at_most = { fact_checker = 12 }
+```
+
+```
+  FAIL  the-checker-is-actually-on-the-roster  roster failed · no model call · 0 tok
+        fact_checker's prompt does not mention 'Quote the evidence'
+        fact_checker declares its own model (gemma4:26b); the case says it should run on the parent's
+        fact_checker may run 50 iterations, and the case allows at most 12
+```
+
+Prose is a case-insensitive **substring** and not a pattern — a prompt is
+written for a model to read, not to be matched. `""` under
+`subagent_model` says the child names no model of its own, so it costs
+whatever the parent costs. And the cap is a **ceiling**: passing at 4 and
+failing at 50, because the dangerous edit to a cap is upward.
+([notes/50](notes/50-the-rest-of-what-a-child-is.md))
+
 Full reasoning in [notes/44](notes/44-a-ceiling-and-a-floor.md).
 
 ### One run is one sample
@@ -2054,7 +2079,7 @@ Most carry a live receipt from a real run.
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) | a gate that waits; a clock and a machine-readable word |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
 | [45](notes/45-the-road-with-no-key.md) | the road with no key, and how it says its name |
-| [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) | a package that declares its children, and the gate that watches their tool lists |
+| [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) [50](notes/50-the-rest-of-what-a-child-is.md) | a package that declares its children, and the gate that watches what they were given |
 
 ### dvara — the door
 
@@ -2167,5 +2192,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1457 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1479 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1457 tests. The
+The harness underneath is complete and covered by 1479 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -915,6 +915,34 @@ not declared is a *failure* rather than a vacuous pass, so renaming a
 sub-agent turns its assertions red instead of quietly grading nothing.
 Tool patterns work in the values, as above.
 
+**And the rest of what the manifest decided about that child.** A
+`[[subagent]]` table holds four things; the tool list only came first
+because it is the one that changes what the package can *reach*
+([notes/50](notes/50-the-rest-of-what-a-child-is.md)):
+
+```toml
+subagent_prompt_contains    = { fact_checker = ["Quote the evidence", "file and line"] }
+subagent_prompt_lacks       = { "*" = ["ignore the sources"] }
+subagent_model              = { fact_checker = "" }
+subagent_iterations_at_most = { fact_checker = 12 }
+```
+
+```
+  FAIL  the-checker-is-actually-on-the-roster  roster failed · no model call · 0 tok
+        fact_checker's prompt does not mention 'Quote the evidence'
+        fact_checker declares its own model (gemma4:26b); the case says it should run on the parent's
+        fact_checker may run 50 iterations, and the case allows at most 12
+```
+
+Prose is matched as a case-insensitive **substring**, never a pattern: a
+prompt is written for a model to read, and `*quote*line*` would put you
+in a regex debugger with an instruction file open. `""` under
+`subagent_model` is the claim that the child names no model of its own,
+so a delegation cannot quietly become the expensive part of a turn.
+`subagent_iterations_at_most` is a **ceiling** and not an equality —
+the dangerous edit is upward, and a case that reddened because somebody
+*lowered* a cap is a case nobody keeps.
+
 **Zero tokens now means zero setup.** A run whose selected cases are all
 roster ones resolves no provider at all — no key, no `.env`, no local
 server, which is what makes this affordable on every push:
@@ -1343,7 +1371,12 @@ src/yantra/
 │                   DECLARED child's list, keyed by name or "*" -- the
 │                   parent's roster is a ceiling over the package and
 │                   cannot see the floor each child was given
-│                   ([notes/44](notes/44-a-ceiling-and-a-floor.md))
+│                   ([notes/44](notes/44-a-ceiling-and-a-floor.md)).
+│                   subagent_prompt_contains/_lacks, subagent_model and
+│                   subagent_iterations_at_most grade the REST of that
+│                   child's table -- prose as a substring, a model slug
+│                   exactly ("" = none of its own), a cap as a CEILING
+│                   ([notes/50](notes/50-the-rest-of-what-a-child-is.md))
 │                   OfflineProvider is what a roster-only run builds against
 │                   -- build() unchanged, every method raising, so the free
 │                   gate needs no key
@@ -1368,7 +1401,9 @@ src/yantra/
 │                   by a child's NAME (or "*"); a pattern key is refused and
 │                   an undeclared child is a failure, because either one
 │                   would grade nothing and report green
-│                   ([notes/44](notes/44-a-ceiling-and-a-floor.md))
+│                   ([notes/44](notes/44-a-ceiling-and-a-floor.md)); the
+│                   same keying carries the prompt, model and cap
+│                   assertions ([notes/50](notes/50-the-rest-of-what-a-child-is.md))
 ├── eval_report.py  one --eval run as JSON, and what moved since the last:
 │                   a record, never a baseline (comparing changes no exit
 │                   code); counts rather than percentages; a case in only
@@ -1587,7 +1622,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1457 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1479 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1618,7 +1653,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1457 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1479 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

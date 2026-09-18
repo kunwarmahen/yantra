@@ -155,3 +155,14 @@ used to change what this package can reach and pass every case here.
 has_tools = ["fact_checker"]
 subagent_has_tools = { fact_checker = ["read_file", "outline"] }
 subagent_lacks_tools = { "*" = ["web_*", "write_file", "edit_file", "bash"] }
+# The three keys beside the tool list, all in the same [[subagent]] table
+# and all editable in the same one-line diff (notes/50). The prompt phrase
+# is the one this package's OWN case above depends on -- the checker is
+# asked for a quote with a file and a line, and a rewrite that dropped
+# that instruction would break "cites_a_file" for a reason that reads like
+# a model problem. "" is the claim that the child names no model of its
+# own, so it costs whatever the parent costs and cannot quietly become
+# the expensive part of a delegation.
+subagent_prompt_contains = { fact_checker = ["Quote the evidence", "file and line"] }
+subagent_model = { fact_checker = "" }
+subagent_iterations_at_most = { fact_checker = 12 }

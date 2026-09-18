@@ -46,6 +46,17 @@ a fact-checker deliberately kept off the network sits well inside a
 ceiling that permits ``web_fetch`` -- and widening it moved nothing any
 assertion could see.
 
+``subagent_prompt_contains``/``subagent_prompt_lacks``, ``subagent_model``
+and ``subagent_iterations_at_most`` grade the REST of what a manifest
+decided about that child -- the prompt file it was handed, the model it
+runs on, and how long it may go on. All four keys live in the same
+``[[subagent]]`` table and change in the same one-line diff; the tool
+list only came first because it is the one that changes what a package
+can reach. Prose is matched as a case-insensitive SUBSTRING and never as
+a pattern: a prompt is written for a model to read, and a key inviting
+``*quote*line*`` would have authors debugging a regex against an
+instruction file.
+
 ``min_pass_rate`` is the other half of being honest about a die roll. A
 case declares the rate it claims to hold at ("7 of 10" is 0.7), and the
 OPERATOR decides how many runs to buy -- ``repeat`` is deliberately not a
@@ -91,8 +102,10 @@ CASES = "cases.toml"
 CASE_KEYS = frozenset({
     "id", "description", "user_message", "required_tools",
     "forbidden_tools", "has_tools", "lacks_tools", "subagent_has_tools",
-    "subagent_lacks_tools", "max_tokens", "max_iterations", "min_pass_rate",
-    "check",
+    "subagent_lacks_tools", "subagent_prompt_contains",
+    "subagent_prompt_lacks", "subagent_model",
+    "subagent_iterations_at_most", "max_tokens", "max_iterations",
+    "min_pass_rate", "check",
 })
 
 #: The roster keys: everything gradeable with no model and no request.
@@ -100,7 +113,9 @@ CASE_KEYS = frozenset({
 #: case omit ``user_message``, does it assert anything at all, and which
 #: keys does the "no task" error tell the author to keep.
 ROSTER_KEYS = ("has_tools", "lacks_tools", "subagent_has_tools",
-               "subagent_lacks_tools")
+               "subagent_lacks_tools", "subagent_prompt_contains",
+               "subagent_prompt_lacks", "subagent_model",
+               "subagent_iterations_at_most")
 
 #: Keys that only mean something once a model has RUN. A case with no
 #: ``user_message`` never reaches one, so any of these on such a case is a
@@ -198,8 +213,65 @@ def _str_list(entry: dict[str, Any], key: str, path: Path, where: str,
     return list(value)
 
 
+def _child_key(child: str, key: str, path: Path, where: str) -> None:
+    """The KEY of every subagent_ table: a name, or ``*``. Never a pattern.
+
+    A pattern key that matched no child would be a case that checked
+    nothing while reading as caution (notes/44), which is the failure the
+    whole family exists to prevent.
+    """
+    if child != EVERY_CHILD and any(c in child for c in GLOB_CHARS):
+        _fail(path, f"{where}.{key} takes a sub-agent NAME, not a pattern "
+                    f"({child}): a key matching no child would assert "
+                    f'nothing. Use "{EVERY_CHILD}" for every declared '
+                    f"sub-agent, or name them one at a time")
+
+
+def _child_str_table(entry: dict[str, Any], key: str, path: Path,
+                     where: str) -> dict[str, str]:
+    """``{ fact_checker = "gemma4:12b" }`` -> the same, checked.
+
+    One string per child rather than a list: a child runs on one model,
+    and "" is the claim that it names none of its own (notes/50).
+    """
+    value = entry.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        _fail(path, f"{where}.{key} must be a table keyed by sub-agent name: "
+                    f'{key} = {{ fact_checker = "gemma4:12b" }}')
+    table: dict[str, str] = {}
+    for child, slug in value.items():
+        _child_key(child, key, path, where)
+        if not isinstance(slug, str):
+            _fail(path, f"{where}.{key}.{child} must be a model slug, or "
+                        f'"" for "no model of its own"')
+        table[child] = slug
+    return table
+
+
+def _child_int_table(entry: dict[str, Any], key: str, path: Path,
+                     where: str) -> dict[str, int]:
+    """``{ fact_checker = 12 }`` -> the same, checked. A CEILING."""
+    value = entry.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        _fail(path, f"{where}.{key} must be a table keyed by sub-agent name: "
+                    f"{key} = {{ fact_checker = 12 }}")
+    table: dict[str, int] = {}
+    for child, cap in value.items():
+        _child_key(child, key, path, where)
+        if not isinstance(cap, int) or isinstance(cap, bool) or cap < 1:
+            _fail(path, f"{where}.{key}.{child} must be a whole number of "
+                        f"iterations, at least 1")
+        table[child] = cap
+    return table
+
+
 def _child_table(entry: dict[str, Any], key: str, path: Path,
-                 where: str) -> dict[str, list[str]]:
+                 where: str, *, what: str = "tool names or patterns"
+                 ) -> dict[str, list[str]]:
     """``{ fact_checker = ["web_*"] }`` -> the same, checked.
 
     A TABLE rather than a flat list of ``child:tool`` strings, because the
@@ -220,15 +292,10 @@ def _child_table(entry: dict[str, Any], key: str, path: Path,
                     f'{key} = {{ fact_checker = ["web_*"] }}')
     table: dict[str, list[str]] = {}
     for child, patterns in value.items():
-        if child != EVERY_CHILD and any(c in child for c in GLOB_CHARS):
-            _fail(path, f"{where}.{key} takes a sub-agent NAME, not a pattern "
-                        f"({child}): a key matching no child would assert "
-                        f'nothing. Use "{EVERY_CHILD}" for every declared '
-                        f"sub-agent, or name them one at a time")
+        _child_key(child, key, path, where)
         if not isinstance(patterns, list) \
                 or any(not isinstance(v, str) for v in patterns):
-            _fail(path, f"{where}.{key}.{child} must be a list of tool names "
-                        f"or patterns")
+            _fail(path, f"{where}.{key}.{child} must be a list of {what}")
         if not patterns:
             # An empty list is a child named and then asked nothing. It
             # reads as caution and grades as decoration.
@@ -364,9 +431,19 @@ def load_cases(where: Path) -> list[EvalCase]:
                                     where_label)
         subagent_lacks = _child_table(entry, "subagent_lacks_tools", path,
                                       where_label)
+        prompt_has = _child_table(entry, "subagent_prompt_contains", path,
+                                  where_label, what="phrases")
+        prompt_lacks = _child_table(entry, "subagent_prompt_lacks", path,
+                                    where_label, what="phrases")
+        child_model = _child_str_table(entry, "subagent_model", path,
+                                       where_label)
+        child_caps = _child_int_table(entry, "subagent_iterations_at_most",
+                                      path, where_label)
         message = _str(entry, "user_message", path, where_label)
         if not message and not (has_tools or lacks_tools
-                                or subagent_has or subagent_lacks):
+                                or subagent_has or subagent_lacks
+                                or prompt_has or prompt_lacks
+                                or child_model or child_caps):
             # A roster assertion is the ONE thing a case can do without a
             # task, because it grades the agent rather than a trajectory.
             # Anything else with no message asserts nothing at all.
@@ -398,6 +475,10 @@ def load_cases(where: Path) -> list[EvalCase]:
             lacks_tools=lacks_tools,
             subagent_has_tools=subagent_has,
             subagent_lacks_tools=subagent_lacks,
+            subagent_prompt_contains=prompt_has,
+            subagent_prompt_lacks=prompt_lacks,
+            subagent_model=child_model,
+            subagent_iterations_at_most=child_caps,
             max_tokens=_int(entry, "max_tokens", path, where_label),
             max_iterations=_int(entry, "max_iterations", path, where_label),
             min_pass_rate=1.0 if rate is None else rate,
@@ -449,12 +530,21 @@ def render_case(case: EvalCase) -> str:
         values = getattr(case, key)
         if values:
             lines.append(f"{key} = {_toml_list(values)}")
-    for key in ("subagent_has_tools", "subagent_lacks_tools"):
+    for key in ("subagent_has_tools", "subagent_lacks_tools",
+                "subagent_prompt_contains", "subagent_prompt_lacks"):
         table = getattr(case, key)
         if table:
             inner = ", ".join(f"{_toml_key(child)} = {_toml_list(patterns)}"
                               for child, patterns in table.items())
             lines.append(f"{key} = {{ {inner} }}")
+    if case.subagent_model:
+        inner = ", ".join(f"{_toml_key(child)} = {_toml_str(slug)}"
+                          for child, slug in case.subagent_model.items())
+        lines.append(f"subagent_model = {{ {inner} }}")
+    if case.subagent_iterations_at_most:
+        inner = ", ".join(f"{_toml_key(child)} = {cap}" for child, cap
+                          in case.subagent_iterations_at_most.items())
+        lines.append(f"subagent_iterations_at_most = {{ {inner} }}")
     if case.max_tokens is not None:
         lines.append(f"max_tokens = {case.max_tokens}")
     if case.max_iterations is not None:

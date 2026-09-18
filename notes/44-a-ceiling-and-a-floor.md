@@ -277,17 +277,20 @@ cheapest way to lose both is to pretend either one covers the other.
 
 ## What is not here yet
 
-* **No assertion about a child's PROMPT.** Its tool list is now guarded;
-  its instructions are a file that can be rewritten freely, and "the
-  fact-checker's prompt still tells it to quote a line number" is a claim
-  no roster check can make. A grader over the child's `instructions`
-  would be the cheap version, and a case that delegates and reads the
-  result is the honest one.
-* **A child's iteration cap and model are ungraded.** `max_iterations = 12`
-  and a `model` slug are both in the same table as the tool list, both
-  editable in the same one-line diff, and neither has an assertion. The
-  tool list came first because it is the one that changes what a package
-  can *reach*.
+* ~~**No assertion about a child's PROMPT.**~~ Shipped in
+  [note 50](50-the-rest-of-what-a-child-is.md) as
+  `subagent_prompt_contains` / `subagent_prompt_lacks` — the cheap
+  version this bullet described, matching case-insensitive SUBSTRINGS
+  rather than patterns, because a prompt is written for a model to read
+  and a key inviting `*quote*line*` would have authors debugging a regex
+  against an instruction file.
+* ~~**A child's iteration cap and model are ungraded.**~~ Shipped in
+  [note 50](50-the-rest-of-what-a-child-is.md) as
+  `subagent_iterations_at_most` (a CEILING, never an equality: the
+  dangerous edit is upward, and a case that reddened when somebody
+  lowered a cap is a case nobody keeps) and `subagent_model`, where `""`
+  is the claim that the child names no model of its own and therefore
+  costs whatever the parent costs.
 * **Nothing grades the freeform `spawn_subagent`.** There is nothing to
   grade: the model writes that child's tool list at call time, which is
   the entire reason it is opt-in behind a flag
