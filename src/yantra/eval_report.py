@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from yantra.confidence import overlaps, wilson_bounds
 from yantra.errors import ConfigError
 
 #: Bumped only when an OLD reader would misread a NEW file. Adding a key
@@ -71,6 +72,19 @@ class CaseRecord:
     def tally(self) -> str:
         """"7/10" -- the honest shape, because 0.7 is not what happened."""
         return f"{self.passes}/{self.attempts}"
+
+    @property
+    def confidence(self) -> tuple[float, float] | None:
+        """What this record's counts are evidence of (notes/47), or ``None``
+        for a roster-only case, which rolled no die.
+
+        Derived rather than stored: ``passes`` and ``attempts`` are already
+        in every report ever written, so old files answer this question
+        too and the format did not have to move.
+        """
+        if not self.ran_model or not self.attempts:
+            return None
+        return wilson_bounds(self.passes, self.attempts)
 
 
 @dataclass(slots=True)
@@ -239,6 +253,23 @@ class CaseDelta:
         if self.before is None or self.after is None:
             return 0
         return self.after.tokens - self.before.tokens
+
+    @property
+    def movement_is_evidence(self) -> bool:
+        """Whether the pass counts moved by more than sampling noise.
+
+        9/10 then 6/10 LOOKS like a regression and is not evidence of one:
+        both counts are consistent with the same underlying rate, so the
+        two intervals overlap (notes/47). The line still prints -- the
+        movement happened -- and this says what it is worth, which is the
+        difference between a report and an alarm.
+        """
+        if self.before is None or self.after is None:
+            return False
+        was, now = self.before.confidence, self.after.confidence
+        if was is None or now is None:
+            return True          # deterministic: a change IS the evidence
+        return not overlaps(was, now)
 
 
 @dataclass(slots=True)

@@ -342,10 +342,14 @@ and it is now unnecessary: with servers connected,
 
 ## What is not here yet
 
-* **Statistics, rather than a fraction.** Unchanged from note 35. "7 of
-  10" is a threshold, not a confidence interval, and `--case` + `--repeat`
-  makes it *cheaper* to buy ten samples without making ten samples mean
-  more than they do.
+* ~~**Statistics, rather than a fraction.**~~ Shipped in
+  [note 47](47-what-seven-of-ten-is-evidence-of.md), and this bullet's
+  point survived intact: `--case` + `--repeat` makes samples cheaper to
+  buy without making them mean more, so the interval is printed beside
+  the fraction and the operator decides what to spend. The one number
+  that changed is in the note this flag prints — "--repeat N" became
+  "--repeat 9", because n is computable from the rate the author
+  claimed.
 * ~~**Comparing two runs of the same suite.**~~ Shipped in
   [note 42](42-two-runs-of-the-same-suite.md) — `--report` writes a run
   down and `--against` answers "was that better than yesterday?". It is a

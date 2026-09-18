@@ -29,6 +29,7 @@ from yantra.agent import (
 )
 from yantra.async_agent import AsyncAgent
 from yantra.budget import Budget
+from yantra.confidence import perfect_runs_needed, wilson_bounds
 from yantra.config import default_model, load_settings
 from yantra.eval_suite import find_suite, load_cases, render_case
 from yantra.evals import (
@@ -141,6 +142,8 @@ __all__ = [
     "load_image_block",
     "load_package",
     "load_settings",
+    "perfect_runs_needed",
+    "wilson_bounds",
     "MANIFEST",
     "Message",
     "ModelResponse",

@@ -830,13 +830,16 @@ class TestTheCliGate:
         assert "✓✗✓ 2/3 runs (needs 3)" in out
         assert "required tool not used: read_file (1 of 3 runs)" in out
 
-    def test_a_declared_rate_at_one_run_says_it_cannot_be_honoured(
+    def test_a_declared_rate_at_one_run_says_what_would_hold_it(
             self, tmp_path, monkeypatch, capsys):
+        """One run grades 0.7 all-or-nothing, and the note now says what
+        the claim would actually cost: nine green runs (notes/47)."""
         root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n'
                                 'min_pass_rate = 0.7\n')
         self._run(tmp_path, monkeypatch,
                   ["--agent", str(root), "--eval", "--provider", "anthropic"])
-        assert "--repeat N buys the evidence" in capsys.readouterr().out
+        out = " ".join(capsys.readouterr().out.split())
+        assert "all-or-nothing -- --repeat 9 would hold the lowest claim" in out
 
     def test_async_drives_the_same_suite_to_the_same_verdict(self, tmp_path,
                                                             monkeypatch,

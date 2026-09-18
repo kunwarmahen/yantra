@@ -249,6 +249,10 @@ twice.
 
 ## What is not here yet
 
+* **A movement inside the noise now says so.** `9/10 → 6/10` still
+  prints — the movement happened — and carries "(intervals overlap: not
+  evidence of a change)" when the two counts are consistent with the same
+  underlying rate ([note 47](47-what-seven-of-ten-is-evidence-of.md)).
 * **Nothing reads a report except a human.** There is no
   `yantra --eval-report-summary`, no HTML, no chart. The file is JSON so
   that whatever somebody wants can be written in ten lines elsewhere.

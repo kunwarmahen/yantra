@@ -381,11 +381,14 @@ other three rows now have three ticks each instead of one.
   shaped it: `AgentSpec.build` runs unchanged and the PROVIDER is the part
   that gets replaced, by one whose every method raises. A roster-only run
   now resolves no provider at all.
-* **Statistics, rather than a fraction.** "7 of 10" is a threshold, not a
-  confidence interval. Three runs of a case tell you very little and the
-  gate will happily print `✓✓✓` as though they told you a lot. Proper
-  intervals need more runs than anyone will pay for per push; naming the
-  limit is the honest interim.
+* ~~**Statistics, rather than a fraction.**~~ Shipped in
+  [note 47](47-what-seven-of-ten-is-evidence-of.md). The guess in this
+  bullet — that proper intervals need more runs than anyone will pay for
+  — had the cost in the wrong place: a Wilson interval over the counts
+  already on screen is free, and what it buys is not a better verdict but
+  an honest one. `✓✓✓` now prints `0.44-1.00 at 95%` beside it, and a
+  case that cleared its own claim on three samples says so under the
+  green line. No exit code moved.
 * ~~**A per-case run count.**~~ The shape turned out not to be a count at
   all: [note 41](41-a-gate-you-can-point.md) adds `--case PATTERN`, so the
   operator POINTS the global run count instead of the author declaring a

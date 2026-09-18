@@ -692,6 +692,25 @@ paying for it on every deterministic one:
 uv run yantra --agent ./researcher --eval --case "flaky-*" --repeat 10
 ```
 
+And the count says what it is evidence of, because a fraction gets read
+as a rate. Three green runs are consistent with a case that holds 44% of
+the time, and one green run with a case that holds 21%:
+
+```
+  PASS  delegation-works-end-to-end  ✓✓✓ 3/3 runs (needs 3) · 0.44-1.00 at 95% · 95.0s
+
+SUBSET GREEN · 1/1 passed · 3 runs · 29930 tokens
+1 case(s) passed on evidence that does not reach the rate they claim
+  delegation-works-end-to-end  3/3 · true rate could be as low as 0.44 · claims 0.7
+  · --repeat 9 would settle it, all green
+```
+
+Nothing there changes the verdict — the case passed, exit 0 — and `9` is
+arithmetic rather than advice: a claim of 0.7 needs nine perfect runs
+before the evidence reaches it, 0.85 needs 22, and 0.95 needs 73. That is
+the best reason to write the claim you actually mean.
+([notes/47](notes/47-what-seven-of-ten-is-evidence-of.md))
+
 ### Writing a run down
 
 ```
@@ -2020,7 +2039,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) | a package brings its own tools |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) | the ceiling, the warning, and the two readers of one meter |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) | a gate that waits; a clock and a machine-readable word |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
@@ -2138,5 +2157,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1408 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1432 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

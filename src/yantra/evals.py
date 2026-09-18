@@ -76,6 +76,7 @@ from typing import Any, ClassVar
 
 from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
+from yantra.confidence import wilson_bounds
 from yantra.errors import ConfigError
 from yantra.providers.base import Provider, ProviderSettings, collect
 from yantra.spec import AgentSpec
@@ -270,6 +271,34 @@ class CaseOutcome:
     @property
     def ran_model(self) -> bool:
         return any(r.ran_model for r in self.runs)
+
+    @property
+    def confidence(self) -> tuple[float, float] | None:
+        """The range of true pass rates these runs are consistent with, or
+        ``None`` for a case that never rolled a die.
+
+        A roster-only case is DETERMINISTIC -- the same list, graded the
+        same way -- so an interval over it would be arithmetic about
+        nothing. Everything that reached a model gets one, including a
+        single run: "one green run" is consistent with a case that holds
+        21% of the time, and that is the sentence notes/35 could not say.
+        """
+        if not self.ran_model or not self.attempts:
+            return None
+        return wilson_bounds(self.passes, self.attempts)
+
+    @property
+    def claim_is_supported(self) -> bool:
+        """Whether the evidence reaches the rate the author DECLARED.
+
+        False is not a failure and never changes a verdict: it means this
+        case passed on samples that cannot tell it from a worse case. The
+        cure is runs, which are the operator's to buy.
+        """
+        band = self.confidence
+        if band is None or self.min_pass_rate >= 1:
+            return True
+        return band[0] >= self.min_pass_rate
 
     @property
     def tokens_used(self) -> int:

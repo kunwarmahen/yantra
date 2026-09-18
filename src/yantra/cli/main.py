@@ -18,6 +18,7 @@ from yantra.budget import Budget
 from yantra.builder import BUILD_SYSTEM, BuildSpec, default_checks, run_build
 from yantra.cli.render import Renderer, SubagentTee
 from yantra.cli.repl import Repl, confirm_gate
+from yantra.confidence import describe, perfect_runs_needed
 from yantra.config import (
     _load_dotenv,
     browser_profile,
@@ -631,10 +632,13 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
         # 0.7 believed they had bought something.
         claimed = sum(1 for c in cases if c.min_pass_rate < 1)
         if claimed:
+            most = min(c.min_pass_rate for c in cases if c.min_pass_rate < 1)
             console.print(f"[dim]note: {claimed} case(s) declare a "
                           f"min_pass_rate below 1.0; one run each can only "
-                          f"grade them all-or-nothing -- --repeat N buys the "
-                          f"evidence (--case PATTERN points it)[/dim]")
+                          f"grade them all-or-nothing -- --repeat "
+                          f"{perfect_runs_needed(most)} would hold the "
+                          f"lowest claim among them at 95%, all green "
+                          f"(--case PATTERN points it)[/dim]")
 
     tools = default_registry(sandbox)
     mcp_manager = None
@@ -704,6 +708,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     console.print(f"\n{verdict} · {tally} · {spent} tokens"
                   + (f" · {free_cases} case(s) cost nothing" if free_cases
                      else ""))
+    _evidence_note(console, outcomes)
 
     run = record_run(outcomes, suite=label or (spec.name or "agent"),
                      provider=provider_name, model=model, repeat=args.repeat,
@@ -758,21 +763,53 @@ def _render_comparison(console: Console, cmp) -> None:
             tally = ""
             if delta.before is not None and delta.after is not None:
                 tally = f"  {delta.before.tally} → {delta.after.tally}"
+                if not delta.movement_is_evidence:
+                    tally += ("  [dim](intervals overlap: not evidence of a "
+                              "change)[/dim]")
             console.print(f"  {marks[delta.kind]}  {escape(delta.id)}{tally}")
         elif delta.rate_moved:
             # Same verdict, different count. A case going 9/10 -> 6/10 is
-            # still green and is the most useful line on this page.
+            # still green and is the most useful line on this page -- but
+            # only if it moved by more than noise, which the line now says
+            # rather than leaving to the reader (notes/47).
             moved += 1
             word = ("[green]up[/green]" if delta.rate_direction == "up"
                     else "[yellow]down[/yellow]")
+            noise = ("" if delta.movement_is_evidence
+                     else "  [dim](intervals overlap: not evidence of a "
+                          "change)[/dim]")
             console.print(f"  rate {word}  {escape(delta.id)}  "
-                          f"{delta.before.tally} → {delta.after.tally}")
+                          f"{delta.before.tally} → {delta.after.tally}{noise}")
     if not moved:
         console.print("  [dim]no case changed verdict or pass count[/dim]")
     spent = cmp.tokens_moved
     if spent:
         console.print(f"[dim]tokens: {before.tokens} → {after.tokens} "
                       f"({spent:+d})[/dim]")
+
+
+def _evidence_note(console: Console, outcomes) -> None:
+    """Cases that PASSED on samples too few to hold the claim they made.
+
+    Never a verdict and never an exit code (notes/47). A case that
+    declares min_pass_rate = 0.7 and goes 3 for 3 has cleared its
+    threshold on evidence that does not separate it from a case holding
+    44% of the time, and the person who most needs to know that is the one
+    reading a green line.
+    """
+    thin = [o for o in outcomes if o.passed and not o.claim_is_supported]
+    if not thin:
+        return
+    console.print(f"[yellow]{len(thin)} case(s) passed on evidence that does "
+                  f"not reach the rate they claim[/yellow]")
+    for outcome in thin:
+        lo, _ = outcome.confidence
+        need = perfect_runs_needed(outcome.min_pass_rate)
+        console.print(f"  [dim]{escape(outcome.case_id)}  "
+                      f"{outcome.passes}/{outcome.attempts} · true rate could "
+                      f"be as low as {lo:.2f} · claims "
+                      f"{outcome.min_pass_rate:g} · --repeat {need} would "
+                      f"settle it, all green[/dim]")
 
 
 def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
@@ -794,8 +831,11 @@ def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
     elif outcome.attempts > 1:
         needed = ("" if outcome.min_pass_rate >= 1
                   else f" (needs {outcome.required_passes})")
+        # The interval beside the fraction, because the fraction alone has
+        # been read as a rate since the day it was printed (notes/47).
+        band = describe(outcome.passes, outcome.attempts)
         detail = (f"{outcome.marks} {outcome.passes}/{outcome.attempts} "
-                  f"runs{needed} · {outcome.duration_seconds:.1f}s · "
+                  f"runs{needed} · {band} · {outcome.duration_seconds:.1f}s · "
                   f"{outcome.tokens_used} tok")
     else:
         run = outcome.runs[-1]

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1408 tests. The
+The harness underneath is complete and covered by 1432 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1008,6 +1008,30 @@ Two of four, on a case that passes if you run it once and are lucky. The
 glyphs are there because `2/4` hides which runs failed, and the count on
 the failure line separates a flaky prompt from a broken one.
 
+**And the count says what it is evidence of.** A fraction is a threshold;
+the question a person actually asks of it is *would it come out that way
+again*, and three green runs answer that much less firmly than they look:
+
+```
+  PASS  delegation-works-end-to-end  ✓✓✓ 3/3 runs (needs 3) · 0.44-1.00 at 95% · 95.0s
+
+SUBSET GREEN · 1/1 passed · 3 runs · 29930 tokens
+1 case(s) passed on evidence that does not reach the rate they claim
+  delegation-works-end-to-end  3/3 · true rate could be as low as 0.44 · claims 0.7
+  · --repeat 9 would settle it, all green
+```
+
+A Wilson interval beside the tally, and a note under a green line when a
+case cleared its own claim on samples that cannot hold it. **No exit code
+moves**: a gate that reddens on a statistic gets argued with the first
+time an honest run lands two samples unlucky. `--repeat 9` is a closed
+form, not a guess — a claim of 0.7 needs 9 perfect runs, 0.85 needs 22,
+0.95 needs 73, which is the argument for writing the claim you mean. A
+roster-only case gets no interval at all: it rolled no die. In a
+comparison, `9/10 → 6/10` now carries *(intervals overlap: not evidence
+of a change)*. See
+[notes/47](notes/47-what-seven-of-ten-is-evidence-of.md).
+
 `--async N` drives the same suite through `AsyncEvalRunner`, N
 trajectories at once, with identical grading — a flag worth having against
 a metered provider and close to a wash against one local model on one GPU
@@ -1267,6 +1291,13 @@ src/yantra/
 │                   RFC 9728/8414 discovery, RFC 7591 dynamic
 │                   registration, PKCE + a localhost redirect listener,
 │                   0600 token store with refresh ([notes/09](notes/09-mcp.md))
+├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
+│                   over passes/attempts (it does not collapse at 3/3, where
+│                   the textbook one claims certainty from three coin
+│                   flips), how many perfect runs a declared rate would
+│                   need, and whether two counts overlap. Information,
+│                   never a verdict -- nothing here moves an exit code
+│                   ([notes/47](notes/47-what-seven-of-ten-is-evidence-of.md))
 ├── evals.py        trajectory evals: completion/correctness/process/cost,
 │                   recording registry (records late arrivals too), LLM
 │                   judge; AsyncEvalRunner twin runs cases concurrently,
@@ -1517,7 +1548,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1408 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1432 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1548,7 +1579,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1408 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1432 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
