@@ -224,6 +224,7 @@ class AgentSpec:
         provider=None,
         provider_name: str | None = None,
         model: str | None = None,
+        max_parallel_children: int | None = None,
     ) -> Agent:
         """A wired Agent, assembled in the one order that works.
 
@@ -243,6 +244,7 @@ class AgentSpec:
             Agent, permissions=permissions, sandbox=sandbox, cwd=cwd,
             registry=registry, provider=provider,
             provider_name=provider_name, model=model,
+            max_parallel_children=max_parallel_children,
         )
 
     def build_async(
@@ -256,6 +258,7 @@ class AgentSpec:
         provider_name: str | None = None,
         model: str | None = None,
         max_parallel_tools: int | None = None,
+        max_parallel_children: int | None = None,
     ) -> AsyncAgent:
         """The async twin, for hosts that drive several turns at once.
 
@@ -271,11 +274,13 @@ class AgentSpec:
         return self._assemble(
             AsyncAgent, permissions=permissions, sandbox=sandbox, cwd=cwd,
             registry=registry, provider=provider,
-            provider_name=provider_name, model=model, **extra,
+            provider_name=provider_name, model=model,
+            max_parallel_children=max_parallel_children, **extra,
         )
 
     def _assemble(self, agent_cls, *, permissions, sandbox, cwd, registry,
-                  provider, provider_name, model, **extra):
+                  provider, provider_name, model,
+                  max_parallel_children=None, **extra):
         """The assembly itself. ONE body, so the sync and async agents can
         never drift into being configured differently."""
         name = provider_name or self.provider or guess_provider()
@@ -379,7 +384,12 @@ class AgentSpec:
         # agent, so a later --subagents (or a delegated skill) shares this
         # spawn budget rather than opening a second one beside it.
         if self.subagents:
-            spawner = SubagentSpawner(agent)
+            # How many children may run at once is the HOST's appetite for
+            # parallelism rather than the agent's character, so it is an
+            # argument here for the same reason max_parallel_tools is.
+            spawner = SubagentSpawner(
+                agent, **({} if max_parallel_children is None
+                          else {"max_parallel": max_parallel_children}))
             agent.subagents = spawner
             for sub in self.subagents:
                 try:

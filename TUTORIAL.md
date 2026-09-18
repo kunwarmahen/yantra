@@ -2114,7 +2114,7 @@ Most carry a live receipt from a real run.
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
 | [45](notes/45-the-road-with-no-key.md) [54](notes/54-the-word-for-a-road.md) | the road with no key, how it says its name, and what to call it |
-| [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) [50](notes/50-the-rest-of-what-a-child-is.md) | a package that declares its children, and the gate that watches what they were given |
+| [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) [50](notes/50-the-rest-of-what-a-child-is.md) [55](notes/55-two-at-a-time.md) | a package that declares its children, and the gate that watches what they were given |
 
 ### dvara — the door
 
@@ -2227,5 +2227,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1532 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 1543 offline tests passing (1 skipped) — no network, no key.
 dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*

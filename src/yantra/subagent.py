@@ -57,6 +57,8 @@ from it.
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
@@ -181,6 +183,21 @@ class SubagentResult:
     input_tokens: int
     output_tokens: int
     error: str | None = None
+    #: The same failure as a machine token, for whoever wired the
+    #: delegation up rather than for the model (notes/55). The prose in
+    #: ``error`` is what the parent MODEL reads and is free to improve;
+    #: a host that retries a provider failure and does not retry an
+    #: iteration cap needs something that does not change when it does.
+    #: None when the child finished.
+    code: str | None = None
+
+
+#: Why a child did not finish. Two, because two things go wrong -- and
+#: they want opposite handling: a provider failure is worth retrying and
+#: an iteration cap is a child that needs a different task, not another
+#: go at the same one.
+CHILD_PROVIDER_ERROR = "provider_error"
+CHILD_ITERATION_CAP = "iteration_cap"
 
 
 class SubagentSpawner:
@@ -191,11 +208,34 @@ class SubagentSpawner:
 
     def __init__(self, parent: Agent | AsyncAgent, *, max_per_session: int = 5,
                  default_max_iterations: int = 20,
+                 max_parallel: int = 2,
                  on_child_event: Callable[[int, Any], None] | None = None) -> None:
         self.parent = parent
         self.max_per_session = max_per_session
         self.default_max_iterations = default_max_iterations
+        #: How many children may be RUNNING at once (notes/55). Two,
+        #: which is much lower than the eight tool calls a batch may
+        #: hold, because a child is not a file read: it is a whole
+        #: conversation with its own iteration cap, spending the same
+        #: dollar meter. On one local GPU concurrency does not create
+        #: hardware either -- notes/35 measured a suite getting SLOWER
+        #: under it -- so the number that helps is "enough to overlap
+        #: two waits", not "as many as the batch happens to contain".
+        self.max_parallel = max_parallel
         self.spawned = 0
+        # The spawn budget is CHECKED AND THEN INCREMENTED, which is two
+        # operations and therefore a race: the sync loop runs a batch on
+        # a thread pool, so two children can both read "4 of 5 used" and
+        # both proceed. A lock, not a counter trick, because the check
+        # and the increment have to be one thing.
+        self._budget_lock = threading.Lock()
+        # One slot counter per call path. They are separate objects
+        # rather than one because a thread cannot wait on an asyncio
+        # semaphore and an event loop must not block on a threading one;
+        # a session drives one path or the other (the child's KIND is
+        # keyed to the caller, see _build), so the two never both apply.
+        self._slots = threading.Semaphore(max_parallel)
+        self._aslots = asyncio.Semaphore(max_parallel)
         self.results: list[SubagentResult] = []  # observability / evals
         # optional live view of child internals: called as
         # on_child_event(spawn_number, StreamEvent). Deliberately NOT part
@@ -258,13 +298,14 @@ class SubagentSpawner:
         still consumed a model call, and a budget that only counted
         successes would be a budget a failing loop could ignore.
         """
-        if self.spawned >= self.max_per_session:
-            raise ToolError(
-                f"sub-agent budget exhausted ({self.spawned}/"
-                f"{self.max_per_session} used this session); do the work "
-                "inline or ask the user to raise the budget"
-            )
-        self.spawned += 1
+        with self._budget_lock:
+            if self.spawned >= self.max_per_session:
+                raise ToolError(
+                    f"sub-agent budget exhausted ({self.spawned}/"
+                    f"{self.max_per_session} used this session); do the work "
+                    "inline or ask the user to raise the budget"
+                )
+            self.spawned += 1
 
     def _child_registry(self, allowed: list[str]) -> ToolRegistry:
         """The child's WHOLE tool set -- scope restriction as a fact about
@@ -433,22 +474,27 @@ class SubagentSpawner:
     # ---- running one child, and what its failures mean ----------------------
 
     def _run(self, child, objective: str) -> SubagentResult:
-        try:
-            child.run(objective)
-        except ProviderError as exc:
-            return self._record(self._provider_failed(child, exc))
-        except RuntimeError as exc:
-            return self._record(self._capped(child, exc))
-        return self._record(self._finished(child))
+        # The slot is held around the RUN, not around validation or the
+        # budget: what is being limited is conversations in flight, and a
+        # child that was refused a spawn never became one.
+        with self._slots:
+            try:
+                child.run(objective)
+            except ProviderError as exc:
+                return self._record(self._provider_failed(child, exc))
+            except RuntimeError as exc:
+                return self._record(self._capped(child, exc))
+            return self._record(self._finished(child))
 
     async def _arun(self, child, objective: str) -> SubagentResult:
-        try:
-            await child.run(objective)
-        except ProviderError as exc:
-            return self._record(self._provider_failed(child, exc))
-        except RuntimeError as exc:
-            return self._record(self._capped(child, exc))
-        return self._record(self._finished(child))
+        async with self._aslots:
+            try:
+                await child.run(objective)
+            except ProviderError as exc:
+                return self._record(self._provider_failed(child, exc))
+            except RuntimeError as exc:
+                return self._record(self._capped(child, exc))
+            return self._record(self._finished(child))
 
     @staticmethod
     def _provider_failed(child, exc: Exception) -> SubagentResult:
@@ -458,6 +504,7 @@ class SubagentSpawner:
             "", 0, 0, child.total_usage.input_tokens,
             child.total_usage.output_tokens,
             error=f"provider error inside sub-agent: {exc}",
+            code=CHILD_PROVIDER_ERROR,
         )
 
     def _capped(self, child, exc: Exception) -> SubagentResult:
@@ -475,6 +522,7 @@ class SubagentSpawner:
             child.total_usage.input_tokens,
             child.total_usage.output_tokens,
             error=f"sub-agent hit its iteration cap: {exc}",
+            code=CHILD_ITERATION_CAP,
         )
 
     def _finished(self, child) -> SubagentResult:

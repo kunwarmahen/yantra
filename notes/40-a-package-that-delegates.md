@@ -382,16 +382,18 @@ nobody can read and nobody can review, which is the opposite of what
   missing was any way to assert the FLOOR each child was given. Widening
   `fact_checker` to include `web_fetch` now turns the example package's
   gate red, in under a second, with no API key.
-* **Nothing bounds concurrent children.** Two delegations in one batch
-  really do run at once — the sync loop's thread pool, the async loop's
-  gather — and the ceiling on that is `max_parallel_tools`, which was
-  sized for file reads rather than for whole agents. Eight children in
-  flight is eight conversations sharing one spawn budget and one dollar
-  meter, and neither of those was designed with a race in mind.
-* **A child's failure is a string.** `[INCOMPLETE -- sub-agent hit its
-  iteration cap]` reaches the parent as prose, exactly as in note 08. A
-  refusal code beside it ([note 39](39-a-clock-and-a-word.md)) would fit
-  the shape, and nothing has needed to branch on one.
+* ~~**Nothing bounds concurrent children.**~~ Shipped in
+  [note 55](55-two-at-a-time.md): children have their own ceiling,
+  defaulting to TWO rather than to the eight a tool batch allows. The
+  bullet's last clause turned out to be literal — the spawn budget was a
+  check followed by an increment, which is a race the moment a batch runs
+  on a thread pool, and it is a lock now.
+* ~~**A child's failure is a string.**~~ Shipped in
+  [note 55](55-two-at-a-time.md) as `SubagentResult.code` —
+  `provider_error` and `iteration_cap`, which want opposite handling
+  (retry the first, never the second). The prose stays what the parent
+  MODEL reads, and stays improvable, which is precisely why a caller
+  cannot be left matching on it.
 * **No way to see the child's transcript after the fact.** The stream tee
   shows it live if a UI wires one up; once the turn is over, the child's
   history is gone. A service that wants to explain a verdict a week later

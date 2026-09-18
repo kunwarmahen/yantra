@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1532 tests. The
+The harness underneath is complete and covered by 1543 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1325,7 +1325,13 @@ src/yantra/
 │                   ([notes/08](notes/08-sub-agents.md),
 │                   [notes/34](notes/34-budgets.md),
 │                   [notes/40](notes/40-a-package-that-delegates.md),
-│                   [notes/44](notes/44-a-ceiling-and-a-floor.md))
+│                   [notes/44](notes/44-a-ceiling-and-a-floor.md)). At most
+│                   TWO children run at once (a child is a conversation,
+│                   not a file read; the spawn budget is a lock, because a
+│                   check plus an increment on a thread pool is a race),
+│                   and a child's failure carries a CODE beside the prose:
+│                   provider_error retries, iteration_cap must not
+│                   ([notes/55](notes/55-two-at-a-time.md))
 ├── permissions.py  PermissionRequest + gates: allow_read_only / yolo /
 │                   deny_all / trust_sandbox (auto-approves bash ONLY while
 │                   confined); SwitchableGate flips ask ⇄ yolo mid-session;
@@ -1691,7 +1697,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1532 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1543 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1722,7 +1728,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1532 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1543 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
