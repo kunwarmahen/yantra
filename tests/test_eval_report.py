@@ -31,6 +31,7 @@ from yantra.eval_report import (
     CaseRecord,
     SuiteRun,
     compare,
+    line_up,
     read_report,
     record_run,
     write_report,
@@ -199,6 +200,45 @@ class TestWhatMoved:
         assert cmp.tokens_moved == -600
 
 
+# ---- three or more ----------------------------------------------------------
+
+
+class TestLiningRunsUp:
+    """A table, not a stack of differences.
+
+    Same bias as the pair: nothing may be intersected away, and a run that
+    did not grade a case must leave a visible hole rather than a silent
+    one.
+    """
+
+    def test_the_last_run_sets_the_row_order(self):
+        table = line_up([run(case("b"), case("a")), run(case("a"), case("b"))])
+        assert table.ids == ["a", "b"]
+
+    def test_a_case_only_an_earlier_run_had_is_kept(self):
+        table = line_up([run(case("a"), case("dropped")), run(case("a"))])
+        assert table.ids == ["a", "dropped"]
+        assert table.cell("dropped", 1) is None
+        assert table.comparable is False
+
+    def test_runs_that_graded_the_same_cases_are_comparable(self):
+        assert line_up([run(case("a")), run(case("a")),
+                        run(case("a"))]).comparable is True
+
+    def test_every_run_keeps_its_own_model(self):
+        table = line_up([run(case("a"), model="qwen3.8:27b"),
+                         run(case("a"), model="gemma4:12b"),
+                         run(case("a"), model="qwen3.8:latest")])
+        assert table.models == ["ollama/qwen3.8:27b", "ollama/gemma4:12b",
+                                "ollama/qwen3.8:latest"]
+
+    def test_a_row_reads_across_in_column_order(self):
+        table = line_up([run(case("a")), run(case("a", passed=False)),
+                         run(case("a"))])
+        (_, row), = table.rows
+        assert [c.passed for c in row] == [True, False, True]
+
+
 # ---- through the CLI --------------------------------------------------------
 
 
@@ -285,6 +325,77 @@ class TestThroughTheGate:
         self._run(monkeypatch, ["--agent", str(root), "--eval",
                                 "--against", str(first)])
         assert "no case changed" in capsys.readouterr().out
+
+    def test_three_reports_line_up_as_a_table(self, tmp_path, monkeypatch,
+                                              capsys):
+        """Two runs are a difference; three are a table, and rendering a
+        table as two differences makes the reader do the join."""
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n')
+        a, b = tmp_path / "qwen.json", tmp_path / "gemma.json"
+        write_report(a, run(case("x"), model="qwen3.8:27b"))
+        write_report(b, run(case("x", passed=False), model="gemma4:12b"))
+        self._run(monkeypatch, ["--agent", str(root), "--eval", "--against",
+                                str(a), "--against", str(b)])
+        out = capsys.readouterr().out
+        assert "across 3 runs" in out
+        assert "qwen" in out and "gemma" in out and "this run" in out
+        assert "→" not in out                 # not a pair rendering
+
+    def test_a_pair_is_still_a_difference(self, tmp_path, monkeypatch,
+                                          capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n')
+        a = tmp_path / "qwen.json"
+        write_report(a, run(case("x", passed=False)))
+        self._run(monkeypatch, ["--agent", str(root), "--eval", "--against",
+                                str(a)])
+        out = capsys.readouterr().out
+        assert "across" not in out and "fixed" in out
+
+    def test_a_table_says_which_run_did_not_grade_a_case(self, tmp_path,
+                                                         monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n')
+        a, b = tmp_path / "a.json", tmp_path / "b.json"
+        write_report(a, run(case("x"), case("gone-since")))
+        write_report(b, run(case("x")))
+        self._run(monkeypatch, ["--agent", str(root), "--eval", "--against",
+                                str(a), "--against", str(b)])
+        out = capsys.readouterr().out
+        assert "not every run graded every case" in out
+        assert "gone-since" in out and "--" in out
+
+    def test_a_table_changes_no_verdict(self, tmp_path, monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n'
+                                'required_tools = ["read_file"]\n')
+        a, b = tmp_path / "a.json", tmp_path / "b.json"
+        write_report(a, run(case("x")))
+        write_report(b, run(case("x")))
+        rc = self._run(monkeypatch, ["--agent", str(root), "--eval",
+                                     "--against", str(a), "--against", str(b)])
+        assert rc == 1                       # this run's own verdict, alone
+
+    def test_an_unreadable_report_among_several_is_still_an_error(
+            self, tmp_path, monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n')
+        a, b = tmp_path / "a.json", tmp_path / "b.json"
+        write_report(a, run(case("x")))
+        b.write_text("{not json")
+        rc = self._run(monkeypatch, ["--agent", str(root), "--eval",
+                                     "--against", str(a), "--against", str(b)],
+                       script=[])
+        assert rc == 2
+        assert self.provider.requests == []
+
+    def test_bare_failed_refuses_to_guess_among_several_reports(
+            self, tmp_path, monkeypatch, capsys):
+        root = _suite(tmp_path, '[[case]]\nid = "x"\nuser_message = "hi"\n')
+        a, b = tmp_path / "a.json", tmp_path / "b.json"
+        write_report(a, run(case("x", passed=False)))
+        write_report(b, run(case("x", passed=False)))
+        rc = self._run(monkeypatch, ["--agent", str(root), "--eval",
+                                     "--failed", "--against", str(a),
+                                     "--against", str(b)], script=[])
+        assert rc == 2
+        assert "are 2 of them" in capsys.readouterr().err
 
     def test_a_case_deleted_between_runs_shows_up_as_gone(self, tmp_path,
                                                           monkeypatch,

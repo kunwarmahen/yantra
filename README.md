@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1446 tests. The
+The harness underneath is complete and covered by 1457 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -967,6 +967,29 @@ rather than being intersected away, and comparing two different models is
 the point rather than an error. See
 [notes/42](notes/42-two-runs-of-the-same-suite.md).
 
+**Three models side by side is a table, not three comparisons.**
+`--against` is repeatable, and two or more reports line up as columns
+with this run last:
+
+```
+across 4 runs researcher 0.1.0
+  qwen: ollama/qwen3.8:27b · 6/6 passed · 42141 tok
+  gemma: ollama/gemma4:12b · 6/6 passed · 33762 tok
+  red: ollama/qwen3.8:27b · 4/6 passed · 47236 tok
+  this run: ollama/qwen3.8:latest · 6/6 passed · 28626 tok
+  case                                   qwen  gemma  red  this run
+  outlines-before-reading                   ✓      ✓    ✓         ✓
+  delegation-works-end-to-end               ✓      ✓    ✗         ✓
+  the-checker-is-actually-on-the-roster     ✓      ✓    ✗         ✓
+```
+
+Columns are labelled with the file names you typed (two runs of one model
+against different builds is a comparison somebody wants, and two columns
+reading `ollama/qwen3.8:27b` would be unreadable); a case a run did not
+grade is `--` rather than a dropped row; every file is read before a
+token is spent; and the verdict is still this run's alone. See
+[notes/49](notes/49-three-runs-side-by-side.md).
+
 **And a report can choose the next run, not only judge it.** `--failed
 FILE` runs the cases that were red in a report written earlier; with no
 `FILE`, the one `--against` names:
@@ -1354,7 +1377,10 @@ src/yantra/
 │                   set of CASES is the warning
 │                   ([notes/42](notes/42-two-runs-of-the-same-suite.md),
 │                   [notes/46](notes/46-the-cases-that-were-red.md) reads
-│                   one back as the SELECTION for the next run: --failed)
+│                   one back as the SELECTION for the next run: --failed).
+│                   line_up puts three or more runs in one TABLE -- a pair
+│                   is a difference, three is a different question
+│                   ([notes/49](notes/49-three-runs-side-by-side.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -1561,7 +1587,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 1446 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 1457 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
@@ -1592,7 +1618,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 1446 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 1457 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

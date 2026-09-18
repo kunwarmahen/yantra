@@ -256,9 +256,12 @@ twice.
 * **Nothing reads a report except a human.** There is no
   `yantra --eval-report-summary`, no HTML, no chart. The file is JSON so
   that whatever somebody wants can be written in ten lines elsewhere.
-* **No way to compare more than two runs.** Three models side by side is
-  the obvious next ask, and it is a table rather than a pair, which is a
-  different rendering problem than this one.
+* ~~**No way to compare more than two runs.**~~ Shipped in
+  [note 49](49-three-runs-side-by-side.md): `--against` is repeatable,
+  and two or more reports line up as a table — one column per run, the
+  current run last. The bullet's own framing turned out to be the design:
+  two runs are a DIFFERENCE and three are a TABLE, so a pair keeps
+  exactly the rendering it had rather than becoming a one-column table.
 * ~~**Cost is measured in tokens, not dollars.**~~ Shipped in
   [note 48](48-what-the-run-cost.md), and the trap this bullet named is
   what shaped it: the figure is priced when the run HAPPENS and stored,

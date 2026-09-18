@@ -360,6 +360,66 @@ class Comparison:
         return self.after.usd - self.before.usd
 
 
+@dataclass(slots=True)
+class Matrix:
+    """Three or more runs of one suite, lined up case by case.
+
+    Two runs are a DIFFERENCE and three are a TABLE -- the same data, and
+    a different question. "Did this get worse?" has a before and an after;
+    "which of these three models should we use?" has no before at all, and
+    rendering it as two differences makes the reader do the join in their
+    head.
+
+    The last run is the one that just happened, and the columns are in the
+    order the operator named them, because that is the order they are
+    holding in mind.
+    """
+
+    runs: list[SuiteRun]
+    ids: list[str]
+
+    def cell(self, case_id: str, column: int) -> CaseRecord | None:
+        """One case in one run, or None when that run did not grade it."""
+        for case in self.runs[column].cases:
+            if case.id == case_id:
+                return case
+        return None
+
+    @property
+    def rows(self) -> list[tuple[str, list[CaseRecord | None]]]:
+        return [(case_id, [self.cell(case_id, i)
+                           for i in range(len(self.runs))])
+                for case_id in self.ids]
+
+    @property
+    def comparable(self) -> bool:
+        """Whether every run graded every case. False is a header line, not
+        a refusal -- the same rule a pair follows."""
+        return all(cell is not None for _, row in self.rows for cell in row)
+
+    @property
+    def models(self) -> list[str]:
+        return [run.where for run in self.runs]
+
+
+def line_up(runs: Sequence[SuiteRun]) -> Matrix:
+    """Several runs -> one table, keeping every case any of them graded.
+
+    Row order is the LAST run's -- the one just watched go past -- with
+    cases only the earlier runs have appended in the order they first
+    appear. Same rule as ``compare``: nothing is intersected away, because
+    a case that one run graded and another did not is the most important
+    thing a comparison can say.
+    """
+    ordered = list(runs)
+    ids: list[str] = [c.id for c in ordered[-1].cases] if ordered else []
+    for run in ordered[:-1]:
+        for case in run.cases:
+            if case.id not in ids:
+                ids.append(case.id)
+    return Matrix(runs=ordered, ids=ids)
+
+
 def compare(before: SuiteRun, after: SuiteRun) -> Comparison:
     """What changed, in the LATER run's order.
 

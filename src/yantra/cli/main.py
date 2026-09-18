@@ -31,7 +31,8 @@ from yantra.config import (
     load_settings,
 )
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
-from yantra.eval_report import compare, read_report, record_run, write_report
+from yantra.eval_report import (Matrix, SuiteRun, compare, line_up,
+                                read_report, record_run, write_report)
 from yantra.eval_suite import CASES, SUITE_DIR, find_suite, load_cases
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
                           OfflineProvider)
@@ -163,11 +164,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --eval: write this run to FILE as JSON "
                              "(green or red -- a red run is the one you will "
                              "want to compare against tomorrow)")
-    parser.add_argument("--against", metavar="FILE", default=None,
+    parser.add_argument("--against", metavar="FILE", action="append",
+                        default=[],
                         help="with --eval: compare this run to a report "
                              "written earlier and print what moved. Changes "
                              "no verdict and no exit code: a run that got "
-                             "worse and is still green is still green")
+                             "worse and is still green is still green. "
+                             "REPEATABLE -- two or more reports line up as a "
+                             "table instead, one column per run, which is "
+                             "how you put three models side by side")
     parser.add_argument("--no-mcp", action="store_true", dest="no_mcp",
                         help="with --eval: do not start the MCP servers the "
                              "package declares. The agent under test is then "
@@ -480,10 +485,10 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     # asked for and cannot have is worth discovering now, not after a
     # suite's worth of real tokens has been spent producing the other half
     # of it -- the same rule graders get (eval_suite.py).
-    baseline = None
-    if args.against is not None:
+    baselines: list[SuiteRun] = []
+    for path in args.against:
         try:
-            baseline = read_report(Path(args.against))
+            baselines.append(read_report(Path(path)))
         except ConfigError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -493,14 +498,17 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     # never has to happen.
     pool, filters = every_case, list(args.case)
     if args.failed is not None:
-        source = args.failed or args.against
+        source = args.failed or (args.against[0] if len(args.against) == 1
+                                 else "")
         if not source:
             print("error: --failed with no FILE means the report --against "
-                  "names, and there is no --against; pass --failed FILE or "
-                  "add --against FILE", file=sys.stderr)
+                  "names, and there "
+                  + ("is no --against" if not args.against else
+                     f"are {len(args.against)} of them")
+                  + "; pass --failed FILE", file=sys.stderr)
             return 2
         try:
-            prior = (baseline if source == args.against and baseline is not None
+            prior = (baselines[0] if source in args.against and baselines
                      else read_report(Path(source)))
         except ConfigError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -730,8 +738,11 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         console.print(f"[dim]report: {escape(args.report)}[/dim]")
-    if baseline is not None:
-        _render_comparison(console, compare(baseline, run))
+    if len(baselines) == 1:
+        _render_comparison(console, compare(baselines[0], run))
+    elif baselines:
+        _render_matrix(console, line_up([*baselines, run]),
+                       [Path(p).stem for p in args.against] + ["this run"])
     # The verdict is THIS run's, and the comparison did not touch it.
     return 0 if green else 1
 
@@ -831,6 +842,55 @@ def _evidence_note(console: Console, outcomes) -> None:
                       f"be as low as {lo:.2f} · claims "
                       f"{outcome.min_pass_rate:g} · --repeat {need} would "
                       f"settle it, all green[/dim]")
+
+
+def _render_matrix(console: Console, table: Matrix, labels: list[str]) -> None:
+    """Three or more runs side by side, one column each.
+
+    Not three comparisons stacked: the question a table answers has no
+    "before" in it ("which of these models should we use?"), and stacking
+    differences makes the reader do the join in their head. The verdict is
+    still untouched -- this prints under a run whose exit code was decided
+    before any of these files were opened (notes/49).
+    """
+    console.print(f"\n[bold]across {len(table.runs)} runs[/bold] "
+                  f"{escape(table.runs[-1].suite)}")
+    for label, run in zip(labels, table.runs, strict=True):
+        cost = f" · ${run.usd:.4f}" if run.usd else ""
+        console.print(f"  [dim]{escape(label)}: {escape(run.where)} · "
+                      f"{run.at} · {run.passed}/{len(run.cases)} passed · "
+                      f"{run.tokens} tok{cost}[/dim]")
+    if not table.comparable:
+        console.print("[yellow]not every run graded every case; a blank cell "
+                      "is a case that run did not have[/yellow]")
+
+    def text_of(cell) -> str:
+        if cell is None:
+            return "--"                      # this run did not grade it
+        mark = "\u2713" if cell.passed else "\u2717"
+        return f"{mark} {cell.tally}" if cell.attempts > 1 else mark
+
+    rows = table.rows
+    width = max([len(i) for i in table.ids] + [4])
+    columns = [max([len(label)] + [len(text_of(row[i])) for _, row in rows])
+               for i, label in enumerate(labels)]
+    header = "  ".join(label.rjust(w) for label, w in zip(labels, columns,
+                                                          strict=True))
+    console.print(f"  [dim]{'case'.ljust(width)}  {escape(header)}[/dim]")
+    for case_id, row in rows:
+        cells = []
+        for cell, w in zip(row, columns, strict=True):
+            body = text_of(cell)
+            # PAD THE PLAIN TEXT, then colour it. Markup inside a rjust
+            # counts the colour codes as characters and shifts every
+            # column after this one.
+            pad = " " * (w - len(body))
+            if cell is None:
+                cells.append(pad + "[dim]--[/dim]")
+            else:
+                colour = "green" if cell.passed else "red"
+                cells.append(f"{pad}[{colour}]{body}[/{colour}]")
+        console.print(f"  {escape(case_id).ljust(width)}  " + "  ".join(cells))
 
 
 def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
