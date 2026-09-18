@@ -90,7 +90,7 @@ surface ([notes/19](notes/19-responses-api.md)).
 ## Usage
 
 ```bash
-uv run yantra --agent ./researcher                   # run an AGENT PACKAGE (see below)
+uv run yantra --agent examples/agents/researcher     # run an AGENT PACKAGE (see below)
 uv run yantra                                        # REPL (provider resolved from .env)
 uv run yantra --provider openai                      # pick a dialect explicitly
 uv run yantra --provider ollama                      # LOCAL models (localhost:11434, no key)
@@ -701,14 +701,20 @@ researcher/
 └── evals/          the cases that say it still works
 ```
 
+`researcher/` above is *your* directory, wherever you make it. A worked
+one already ships in this repo, so these run from the repo root as they
+stand:
+
 ```bash
-uv run yantra --agent ./researcher "what changed in notes/30 recently?"
-uv run yantra --agent ./researcher --provider ollama   # against your own hardware
-cd researcher && uv run yantra                         # ./agent.toml is found
+uv run yantra --agent examples/agents/researcher "what changed in notes/30 recently?"
+uv run yantra --agent examples/agents/researcher --provider ollama   # your own hardware
+cd examples/agents/researcher && uv run yantra                       # ./agent.toml is found
 ```
 
-A worked example ships in
-[examples/agents/researcher](examples/agents/researcher) — a read-only
+`--agent` takes the directory or the `agent.toml` inside it; both work,
+and elsewhere in this file `./researcher` stands in for whichever package
+you are pointing at. That shipped example —
+[examples/agents/researcher](examples/agents/researcher) — is a read-only
 research agent with its own skill and its own tool. The full format and
 the reasoning behind it are [notes/31](notes/31-agent-packages.md).
 

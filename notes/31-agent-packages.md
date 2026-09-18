@@ -37,7 +37,8 @@ That is a complete, runnable agent package. So is an empty `agent.toml` —
 the directory's own name fills in. Everything is optional, which is a
 design decision doing real work; see "Why every field is optional" below.
 
-Run one:
+Run one — `./researcher` is whichever directory you built; the worked
+example in this repo is `examples/agents/researcher`:
 
 ```bash
 yantra --agent ./researcher "what changed in notes/30 recently?"

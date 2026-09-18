@@ -56,8 +56,11 @@ class TestLocating:
         with pytest.raises(ConfigError, match=f"no {MANIFEST}"):
             load_package(tmp_path)
 
-    def test_a_missing_path_is_not_a_package(self, tmp_path):
-        with pytest.raises(ConfigError, match="not an agent package"):
+    def test_a_missing_path_says_it_is_missing(self, tmp_path):
+        """Not 'not an agent package': a reader who mistyped the path, or
+        ran a tutorial line from the wrong directory, should not go
+        looking for a manifest that was never there."""
+        with pytest.raises(ConfigError, match="nothing exists at that path"):
             load_package(tmp_path / "nope")
 
     def test_find_manifest_reports_absence_without_raising(self, tmp_path):

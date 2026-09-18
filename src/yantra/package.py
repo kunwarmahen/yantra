@@ -355,9 +355,16 @@ def load_package(where: Path) -> AgentSpec:
     manifest = find_manifest(where)
     if manifest is None:
         target = Path(where).expanduser()
+        # A path that does not exist and a directory that is not a package
+        # are different mistakes, and the first one is usually a typo or a
+        # command copied from a tutorial into the wrong directory. Saying
+        # "not an agent package" about a path with nothing at it sends the
+        # reader to inspect a manifest that was never there.
         raise ConfigError(
             f"no {MANIFEST} in {target}" if target.is_dir()
-            else f"not an agent package: {target}"
+            else f"no agent package at {target}: nothing exists at that "
+                 f"path (--agent takes a directory holding {MANIFEST}, "
+                 f"or that file itself)"
         )
     root = manifest.parent.resolve()
 

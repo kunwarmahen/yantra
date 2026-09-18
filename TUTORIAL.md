@@ -410,17 +410,21 @@ researcher/
 └── evals/          the cases that say it still works
 ```
 
+`./researcher` above is *your* directory, wherever you make it. A worked
+one already ships in this repo, so the lines below run from the repo root
+as they stand:
+
 ```bash
-uv run yantra --agent ./researcher "what changed in notes/30 recently?"
-uv run yantra --agent ./researcher --provider ollama   # your own hardware
-cd researcher && uv run yantra                         # ./agent.toml is found
+uv run yantra --agent examples/agents/researcher "what changed in notes/30 recently?"
+uv run yantra --agent examples/agents/researcher --provider ollama   # your own hardware
+cd examples/agents/researcher && uv run yantra                       # ./agent.toml is found
 ```
 
-A worked example ships in
-[examples/agents/researcher](examples/agents/researcher) — a read-only
-research agent with its own skill, its own tool, its own declared child
-and its own eval suite. Read it before writing your own; it is commented
-the way a tutorial is.
+`--agent` takes the directory or the `agent.toml` inside it; both work.
+That shipped example — [examples/agents/researcher](examples/agents/researcher) —
+is a read-only research agent with its own skill, its own tool, its own
+declared child and its own eval suite. Read it before writing your own;
+it is commented the way a tutorial is.
 
 **The smallest package that works is two lines:**
 
