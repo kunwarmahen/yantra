@@ -383,7 +383,7 @@ A few deserve a sentence each:
   servers, watchers, long builds — teeing output to `.yantra/jobs/<id>.log`.
   They are plain subprocesses by design (they outlive any sandbox), so
   they always gate.
-* **browser_\*** drive a real headless Chromium. JavaScript runs, so
+* **browser_\*** drive a real browser. JavaScript runs, so
   JS-rendered apps work where `web_fetch` sees an empty shell. Every
   action returns prose plus numbered element refs (`[e1]`, `[e2]`)
   harvested from the live DOM. Logins persist through a profile directory
@@ -391,9 +391,66 @@ A few deserve a sentence each:
 
 ```bash
 uv sync --extra browse && uv run playwright install chromium
-export YANTRA_BROWSER_PROFILE=~/.local/state/yantra/browser-profile
+export YANTRA_BROWSER_PROFILE=~/yantra-browser-profile
 uv run yantra --browse-login https://example.com     # sign in once, by hand
 ```
+
+Out of the box that is Playwright's own bundled Chromium, which some
+sites refuse — its user-agent says `HeadlessChrome` out loud, and
+sign-in pages that check for automation turn it away however visible
+the window is. Point Yantra at a browser you already have and both
+problems go away: the agent drives that browser, and `--browse-login`
+runs it as a plain subprocess with no automation attached, which is
+what those sign-in pages are testing for. Use the same value for both —
+a profile belongs to the browser that wrote it.
+
+```bash
+export YANTRA_BROWSER_EXECUTABLE=chrome        # a channel Playwright knows
+# ...or a path, when the channel name does not find it:
+#   /usr/bin/google-chrome     Chrome from the .deb/.rpm
+#   /snap/bin/brave            Brave from the snap
+#   /usr/bin/chromium          Chromium from your distro
+# A bare command works too — it is looked up on $PATH.
+export YANTRA_BROWSER_HEADED=1                 # a real window, on an Xvfb
+uv run yantra --browse-login https://mail.google.com
+```
+
+`YANTRA_BROWSER_HEADED=1` is worth setting on a stubborn site: headless
+is a different Chromium build with its own fingerprints, and when no
+display is attached Yantra starts an Xvfb — a real X server with no
+monitor — so the window exists without anyone seeing it. If your
+browser is a **snap**, keep the profile path out of hidden (dot)
+directories: snap confinement cannot write into them and saves nothing
+rather than complaining. None of this is stealth; a captcha still
+refuses you ([notes/58](notes/58-the-browser-you-already-have.md)).
+
+One thing that will bite you if nobody warns you: `export` in your
+shell **beats** `.env`. If you once pasted an `export
+YANTRA_BROWSER_PROFILE=...` line, it outranks the file you are editing
+and nothing you change there takes effect. Yantra says so when the two
+disagree, but a new terminal is the quicker cure.
+
+### Did the login actually stick?
+
+Ask the agent to go look. No special command — the browser tools are
+just tools, so a prompt is the test:
+
+```bash
+uv run yantra --prompt "open https://mail.google.com, re-read the page, \
+  then tell me whether it shows an inbox or a sign-in screen"
+```
+
+Signed in, the agent reads back your inbox; signed out, it reads back
+a login form, and nothing about the answer is ambiguous.
+
+The **re-read** in that prompt is not padding. `browser_open` returns
+the page a beat after it loads, which is right for ordinary pages and
+too early for a heavy JavaScript app like Gmail — the first snapshot
+can come back before the app has drawn anything. Calling `browser_open`
+again with **no url** re-reads the page already open, without
+navigating, and that second look has the content. Worth putting in any
+prompt that drives a big web app; the model can work it out alone, but
+telling it saves an iteration.
 
 Past about twenty tools, model selection accuracy hits a cliff, so only
 the top-K best-matching tools are **sent** each turn (BM25 over name and

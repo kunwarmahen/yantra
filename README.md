@@ -61,7 +61,13 @@ uv add "yantra @ git+https://github.com/kunwarmahen/yantra@v0.1.0"
 ```
 
 `.env` is loaded automatically (a ~15-line loader in `config.py` — no
-python-dotenv dependency); real environment variables still win.
+python-dotenv dependency); real environment variables still win. When
+one does win over a line in your `.env`, the loader remembers, so an
+error about that value can say it came from the shell rather than from
+the file you are editing. When
+one does win over a line in your `.env`, the loader remembers, so an
+error about that value can say it came from the shell rather than from
+the file you are editing.
 
 `.env` variables per provider (`PREFIX` = `ANTHROPIC`, `OPENAI`,
 `RESPONSES`, or `OLLAMA`):
@@ -505,7 +511,7 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   image rides history right after the tool result on all three wire
   dialects ([notes/27](notes/27-read-image.md)).
 - **browser_open / browser_click / browser_fill / browser_close**
-  drive a real headless Chromium (`[browse]` optional extra:
+  drive a real browser (`[browse]` optional extra:
   `uv sync --extra browse && uv run playwright install chromium`).
   JavaScript runs, so JS-rendered apps work where web_fetch sees an
   empty shell; every action returns readable prose plus numbered
@@ -514,11 +520,32 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   rule as web_fetch — all four gate. Installing the extra IS the
   opt-in: the four register only when playwright is present
   ([notes/28](notes/28-browser-tools.md)). Logins persist too: set
-  `YANTRA_BROWSER_PROFILE=~/.local/state/yantra/browser-profile`
+  `YANTRA_BROWSER_PROFILE=~/yantra-browser-profile`
   and run `uv run yantra --browse-login <url>` once — a visible
   window opens, you sign in yourself (2FA included), close it — and
   every later session starts signed-in. Cookies never enter model
   context: the profile holds them on disk, outside the conversation.
+  To confirm a login stuck, just ask: `uv run yantra --prompt "open
+  https://mail.google.com, re-read the page, then tell me whether it
+  shows an inbox or a sign-in screen"`. The **re-read** matters — the
+  first snapshot of a heavy JavaScript app can arrive before the app
+  has drawn, and `browser_open` with no url takes a second look
+  without navigating ([notes/28](notes/28-browser-tools.md)).
+- **The browser can be one you already have.**
+  `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
+  — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
+  or a bare command found on `$PATH` — drives that browser instead of
+  the bundled Chromium, and makes `--browse-login` run it as a PLAIN
+  SUBPROCESS — no driver attached, which is what sign-in pages
+  checking for robots are actually testing for; a visible Playwright
+  window is still an automated one, and Google refuses it.
+  `YANTRA_BROWSER_HEADED=1` adds a real window, on an Xvfb Yantra
+  starts and kills when no display is attached, so it exists without
+  being seen. The `--enable-automation` flag and the
+  `AutomationControlled` Blink feature are dropped on every launch
+  with no knob at all. None of it is stealth — a bot check that
+  refuses you still refuses you, and the snapshot shows the check
+  ([notes/58](notes/58-the-browser-you-already-have.md)).
 
 REPL commands: `/help /model /provider /tools /history /usage /save /load
 /compact /clear /image /build /quit` (`//text` sends a literal leading slash; a
@@ -1311,8 +1338,11 @@ src/yantra/
 ├── errors.py       ProviderError family (terminal for the turn) vs ToolError
 │                   family (become data the model reads) vs UserUnavailable
 │                   (control-flow BaseException: nobody home to ask)
-├── config.py       env vars -> ProviderSettings (+ .env auto-load); resolves
-│                   which provider a flagless run uses — YANTRA_PROVIDER, then a
+├── config.py       env vars -> ProviderSettings (+ .env auto-load, which fills
+│                   gaps only and remembers which keys a real environment
+│                   variable outranked, so an error can name the shell);
+│                   resolves which provider a flagless run uses —
+│                   YANTRA_PROVIDER, then a
 │                   key, then an OLLAMA_* line, never a network probe
 │                   ([notes/45](notes/45-the-road-with-no-key.md)).
 │                   canonical_provider() resolves "local" -> "ollama" at
@@ -1582,13 +1612,19 @@ src/yantra/
 │   ├── read_image.py the agent looking at a picture BY ITSELF: returns a
 │   │               ToolOutput; the loop hoists images onto history after the
 │   │               result ([notes/27](notes/27-read-image.md))
-│   ├── browser.py  browser_open/click/fill/close — a real headless Chromium
-│   │               behind the [browse] extra: JS-rendered pages come back as
-│   │               text + numbered element refs; registers only when playwright
+│   ├── browser.py  browser_open/click/fill/close — a real browser behind the
+│   │               [browse] extra: JS-rendered pages come back as text +
+│   │               numbered element refs; registers only when playwright
 │   │               imports, so the tool count never moves uninvited; optional
 │   │               $YANTRA_BROWSER_PROFILE keeps logins between sessions
 │   │               (--browse-login = headed one-time setup) — cookies stay on
-│   │               disk, never in model context ([notes/28](notes/28-browser-tools.md))
+│   │               disk, never in model context ([notes/28](notes/28-browser-tools.md)).
+│   │               $YANTRA_BROWSER_EXECUTABLE picks a browser you already have
+│   │               (channel or path) and turns --browse-login into a plain
+│   │               un-driven subprocess of it; $YANTRA_BROWSER_HEADED runs with
+│   │               a window, on a self-started Xvfb when no display is
+│   │               attached; the automation flags are dropped either way
+│   │               ([notes/58](notes/58-the-browser-you-already-have.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,

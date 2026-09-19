@@ -4,6 +4,15 @@ The suite stays offline-green WITHOUT playwright installed: tests
 inject a FakePage implementing the sliver of the page API the session
 touches, so run() exercises the real snapshot/ref/selector logic. The
 launch paths are pinned by stubbing the playwright import itself.
+
+The browser-choice tests encode one bias above all: A LOGIN THAT SAVES
+NOTHING MUST NOT LOOK LIKE A LOGIN THAT WORKED. Both ways of getting
+there are silent in real life -- a snap-confined browser refused a
+hidden profile directory and exits 0, and a browser already running
+hands its window to the running copy and exits 0 -- so each has a test
+demanding a loud refusal. The rest pin that the automation flags are
+always dropped, that a channel and a path reach Playwright by their
+own doors, and that headed mode never leaves an Xvfb behind.
 """
 
 from __future__ import annotations
@@ -16,14 +25,30 @@ from pathlib import Path
 import pytest
 
 import yantra.cli.main as cli_main
-from yantra.errors import ToolError
+from yantra.errors import ConfigError, ToolError
 from yantra.tools import BrowserClick, BrowserClose, BrowserFill, \
     BrowserOpen, default_registry
 from yantra.tools.base import ToolContext
 from yantra.tools.browser import MAX_ELEMENTS, BrowserSession, \
-    run_login_session
+    _VirtualDisplay, run_login_session
 
 URL = "https://fake.local/"
+
+
+@pytest.fixture(autouse=True)
+def _no_inherited_browser_env(monkeypatch):
+    """The suite must say what browser it means -- never the dev's .env."""
+    monkeypatch.delenv("YANTRA_BROWSER_EXECUTABLE", raising=False)
+    monkeypatch.delenv("YANTRA_BROWSER_HEADED", raising=False)
+
+
+#: What every launch carries now: headless unless asked otherwise, and
+#: the two flags that used to announce a driver, gone.
+BASE_OPTIONS = {
+    "headless": True,
+    "args": ["--disable-blink-features=AutomationControlled"],
+    "ignore_default_args": ["--enable-automation"],
+}
 
 
 @pytest.fixture
@@ -288,6 +313,17 @@ class FakeContext:
         self.closed = True
 
 
+class FakeProc:
+    """A browser subprocess that opens, is closed by the human, exits."""
+
+    def __init__(self) -> None:
+        self.waited = False
+
+    def wait(self) -> int:
+        self.waited = True
+        return 0
+
+
 class FakeChromium:
     """Records WHICH launch door was used -- launch() vs
     launch_persistent_context() is the whole ephemeral/persistent
@@ -340,7 +376,7 @@ class TestPersistentProfile:
         install_fake_playwright(monkeypatch, chromium)
         session = BrowserSession(profile=None)
         session.open(URL)
-        assert chromium.launch_calls == [{"headless": True}]
+        assert chromium.launch_calls == [BASE_OPTIONS]
         assert chromium.persistent_calls == []
 
     def test_profile_launches_a_persistent_context_on_the_dir(
@@ -349,7 +385,8 @@ class TestPersistentProfile:
         install_fake_playwright(monkeypatch, chromium)
         out = BrowserSession(profile=tmp_path).open(URL)
         (kwargs,) = chromium.persistent_calls
-        assert kwargs == {"user_data_dir": str(tmp_path), "headless": True}
+        assert kwargs == {"user_data_dir": str(tmp_path),
+                          **BASE_OPTIONS}
         assert chromium.launch_calls == []
         assert "hello world" in out  # traffic flows through the context page
 
@@ -416,7 +453,8 @@ class TestLoginSession:
         started = install_fake_playwright(monkeypatch, chromium)
         run_login_session(tmp_path, URL)
         (kwargs,) = chromium.persistent_calls
-        assert kwargs == {"user_data_dir": str(tmp_path), "headless": False}
+        assert kwargs == {"user_data_dir": str(tmp_path),
+                          **BASE_OPTIONS, "headless": False}
         assert context.pages[0].gotos == [URL]
         assert context.waited_for == "close"  # the window IS the progress bar
         assert started and started[0].stopped
@@ -435,6 +473,229 @@ class TestLoginSession:
                            match="could not open the login window"):
             run_login_session(tmp_path)
         assert started and started[0].stopped
+
+
+class TestChosenBrowser:
+    """$YANTRA_BROWSER_EXECUTABLE: a channel goes in by name, a path by
+    path, and neither launch ever re-adds the automation flags."""
+
+    def test_a_channel_name_reaches_playwright_as_a_channel(
+            self, monkeypatch):
+        chromium = FakeChromium(browser=types.SimpleNamespace(
+            new_page=FakePage))
+        install_fake_playwright(monkeypatch, chromium)
+        BrowserSession(profile=None, executable="chrome").open(URL)
+        assert chromium.launch_calls == [{**BASE_OPTIONS,
+                                          "channel": "chrome"}]
+
+    def test_a_path_reaches_playwright_as_an_executable_path(
+            self, monkeypatch, tmp_path):
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        BrowserSession(profile=tmp_path,
+                       executable="/opt/brave/brave").open(URL)
+        (kwargs,) = chromium.persistent_calls
+        assert kwargs["executable_path"] == "/opt/brave/brave"
+        assert "channel" not in kwargs
+
+    def test_the_env_var_resolves_a_bare_command_on_path(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_BROWSER_EXECUTABLE", "my-browser")
+        monkeypatch.setattr("yantra.config.shutil.which",
+                            lambda name: "/usr/local/bin/my-browser")
+        assert BrowserSession()._executable == "/usr/local/bin/my-browser"
+
+    def test_a_browser_that_is_not_installed_is_a_config_error(
+            self, monkeypatch):
+        monkeypatch.setenv("YANTRA_BROWSER_EXECUTABLE", "not-a-browser")
+        monkeypatch.setattr("yantra.config.shutil.which", lambda name: None)
+        with pytest.raises(ConfigError, match="YANTRA_BROWSER_EXECUTABLE"):
+            BrowserSession()
+
+    def test_launch_failure_names_the_browser_that_failed(self, monkeypatch):
+        class Exploding(FakeChromium):
+            def launch(self, **kwargs):
+                raise RuntimeError("no such file")
+
+        install_fake_playwright(monkeypatch, Exploding())
+        session = BrowserSession(profile=None, executable="/opt/nope")
+        with pytest.raises(ToolError, match="/opt/nope"):
+            session.open(URL)
+
+
+class TestHeadedMode:
+    """$YANTRA_BROWSER_HEADED: a real window, on an invisible screen when
+    there is no real one -- and never an Xvfb left running after close."""
+
+    def test_headed_without_a_display_starts_and_stops_an_xvfb(
+            self, monkeypatch, tmp_path):
+        monkeypatch.delenv("DISPLAY", raising=False)
+        monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+        started, stopped = [], []
+
+        class FakeDisplay:
+            def start(self):
+                started.append(self)
+                return ":91"
+
+            def stop(self):
+                stopped.append(self)
+
+        monkeypatch.setattr("yantra.tools.browser._VirtualDisplay",
+                            FakeDisplay)
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        session = BrowserSession(profile=tmp_path, headed=True)
+        session.open(URL)
+        (kwargs,) = chromium.persistent_calls
+        assert kwargs["headless"] is False
+        assert kwargs["env"]["DISPLAY"] == ":91"
+        assert len(started) == 1 and not stopped
+        session.close()
+        assert len(stopped) == 1  # the screen dies with the browser
+
+    def test_headed_with_a_display_uses_it_and_starts_no_xvfb(
+            self, monkeypatch, tmp_path):
+        monkeypatch.setenv("DISPLAY", ":0")
+
+        def explode():
+            raise AssertionError("must not start Xvfb with a display up")
+
+        monkeypatch.setattr("yantra.tools.browser._VirtualDisplay", explode)
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        BrowserSession(profile=tmp_path, headed=True).open(URL)
+        (kwargs,) = chromium.persistent_calls
+        assert kwargs["headless"] is False
+        assert "env" not in kwargs  # the session's own DISPLAY is enough
+
+    def test_missing_xvfb_names_the_package_to_install(self, monkeypatch):
+        monkeypatch.delenv("DISPLAY", raising=False)
+        monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+        monkeypatch.setattr("yantra.tools.browser.shutil.which",
+                            lambda name: None)
+        with pytest.raises(ToolError, match="xvfb"):
+            _VirtualDisplay().start()
+
+    def test_the_env_knob_is_a_boolean_and_says_so_when_it_is_not(
+            self, monkeypatch):
+        monkeypatch.setenv("YANTRA_BROWSER_HEADED", "1")
+        assert BrowserSession()._headed is True
+        monkeypatch.setenv("YANTRA_BROWSER_HEADED", "off")
+        assert BrowserSession()._headed is False
+        monkeypatch.setenv("YANTRA_BROWSER_HEADED", "sometimes")
+        with pytest.raises(ConfigError, match="YANTRA_BROWSER_HEADED"):
+            BrowserSession()
+
+
+class TestUnautomatedLogin:
+    """With a real browser named, --browse-login runs it as a PLAIN
+    SUBPROCESS: the automated window is exactly what sign-in pages
+    refuse, so the fix is to bring no automation at all."""
+
+    def test_a_named_browser_is_run_as_a_subprocess_not_by_playwright(
+            self, monkeypatch, tmp_path):
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        calls = []
+        monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
+                            lambda argv: calls.append(argv) or FakeProc())
+        monkeypatch.setattr("yantra.tools.browser._profile_has_state",
+                            lambda profile: True)
+        run_login_session(tmp_path, URL, executable="/usr/bin/brave")
+        (argv,) = calls
+        assert argv[0] == "/usr/bin/brave"
+        assert f"--user-data-dir={tmp_path}" in argv
+        assert argv[-1] == URL
+        assert chromium.persistent_calls == []  # playwright never touched
+
+    def test_a_channel_is_looked_up_on_path_for_the_subprocess(
+            self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("yantra.config.shutil.which",
+                            lambda name: f"/usr/bin/{name}")
+        monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
+                            lambda argv: calls.append(argv) or FakeProc())
+        monkeypatch.setattr("yantra.tools.browser._profile_has_state",
+                            lambda profile: True)
+        run_login_session(tmp_path, None, executable="chrome")
+        assert calls[0][0] == "/usr/bin/google-chrome"
+
+    def test_a_window_that_saved_nothing_is_refused_not_celebrated(
+            self, monkeypatch, tmp_path):
+        monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
+                            lambda argv: FakeProc())
+        # nothing writes the profile -- exactly what snap confinement and
+        # a browser handing off to a running copy both look like
+        with pytest.raises(ToolError, match="ALREADY RUNNING"):
+            run_login_session(tmp_path, URL, executable="/usr/bin/brave")
+
+    def test_no_browser_named_still_opens_playwrights_own_window(
+            self, monkeypatch, tmp_path):
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        run_login_session(tmp_path, URL, executable=None)
+        assert len(chromium.persistent_calls) == 1  # unchanged fallback
+
+
+class TestSnapProfileGuard:
+    """A snap browser cannot write hidden directories and does not say
+    so -- it exits 0 having created nothing. Refuse the pairing."""
+
+    def test_a_snap_browser_refuses_a_hidden_profile_directory(
+            self, tmp_path):
+        hidden = tmp_path / ".local" / "state" / "yantra"
+        with pytest.raises(ToolError, match="snap"):
+            run_login_session(hidden, URL, executable="/snap/bin/brave")
+
+    def test_a_shell_override_is_named_so_editing_env_is_not_futile(
+            self, monkeypatch, tmp_path):
+        monkeypatch.setattr("yantra.tools.browser.shadowed_by_shell",
+                            lambda key: True)
+        hidden = tmp_path / ".local" / "prof"
+        with pytest.raises(ToolError, match="exported in your SHELL"):
+            run_login_session(hidden, URL, executable="/snap/bin/brave")
+
+    def test_without_an_override_the_refusal_does_not_blame_the_shell(
+            self, monkeypatch, tmp_path):
+        monkeypatch.setattr("yantra.tools.browser.shadowed_by_shell",
+                            lambda key: False)
+        hidden = tmp_path / ".local" / "prof"
+        with pytest.raises(ToolError) as caught:
+            run_login_session(hidden, URL, executable="/snap/bin/brave")
+        assert "SHELL" not in str(caught.value)
+
+    def test_the_refusal_offers_a_visible_path(self, tmp_path):
+        hidden = tmp_path / ".config" / "prof"
+        with pytest.raises(ToolError, match="YANTRA_BROWSER_PROFILE"):
+            run_login_session(hidden, URL, executable="/snap/bin/brave")
+
+    def test_a_snap_browser_is_fine_with_a_visible_profile(
+            self, monkeypatch, tmp_path):
+        monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
+                            lambda argv: FakeProc())
+        monkeypatch.setattr("yantra.tools.browser._profile_has_state",
+                            lambda profile: True)
+        run_login_session(tmp_path / "visible", URL,
+                          executable="/snap/bin/brave")  # no raise
+
+    def test_a_non_snap_browser_may_use_a_hidden_profile(
+            self, monkeypatch, tmp_path):
+        monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
+                            lambda argv: FakeProc())
+        monkeypatch.setattr("yantra.tools.browser._profile_has_state",
+                            lambda profile: True)
+        run_login_session(tmp_path / ".local" / "prof", URL,
+                          executable="/usr/bin/google-chrome")  # no raise
+
+    def test_the_session_refuses_the_same_pairing_before_launching(
+            self, monkeypatch, tmp_path):
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        session = BrowserSession(profile=tmp_path / ".hidden" / "p",
+                                 executable="/snap/bin/brave")
+        with pytest.raises(ToolError, match="snap"):
+            session.open(URL)
+        assert chromium.persistent_calls == []  # refused BEFORE the cost
 
 
 class TestBrowseLoginFlag:

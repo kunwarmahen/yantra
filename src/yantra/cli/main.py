@@ -22,6 +22,8 @@ from yantra.confidence import describe, perfect_runs_needed
 from yantra.config import (
     _load_dotenv,
     canonical_provider,
+    browser_executable,
+    browser_login_command,
     browser_profile,
     default_env_context,
     default_model,
@@ -189,10 +191,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--browse-login", metavar="URL", dest="browse_login",
                         default=None,
                         help="one-time LOGIN SETUP for the browser_* tools: "
-                             "opens a VISIBLE Chromium on the "
+                             "opens a VISIBLE browser on the "
                              "$YANTRA_BROWSER_PROFILE directory (set it in "
                              ".env first), you log in yourself -- 2FA and "
                              "captchas included -- then close the window. "
+                             "Set $YANTRA_BROWSER_EXECUTABLE to a browser you "
+                             "already have and the window carries no "
+                             "automation, which is what sign-in pages that "
+                             "refuse robots are checking for. "
                              "Every later headless session on that profile "
                              "starts logged-in. No model, no API key needed")
     parser.add_argument("--mcp-login", metavar="NAME", dest="mcp_login",
@@ -1019,19 +1025,43 @@ def _browse_login(url: str, console: Console) -> int:
     wall by hand once; the profile keeps the session for every later
     headless run ([notes/28](../notes/28-browser-tools.md)).
     """
-    from yantra.tools.browser import run_login_session  # lazy: [browse] extra
+    from yantra.tools.browser import (  # lazy: [browse] extra
+        check_profile_reachable, run_login_session)
 
     profile = browser_profile()
     if profile is None:
         print("error: --browse-login needs somewhere to KEEP the login: put\n"
-              "  YANTRA_BROWSER_PROFILE=~/.local/state/yantra/browser-profile"
+              "  YANTRA_BROWSER_PROFILE=~/yantra-browser-profile"
               "\nin .env first (see .env.example)", file=sys.stderr)
         return 2
+    executable = browser_executable()
+    command = browser_login_command(executable)
+    try:
+        check_profile_reachable(profile, executable)  # before promising
+    except ToolError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     console.print(f"[bold]login setup[/bold] · profile {profile}\n"
-                  f"a visible Chromium is opening{f' at {url}' if url else ''} "
-                  "-- log in yourself (2FA and\ncaptchas are yours to beat), "
-                  "then CLOSE THE WINDOW. Everything you leave\nsigned-in "
-                  "here, the agent finds signed-in later.")
+                  f"{escape(command or 'a visible Chromium')} is opening"
+                  f"{f' at {url}' if url else ''} -- log in yourself (2FA "
+                  "and\ncaptchas are yours to beat), then CLOSE THE WINDOW. "
+                  "Everything you leave\nsigned-in here, the agent finds "
+                  "signed-in later.")
+    if command is None:
+        # The window about to open is Playwright's, and Playwright's
+        # window is an AUTOMATED one -- which is the exact thing the
+        # large identity providers refuse, headed or not. Say so before
+        # the refusal, not after: from inside the browser it reads as a
+        # problem with the password.
+        console.print(
+            "[yellow]note[/yellow] this is Playwright's own Chromium, and "
+            "sign-in pages that\ncheck for automation (Google among them) "
+            "will refuse it. To log into\nthose, name a browser you already "
+            "have -- it then opens with no\nautomation attached at all:\n"
+            "  YANTRA_BROWSER_EXECUTABLE=chrome     (or a path, e.g. "
+            "/snap/bin/brave)\n"
+            "Use the SAME value for agent runs: a profile belongs to the "
+            "browser\nthat wrote it.")
     try:
         run_login_session(profile, url)
     except KeyboardInterrupt:

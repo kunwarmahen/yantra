@@ -16,6 +16,7 @@ Base-URL contract (matches the official SDKs so env files stay portable):
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 from yantra.errors import ConfigError
@@ -54,6 +55,8 @@ _DEFAULT_CONTEXT_WINDOWS: dict[str, int] = {
 }
 
 _dotenv_loaded = False
+#: .env keys a real environment variable outranked (see shadowed_by_shell)
+_shadowed: set[str] = set()
 
 
 def _load_dotenv() -> None:
@@ -91,8 +94,26 @@ def _load_dotenv() -> None:
         # a blank VALUE is template residue (``OLLAMA_API_KEY=   `` left
         # over from copying .env.example); importing it would shadow the
         # code's own fallbacks with ""
-        if key and value and key not in os.environ:
+        if key and value:
+            if key in os.environ:
+                # The shell wins, quietly -- and quiet is the problem: a
+                # stale `export` from an old tutorial line outranks the
+                # .env the user is LOOKING AT while debugging. Remember
+                # which keys lost so an error can say whose value it is.
+                if os.environ[key] != value:
+                    _shadowed.add(key)
+                continue
             os.environ[key] = value
+
+
+def shadowed_by_shell(key: str) -> bool:
+    """True when .env set this key to something the environment overrode.
+
+    For error messages only: the value in force did NOT come from the
+    file the user is editing, and saying so is the difference between a
+    fix and another round of confusion.
+    """
+    return key in _shadowed
 
 
 def _clean_value(raw: str) -> str:
@@ -225,6 +246,120 @@ def browser_profile() -> Path | None:
         return None
     path = Path(raw).expanduser()
     return path if path.is_absolute() else Path.cwd() / path
+
+
+#: Browser channels Playwright resolves BY NAME, no path needed -- it
+#: knows where each branded build installs itself on every OS. Anything
+#: not in here is taken as a binary to find on disk instead.
+BROWSER_CHANNELS = frozenset({
+    "chromium", "chrome", "chrome-beta", "chrome-dev", "chrome-canary",
+    "msedge", "msedge-beta", "msedge-dev", "msedge-canary",
+})
+
+#: Channel name -> the commands it is called on a Linux PATH. Only
+#: --browse-login needs this: launching a browser WITHOUT Playwright
+#: means resolving the binary ourselves, and a channel name is not a
+#: binary. Empty for channels with no stable Linux command.
+_CHANNEL_COMMANDS: dict[str, tuple[str, ...]] = {
+    "chromium": ("chromium", "chromium-browser"),
+    "chrome": ("google-chrome", "google-chrome-stable"),
+    "chrome-beta": ("google-chrome-beta",),
+    "chrome-dev": ("google-chrome-unstable",),
+    "msedge": ("microsoft-edge", "microsoft-edge-stable"),
+    "msedge-beta": ("microsoft-edge-beta",),
+    "msedge-dev": ("microsoft-edge-dev",),
+}
+
+
+def browser_executable() -> str | None:
+    """Which browser the browser_* tools drive ($YANTRA_BROWSER_EXECUTABLE).
+
+    Unset => Playwright's own bundled Chromium, the default since these
+    tools existed. Set => any Chromium-family browser already on this
+    machine, given either way round:
+
+    * a CHANNEL name Playwright knows ('chrome', 'msedge', 'chromium')
+      -- returned lower-cased, for ``channel=`` at launch;
+    * a PATH or a command on $PATH ('/snap/bin/brave', 'brave') --
+      resolved to an absolute path here, for ``executable_path=``.
+
+    Why bother: the bundled build is an unbranded Chromium carrying no
+    proprietary codecs, no Widevine and no Google API keys, and its
+    default binary is the headless SHELL, whose user-agent says
+    HeadlessChrome out loud. A real installed browser is simply a
+    normal client, which is all a site checking for robots is asking.
+    It is NOT stealth -- see notes/28.
+
+    Resolution happens HERE, at config time, so a typo is a startup
+    error naming the variable rather than a Playwright stack trace
+    fifteen seconds into a run. Blank counts as unset (.env.example
+    residue must never shadow the code's fallback).
+    """
+    raw = os.environ.get("YANTRA_BROWSER_EXECUTABLE", "").strip()
+    if not raw:
+        return None
+    if raw.lower() in BROWSER_CHANNELS:
+        return raw.lower()
+    if os.sep in raw or raw.startswith("~"):
+        path = Path(raw).expanduser()
+        if not path.exists():
+            raise ConfigError(
+                f"YANTRA_BROWSER_EXECUTABLE={raw!r} is not a file on this "
+                f"machine (looked at {path}); give a path to a "
+                "Chromium-family browser, or one of: "
+                f"{', '.join(sorted(BROWSER_CHANNELS))}")
+        return str(path)
+    found = shutil.which(raw)
+    if found is None:
+        raise ConfigError(
+            f"YANTRA_BROWSER_EXECUTABLE={raw!r} is not on $PATH and is not a "
+            "Playwright channel; give a path to a Chromium-family browser, "
+            f"or one of: {', '.join(sorted(BROWSER_CHANNELS))}")
+    return found
+
+
+def browser_login_command(executable: str | None) -> str | None:
+    """The binary --browse-login can run WITHOUT Playwright, or None.
+
+    A path is already the answer; a channel name has to be looked up on
+    $PATH, because launching a browser as a plain subprocess is the
+    entire point (see run_login_session) and ``channel=`` is a
+    Playwright concept that no subprocess understands.
+    """
+    if executable is None:
+        return None
+    if executable not in BROWSER_CHANNELS:
+        return executable
+    for command in _CHANNEL_COMMANDS.get(executable, ()):
+        found = shutil.which(command)
+        if found is not None:
+            return found
+    return None
+
+
+def browser_headed() -> bool:
+    """Run the browser_* tools WITH a window ($YANTRA_BROWSER_HEADED).
+
+    Off by default. On, the browser is genuinely headed -- and if no
+    display is attached, Yantra puts one under it (Xvfb), so the window
+    exists without ever being visible. That combination is the point:
+    headless mode is a distinct Chromium build with distinct
+    fingerprints, and no flag talks it out of them, while a headed
+    browser on an invisible screen has nothing to hide because there is
+    nothing different about it.
+
+    Costs a real X server process and more memory than headless. Off
+    remains the default because most pages never ask.
+    """
+    raw = os.environ.get("YANTRA_BROWSER_HEADED", "").strip().lower()
+    if not raw:
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    raise ConfigError(
+        f"YANTRA_BROWSER_HEADED must be 1|0 (or true/false), got {raw!r}")
 
 
 def default_env_context() -> str:

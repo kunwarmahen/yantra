@@ -40,6 +40,7 @@ def _fresh_loader(monkeypatch, tmp_path):
     """
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(config, "_dotenv_loaded", False)
+    monkeypatch.setattr(config, "_shadowed", set())
     for var in ("YANTRA_TEST_KEY", "YANTRA_TEST_WINDOW",
                 "OLLAMA_CONTEXT_WINDOW"):
         monkeypatch.delenv(var, raising=False)
@@ -94,6 +95,27 @@ class TestContract:
         _write_env("YANTRA_TEST_KEY=from-file\n")
         _load_dotenv()
         assert os.environ["YANTRA_TEST_KEY"] == "from-shell"
+
+    def test_a_shell_value_that_beat_the_file_is_remembered(self,
+                                                             monkeypatch):
+        # The override is silent, and silence is what makes it cost an
+        # afternoon: the user edits .env and nothing changes. Errors
+        # need to be able to say whose value is actually in force.
+        monkeypatch.setenv("YANTRA_TEST_KEY", "from-shell")
+        _write_env("YANTRA_TEST_KEY=from-file\n")
+        _load_dotenv()
+        assert config.shadowed_by_shell("YANTRA_TEST_KEY")
+
+    def test_agreeing_values_are_not_called_a_conflict(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_TEST_KEY", "same")
+        _write_env("YANTRA_TEST_KEY=same\n")
+        _load_dotenv()
+        assert not config.shadowed_by_shell("YANTRA_TEST_KEY")
+
+    def test_a_key_only_the_file_sets_is_not_shadowed(self):
+        _write_env("YANTRA_TEST_KEY=from-file\n")
+        _load_dotenv()
+        assert not config.shadowed_by_shell("YANTRA_TEST_KEY")
 
     def test_loads_once(self):
         _write_env("YANTRA_TEST_KEY=first\n")

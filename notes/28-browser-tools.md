@@ -4,7 +4,7 @@
 growing share of the web is an empty HTML shell that JavaScript fills
 in — to web_fetch those pages are blank — and bot-defended sites
 refuse plain HTTP clients outright. The agent could read about the
-world but not operate it. Four verbs on a real headless Chromium close
+world but not operate it. Four verbs on a real browser engine close
 that gap, behind an optional extra.*
 
 ## Why an engine, not more parsing
@@ -48,17 +48,37 @@ Text out, no screenshots: text is the wire format local models are
 best at. Vision stays where it belongs, behind read_image's explicit
 opt-in.
 
+## A heavy app needs a second look
+
+`browser_open` snapshots the page a beat after `domcontentloaded` —
+long enough for ordinary pages, and too early for an application the
+size of Gmail, whose first snapshot can arrive before the app has
+drawn anything at all. The cure is already a verb: `browser_open` with
+NO url re-reads whatever page is open, without navigating, and that
+second look has the content.
+
+This is a deliberate floor rather than an oversight. Waiting for
+`networkidle` would hang on any page that polls — which is most
+applications worth driving — and a long fixed settle would tax every
+quick page to rescue a few slow ones. A cheap first look plus a
+re-read the model can ask for costs one iteration exactly when it is
+needed and nothing the rest of the time. Prompts that drive a big web
+app do well to say "re-read the page" out loud.
+
 ## Trust: the web_fetch rule, times four
 
 Same argument as notes/25, stronger: this is network egress from
 outside every sandbox wall, and a browser compounds it — form
 submissions MUTATE remote state. All four verbs gate individually;
 --yolo owns the tradeoff explicitly. And honesty about limits cuts
-both ways: headless Chromium is NOT stealth. Captchas and bot checks
-still refuse us; login walls refuse us only until you hand the
-profile a login (next section) — when a site serves a robot check,
-the snapshot shows the check instead of pretending the mission
-succeeded.
+both ways: this is NOT stealth. Captchas and bot checks still refuse
+us; login walls refuse us only until you hand the profile a login
+(next section) — when a site serves a robot check, the snapshot shows
+the check instead of pretending the mission succeeded. How far the
+wall can be pushed back — a browser you already have, headed on a
+screen nobody looks at — is
+[notes/58](58-the-browser-you-already-have.md); it moves the wall
+without moving this paragraph.
 
 ## Logins live in the profile, not in the model
 
@@ -81,14 +101,18 @@ model your cookies — is exactly wrong twice over:
 
 So: `$YANTRA_BROWSER_PROFILE=<dir>` (unset = fresh sessions, nothing
 persists — the default, since a profile IS a plaintext credential
-store). Set it, and every headless launch lands on that dir;
-`--browse-login <url>` opens a HEADED Chromium on the same dir so the
+store). Set it, and every launch lands on that dir;
+`--browse-login <url>` opens a HEADED browser on the same dir so the
 human beats the wall once — 2FA, captchas, SSO, all by hand — then
 closes the window. Two roads to the same profile:
 
 - **You log in** (`--browse-login`): the robust road. No model in the
   loop, no API key needed — the CLI dispatches it before provider
-  resolution on purpose.
+  resolution on purpose. A sign-in page that checks for automation
+  refuses a Playwright window however visible it is, so with
+  `$YANTRA_BROWSER_EXECUTABLE` naming a browser this machine already
+  has, that window is a plain subprocess of it with no driver attached
+  at all ([notes/58](58-the-browser-you-already-have.md)).
 - **The model logs in**: with persistence on, filling a login form is
   just browser_fill + browser_click — each gated like every other
   verb, so a password entry is something YOU approved. Works on plain
@@ -132,6 +156,8 @@ and every action without a page saying so in model-readable words.
   pinned via a fake chromium that records WHICH door was used);
   close shuts the context; the env knob reaches browser_tools() and
   all four verbs share that one session
+- browser choice, headed mode and the unautomated login door have
+  their own tests, listed in [notes/58](58-the-browser-you-already-have.md)
 - login setup: headed launch + goto + wait_for_event('close'),
   playwright stopped even when waiting explodes, missing extra names
   `yantra[browse]`, file:// refused before any launch cost;
@@ -157,3 +183,6 @@ model opened the page, typed `turbo` into the `[e1] textbox`, clicked
 `[e2] button Search`, and read back the JS-built snapshot:
 **"turbo encabulator -- $42.00"** — reported exactly that, end_turn.
 `3419 in / 97 out · 4 iteration(s)`
+
+Continued by [notes/58](58-the-browser-you-already-have.md), which
+answers the walls this note admits to.

@@ -1,4 +1,4 @@
-"""Real browsing -- four verbs on a headless Chromium, behind an extra.
+"""Real browsing -- four verbs on a real browser, behind an extra.
 
 web_fetch reads the web's DOCUMENTS; these tools operate its APPS. The
 difference is JavaScript: modern pages ship an empty shell and build
@@ -25,17 +25,26 @@ Scope decisions worth writing down:
   (form submissions mutate remote state). Each verb gates individually;
   --yolo owns the tradeoff explicitly.
 * LOGINS LIVE IN A PROFILE, NEVER IN MODEL CONTEXT. With
-  $YANTRA_BROWSER_PROFILE set, every session launches Chromium on that
-  on-disk profile (launch_persistent_context), so one login -- the
-  human's via --browse-login's headed window, or the model's via an
-  approved fill -- survives restarts. Deliberately NOT a
+  $YANTRA_BROWSER_PROFILE set, every session launches the browser on
+  that on-disk profile (launch_persistent_context), so one login --
+  the human's via --browse-login's headed window, or the model's via
+  an approved fill -- survives restarts. Deliberately NOT a
   get-cookies verb: raw session tokens in model context are one
   prompt injection away from exfiltration; a persisted profile keeps
   them invisible to the model entirely, while the agent simply IS
   logged in. Unset, each session starts fresh -- nothing persists,
   which is also the default.
+* THE BROWSER CAN BE ONE THE MACHINE ALREADY HAS.
+  $YANTRA_BROWSER_EXECUTABLE takes a Playwright channel ('chrome') or
+  a path ('/snap/bin/brave'); $YANTRA_BROWSER_HEADED=1 runs with a
+  real window, on a self-started Xvfb when no display is attached. The
+  automation flags come off every launch regardless. This is not
+  disguise -- the bundled default is a stripped headless SHELL whose
+  user-agent says HeadlessChrome and which carries no codecs, no
+  Widevine and no API keys, and being a browser people actually run is
+  all a robot check is asking. notes/58 argues the whole of it.
 * HONEST ABOUT WALLS. Captchas and bot detection still refuse us --
-  headless Chromium is not stealth, and no profile changes that. Login
+  none of the above is stealth, and no profile changes that. Login
   walls refuse us only until the profile carries a login; when a site
   serves a robot check, the snapshot shows the check instead of
   pretending the mission succeeded.
@@ -49,13 +58,19 @@ executor -- one thread sees all the traffic, whichever loop twin runs.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import time
 from importlib.util import find_spec
 from pathlib import Path
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, ClassVar
 
-from yantra.config import browser_profile
+from yantra.config import BROWSER_CHANNELS, browser_executable, \
+    browser_headed, browser_login_command, browser_profile, \
+    shadowed_by_shell
 from yantra.errors import ToolError
 from yantra.tools.base import Tool, ToolContext, require_str
 from yantra.tools.web_fetch import MAX_RESULT_CHARS, _clip
@@ -69,6 +84,20 @@ ACTION_TIMEOUT_MS = 10_000
 SETTLE_MS = 400
 #: Element refs listed per snapshot; beyond this the model gets a count.
 MAX_ELEMENTS = 60
+#: The invisible screen headed mode gets when no display is attached.
+XVFB_SCREEN = "1920x1080x24"
+#: How long Xvfb has to create its socket before we call the try lost.
+XVFB_START_TIMEOUT_S = 5.0
+#: Display numbers we will claim -- :0-:9 belong to real logins.
+XVFB_DISPLAYS = range(90, 120)
+
+#: Chromium announces its driver in two places, and sites read both:
+#: --enable-automation (which is what sets navigator.webdriver) and the
+#: AutomationControlled Blink feature. Dropping them does not disguise
+#: anything -- the browser IS ordinary; these flags were the only part
+#: claiming otherwise.
+_AUTOMATION_ARGS = ("--disable-blink-features=AutomationControlled",)
+_AUTOMATION_DEFAULT_ARGS_DROPPED = ("--enable-automation",)
 
 _BROWSER_EXTRA_HINT = (
     "playwright is not installed -- the browser_* tools are the optional "
@@ -136,6 +165,130 @@ def _require_http(url: str) -> str:
     return url
 
 
+def _terminate(proc: subprocess.Popen) -> None:
+    """Ask a child to stop, insist if it will not."""
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        proc.kill()
+
+
+def _is_snap(executable: str) -> bool:
+    """True when this binary runs under snap confinement."""
+    if executable.startswith("/snap/"):
+        return True
+    try:
+        # /snap/bin/brave is a symlink to /usr/bin/snap, which re-execs
+        # the real binary inside the sandbox -- the confinement follows
+        # whichever spelling of the name you launched.
+        return Path(executable).resolve().name == "snap"
+    except OSError:
+        return False
+
+
+def _hidden_part(path: Path) -> str | None:
+    """The first dot-directory in a path, if any -- snap cannot see them."""
+    return next((part for part in path.parts if part.startswith(".")
+                 and part not in (".", "..")), None)
+
+
+def check_profile_reachable(profile: Path, executable: str | None) -> None:
+    """Refuse a profile the chosen browser would silently fail to write.
+
+    Public because the CLI asks FIRST, before it promises the user a
+    window: an encouraging banner followed by a refusal reads as a
+    crash, and the refusal is the useful half.
+
+    A snap-confined browser is allowed into $HOME but NOT into its
+    hidden directories, and it does not complain: it exits 0 having
+    created nothing, so a login window appears, takes your password and
+    saves the session precisely nowhere. Better to refuse the
+    combination up front than to hand back an empty profile that looks
+    like a working one.
+    """
+    if executable is None or not _is_snap(executable):
+        return
+    hidden = _hidden_part(profile)
+    if hidden is None:
+        return
+    shell = ("\nthis path came from YANTRA_BROWSER_PROFILE exported in your "
+             "SHELL, which\noutranks the .env you are probably looking at -- "
+             "`unset YANTRA_BROWSER_PROFILE`\nfirst, or fix the export\n"
+             if shadowed_by_shell("YANTRA_BROWSER_PROFILE") else "")
+    raise ToolError(
+        f"{executable} is a snap, and snap-confined browsers cannot write "
+        f"into hidden directories -- {profile} is under {hidden!r}, so the "
+        "profile would be silently discarded (the browser exits 0 and "
+        f"creates nothing).\n{shell}"
+        "point YANTRA_BROWSER_PROFILE somewhere visible in your home, e.g.\n"
+        "  YANTRA_BROWSER_PROFILE=~/yantra-browser-profile\n"
+        "or use a non-snap browser (a .deb Chrome/Chromium has no such "
+        "restriction)")
+
+
+class _VirtualDisplay:
+    """An X server with no monitor -- the invisible half of headed mode.
+
+    Headed is what defeats headless fingerprinting, but a window on the
+    user's screen during an agent run is its own kind of broken (and on
+    a server there is no screen at all). Xvfb resolves the
+    contradiction: a real display the browser paints into honestly,
+    which nothing renders. The session owns the process and kills it on
+    teardown.
+
+    Display numbers are claimed by looking for a free socket and then
+    racing for it. Two Yantras starting in the same millisecond can pick
+    the same number; the loser sees Xvfb die and tries the next one,
+    which is cheaper than a lock file nobody cleans up.
+    """
+
+    def __init__(self) -> None:
+        self._proc: subprocess.Popen | None = None
+        self.display = ""
+
+    def start(self) -> str:
+        if shutil.which("Xvfb") is None:
+            raise ToolError(
+                "YANTRA_BROWSER_HEADED=1 needs somewhere to put the window: "
+                "no display is attached and Xvfb is not installed.\n"
+                "  sudo apt install xvfb      (Debian/Ubuntu)\n"
+                "  sudo dnf install xorg-x11-server-Xvfb    (Fedora)\n"
+                "or run where $DISPLAY is set, or drop "
+                "YANTRA_BROWSER_HEADED to go back to headless")
+        for number in XVFB_DISPLAYS:
+            socket = Path(f"/tmp/.X11-unix/X{number}")
+            if socket.exists():
+                continue
+            proc = subprocess.Popen(
+                ["Xvfb", f":{number}", "-screen", "0", XVFB_SCREEN,
+                 "-nolisten", "tcp"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            deadline = time.monotonic() + XVFB_START_TIMEOUT_S
+            while time.monotonic() < deadline:
+                if socket.exists():
+                    self._proc = proc
+                    self.display = f":{number}"
+                    return self.display
+                if proc.poll() is not None:
+                    break  # lost the race for this number, or Xvfb refused
+                time.sleep(0.05)
+            _terminate(proc)
+        raise ToolError(
+            f"could not start Xvfb on any display in {XVFB_DISPLAYS.start}-"
+            f"{XVFB_DISPLAYS.stop - 1} -- every number was taken or Xvfb "
+            "would not start")
+
+    def stop(self) -> None:
+        if self._proc is not None:
+            try:
+                _terminate(self._proc)
+            except Exception:
+                pass  # a display we cannot kill is not the caller's problem
+        self._proc = None
+        self.display = ""
+
+
 class BrowserSession:
     """The live browser behind all four tools: launch lazily, one page.
 
@@ -149,17 +302,24 @@ class BrowserSession:
     docstring for why).
     """
 
-    def __init__(self, profile: Path | None | str = "default") -> None:
-        #: ``"default"`` sentinel: read $YANTRA_BROWSER_PROFILE once, at
-        #: construction -- tests (and embedders) pass a Path/None instead.
+    def __init__(self, profile: Path | None | str = "default",
+                 executable: str | None = "default",
+                 headed: bool | None = None) -> None:
+        #: ``"default"``/None sentinels: read the environment once, at
+        #: construction -- tests (and embedders) pass values instead.
         self._profile: Path | None = (
             browser_profile() if profile == "default" else profile)
+        self._executable: str | None = (
+            browser_executable() if executable == "default" else executable)
+        self._headed: bool = (
+            browser_headed() if headed is None else headed)
         self._pw = None
         self._browser = None   # ephemeral mode
         self._context = None   # persistent mode (launch_persistent_context)
         self._page = None
         self._elements: dict[str, dict] = {}
         self._exec: ThreadPoolExecutor | None = None
+        self._display: _VirtualDisplay | None = None
 
     # -- plumbing ----------------------------------------------------------
 
@@ -170,15 +330,44 @@ class BrowserSession:
                 max_workers=1, thread_name_prefix="yantra-browser")
         return self._exec.submit(fn).result()
 
+    def _launch_options(self) -> dict[str, Any]:
+        """Every knob the two launch doors share, resolved once.
+
+        ``channel=`` and ``executable_path=`` are the same choice spelled
+        two ways -- Playwright finds a branded build BY NAME on any OS,
+        or takes the path when the browser is somewhere only this
+        machine knows (a snap, a flatpak, a build directory).
+        """
+        options: dict[str, Any] = {
+            "headless": not self._headed,
+            "args": list(_AUTOMATION_ARGS),
+            "ignore_default_args": list(_AUTOMATION_DEFAULT_ARGS_DROPPED),
+        }
+        if self._executable is not None:
+            if self._executable in BROWSER_CHANNELS:
+                options["channel"] = self._executable
+            else:
+                options["executable_path"] = self._executable
+        if self._headed and not (os.environ.get("DISPLAY")
+                                 or os.environ.get("WAYLAND_DISPLAY")):
+            self._display = _VirtualDisplay()
+            # env= reaches the BROWSER process only: nothing else in this
+            # Yantra learns about a display it has no business drawing on.
+            options["env"] = {**os.environ, "DISPLAY": self._display.start()}
+        return options
+
     def _launch(self) -> None:
         try:
             from playwright.sync_api import sync_playwright
         except ImportError as exc:
             raise ToolError(_BROWSER_EXTRA_HINT) from exc
+        if self._profile is not None:
+            check_profile_reachable(self._profile, self._executable)
         try:
+            options = self._launch_options()
             self._pw = sync_playwright().start()
             if self._profile is None:
-                self._browser = self._pw.chromium.launch(headless=True)
+                self._browser = self._pw.chromium.launch(**options)
                 self._page = self._browser.new_page()
             else:
                 # Chromium locks the dir -- one live session per profile,
@@ -186,17 +375,22 @@ class BrowserSession:
                 # over one identity.
                 self._profile.mkdir(parents=True, exist_ok=True)
                 self._context = self._pw.chromium.launch_persistent_context(
-                    user_data_dir=str(self._profile), headless=True)
+                    user_data_dir=str(self._profile), **options)
                 pages = self._context.pages
                 self._page = pages[0] if pages else self._context.new_page()
         except ToolError:
             raise
         except Exception as exc:
             self._teardown()
+            named = (f" ({self._executable})" if self._executable
+                     else "")
             raise ToolError(
-                f"could not start Chromium: {type(exc).__name__}: {exc}\n"
+                f"could not start the browser{named}: "
+                f"{type(exc).__name__}: {exc}\n"
                 "if the browser binary itself is missing, run:\n"
-                "  uv run playwright install chromium") from exc
+                "  uv run playwright install chromium\n"
+                "or point YANTRA_BROWSER_EXECUTABLE at a browser you "
+                "already have") from exc
 
     def _teardown(self) -> None:
         for obj, closer in ((self._page, "close"),
@@ -210,6 +404,9 @@ class BrowserSession:
                     pass  # tearing down a corpse; never mask the real error
         self._pw = self._browser = self._context = self._page = None
         self._elements = {}
+        if self._display is not None:
+            self._display.stop()  # outlives the browser otherwise
+            self._display = None
 
     def _require_page(self):
         if self._page is None:
@@ -348,16 +545,84 @@ class BrowserSession:
         return was_open
 
 
-def run_login_session(profile: Path, url: str | None = None) -> None:
-    """Open a HEADED Chromium on ``profile`` and block until it closes.
+def _profile_has_state(profile: Path) -> bool:
+    """True once a browser has actually written this profile directory."""
+    return (profile / "Local State").exists() or (profile / "Default").is_dir()
+
+
+def _run_unautomated_login(command: str, profile: Path,
+                           url: str | None) -> None:
+    """Run a real browser as a PLAIN SUBPROCESS, wait for it to close.
+
+    NO PLAYWRIGHT, deliberately -- this is the whole reason the function
+    exists. A headed Playwright window is still an automated one: it
+    carries --enable-automation, answers CDP, and reports
+    navigator.webdriver, and the large identity providers refuse to
+    sign you in when they see that ("this browser or app may not be
+    secure"). Headed never fixed it because headed was never the thing
+    being detected. Launched this way the browser is not automated in
+    any sense -- it is the same binary you use yourself, pointed at a
+    different profile directory -- so the sign-in is as ordinary as
+    sign-ins get, and the cookies it leaves behind are what every later
+    headless run rides.
+
+    The catch is that the login profile and the agent profile must be
+    written by the SAME browser: Chromium refuses a profile stamped by
+    a newer version of itself. That is why this path opens only when
+    YANTRA_BROWSER_EXECUTABLE names the browser both halves will use.
+    """
+    argv = [command, f"--user-data-dir={profile}", "--no-first-run",
+            "--no-default-browser-check"]
+    if url:
+        argv.append(url)
+    try:
+        proc = subprocess.Popen(argv)
+    except OSError as exc:
+        raise ToolError(
+            f"could not run {command}: {type(exc).__name__}: {exc}") from exc
+    try:
+        proc.wait()  # the window IS the progress bar
+    except KeyboardInterrupt:
+        _terminate(proc)
+        raise
+    if not _profile_has_state(profile):
+        # Two ways to get here, and the user cannot tell them apart from
+        # the outside: snap confinement refusing a hidden directory
+        # (silently, exit 0), or the browser handing the URL to a copy
+        # of itself that was already running and exiting immediately.
+        raise ToolError(
+            f"{command} exited without writing anything to {profile} -- "
+            "nothing was saved.\n"
+            "usually one of two things:\n"
+            "  * that browser was ALREADY RUNNING, so it handed the window "
+            "to the running copy and quit -- close it and try again\n"
+            "  * the profile sits in a directory the browser is not allowed "
+            "to write (snap confinement cannot see hidden dirs) -- put "
+            "YANTRA_BROWSER_PROFILE somewhere visible in your home")
+
+
+def run_login_session(profile: Path, url: str | None = None,
+                      executable: str | None = "default") -> None:
+    """Open a HEADED browser on ``profile`` and block until it closes.
 
     The human half of profile persistence -- 2FA, captchas, SSO are
     beaten by hand ONCE in a visible window (``--browse-login``), and
     every later headless session on the same profile simply IS logged
     in. The model's half needs nothing new: an approved browser_fill of
-    a login form lands in the same profile. Raises ToolError for the
-    two known walls (missing extra, missing chromium binary); a locked
-    profile or other launch failure propagates as ToolError too.
+    a login form lands in the same profile.
+
+    TWO DOORS, and which one opens is the difference between a login
+    that works and one that is refused. With YANTRA_BROWSER_EXECUTABLE
+    naming a browser this machine already has, the window is a plain
+    subprocess of that browser with no automation attached to it at all
+    (_run_unautomated_login) -- the only form that gets past a sign-in
+    page checking for robots. Without it, this falls back to
+    Playwright's own headed Chromium, which beats captchas and 2FA but
+    is still visibly automated, and unbranded besides.
+
+    Raises ToolError for the known walls (missing extra, missing
+    binary, unreachable profile); a locked profile or other launch
+    failure propagates as ToolError too.
     """
     # Scheme check FIRST: it costs nothing and needs no browser, so a
     # file:// URL gets the honest answer whether or not the optional
@@ -365,15 +630,31 @@ def run_login_session(profile: Path, url: str | None = None) -> None:
     # missing dependency on machines without playwright.
     if url:
         _require_http(url)
+    if executable == "default":
+        executable = browser_executable()
+    check_profile_reachable(profile, executable)
+    profile.mkdir(parents=True, exist_ok=True)
+
+    command = browser_login_command(executable)
+    if command is not None:
+        _run_unautomated_login(command, profile, url)
+        return
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise ToolError(_BROWSER_EXTRA_HINT) from exc
-    profile.mkdir(parents=True, exist_ok=True)
+    options: dict[str, Any] = {
+        "headless": False,
+        "args": list(_AUTOMATION_ARGS),
+        "ignore_default_args": list(_AUTOMATION_DEFAULT_ARGS_DROPPED),
+    }
+    if executable in BROWSER_CHANNELS:
+        options["channel"] = executable
     pw = sync_playwright().start()
     try:
         context = pw.chromium.launch_persistent_context(
-            user_data_dir=str(profile), headless=False)
+            user_data_dir=str(profile), **options)
         page = context.pages[0] if context.pages else context.new_page()
         if url:
             page.goto(url, wait_until="domcontentloaded",
