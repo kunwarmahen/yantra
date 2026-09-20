@@ -203,7 +203,10 @@ tools, which is why it needed no new tool and no prompt changes.
 - the snap/hidden-directory pairing is refused for BOTH doors, before
   any cost, and the refusal names `YANTRA_BROWSER_PROFILE`
 - a window that exits having written nothing raises rather than
-  reporting success
+  reporting success — ~~and one that wrote a profile is reported
+  saved~~, which was not the same question: see
+  [notes/59](59-one-key-both-halves.md), where "saved" became a cookie
+  COUNT because a directory that looks like a profile always did
 - a `.env` key the shell outranked is remembered and named in the
   refusal; identical values are not called a conflict, and with no
   override the message does not blame a shell
@@ -311,4 +314,12 @@ Five iterations, 162 tokens out. A local model is entirely capable of
 driving this; nothing here needs a frontier model, because the hard
 part was never the reasoning — it was the browser being allowed in.
 
-Continues notes/28.
+One thing this note got right for the wrong reason. The Gmail receipt
+above worked, so persistence looked settled — but the browser writing
+that profile and the browser reading it were agreeing about cookie
+encryption by luck, not by design. Where they disagree, the login is
+not ignored, it is DELETED, seconds before `--browse-login` says it
+saved. [notes/59](59-one-key-both-halves.md) is that story.
+
+Continues notes/28; continued by
+[notes/59](59-one-key-both-halves.md).

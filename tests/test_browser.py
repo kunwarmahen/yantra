@@ -6,13 +6,15 @@ touches, so run() exercises the real snapshot/ref/selector logic. The
 launch paths are pinned by stubbing the playwright import itself.
 
 The browser-choice tests encode one bias above all: A LOGIN THAT SAVES
-NOTHING MUST NOT LOOK LIKE A LOGIN THAT WORKED. Both ways of getting
-there are silent in real life -- a snap-confined browser refused a
-hidden profile directory and exits 0, and a browser already running
-hands its window to the running copy and exits 0 -- so each has a test
-demanding a loud refusal. The rest pin that the automation flags are
-always dropped, that a channel and a path reach Playwright by their
-own doors, and that headed mode never leaves an Xvfb behind.
+NOTHING MUST NOT LOOK LIKE A LOGIN THAT WORKED. Every way of getting
+there is silent in real life -- a snap-confined browser refused a
+hidden profile directory and exits 0, a browser already running hands
+its window to the running copy and exits 0, and a profile written
+under one cookie key is EMPTIED by a browser holding another -- so
+each has a test demanding a loud refusal or a count that can be
+wrong. The rest pin that the automation flags are always dropped,
+that a channel and a path reach Playwright by their own doors,
+and that headed mode never leaves an Xvfb behind.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from yantra.tools import BrowserClick, BrowserClose, BrowserFill, \
     BrowserOpen, default_registry
 from yantra.tools.base import ToolContext
 from yantra.tools.browser import MAX_ELEMENTS, BrowserSession, \
-    _VirtualDisplay, run_login_session
+    _COOKIE_KEY_ARG, _VirtualDisplay, _cookie_count, run_login_session
 
 URL = "https://fake.local/"
 
@@ -42,11 +44,13 @@ def _no_inherited_browser_env(monkeypatch):
     monkeypatch.delenv("YANTRA_BROWSER_HEADED", raising=False)
 
 
-#: What every launch carries now: headless unless asked otherwise, and
-#: the two flags that used to announce a driver, gone.
+#: What every launch carries now: headless unless asked otherwise, the
+#: two flags that used to announce a driver gone, and the cookie key
+#: store named rather than inherited -- see _COOKIE_KEY_ARG.
 BASE_OPTIONS = {
     "headless": True,
-    "args": ["--disable-blink-features=AutomationControlled"],
+    "args": ["--disable-blink-features=AutomationControlled",
+             "--password-store=basic"],
     "ignore_default_args": ["--enable-automation"],
 }
 
@@ -698,6 +702,86 @@ class TestSnapProfileGuard:
         assert chromium.persistent_calls == []  # refused BEFORE the cost
 
 
+class TestCookieKeyStore:
+    """One key, both halves -- the bug that destroyed logins silently.
+
+    Chromium picks its cookie encryption key from a launch flag.
+    Playwright hardcodes --password-store=basic; a browser started
+    without it uses the desktop keyring instead. Mix the two across a
+    profile and the browser that cannot decrypt a cookie DELETES it, so
+    a login beaten by hand vanishes on the agent's first launch --
+    after --browse-login has already said it saved. These tests pin the
+    flag onto every door, because the failure leaves no trace to debug.
+    """
+
+    def test_the_login_subprocess_names_the_same_key_store(
+            self, monkeypatch, tmp_path):
+        calls = []
+        monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
+                            lambda argv: calls.append(argv) or FakeProc())
+        monkeypatch.setattr("yantra.tools.browser._profile_has_state",
+                            lambda profile: True)
+        run_login_session(tmp_path, URL, executable="/usr/bin/brave")
+        (argv,) = calls
+        assert _COOKIE_KEY_ARG in argv
+
+    def test_the_agent_launch_names_it_rather_than_inheriting_it(
+            self, monkeypatch, tmp_path):
+        """Playwright supplies this flag by default today. Naming it
+        anyway means an upstream default that changes quietly cannot
+        take every stored login with it."""
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        BrowserSession(profile=tmp_path).open(URL)
+        (kwargs,) = chromium.persistent_calls
+        assert _COOKIE_KEY_ARG in kwargs["args"]
+
+    def test_the_playwright_login_door_names_it_too(self, monkeypatch,
+                                                    tmp_path):
+        chromium = FakeChromium(context=FakeContext())
+        install_fake_playwright(monkeypatch, chromium)
+        run_login_session(tmp_path, URL, executable=None)
+        (kwargs,) = chromium.persistent_calls
+        assert _COOKIE_KEY_ARG in kwargs["args"]
+
+
+class TestCookieCount:
+    """The receipt behind "profile saved" -- a count, never a value.
+
+    _profile_has_state answers whether the DIRECTORY looks like a
+    profile, and stays true forever once anything has written it. It
+    cannot tell a login that worked from one that saved nothing, which
+    is exactly the question the human is asking.
+    """
+
+    def test_a_profile_with_no_cookie_store_counts_zero(self, tmp_path):
+        assert _cookie_count(tmp_path) == 0
+
+    def test_it_counts_rows_without_reading_a_single_value(self, tmp_path):
+        import sqlite3
+        db = tmp_path / "Default" / "Cookies"
+        db.parent.mkdir(parents=True)
+        conn = sqlite3.connect(db)
+        conn.execute("create table cookies (host_key text, name text, "
+                     "encrypted_value blob)")
+        conn.executemany("insert into cookies values (?, ?, ?)",
+                         [(".example.com", "sid", b"v11secret"),
+                          (".example.com", "csrf", b"v11secret")])
+        conn.commit()
+        conn.close()
+        assert _cookie_count(tmp_path) == 2
+
+    def test_an_unreadable_store_counts_zero_rather_than_raising(
+            self, tmp_path):
+        """A login is not worth failing over a receipt: a file that is
+        not a database, or a schema this Chromium does not use, reports
+        nothing found instead of taking the command down with it."""
+        db = tmp_path / "Default" / "Cookies"
+        db.parent.mkdir(parents=True)
+        db.write_bytes(b"not a database at all")
+        assert _cookie_count(tmp_path) == 0
+
+
 class TestBrowseLoginFlag:
     """CLI wiring: its own mode, dispatched before provider resolution --
     no model, no API key, on purpose."""
@@ -714,12 +798,29 @@ class TestBrowseLoginFlag:
 
         def fake_login(profile, url=None):
             seen["args"] = (profile, url)
+            return 7  # cookies -- what the receipt counts
 
         monkeypatch.setattr("yantra.tools.browser.run_login_session",
                             fake_login)
         assert cli_main.main(["--browse-login", URL]) == 0
         assert seen["args"] == (tmp_path, URL)
-        assert "profile saved" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "profile saved" in out
+        assert "7 cookies" in out
+
+    def test_a_login_that_saved_no_cookies_says_so_instead_of_saved(
+            self, monkeypatch, tmp_path, capsys):
+        """The bug this replaces: "profile saved" printed on a profile
+        holding nothing, because the old check only asked whether the
+        DIRECTORY looked like a profile -- true forever once anything
+        had written it. A count can be wrong out loud."""
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", str(tmp_path))
+        monkeypatch.setattr("yantra.tools.browser.run_login_session",
+                            lambda profile, url=None: 0)
+        assert cli_main.main(["--browse-login", URL]) == 1
+        out = capsys.readouterr().out
+        assert "nothing was saved" in out
+        assert "profile saved" not in out
 
     def test_combining_with_other_modes_is_refused(self):
         assert cli_main.main(["--browse-login", URL,

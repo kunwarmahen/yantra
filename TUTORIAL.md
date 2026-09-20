@@ -395,6 +395,17 @@ export YANTRA_BROWSER_PROFILE=~/yantra-browser-profile
 uv run yantra --browse-login https://example.com     # sign in once, by hand
 ```
 
+Sign in fully, then **close the window** — closing it is what writes the
+session to disk, and interrupting the command with Ctrl-C is not the
+same thing. Yantra then counts what actually landed:
+
+```
+profile saved -- 46 cookies; future browser_* sessions start from these logins
+```
+
+If it says `nothing was saved` instead, nothing was: sign in again
+rather than moving on.
+
 Out of the box that is Playwright's own bundled Chromium, which some
 sites refuse — its user-agent says `HeadlessChrome` out loud, and
 sign-in pages that check for automation turn it away however visible

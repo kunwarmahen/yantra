@@ -1063,16 +1063,27 @@ def _browse_login(url: str, console: Console) -> int:
             "Use the SAME value for agent runs: a profile belongs to the "
             "browser\nthat wrote it.")
     try:
-        run_login_session(profile, url)
+        cookies = run_login_session(profile, url)
     except KeyboardInterrupt:
-        console.print("\n[yellow](cancelled -- whatever you logged into "
-                      "before now is already saved)[/yellow]")
+        console.print("\n[yellow](cancelled -- the window was killed rather "
+                      "than closed, so a sign-in you just finished may not "
+                      "have reached disk)[/yellow]")
         return 130
     except ToolError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    console.print("[green]profile saved[/green] -- future browser_* "
-                  "sessions start from these logins")
+    if not cookies:
+        # The old success line printed here unconditionally, on top of a
+        # profile that might hold nothing at all. A count can be wrong
+        # out loud, which is the point of counting.
+        console.print(
+            "[yellow]nothing was saved[/yellow] -- the profile holds no "
+            "cookies, so the agent\nwill meet the same wall you just "
+            "beat. Sign in FULLY, then close the\nwindow (closing it is "
+            "what writes the session to disk).")
+        return 1
+    console.print(f"[green]profile saved[/green] -- {cookies} cookies; "
+                  "future browser_* sessions start from these logins")
     return 0
 
 

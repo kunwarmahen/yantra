@@ -523,8 +523,14 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   `YANTRA_BROWSER_PROFILE=~/yantra-browser-profile`
   and run `uv run yantra --browse-login <url>` once — a visible
   window opens, you sign in yourself (2FA included), close it — and
-  every later session starts signed-in. Cookies never enter model
-  context: the profile holds them on disk, outside the conversation.
+  every later session starts signed-in. Closing the window is what
+  writes the session to disk; interrupting the command is not the same
+  thing. The command then counts what landed rather than assuming:
+  `profile saved -- 46 cookies`, or `nothing was saved` with a non-zero
+  exit, because a directory that merely looks like a profile always did
+  ([notes/59](notes/59-one-key-both-halves.md)). Cookies never enter
+  model context: the profile holds them on disk, outside the
+  conversation, and the count is a row count — no value is ever read.
   To confirm a login stuck, just ask: `uv run yantra --prompt "open
   https://mail.google.com, re-read the page, then tell me whether it
   shows an inbox or a sign-in screen"`. The **re-read** matters — the
@@ -539,6 +545,11 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   SUBPROCESS — no driver attached, which is what sign-in pages
   checking for robots are actually testing for; a visible Playwright
   window is still an automated one, and Google refuses it.
+  Both halves launch with `--password-store=basic`, so the browser you
+  sign into and the browser the agent drives derive the same cookie
+  encryption key: mix the two and Chromium DELETES every cookie it
+  cannot decrypt, which silently destroys the login you just beat
+  ([notes/59](notes/59-one-key-both-halves.md)).
   `YANTRA_BROWSER_HEADED=1` adds a real window, on an Xvfb Yantra
   starts and kills when no display is attached, so it exists without
   being seen. The `--enable-automation` flag and the
@@ -1624,7 +1635,13 @@ src/yantra/
 │   │               un-driven subprocess of it; $YANTRA_BROWSER_HEADED runs with
 │   │               a window, on a self-started Xvfb when no display is
 │   │               attached; the automation flags are dropped either way
-│   │               ([notes/58](notes/58-the-browser-you-already-have.md))
+│   │               ([notes/58](notes/58-the-browser-you-already-have.md)).
+│   │               _COOKIE_KEY_ARG goes on BOTH doors -- Chromium picks its
+│   │               cookie encryption key from a launch flag and DELETES what
+│   │               it cannot decrypt, so two halves that disagree destroy the
+│   │               login instead of ignoring it; _cookie_count makes "profile
+│   │               saved" a row count that can be wrong out loud
+│   │               ([notes/59](notes/59-one-key-both-halves.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,

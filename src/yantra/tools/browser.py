@@ -34,6 +34,13 @@ Scope decisions worth writing down:
   them invisible to the model entirely, while the agent simply IS
   logged in. Unset, each session starts fresh -- nothing persists,
   which is also the default.
+* ONE COOKIE KEY, BOTH HALVES. Chromium encrypts cookies at rest and
+  picks the key from a launch flag, so the human's login browser and
+  the agent's have to name the SAME one. Out of step, the failure is
+  silent and destructive: a browser that cannot decrypt a cookie does
+  not ignore it, it DELETES it -- so the login beaten by hand vanishes
+  the first time the agent opens the profile, with "profile saved"
+  already printed. Both doors pass _COOKIE_KEY_ARG.
 * THE BROWSER CAN BE ONE THE MACHINE ALREADY HAS.
   $YANTRA_BROWSER_EXECUTABLE takes a Playwright channel ('chrome') or
   a path ('/snap/bin/brave'); $YANTRA_BROWSER_HEADED=1 runs with a
@@ -60,6 +67,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sqlite3
 import subprocess
 import time
 from importlib.util import find_spec
@@ -98,6 +106,23 @@ XVFB_DISPLAYS = range(90, 120)
 #: claiming otherwise.
 _AUTOMATION_ARGS = ("--disable-blink-features=AutomationControlled",)
 _AUTOMATION_DEFAULT_ARGS_DROPPED = ("--enable-automation",)
+
+#: Which key encrypts this profile's cookies -- and the one flag BOTH
+#: HALVES OF THIS FILE MUST AGREE ON. Playwright hardcodes
+#: --password-store=basic into every browser it starts, which derives a
+#: key from a constant. A browser started WITHOUT it asks the desktop
+#: keyring instead (gnome-libsecret, kwallet) and writes cookies the
+#: basic store cannot read -- and Chromium drops what it cannot decrypt,
+#: so those cookies are gone, not merely invisible. That is the whole
+#: distance between a login that survives and one destroyed on first
+#: use. The login subprocess therefore carries this flag too, and the
+#: Playwright door NAMES it rather than inheriting it: a default that
+#: changed quietly upstream would take every stored login with it.
+#: The tradeoff is real -- a constant-derived key is weaker at rest than
+#: the keyring's -- and it is accepted, because the alternative makes
+#: persistence depend on an unlocked keyring, which a server and a
+#: container do not have.
+_COOKIE_KEY_ARG = "--password-store=basic"
 
 _BROWSER_EXTRA_HINT = (
     "playwright is not installed -- the browser_* tools are the optional "
@@ -340,7 +365,7 @@ class BrowserSession:
         """
         options: dict[str, Any] = {
             "headless": not self._headed,
-            "args": list(_AUTOMATION_ARGS),
+            "args": [*_AUTOMATION_ARGS, _COOKIE_KEY_ARG],
             "ignore_default_args": list(_AUTOMATION_DEFAULT_ARGS_DROPPED),
         }
         if self._executable is not None:
@@ -550,6 +575,38 @@ def _profile_has_state(profile: Path) -> bool:
     return (profile / "Local State").exists() or (profile / "Default").is_dir()
 
 
+def _cookie_count(profile: Path) -> int:
+    """How many cookies this profile holds -- the ROW COUNT, never a value.
+
+    The honest half of "profile saved". _profile_has_state only asks
+    whether the directory LOOKS like a profile, and that stays true
+    forever once anything has written it: a login that saved nothing
+    passes it exactly as happily as one that worked, which is how a
+    green success line came to sit on top of an empty profile. Cookies
+    are what a later session actually rides, so counting them is the
+    check with something to fail.
+
+    NO VALUE IS EVER READ, let alone decrypted -- this opens the store
+    read-only and asks sqlite for a count. Anything unreadable (no file
+    yet, a lock, a schema this version does not know) counts as zero
+    rather than raising: the number is a receipt for the human, not
+    control flow, and a login is not worth failing over a count.
+    """
+    db = profile / "Default" / "Cookies"
+    if not db.exists():
+        return 0
+    try:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return 0
+    try:
+        return int(conn.execute("select count(*) from cookies").fetchone()[0])
+    except sqlite3.Error:
+        return 0
+    finally:
+        conn.close()
+
+
 def _run_unautomated_login(command: str, profile: Path,
                            url: str | None) -> None:
     """Run a real browser as a PLAIN SUBPROCESS, wait for it to close.
@@ -572,7 +629,7 @@ def _run_unautomated_login(command: str, profile: Path,
     YANTRA_BROWSER_EXECUTABLE names the browser both halves will use.
     """
     argv = [command, f"--user-data-dir={profile}", "--no-first-run",
-            "--no-default-browser-check"]
+            "--no-default-browser-check", _COOKIE_KEY_ARG]
     if url:
         argv.append(url)
     try:
@@ -602,7 +659,7 @@ def _run_unautomated_login(command: str, profile: Path,
 
 
 def run_login_session(profile: Path, url: str | None = None,
-                      executable: str | None = "default") -> None:
+                      executable: str | None = "default") -> int:
     """Open a HEADED browser on ``profile`` and block until it closes.
 
     The human half of profile persistence -- 2FA, captchas, SSO are
@@ -619,6 +676,9 @@ def run_login_session(profile: Path, url: str | None = None,
     page checking for robots. Without it, this falls back to
     Playwright's own headed Chromium, which beats captchas and 2FA but
     is still visibly automated, and unbranded besides.
+
+    Returns the number of cookies the profile holds afterwards -- the
+    caller's receipt, and the only part of "saved" that can be wrong.
 
     Raises ToolError for the known walls (missing extra, missing
     binary, unreachable profile); a locked profile or other launch
@@ -638,7 +698,7 @@ def run_login_session(profile: Path, url: str | None = None,
     command = browser_login_command(executable)
     if command is not None:
         _run_unautomated_login(command, profile, url)
-        return
+        return _cookie_count(profile)
 
     try:
         from playwright.sync_api import sync_playwright
@@ -646,7 +706,7 @@ def run_login_session(profile: Path, url: str | None = None,
         raise ToolError(_BROWSER_EXTRA_HINT) from exc
     options: dict[str, Any] = {
         "headless": False,
-        "args": list(_AUTOMATION_ARGS),
+        "args": [*_AUTOMATION_ARGS, _COOKIE_KEY_ARG],
         "ignore_default_args": list(_AUTOMATION_DEFAULT_ARGS_DROPPED),
     }
     if executable in BROWSER_CHANNELS:
@@ -672,6 +732,10 @@ def run_login_session(profile: Path, url: str | None = None,
             pw.stop()
         except Exception:
             pass  # the corpse's problems are not the caller's
+    # Counted after pw.stop(): Chromium writes its cookie store on the
+    # way out, so asking any earlier reads a file the browser has not
+    # finished with.
+    return _cookie_count(profile)
 
 
 class _BrowserTool(Tool):
