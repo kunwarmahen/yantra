@@ -50,6 +50,18 @@ is discovered by being there. See `notes/32-package-tools.md` and
 4. **Consider selection.** If the tool belongs to the autonomy floor
    (every task needs it), add it to `CORE_PINS` in
    `src/yantra/tools/selector.py`. Otherwise leave it retrievable.
+   - **Write the description for the reader, not the ranker.** Retrieval
+     indexes name + description, and it used to make a long description
+     cost you: a thorough entry point ranked below its own terse
+     siblings. That is fixed (`b=0.30`, and names index in pieces as
+     well as whole -- [notes/60](../../notes/60-the-tool-that-explained-itself.md)),
+     so explain the tool properly. Say what it returns and name the
+     tools it pairs with.
+   - **If the tool is a family's entry point** -- the one that must run
+     before its siblings mean anything -- check it actually retrieves.
+     A one-line test that asserts it lands in `select(query, k)` for a
+     plausible query is cheap, and its absence is invisible: the model
+     just reports it has no such tool.
 
 5. **Test it** in `tests/test_tools.py` (or its own module if the surface
    is large). Cover: the happy path, a bad argument raising `ToolError`,

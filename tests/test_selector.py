@@ -1,6 +1,14 @@
 """Tool-selection tests: BM25 ranking, pins, the discovery hatch, and
 the loop-level contract (selected specs are what get SENT and the ONLY
 things that can EXECUTE).
+
+The ranking tests encode one bias: A TOOL MUST NOT BE PUNISHED FOR
+EXPLAINING ITSELF. Retrieval that keeps snake_case names whole gives a
+tool's most deliberate word no way into ordinary language, and BM25's
+usual length normalization then hands the win to whichever sibling
+said least -- together they drop a family's ENTRY POINT while
+retrieving the verbs that are useless without it. Both halves have a
+test, because the symptom is a model that reports it has no such tool.
 """
 
 from __future__ import annotations
@@ -17,7 +25,9 @@ from yantra.tools.selector import (
     ListAvailableTools,
     ToolCatalog,
     enable_selection,
+    name_parts,
     query_from_transcript,
+    tokenize,
 )
 from yantra.types import (Message, ModelResponse, TextBlock, ToolCall, ToolResult, Usage)
 
@@ -149,10 +159,88 @@ class TestQueryFromTranscript:
             T("mcp__s1__add", "Add two integers."),
         ])
         opener_only = "use an mcp tool to add 2 and 3"
+        # The opener alone used to rank ECHO first: with names indexed
+        # only whole, "mcp__s1__add" shared no term with "add 2 and 3",
+        # so an MCP-flavoured description beat the tool that does the
+        # job. Name PIECES are indexed now, so "mcp" and "add" reach
+        # their owner and the opener gets it right unaided. The
+        # discovery contract below is what this test exists for, and it
+        # holds either way.
         assert catalog.select(opener_only, k=2,
-                              must_include=())[0].name == "mcp__s1__echo"
+                              must_include=())[0].name == "mcp__s1__add"
         assert catalog.select(query, k=2,
                               must_include=())[0].name == "mcp__s1__add"
+
+
+class TestNameIndexing:
+    """A name is indexed BOTH ways, and each spelling answers a query
+    the other cannot."""
+
+    def test_a_name_survives_whole_so_the_transcript_can_retrieve_it(self):
+        """Why tokenize keeps underscores: a tool the model has already
+        called puts its exact name into the query, and that name has to
+        be a term or the pivot never converges."""
+        assert tokenize("mcp__slack__post_message") == \
+            ["mcp__slack__post_message"]
+
+    def test_a_name_is_also_indexed_in_pieces(self):
+        assert name_parts("browser_open") == ["browser", "open"]
+        assert name_parts("mcp__slack__post_message") == \
+            ["mcp", "slack", "post", "message"]
+
+    def test_the_pieces_let_plain_english_find_a_tool_by_its_name(self):
+        """Nobody types browser_open; they type "open the browser".
+        Whole-name indexing alone leaves that query matching on
+        description words only, which is where it goes wrong."""
+        catalog = ToolCatalog([
+            _mk("browser_open", "Start a page in a real engine."),
+            _mk("note_write", "Write something down for later."),
+        ])
+        chosen = catalog.select("open a browser", k=1, must_include=())
+        assert [t.name for t in chosen] == ["browser_open"]
+
+    def test_a_families_entry_point_is_retrieved_with_its_verbs(self):
+        """The live failure, reconstructed. browser_open carries the
+        long description because it is the one that has to explain the
+        family; its siblings are terse and name it for free. Scored on
+        length-normalized overlap with names kept whole, all three
+        siblings were retrieved and the opener was NOT -- leaving the
+        model holding click, fill and close with no way to open a page,
+        which it reported as having no browser tool at all.
+
+        The claim is admission to the budget, not first place: retrieval
+        owes the turn a workable set, and which sibling edges which
+        inside it is noise that moves with the corpus.
+        """
+        catalog = ToolCatalog([
+            _mk("browser_open",
+                "Open a URL in a real headless Chromium browser -- "
+                "JavaScript runs, so JS-rendered pages work where "
+                "web_fetch sees an empty shell. Returns the page as "
+                "readable text plus numbered interactive elements "
+                "([e1], [e2], ...) for browser_click/browser_fill. Call "
+                "again with NO url to re-read the current page. If a "
+                "persistent profile is configured, logins survive "
+                "restarts."),
+            _mk("browser_click",
+                "Click an element on the open browser page by its ref "
+                "([eN] from your latest browser output) and get the "
+                "refreshed page back."),
+            _mk("browser_fill",
+                "Type text into a field on the open browser page by "
+                "its ref, and get the refreshed page back."),
+            _mk("browser_close",
+                "Close the browser page opened by browser_open."),
+        ])
+        # Fillers give "browser" the rarity it has in a real catalog;
+        # among four browser tools alone the term is worthless and the
+        # ranking measures nothing.
+        for i in range(17):
+            catalog.add(_mk(f"filler_{i}", f"misc utility number {i}"))
+        picked = [t.name for t in catalog.select(
+            "open https://www.x.com and tell me about the top post",
+            k=4, must_include=())]
+        assert "browser_open" in picked
 
 
 class TestDiscoveryTool:

@@ -18,6 +18,17 @@ a second permission system. The loop soft-admits calls that name real
 but unselected tools (see Agent._get_visible_tool); only hallucinated
 names error.
 
+One indexing decision carries most of the accuracy, and it is the one
+that is easy to get backwards. Tool names are snake_case, so a plain
+tokenizer that keeps underscores makes ``browser_open`` a single term
+no English query ever contains -- the name, the strongest signal a tool
+has, matches nothing. And BM25's length normalization then rewards the
+tools that say LEAST: a one-line description sharing a word with the
+query outscores a thorough one sharing the same word, so the family's
+entry point loses to its own siblings, who free-ride by naming it.
+Yantra indexes each name BOTH WAYS -- whole and in pieces -- and damps
+normalization to b=0.3. See ``name_parts``.
+
 Three pieces:
 
 * ``ToolCatalog``      -- the index: BM25 over name+description tokens,
@@ -75,10 +86,30 @@ DEFAULT_TOOLS_PER_TURN = 12
 _TOKEN_SPLIT = re.compile(r"[^a-z0-9_]+")
 
 
+#: How many extra times a name's PIECES are indexed. A name is the most
+#: deliberate word a tool owns, and one occurrence buried in a hundred
+#: description tokens does not read that way to BM25.
+NAME_PART_WEIGHT = 2
+
+
 def tokenize(text: str) -> list[str]:
     """Lowercase, split on non-[a-z0-9_]. Underscores survive so
     ``post_message`` stays one term -- tool names are snake_case on purpose."""
     return [t for t in _TOKEN_SPLIT.split(text.lower()) if t]
+
+
+def name_parts(name: str) -> list[str]:
+    """``browser_open`` -> ``["browser", "open"]``; the other half of a name.
+
+    BOTH SPELLINGS ARE INDEXED, because they answer different queries.
+    The WHOLE name is what makes a name appearing in the transcript a
+    term -- ``mcp__slack__post_message``, once called, retrieves itself
+    exactly, and that is why tokenize keeps underscores. But it also
+    means the whole name matches nothing a HUMAN wrote: nobody types
+    ``browser_open``, they type "open the browser". Splitting gives the
+    name a way into ordinary language without giving up the exact match.
+    """
+    return tokenize(name.replace("_", " "))
 
 
 @dataclass
@@ -88,7 +119,17 @@ class ToolCatalog:
 
     tools: list[Tool] = field(default_factory=list)
     k1: float = 1.5       # BM25 term-frequency saturation
-    b: float = 0.75       # length-normalization strength
+    #: Length normalization, DAMPED from BM25's usual 0.75. That default
+    #: assumes documents whose length is incidental to their relevance;
+    #: tool descriptions are the opposite, written to a length the author
+    #: chose, and the longest is usually the one doing the most work. At
+    #: 0.75 a 29-token description beat a 77-token one on the identical
+    #: matched term by ~2.5x, which is how browser_click, browser_close
+    #: and browser_fill were all retrieved for "open x.com" while
+    #: browser_open -- the only one that can START a session -- was not.
+    #: Punishing a tool for explaining itself is the wrong incentive to
+    #: put in front of the people writing the next tool.
+    b: float = 0.30
     must_include: tuple[str, ...] = ("list_available_tools",)
     #: Names the operator has pulled this session (ToolRegistry.is_disabled,
     #: wired by enable_selection). Hidden tools burn no selection slots and
@@ -113,7 +154,8 @@ class ToolCatalog:
         self._index(tool)
 
     def _index(self, tool: Tool) -> None:
-        doc = tokenize(f"{tool.name} {tool.description}")
+        doc = (tokenize(f"{tool.name} {tool.description}")
+               + name_parts(tool.name) * NAME_PART_WEIGHT)
         for term in set(doc):
             self._df[term] = self._df.get(term, 0) + 1
         self._docs.append(doc)

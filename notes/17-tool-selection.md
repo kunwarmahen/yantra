@@ -19,11 +19,21 @@ Queries come from the agent itself (its own transcript), so they share
 vocabulary with tool descriptions — lexical overlap is the signal.
 BM25 is ~60 lines with zero dependencies (`tools/selector.py`), fully
 deterministic for tests, and swapping in embeddings later means
-replacing exactly one method (`ToolCatalog.scores`). The parameters are
-the textbook defaults: `k1=1.5` (term-frequency saturation), `b=0.75`
-(length normalization). Tokenization splits on non-`[a-z0-9_]` so
-snake_case survives intact — `post_message` stays one term, which
-matters because tool names ARE the vocabulary.
+replacing exactly one method (`ToolCatalog.scores`). `k1=1.5`
+(term-frequency saturation) is the textbook default; `b` (length
+normalization) is NOT — it runs at 0.30 against a textbook 0.75,
+because tool descriptions are written to a length their author chose
+and the longest in a family is usually the entry point. At 0.75 that
+entry point loses to its own siblings
+([notes/60](60-the-tool-that-explained-itself.md)).
+
+Tokenization splits on non-`[a-z0-9_]` so snake_case survives intact —
+`post_message` stays one term, which matters because tool names ARE the
+vocabulary: a tool the model has already called puts its exact name in
+the transcript and retrieves itself next turn. Each name is ALSO
+indexed in pieces (`name_parts`), because the whole-name spelling
+matches nothing a human writes — nobody types `browser_open`, they type
+"open the browser".
 
 ## The score floor is the design
 

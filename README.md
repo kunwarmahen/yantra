@@ -1661,7 +1661,13 @@ src/yantra/
 │   │               ([notes/53](notes/53-a-tool-that-arrives-by-pip.md))
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
 │   │               description, transcript-derived query, core pins +
-│   │               list_available_tools discovery hatch ([notes/17](notes/17-tool-selection.md))
+│   │               list_available_tools discovery hatch ([notes/17](notes/17-tool-selection.md)).
+│   │               Names index BOTH ways -- whole, so a name in the
+│   │               transcript retrieves itself, and in pieces (name_parts),
+│   │               because nobody types browser_open -- and b=0.30 damps the
+│   │               length penalty that ranked a family's entry point below
+│   │               the terse siblings that only work once it has run
+│   │               ([notes/60](notes/60-the-tool-that-explained-itself.md))
 │   ├── search.py   grep — ripgrep subprocess when available, pure-python
 │   │               walker fallback (identical output contract)
 │   ├── memory.py   scratchpad: write_note / recall_notes — JSON store under
