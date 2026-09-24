@@ -48,12 +48,15 @@ price ([notes/64](64-a-price-for-the-free-road.md)).
 ## What was deliberately not built
 
 **No figure carried across agents.** A new agent is a new question, and
-a guess borrowed from somebody else's session is not a forecast.
+a guess borrowed from somebody else's session is not a forecast. (Revised
+in [note 76](76-remembered-and-capped.md): the same package on the same model now remembers its last turn
+on disk, which is the same agent's habit rather than somebody else's.)
 
 ## What is not here yet
 
-* **A reply longer than anything before it** still surprises the
-  forecast. The `WARN_AT` floor is all that catches it, as note 69 said.
+* ~~**A reply longer than anything before it.**~~ Closeable since
+  [note 76](76-remembered-and-capped.md), if you choose: `--budget-cap-reply` limits every reply to what
+  the money left can buy, at the price of a cut-off answer.
 
 ## Receipt
 

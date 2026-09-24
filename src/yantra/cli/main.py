@@ -122,6 +122,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "optimise starts optimising for it. Off by "
                              "default, and yours to give rather than the "
                              "package author's")
+    parser.add_argument("--budget-cap-reply", action="store_true",
+                        dest="budget_cap_reply",
+                        help="limit each reply to what is left of the "
+                             "per-turn ceiling, so no single reply can carry "
+                             "a turn past it. The price: an answer can "
+                             "arrive CUT OFF, and the turn then ends "
+                             "over_budget with what it got. Off by default, "
+                             "and yours to choose rather than the package "
+                             "author's")
     parser.add_argument("--yolo", action="store_true",
                         help="skip permission prompts -- tools run without asking")
     parser.add_argument("--sandbox", action="store_true",
@@ -1962,11 +1971,12 @@ def main(argv: list[str] | None = None) -> int:
         # The operator's call, applied after the build because it is not
         # part of what the PACKAGE describes (budget.notice).
         agent.budget.notify_agent = args.budget_notice
+        agent.budget.cap_reply = args.budget_cap_reply
         console.print(f"[dim]budget: {agent.budget.describe()}[/dim]")
-    elif args.budget_notice:
-        console.print("[yellow]--budget-notice does nothing without a "
-                      "ceiling: set --max-usd, or run a package with "
-                      "[budget] max_usd_per_turn[/yellow]")
+    elif args.budget_notice or args.budget_cap_reply:
+        console.print("[yellow]--budget-notice and --budget-cap-reply do "
+                      "nothing without a ceiling: set --max-usd, or run a "
+                      "package with [budget] max_usd_per_turn[/yellow]")
 
     env_ctx = getattr(agent, "env_context", None)
     if env_ctx is not None and env_ctx.geo_error:

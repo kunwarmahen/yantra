@@ -97,6 +97,11 @@ turn before, never the session's all-time largest, so a single huge
 answer early on does not make every later turn warn early. A fresh
 agent's first call has nothing to go on and is forecast on its input.
 
+A FRESH AGENT REMEMBERS (notes/76). That previous-turn figure is also
+kept on disk, per package and model (``.yantra/replies.json`` beside the
+session store), so an eval case, a one-shot run or a new process starts
+with the last turn anybody ran on that model instead of nothing.
+
 That still undercounts a reply longer than any before it, which is why
 ``WARN_AT`` stays on as a floor: a turn whose cost is mostly output would
 otherwise creep to the ceiling with the forecast saying "fine" each
@@ -122,12 +127,25 @@ with no list price blinds the meter and trips ``exceeded`` in the same
 breath, so the first evidence of trouble IS the stop. Nothing can be said
 earlier, because until that charge arrived there was nothing to say.
 
+THE CAP IS OPT-IN, AND IT IS THE ONE PLACE THE REPLY IS LIMITED
+(notes/76). ``cap_reply`` sets each call's ``max_tokens`` to what the
+money left can buy, so no reply can carry a turn past its ceiling. The
+price is the rule every other part of this module keeps -- a final
+answer is never discarded -- because a capped answer can arrive cut
+off. That is a trade an operator may prefer (a truncated answer over
+an overspend), so it is theirs to switch on, like the budget notice,
+and never a package key.
+
 The honest limit, stated once: a meter can only count what the provider
 reports. ``Usage`` zeros are normal on some streamed calls, and a turn
 billed in silence is a turn this ceiling does not see.
 """
 
 from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
 
 from yantra.errors import ConfigError
 from yantra.pricing import ModelPrice, cost_of, is_free, price_for
@@ -182,6 +200,12 @@ class Budget:
         #: The previous turn's ``largest_reply``: the forecast for a turn
         #: that has not had a reply of its own yet (notes/73).
         self.last_turn_reply = 0
+        #: Where the last turn's largest reply is kept between processes,
+        #: and under which key (notes/76). None: remembered in memory only.
+        self._memory: tuple[Path, str] | None = None
+        #: Opt-in: limit each reply to what the money left can buy
+        #: (notes/76). Off by default; see the module docstring.
+        self.cap_reply = False
         #: Whether the MODEL is told, as well as the operator. Off by
         #: default and deliberately not a package key: see ``notice``.
         self.notify_agent = notify_agent
@@ -251,8 +275,64 @@ class Budget:
         if spender is not None and self._owner is not None \
                 and spender is not self._owner:
             self.delegated += cost
-        else:
-            self.largest_reply = max(self.largest_reply, usage.output_tokens)
+        elif usage.output_tokens > self.largest_reply:
+            self.largest_reply = usage.output_tokens
+            self._remember()
+
+    def remember(self, path: Path, key: str) -> None:
+        """Keep the last turn's largest reply at ``path`` under ``key``,
+        and start from what is there (notes/76). A file that cannot be
+        read is nothing remembered; one that cannot be written is a
+        forecast that stays in memory -- advice is not worth a crash."""
+        self._memory = (Path(path), key)
+        if not self.last_turn_reply:
+            self.last_turn_reply = _recall(Path(path), key)
+
+    def _remember(self) -> None:
+        if self._memory is None or not self.metered:
+            return
+        path, key = self._memory
+        try:
+            known = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(known, dict):
+                known = {}
+        except (OSError, ValueError):
+            known = {}
+        known[key] = self.largest_reply
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temp = path.with_name(f".{path.name}.{os.getpid()}")
+            temp.write_text(json.dumps(known, indent=1, sort_keys=True),
+                            encoding="utf-8")
+            os.replace(temp, path)
+        except OSError:
+            pass
+
+    def reply_cap(self, *, next_input_tokens: int, model: str,
+                  asked: int) -> int:
+        """``max_tokens`` for the call about to go out (notes/76).
+
+        ``asked`` unless the operator switched ``cap_reply`` on and the
+        model is priced: then the reply is limited to what is left of the
+        ceiling once this call's context is paid for. At least one token
+        -- a request for zero is refused by some providers, and a turn
+        with nothing left is stopped by ``exceeded`` before it gets here.
+        """
+        if not self.cap_reply or not self.metered:
+            return asked
+        price = price_for(model)
+        if price is None or not price.output_per_mtok:
+            return asked
+        left = (self.max_usd - self.spent
+                - cost_of(Usage(input_tokens=next_input_tokens), price))
+        affordable = int(left * 1_000_000 / price.output_per_mtok)
+        return max(1, min(asked, affordable))
+
+    def capped(self, limit: int) -> str:
+        """Why a turn ended on a reply cut short by ``reply_cap``."""
+        return (f"the reply was cut off at {limit:,} tokens, what was left "
+                f"of the {_usd(self.max_usd)} ceiling for this turn "
+                f"(--budget-cap-reply)")
 
     def exceeded(self) -> bool:
         """Has this turn earned the right to another model call?"""
@@ -367,8 +447,10 @@ class Budget:
             return (f"{_usd(self.max_usd)} per turn -- inert here, a local "
                     f"model bills nothing")
         told = " (the agent is told too)" if self.notify_agent else ""
+        capped = ("; replies capped at what is left" if self.cap_reply
+                  else "")
         return (f"{_usd(self.max_usd)} per turn -- a heads-up once one "
-                f"more call would not fit{told}")
+                f"more call would not fit{told}{capped}")
 
 
 def _usd(amount: float) -> str:
@@ -380,3 +462,13 @@ def _usd(amount: float) -> str:
     if abs(cents - round(cents)) < 1e-9:
         return f"${amount:.2f}"
     return f"${amount:g}"
+
+
+def _recall(path: Path, key: str) -> int:
+    """The remembered reply for ``key``, or 0 for nothing (notes/76)."""
+    try:
+        known = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    value = known.get(key) if isinstance(known, dict) else None
+    return value if isinstance(value, int) and value > 0 else 0

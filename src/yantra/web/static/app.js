@@ -468,6 +468,9 @@ function onBudgetWarning(env) {
 function onTurnEnd(env) {
   mergeBudget(env);   // the last charge of the turn lands here
   if (env.reason !== "end_turn") {
+    // A reply cut off by --budget-cap-reply carries its text: settle what
+    // streamed before saying why it stops there (notes/76).
+    if (env.text && env.text.trim()) assistantTextDone(env.text);
     const why = env.detail ? ` — ${env.detail}` : "";
     addBanner(`── turn ended: ${env.reason}${why} ` +
               `(after ${env.iterations} iteration(s))`, false);

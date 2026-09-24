@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1809 tests. The
+The harness underneath is complete and covered by 1826 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1463,7 +1463,11 @@ before one call does it before the next. On `qwen3.8:latest` that cut
 the turns stopped without any warning from eight in twenty to one
 ([notes/69](notes/69-a-reply-the-turn-has-seen-before.md)). A turn's
 first call, before it has a reply of its own, borrows the previous
-turn's ([notes/73](notes/73-the-turn-before.md)).
+turn's ([notes/73](notes/73-the-turn-before.md)), remembered on disk per
+package and model so even a fresh agent has one. And if you would rather
+have a cut-off answer than an overspend, `--budget-cap-reply` limits each
+reply to what the ceiling has left; the turn then ends `over_budget`
+with the text it got ([notes/76](notes/76-remembered-and-capped.md)).
 
 The rules worth knowing before you rely on it:
 
@@ -1813,7 +1817,10 @@ src/yantra/
 │                   [notes/43](notes/43-a-bar-and-a-deadline.md),
 │                   [notes/64](notes/64-a-price-for-the-free-road.md)).
 │                   The estimate adds the turn's largest reply so far
-│                   ([notes/69](notes/69-a-reply-the-turn-has-seen-before.md))
+│                   ([notes/69](notes/69-a-reply-the-turn-has-seen-before.md)),
+│                   remembered in .yantra/replies.json; --budget-cap-reply
+│                   limits each reply to what is left
+│                   ([notes/76](notes/76-remembered-and-capped.md))
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
 │   │               ModelResponse (protocol cores shared by both skins);

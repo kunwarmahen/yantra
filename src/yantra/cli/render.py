@@ -122,10 +122,12 @@ class Renderer:
                     )
                 self._render_refusals()
 
-            case TurnEnd(reason=reason, response=None, iterations=n,
-                         detail=detail):
+            case TurnEnd(reason=reason, iterations=n, detail=detail):
                 # detail carries the numbers a bare reason word cannot:
-                # "over_budget" is not an answer to "over what?"
+                # "over_budget" is not an answer to "over what?" A turn
+                # stopped with a response -- a reply cut off by
+                # --budget-cap-reply (notes/76) -- has already streamed
+                # what it got; this line says why it stops there.
                 why = f" -- {detail}" if detail else ""
                 self.console.print(f"\n[yellow]── turn ended: {reason}{why} "
                                    f"(after {n} iteration(s))[/yellow]")

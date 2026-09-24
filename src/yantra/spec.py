@@ -317,6 +317,12 @@ class AgentSpec:
         budget = (None if self.max_usd_per_turn is None
                   else Budget.for_model(self.max_usd_per_turn,
                                         provider_name=name, model=model_slug))
+        if budget is not None:
+            # The last turn's longest reply, kept beside the session store
+            # so a fresh agent on this package and model starts with a
+            # figure rather than none (budget.py, notes/76).
+            budget.remember(root / ".yantra" / "replies.json",
+                            f"{self.name or '-'}|{model_slug}")
         # A sub-agent on its own model spends the SAME meter, so the same
         # refusal has to cover it: a ceiling that can be priced for the
         # parent and not for the child is a ceiling that stops the turn

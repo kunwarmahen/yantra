@@ -110,8 +110,9 @@ priced in full, it would warn on every call of every turn
 * **A reply longer than any before it is still a surprise.** The
   `WARN_AT` floor is all that catches it. The first call of a turn in a
   session now borrows the previous turn's largest reply
-  ([note 73](73-the-turn-before.md)); a fresh agent's first call is
-  still priced on its input alone.
+  ([note 73](73-the-turn-before.md)), and a fresh agent remembers the
+  last turn on disk ([note 76](76-remembered-and-capped.md)). `--budget-cap-reply` closes the rest, at the
+  price of a cut-off answer.
 * **The cloud trial.** Still one command, still not run
   ([notes/67](67-the-agent-or-the-vendor.md)).
 

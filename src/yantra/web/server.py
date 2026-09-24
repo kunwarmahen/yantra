@@ -442,12 +442,16 @@ class WebSession:
                     "iterations": n,
                     "budget_meter": _budget_meter(self.agent),
                 })
-            case TurnEnd(reason=reason, response=None, iterations=n,
+            case TurnEnd(reason=reason, response=response, iterations=n,
                          detail=detail):
                 # detail carries the numbers the reason word cannot --
-                # "over_budget" is not an answer to "over what?" (budget.py)
+                # "over_budget" is not an answer to "over what?" (budget.py).
+                # A capped reply (notes/76) arrives WITH its response: the
+                # text so far is kept, and the reason says why it stops.
                 self.broadcast({"type": "turn_end", "reason": reason,
                                 "detail": detail or "",
+                                "text": (response.message.text()
+                                         if response is not None else ""),
                                 "iterations": n, "cost_line": ""})
 
     # ---- snapshots -------------------------------------------------------------

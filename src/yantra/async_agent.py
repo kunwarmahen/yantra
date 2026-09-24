@@ -239,9 +239,16 @@ class AsyncAgent:
                 # yet. The meter latches and answers only its owner, so
                 # this fires once per turn and never from inside a
                 # sub-agent (budget.py).
+                limit = self.max_tokens
                 if self.budget is not None:
+                    forecast = self._forecast_tokens(messages)
+                    # Opt-in: the reply may be no longer than the money
+                    # left can buy (budget.reply_cap, notes/76).
+                    limit = self.budget.reply_cap(
+                        next_input_tokens=forecast, model=self.model,
+                        asked=self.max_tokens)
                     advice = self.budget.take_warning(
-                        self, next_input_tokens=self._forecast_tokens(messages),
+                        self, next_input_tokens=forecast,
                         model=self.model)
                     if advice is not None:
                         yield BudgetWarning(detail=advice,
@@ -261,7 +268,7 @@ class AsyncAgent:
                             system=self.system,
                             tools=self._specs_for_request(),
                             model=self.model,
-                            max_tokens=self.max_tokens,
+                            max_tokens=limit,
                         )
                     )
                 )
@@ -280,6 +287,16 @@ class AsyncAgent:
                     self.budget.charge(response.usage,
                                        response.model or self.model,
                                        spender=self)
+
+                if limit < self.max_tokens and response.stop_reason == "max_tokens":
+                    # Cut off by the cap, not by the model: the answer is
+                    # kept as far as it got, a half-written tool call is
+                    # never run, and the turn says why (notes/76).
+                    self._answer_outstanding({})
+                    yield TurnEnd(response=response, reason="over_budget",
+                                  iterations=iteration,
+                                  detail=self.budget.capped(limit))
+                    return
 
                 calls = response.message.tool_calls()
                 if response.stop_reason != "tool_use" or not calls:
@@ -334,7 +351,13 @@ class AsyncAgent:
         if self.last_context_tokens and self._sent_through <= len(messages):
             return (self.last_context_tokens
                     + estimate_history(messages[self._sent_through:]))
-        return estimate_history(messages)
+        return estimate_history(messages) + self._fixed_tokens()
+
+    def _fixed_tokens(self) -> int:
+        """The system prompt and tool schemas, as ``Agent._fixed_tokens``."""
+        fixed = json.dumps([self.system or "", self._specs_for_request()],
+                           default=str)
+        return len(fixed) // 4
 
     def _begin_iteration(self) -> None:
         """Re-pick this model call's visible tool set -- deliberate twin of

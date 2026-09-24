@@ -341,9 +341,16 @@ class Agent:
                 # yet. The meter latches and answers only its owner, so
                 # this fires once per turn and never from inside a
                 # sub-agent (budget.py).
+                limit = self.max_tokens
                 if self.budget is not None:
+                    forecast = self._forecast_tokens(messages)
+                    # Opt-in: the reply may be no longer than the money
+                    # left can buy (budget.reply_cap, notes/76).
+                    limit = self.budget.reply_cap(
+                        next_input_tokens=forecast, model=self.model,
+                        asked=self.max_tokens)
                     advice = self.budget.take_warning(
-                        self, next_input_tokens=self._forecast_tokens(messages),
+                        self, next_input_tokens=forecast,
                         model=self.model)
                     if advice is not None:
                         yield BudgetWarning(detail=advice,
@@ -364,7 +371,7 @@ class Agent:
                             system=self.system,
                             tools=self._specs_for_request(),
                             model=self.model,
-                            max_tokens=self.max_tokens,
+                            max_tokens=limit,
                         )
                     )
                 )
@@ -383,6 +390,16 @@ class Agent:
                     self.budget.charge(response.usage,
                                        response.model or self.model,
                                        spender=self)
+
+                if limit < self.max_tokens and response.stop_reason == "max_tokens":
+                    # Cut off by the cap, not by the model: the answer is
+                    # kept as far as it got, a half-written tool call is
+                    # never run, and the turn says why (notes/76).
+                    self._answer_outstanding({})
+                    yield TurnEnd(response=response, reason="over_budget",
+                                  iterations=iteration,
+                                  detail=self.budget.capped(limit))
+                    return
 
                 calls = response.message.tool_calls()
                 if response.stop_reason != "tool_use" or not calls:
@@ -440,18 +457,25 @@ class Agent:
         that is what makes a turn's next call cost five times its last
         (budget.py).
 
-        Before any response has arrived there is nothing to anchor on and
-        this falls back to the chars/4 proxy, which counts the transcript
-        but not the system prompt or the tool schemas -- so the very
-        first call of a turn reads LOW. That is the honest shape of the
-        error: the forecast understates at the start of a turn, when
-        almost nothing has been spent, and is at its most accurate deep
-        into one, which is when anyone needs it.
+        Before any response has arrived there is nothing to anchor on, so
+        the estimate is chars/4 of everything the request carries: the
+        transcript, and also the system prompt and the tool schemas
+        (notes/76). It used to count the transcript alone, which read a
+        fresh agent's first call as a few dozen tokens when the request
+        was thousands -- harmless while nothing was forecast on top of
+        it, and wrong once a remembered reply was.
         """
         if self.last_context_tokens and self._sent_through <= len(messages):
             return (self.last_context_tokens
                     + estimate_history(messages[self._sent_through:]))
-        return estimate_history(messages)
+        return estimate_history(messages) + self._fixed_tokens()
+
+    def _fixed_tokens(self) -> int:
+        """chars/4 of what every request carries besides the transcript:
+        the system prompt and the tool schemas offered this call."""
+        fixed = json.dumps([self.system or "", self._specs_for_request()],
+                           default=str)
+        return len(fixed) // 4
 
     def _begin_iteration(self) -> None:
         """Re-pick the visible tool set for this model call.
