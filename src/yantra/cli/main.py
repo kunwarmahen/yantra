@@ -301,6 +301,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "while recording -- a recorder that deletes is "
                              "one nobody can leave on. A line with no "
                              "readable date is kept")
+    parser.add_argument("--turns", nargs="?", const="all", default=None,
+                        choices=["all", "failed"],
+                        help="with --trace FILE: list the recorded turns -- "
+                             "id, when, how each ended, the task -- and exit; "
+                             "'--turns failed' keeps the ones the cheap "
+                             "filter flags (ended badly, or a tool or "
+                             "sub-agent failed). A list to choose from, not "
+                             "a verdict: pass an id to --fossil")
     parser.add_argument("--tool-pack", action="append", default=[],
                         metavar="NAME", dest="tool_pack",
                         help="load the tools an INSTALLED distribution "
@@ -534,6 +542,72 @@ def _trace_prune_mode(args, console: Console) -> int:
         console.print(f"[dim]{pruned.unreadable} line(s) with no readable "
                       f"date kept as they were -- age cannot judge them[/dim]")
     return 0
+
+
+def _turns_mode(args, console: Console) -> int:
+    """--turns [failed] --trace FILE: the recording, one line a turn.
+
+    The fossil loop needs an id, and until this the only way to find one
+    was to open the JSONL. It decides nothing (notes/57): a turn that
+    ended cleanly can still be wrong, and a flagged one may have
+    recovered. It shows each turn's cheap signals -- and, for a suite's
+    turns, the verdict of the grader somebody wrote (notes/70) -- so a
+    person can pick.
+    """
+    log = TrajectoryLog(Path(args.trace))
+    try:
+        turns = log.read()
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    shown = [t for t in turns if args.turns == "all" or _flagged(t)]
+    for turn in shown:
+        mark = "[red]✗[/red]" if _flagged(turn) else " "
+        case = f" [dim]case {escape(turn.case)}[/dim]" if turn.case else ""
+        why = _why_flagged(turn)
+        task = " ".join(turn.task.split())
+        if len(task) > 60:
+            task = task[:57] + "..."
+        console.print(f"{mark} {turn.id[:8]}  {turn.at}  "
+                      f"{len(turn.steps):>2} tool(s)  {escape(task)}{case}"
+                      + (f"\n             [dim]{escape(why)}[/dim]"
+                         if why else ""))
+    flagged = sum(1 for t in turns if _flagged(t))
+    console.print(f"\n[dim]{len(turns)} turn(s), {flagged} flagged"
+                  + (f", {log.unreadable} unreadable line(s) skipped"
+                     if log.unreadable else "")
+                  + " -- by the cheap filter or by a case's own grader; "
+                    "an unflagged turn can still be wrong. A case from one: "
+                    "--fossil ID "
+                    f"--trace {escape(str(log.path))}[/dim]")
+    return 0
+
+
+def _flagged(turn) -> bool:
+    """The cheap filter (``Trajectory.failed``), or a grader that said no.
+
+    A grader's verdict is the one judgement a trace carries that Yantra
+    did not make: a person wrote the case (notes/70).
+    """
+    return turn.failed or turn.passed is False
+
+
+def _why_flagged(turn) -> str:
+    """Every reason a turn is flagged, or "". All of them, because the
+    grader's no and a tool that failed are two different leads."""
+    why = []
+    if turn.passed is False:
+        why.append("red in its case -- the grader said no")
+    if turn.outcome != "end_turn":
+        why.append(f"ended {turn.outcome}")
+    why += [f"{step.name}{_step_note(step)}" for step in turn.steps
+            if not step.ok]
+    for child in turn.children:
+        if child.failed:
+            why.append(f"sub-agent #{child.number} {child.agent}: " + (
+                child.code or next(f"{s.name}{_step_note(s)}"
+                                   for s in child.steps if not s.ok)))
+    return "; ".join(why)
 
 
 def _step_note(step) -> str:
@@ -1546,6 +1620,19 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --fossil prints one recorded turn as a case and exits; "
               "drop --eval/--build/--web/--prompt/PROMPT", file=sys.stderr)
         return 2
+    if args.turns is not None and args.trace is None:
+        print("error: --turns lists a recording, so it needs the file: "
+              "--turns --trace FILE", file=sys.stderr)
+        return 2
+    if args.turns is not None and (
+            args.eval or args.build or args.web or args.prompt
+            or args.prompt_positional or args.fossil is not None
+            or args.trace_full or args.reports is not None
+            or args.trace_prune is not None):
+        print("error: --turns lists a recording and exits; drop "
+              "--eval/--build/--web/--fossil/--reports/--trace-prune/"
+              "--trace-full/--prompt/PROMPT", file=sys.stderr)
+        return 2
     if args.trace_prune is not None and args.trace is None:
         print("error: --trace-prune removes old turns from a recording, so "
               "it needs the file: --trace-prune DAYS --trace FILE",
@@ -1601,6 +1688,8 @@ def main(argv: list[str] | None = None) -> int:
     # A recording is a file too (notes/67).
     if args.trace_prune is not None:
         return _trace_prune_mode(args, console)
+    if args.turns is not None:
+        return _turns_mode(args, console)
 
     # Reports are files. Reading them needs no package, no provider and no
     # key, so this goes before any of those are resolved (notes/62).

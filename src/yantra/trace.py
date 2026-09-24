@@ -51,10 +51,11 @@ the gate's refusal code too (notes/65), so a child turned away by a rule
 does not read as a child whose call failed.
 
 A SUITE RECORDS WHAT IT GRADED (notes/65). ``--eval --trace`` writes
-every run of every case, tagged with the case's id, and the report names
-those turns back. The eval runners call ``agent.run()`` and have no
-stream to tee, so ``from_history`` writes the line afterwards from what
-the agent kept -- recording must not change how the graded run was driven.
+every run of every case, tagged with the case's id and whether its grader
+passed it (notes/70), and the report names those turns back. The eval
+runners call ``agent.run()`` and have no stream to tee, so
+``from_history`` writes the line afterwards from what the agent kept --
+recording must not change how the graded run was driven.
 
 APPEND-ONLY JSONL, one turn per line, because the failure being recorded
 may be a crash: a format that has to be closed to be valid loses the one
@@ -164,6 +165,12 @@ class Trajectory:
     #: (notes/65); None for a turn somebody typed. The report names the
     #: turn from the other side, so either file finds the other.
     case: str | None = None
+    #: Whether that case's grader passed this run (notes/70), when a suite
+    #: recorded it: the one verdict a trace can carry honestly, because a
+    #: person wrote the case that reached it. None for a typed turn.
+    #: Kept at SHAPE -- a boolean, not the grader's words, which may quote
+    #: whatever the agent said.
+    passed: bool | None = None
 
     @property
     def tools_used(self) -> list[str]:
@@ -385,6 +392,8 @@ def _as_json(trajectory: Trajectory) -> dict[str, Any]:
         payload["answer"] = trajectory.answer
     if trajectory.case is not None:
         payload["case"] = trajectory.case
+    if trajectory.passed is not None:
+        payload["passed"] = trajectory.passed
     if trajectory.children:
         # Only when there were any, so a turn without delegation reads
         # exactly as it always did.
@@ -437,6 +446,7 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
             code=c.get("code"), task=c.get("task"), answer=c.get("answer"),
         ) for c in raw.get("children", [])],
         case=raw.get("case"),
+        passed=raw.get("passed"),
     )
 
 
@@ -530,8 +540,8 @@ def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
 def from_history(agent: Any, task: str, *, provider: str = "",
                  model: str = "", detail: str = SHAPE,
                  outcome: str = "end_turn", seconds: float = 0.0,
-                 usd: float | None = None, case: str | None = None
-                 ) -> Trajectory:
+                 usd: float | None = None, case: str | None = None,
+                 passed: bool | None = None) -> Trajectory:
     """A turn that was RUN rather than streamed, written down afterwards.
 
     ``watch`` needs the event stream, and an eval runner does not have
@@ -554,7 +564,7 @@ def from_history(agent: Any, task: str, *, provider: str = "",
     trajectory = Trajectory(id=uuid.uuid4().hex, at=_now(), provider=provider,
                             model=model, detail=detail, task=task,
                             outcome=outcome, seconds=seconds, usd=usd,
-                            case=case)
+                            case=case, passed=passed)
     for message in history:
         if message.role != "assistant":
             continue

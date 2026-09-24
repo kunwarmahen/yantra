@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1757 tests. The
+The harness underneath is complete and covered by 1770 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1185,6 +1185,24 @@ same tokens per run (~1,000) -- the rates moved between those reports,
 not only the agent`. `--pool-json` carries `tokens_first` and
 `tokens_last`. See [notes/67](notes/67-the-agent-or-the-vendor.md).
 
+**Finding the turn worth keeping.** `--turns --trace FILE` lists a
+recording one line a turn (the id `--fossil` takes, when, the task, the
+case), and `--turns failed` keeps the flagged ones, each with every
+reason: the turn ended badly, a tool or sub-agent failed, or, for a
+suite's turn, **its own case's grader said no**, which `--eval --trace`
+now writes into the line as a boolean. It decides nothing: the footer
+says an unflagged turn can still be wrong.
+
+```
+$ uv run yantra --turns failed --trace runs/turns.jsonl
+✗ f8d557f7  2026-09-24T15:04:55Z   2 tool(s)  Which file in sources/ mentions ... case outlines-a-one-word-lookup
+             red in its case -- the grader said no; read_file (failed)
+✗ 28a0f12c  2026-09-24T15:05:03Z   2 tool(s)  Which file in sources/ mentions ... case outlines-a-one-word-lookup
+             red in its case -- the grader said no
+```
+
+See [notes/70](notes/70-a-list-to-choose-from.md).
+
 **And a report can choose the next run, not only judge it.** `--failed
 FILE` runs the cases that were red in a report written earlier; with no
 `FILE`, the one `--against` names:
@@ -1730,7 +1748,10 @@ src/yantra/
 │                   -- how a suite records its cases, each line tagged with
 │                   its case id ([notes/65](notes/65-the-turn-behind-the-red-line.md)).
 │                   prune removes turns by AGE, only when asked, keeping
-│                   what it cannot date ([notes/67](notes/67-the-agent-or-the-vendor.md))
+│                   what it cannot date ([notes/67](notes/67-the-agent-or-the-vendor.md)).
+│                   A suite's line keeps its grader's verdict (passed), so
+│                   --turns can flag a clean turn that was wrong
+│                   ([notes/70](notes/70-a-list-to-choose-from.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

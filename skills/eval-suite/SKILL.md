@@ -239,7 +239,10 @@ newest; `--pool-json FILE` writes the pool as JSON
 To see what a red case actually DID, run the suite with `--trace
 FILE`: each failing case prints its turn ids, the report keeps them, and
 `--fossil ID --trace FILE` turns one into a case
-(`notes/65-the-turn-behind-the-red-line.md`).
+(`notes/65-the-turn-behind-the-red-line.md`). `--turns failed --trace
+FILE` lists the flagged turns with their reasons, including a grader's
+no, so an id can be found without opening the file
+(`notes/70-a-list-to-choose-from.md`).
 
 ## Graders: checking the answer text
 

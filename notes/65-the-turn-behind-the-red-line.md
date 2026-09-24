@@ -149,7 +149,9 @@ of `jq`.
 
 * **Nothing decides what was a failure.** Still true from note 57: a
   green run can be wrong, and a red run's turn is where to *start*
-  looking, not a verdict on what went wrong.
+  looking, not a verdict on what went wrong. [note 70](70-a-list-to-choose-from.md) lists the
+  recording (`--turns`) and keeps each suite turn's grader verdict, so
+  those red turns are findable without opening the file.
 * ~~**No retention or rotation.**~~ Shipped in [note 67](67-the-agent-or-the-vendor.md):
   `--trace-prune DAYS`. Was: still true from note 57, and more pressing
   now that `--repeat 10` on a suite writes ten lines a case.

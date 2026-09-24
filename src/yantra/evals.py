@@ -814,7 +814,7 @@ def _recorded(runner: Any, case: EvalCase, agent: Any, start: float,
         agent, case.user_message, provider=runner.provider_name or "",
         model=runner.model, detail=log.detail, outcome=outcome,
         seconds=round(time.monotonic() - start, 3), usd=result.usd,
-        case=case.id))
+        case=case.id, passed=result.passed))
     return result
 
 

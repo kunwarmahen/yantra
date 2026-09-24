@@ -131,7 +131,9 @@ redirect above does not swallow it.
   cheap filter — the turn ended badly, or a tool errored — and a turn
   can end perfectly while producing a wrong answer. Only a person can
   say which recordings deserve a case, which is why `--fossil` takes an
-  id rather than a predicate.
+  id rather than a predicate. Still true by design; [note 70](70-a-list-to-choose-from.md) helps the
+  person choose: `--turns` lists the recording with every flag's reason,
+  and a suite's line keeps its own grader's verdict.
 * ~~**No retention, no rotation.**~~ Shipped in [note 67](67-the-agent-or-the-vendor.md):
   `--trace-prune DAYS` removes turns by age, on request. Was: the file
   grows until somebody deletes it.
