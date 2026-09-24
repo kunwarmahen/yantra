@@ -136,10 +136,16 @@ redirect above does not swallow it.
   somebody deletes it. A service wanting "keep thirty days" or "drop
   anything matching this pattern" writes it in ten lines against JSONL,
   which is why the format is JSONL.
-* **The web UI records nothing.** `--trace` is a terminal flag; the
+* ~~**The web UI records nothing.**~~ Shipped in
+  [note 63](63-the-whole-turn-written-down.md): `--trace` records the
+  browser's turns too, and the banner says so. Was: `--trace` is a terminal flag; the
   browser drives the same agent through a different path, and the tee
   would have to go in `WebSession._emit`.
-* **A sub-agent's turn is invisible.** The tee sees the parent's event
+* ~~**A sub-agent's turn is invisible.**~~ Shipped in
+  [note 63](63-the-whole-turn-written-down.md): each child rides in its
+  parent's line under `children`, with its tool calls in order and
+  whether each worked, read from the child's history rather than from
+  the stream. Was: The tee sees the parent's event
   stream, and a child's work shows up as one `ToolExecuted` with the
   child's name on it ([notes/40](40-a-package-that-delegates.md)). Where
   the delegation failed inside the child is still gone when the turn

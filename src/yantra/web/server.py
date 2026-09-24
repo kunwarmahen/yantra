@@ -63,6 +63,7 @@ from yantra.prompt import recompose
 from yantra.providers import get_provider
 from yantra.session import SessionStore, apply_payload
 from yantra.skills.loader import SkillError
+from yantra.trace import watch
 from yantra.types import (
     EndEvent,
     ImageBlock,
@@ -147,6 +148,12 @@ class WebSession:
         self._pending: _Pending | None = None
         self._cancel = threading.Event()
         self.turn_active = False
+        #: A TrajectoryLog when the operator passed --trace (notes/63). The
+        #: browser drives the same agent through a different loop from the
+        #: terminal's, so the recorder has to be teed in here as well --
+        #: a flag that recorded one frontend and silently not the other
+        #: would be a store with holes nobody could see.
+        self.trace: Any | None = None
 
     # ---- wiring -------------------------------------------------------------
 
@@ -338,6 +345,11 @@ class WebSession:
         envelopes, honor cancel at every yield boundary."""
         agent = self.agent
         stream = agent.run_streaming(text, images=images or None)
+        if self.trace is not None:
+            stream = watch(text, stream, self.trace.record,
+                           provider=getattr(agent.provider, "name", ""),
+                           model=agent.model, detail=self.trace.detail,
+                           spawner=getattr(agent, "subagents", None))
         ended = False  # a natural TurnEnd went out -- don't double-report
         cancelled = False
         try:
@@ -1113,9 +1125,12 @@ def launch(session: WebSession, agent: Agent, store: SessionStore | None,
     session.attach(agent, store, mcp=mcp)
     app = make_app(session)
     servers = f" · mcp servers={len(mcp.sessions)}" if mcp else ""
+    recording = (f"  recording turns -> {session.trace.path} "
+                 f"({session.trace.detail})\n" if session.trace else "")
     print(f"\n  yantra web UI -> http://{host}:{port}\n"
           f"  provider={agent.provider.name} · model={agent.model} · "
           f"tools={len(agent.registry)}{servers} · cwd={agent.ctx.cwd}\n"
+          f"{recording}"
           "  ctrl-c stops the server\n")
     uvicorn.run(app, host=host, port=port, log_level="warning")
     return 0

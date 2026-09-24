@@ -1161,7 +1161,8 @@ a run of nothing passes everything. See
 
 **Every real failure leaves a fossil in the suite** — and now without
 anybody transcribing it. `--trace FILE` appends every turn of a session
-to JSONL, and `--fossil ID` prints the case that turn should have left:
+to JSONL (in the terminal and under `--web` alike), and `--fossil ID`
+prints the case that turn should have left:
 
 ```
 $ uv run yantra --provider local --trace runs/today.jsonl "outline notes/30 at depth 1"
@@ -1184,6 +1185,15 @@ a case asserting on the contents of a file goes red the day somebody
 edits that file. The block is **printed rather than appended** — a
 suite is its author's file. See
 [notes/57](notes/57-a-turn-written-down.md).
+
+A turn that delegated keeps its **sub-agents** too, inside the parent's
+line: each child's tool calls in order, whether each worked, its tokens
+and how it stopped. A failure inside a child marks the whole turn as
+failed, even when the parent covered for it in its answer. The task the
+parent wrote for the child counts as content and is kept only with
+`--trace-full`. `--fossil` names what the children did on stderr and
+does not assert it. See
+[notes/63](notes/63-the-whole-turn-written-down.md).
 
 **The servers the package declares are under test too.** `--eval` starts
 them and their tools register as `mcp__<server>__<tool>`, so
@@ -1415,7 +1425,9 @@ src/yantra/
 │                   suspends still works inside one. resolve_child_tools is
 │                   the ONE definition of what a child would be offered --
 │                   a disabled tool is unreachable, not present -- shared by
-│                   the spawn, the refusal, read_only and the eval assertion
+│                   the spawn, the refusal, read_only and the eval assertion.
+│                   Each result keeps the child's number, name, model and
+│                   tool steps for a recorder, never for the model
 │                   ([notes/08](notes/08-sub-agents.md),
 │                   [notes/34](notes/34-budgets.md),
 │                   [notes/40](notes/40-a-package-that-delegates.md),
@@ -1591,7 +1603,10 @@ src/yantra/
 │                   arguments, results or the answer, which is whatever the
 │                   agent read. --trace-full opts in, and every line says
 │                   which level wrote it
-│                   ([notes/57](notes/57-a-turn-written-down.md))
+│                   ([notes/57](notes/57-a-turn-written-down.md)). A
+│                   turn's CHILDREN ride in its line, steps read off the
+│                   spawner; the web UI's loop is teed the same way
+│                   ([notes/63](notes/63-the-whole-turn-written-down.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

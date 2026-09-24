@@ -967,6 +967,13 @@ level wrote it. The shape is also all a case wants: assert on the
 contents of a file and your case goes red the day somebody edits it.
 ([notes/57](notes/57-a-turn-written-down.md))
 
+`--trace` works with `--web` too, so turns you run in the browser are
+recorded the same way. When the agent hands work to a sub-agent, the
+sub-agent's steps are saved inside the same line: which tools it used,
+and whether each one worked. If something failed inside the sub-agent,
+the turn counts as failed even if the main agent carried on and
+answered anyway ([notes/63](notes/63-the-whole-turn-written-down.md)).
+
 ### Embedding a package instead of running it
 
 ```python
@@ -2236,7 +2243,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |

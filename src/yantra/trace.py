@@ -38,6 +38,16 @@ task and the tool names, and asserts on those. A case built from a full
 trajectory would be asserting on the contents of a file that will have
 changed by the time anybody re-runs it.
 
+A CHILD IS PART OF THE TURN THAT SPAWNED IT (notes/63). A sub-agent's
+work used to reach the recording as one ``ToolExecuted`` with the child's
+name on it, so a delegation that failed three calls deep inside the child
+looked, afterwards, like a tool that returned. Each child now rides in its
+parent's line under ``children``, at the same level of detail as the
+parent: its tool calls in order and whether each worked, its iterations,
+tokens and how it stopped, always; the task the parent gave it and what
+it answered, only at FULL -- the parent model WROTE that task out of
+whatever it had read, so it is content, not shape.
+
 APPEND-ONLY JSONL, one turn per line, because the failure being recorded
 may be a crash: a format that has to be closed to be valid loses the one
 turn worth keeping. A malformed line is skipped on read with a count, not
@@ -90,6 +100,27 @@ class ToolStep:
 
 
 @dataclass(slots=True)
+class ChildRun:
+    """One sub-agent the turn spawned, as its parent's recording keeps it."""
+
+    number: int                  # 1-based spawn number, as the live view shows
+    agent: str                   # the tool the parent called
+    model: str
+    steps: list[ToolStep] = field(default_factory=list)
+    iterations: int = 0
+    tokens: int = 0
+    #: ``SubagentResult.code``: None when the child finished, else why not.
+    code: str | None = None
+    #: Only at FULL: the task it was given and what it answered.
+    task: str | None = None
+    answer: str | None = None
+
+    @property
+    def failed(self) -> bool:
+        return self.code is not None or any(not s.ok for s in self.steps)
+
+
+@dataclass(slots=True)
 class Trajectory:
     """One turn, written down."""
 
@@ -107,6 +138,9 @@ class Trajectory:
     outcome: str = "end_turn"     # TurnEnd.reason, or "crashed"
     #: Only at FULL: what the model finally said.
     answer: str | None = None
+    #: Sub-agents this turn spawned, in the order they FINISHED (two may
+    #: run at once, notes/55); ``number`` says the order they started.
+    children: list[ChildRun] = field(default_factory=list)
 
     @property
     def tools_used(self) -> list[str]:
@@ -122,8 +156,13 @@ class Trajectory:
         Not a verdict -- a turn that ended cleanly can still have produced
         a wrong answer, and only a person can say so. This is the cheap
         half, and it is what a host filters on before asking one.
+
+        A child that failed counts: its trouble is this turn's trouble,
+        even when the parent smoothed it over in its answer.
         """
-        return self.outcome != "end_turn" or any(not s.ok for s in self.steps)
+        return (self.outcome != "end_turn"
+                or any(not s.ok for s in self.steps)
+                or any(c.failed for c in self.children))
 
 
 def _now() -> str:
@@ -238,7 +277,25 @@ def _as_json(trajectory: Trajectory) -> dict[str, Any]:
         payload["steps"].append(row)
     if trajectory.answer is not None:
         payload["answer"] = trajectory.answer
+    if trajectory.children:
+        # Only when there were any, so a turn without delegation reads
+        # exactly as it always did.
+        payload["children"] = [_child_json(c) for c in trajectory.children]
     return payload
+
+
+def _child_json(child: ChildRun) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "number": child.number, "agent": child.agent, "model": child.model,
+        "iterations": child.iterations, "tokens": child.tokens,
+        "code": child.code,
+        "steps": [{"name": s.name, "ok": s.ok} for s in child.steps],
+    }
+    if child.task is not None:
+        row["task"] = child.task
+    if child.answer is not None:
+        row["answer"] = child.answer
+    return row
 
 
 def _from_json(raw: dict[str, Any]) -> Trajectory:
@@ -254,12 +311,34 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         iterations=raw.get("iterations", 0), tokens=raw.get("tokens", 0),
         usd=raw.get("usd"), seconds=raw.get("seconds", 0.0),
         outcome=raw.get("outcome", "end_turn"), answer=raw.get("answer"),
+        children=[ChildRun(
+            number=c["number"], agent=c["agent"], model=c.get("model", ""),
+            steps=[ToolStep(name=s["name"], ok=s["ok"])
+                   for s in c.get("steps", [])],
+            iterations=c.get("iterations", 0), tokens=c.get("tokens", 0),
+            code=c.get("code"), task=c.get("task"), answer=c.get("answer"),
+        ) for c in raw.get("children", [])],
     )
+
+
+def _child_run(result: Any, detail: str) -> ChildRun:
+    """A spawner's ``SubagentResult`` -> the shape a recording keeps."""
+    child = ChildRun(
+        number=result.number, agent=result.agent, model=result.model,
+        steps=[ToolStep(name=name, ok=ok) for name, ok in result.steps],
+        iterations=result.iterations_used,
+        tokens=result.input_tokens + result.output_tokens, code=result.code,
+    )
+    if detail == FULL:
+        child.task = _clip(result.objective)
+        child.answer = _clip(result.summary)
+    return child
 
 
 def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
           *, provider: str = "", model: str = "", detail: str = SHAPE,
-          usd: float | None = None) -> Iterator[Any]:
+          usd: float | None = None, spawner: Any | None = None
+          ) -> Iterator[Any]:
     """Pass every event through, and hand the finished turn to ``sink``.
 
     A TEE rather than a consumer, the same shape the sub-agent stream
@@ -271,8 +350,17 @@ def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
     ends badly. A turn that raises is recorded with ``outcome="crashed"``
     and the exception re-raised, because the turn somebody most wants a
     case for is the one that fell over.
+
+    ``spawner`` is the session's ``SubagentSpawner``, when it has one: the
+    children it finished while this turn ran are this turn's children.
+    Read off its ``results`` list rather than off the event stream, which
+    carries the parent's events only -- one turn at a time is how every
+    host here drives an agent, so "finished during this turn" is exact.
     """
     started = time.monotonic()
+    if not isinstance(getattr(spawner, "results", None), list):
+        spawner = None           # a host with no spawner, or a stand-in
+    already = len(spawner.results) if spawner is not None else 0
     trajectory = Trajectory(id=uuid.uuid4().hex, at=_now(), provider=provider,
                             model=model, detail=detail, task=task)
     try:
@@ -302,8 +390,18 @@ def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
         raise
     finally:
         # In a finally so a crashed or ABANDONED turn is still recorded:
-        # a generator closed early (Ctrl-C at the terminal) is exactly the
-        # shape of turn somebody wants to look at afterwards.
+        # a generator closed early (Ctrl-C at the terminal, Stop in the
+        # browser) is exactly the shape of turn somebody wants to look at
+        # afterwards. The inner stream is closed HERE, explicitly, so the
+        # agent's outstanding-call synthesis has run -- and its children
+        # have reported -- before the line is written, rather than
+        # whenever the collector gets round to it.
+        close = getattr(events, "close", None)
+        if close is not None:
+            close()
         trajectory.seconds = round(time.monotonic() - started, 3)
         trajectory.usd = usd
+        if spawner is not None:
+            trajectory.children = [_child_run(r, detail)
+                                   for r in spawner.results[already:]]
         sink(trajectory)

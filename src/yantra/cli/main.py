@@ -266,8 +266,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "Default from $YANTRA_ENV_CONTEXT (full)")
     parser.add_argument("--trace", metavar="FILE", default=None,
                         help="append every turn of this session to FILE as "
-                             "JSONL -- the task, which tools ran, and what it "
-                             "cost. A real failure can then become a "
+                             "JSONL -- the task, which tools ran (a sub-agent's "
+                             "too), and what it cost; the terminal and --web "
+                             "alike. A real failure can then become a "
                              "regression case with --fossil. Keeps the SHAPE "
                              "of a turn and not its contents; --trace-full "
                              "adds arguments, results and the answer, which "
@@ -487,6 +488,15 @@ def _fossil_mode(args, console: Console) -> int:
     print("note: assertions are the SHAPE of that turn -- its task and the "
           "tools it used. Edit the id and description before committing; "
           "the ceiling is what it cost x1.5.", file=sys.stderr)
+    for child in trajectory.children:
+        # Said, not asserted: a child's steps are the delegation's inner
+        # workings, and a case that pinned them would break every time the
+        # child found a better route to the same answer (notes/63).
+        steps = ", ".join(f"{s.name}{'' if s.ok else ' (failed)'}"
+                          for s in child.steps) or "no tool calls"
+        ended = child.code or "finished"
+        print(f"note: sub-agent #{child.number} {child.agent} on "
+              f"{child.model}: {steps}; {ended}", file=sys.stderr)
     return 0
 
 
@@ -1684,6 +1694,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if web_session is not None:
             from yantra.web.server import launch
+            web_session.trace = repl.trace   # --trace records the browser too
             return launch(web_session, agent, store,
                           host=args.host, port=args.port, mcp=mcp_manager)
 

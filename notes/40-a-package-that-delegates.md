@@ -394,7 +394,10 @@ nobody can read and nobody can review, which is the opposite of what
   (retry the first, never the second). The prose stays what the parent
   MODEL reads, and stays improvable, which is precisely why a caller
   cannot be left matching on it.
-* **No way to see the child's transcript after the fact.** The stream tee
+* **No way to see the child's transcript after the fact.** Its SHAPE is
+  kept now ([note 63](63-the-whole-turn-written-down.md)): `--trace`
+  records which tools a child called, whether each worked, and how it
+  stopped. Its contents are still not kept. The stream tee
   shows it live if a UI wires one up; once the turn is over, the child's
   history is gone. A service that wants to explain a verdict a week later
   has to keep it itself.

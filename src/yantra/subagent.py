@@ -60,13 +60,14 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
 from yantra.errors import ProviderError, ToolError
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
+from yantra.types import ToolResult
 
 SPAWN_TOOL_NAME = "spawn_subagent"
 
@@ -190,6 +191,18 @@ class SubagentResult:
     #: iteration cap needs something that does not change when it does.
     #: None when the child finished.
     code: str | None = None
+    #: Which child this was, for a recorder rather than for the model
+    #: (notes/63): the 1-based spawn number the live view already tags
+    #: its lines with, the tool the parent called (a declared child's
+    #: name, or the freeform spawn tool), the model it ran on, the task it
+    #: was given, and every tool call it made with whether that call
+    #: succeeded, in order. The parent model never sees any of these --
+    #: the tool returns ``summary`` -- which is the point of a child.
+    number: int = 0
+    agent: str = ""
+    model: str = ""
+    objective: str = ""
+    steps: list[tuple[str, bool]] = field(default_factory=list)
 
 
 #: Why a child did not finish. Two, because two things go wrong -- and
@@ -291,7 +304,7 @@ class SubagentSpawner:
 
     # ---- execution ---------------------------------------------------------
 
-    def _charge_one(self) -> None:
+    def _charge_one(self) -> int:
         """Take one spawn off the session budget, or say it is gone.
 
         Counted when ATTEMPTED, successful or not: a child that crashed
@@ -306,6 +319,10 @@ class SubagentSpawner:
                     "inline or ask the user to raise the budget"
                 )
             self.spawned += 1
+            # Returned from INSIDE the lock: reading ``self.spawned`` again
+            # after it would be the check-then-act race notes/55 closed,
+            # and would hand two parallel children the same number.
+            return self.spawned
 
     def _child_registry(self, allowed: list[str]) -> ToolRegistry:
         """The child's WHOLE tool set -- scope restriction as a fact about
@@ -329,7 +346,8 @@ class SubagentSpawner:
         return registry
 
     def _build(self, *, system: str, allowed: list[str], max_iterations: int,
-               model: str | None = None, want_async: bool = False):
+               number: int, model: str | None = None,
+               want_async: bool = False):
         """One child, of whichever KIND ITS CALLER can drive.
 
         Keyed to the CALL PATH, not to the parent: a synchronous spawn
@@ -366,9 +384,8 @@ class SubagentSpawner:
             # seeing any of it. Still deliberately NOT part of the
             # StreamEvent union -- this is a UI seam with different
             # provenance, not new loop vocabulary (hence the loose Any).
-            spawn_no = self.spawned  # already incremented: this child's number
             child.on_stream_event = (
-                lambda event, n=spawn_no: self.on_child_event(n, event)
+                lambda event, n=number: self.on_child_event(n, event)
             )
         return child
 
@@ -432,48 +449,50 @@ class SubagentSpawner:
         """The FREEFORM route: the model named everything. Validate, build,
         run to completion."""
         objective, output_format, allowed, max_iterations = self._validate(args)
-        self._charge_one()
+        number = self._charge_one()
         child = self._build(
             system=self._freeform_system(objective, output_format, allowed,
                                          max_iterations),
-            allowed=allowed, max_iterations=max_iterations)
-        return self._run(child, objective)
+            allowed=allowed, max_iterations=max_iterations, number=number)
+        return self._run(child, objective, number, SPAWN_TOOL_NAME)
 
     async def aspawn(self, args: dict[str, Any]) -> SubagentResult:
         """The freeform route from a coroutine. Same validation, same child
         construction, awaited rather than blocked on."""
         objective, output_format, allowed, max_iterations = self._validate(args)
-        self._charge_one()
+        number = self._charge_one()
         child = self._build(
             system=self._freeform_system(objective, output_format, allowed,
                                          max_iterations),
-            allowed=allowed, max_iterations=max_iterations, want_async=True)
-        return await self._arun(child, objective)
+            allowed=allowed, max_iterations=max_iterations, number=number,
+            want_async=True)
+        return await self._arun(child, objective, number, SPAWN_TOOL_NAME)
 
     def spawn_declared(self, spec: SubagentSpec,
                        args: dict[str, Any]) -> SubagentResult:
         """A sub-agent the PACKAGE declared. The model supplies one string."""
         objective = self._declared_objective(spec, args)
-        self._charge_one()
+        number = self._charge_one()
         child = self._build(system=self._declared_system(spec, objective),
                             allowed=list(spec.tools),
                             max_iterations=spec.max_iterations,
-                            model=spec.model)
-        return self._run(child, objective)
+                            number=number, model=spec.model)
+        return self._run(child, objective, number, spec.name)
 
     async def aspawn_declared(self, spec: SubagentSpec,
                               args: dict[str, Any]) -> SubagentResult:
         objective = self._declared_objective(spec, args)
-        self._charge_one()
+        number = self._charge_one()
         child = self._build(system=self._declared_system(spec, objective),
                             allowed=list(spec.tools),
                             max_iterations=spec.max_iterations,
-                            model=spec.model, want_async=True)
-        return await self._arun(child, objective)
+                            number=number, model=spec.model, want_async=True)
+        return await self._arun(child, objective, number, spec.name)
 
     # ---- running one child, and what its failures mean ----------------------
 
-    def _run(self, child, objective: str) -> SubagentResult:
+    def _run(self, child, objective: str, number: int = 0,
+             agent: str = "") -> SubagentResult:
         # The slot is held around the RUN, not around validation or the
         # budget: what is being limited is conversations in flight, and a
         # child that was refused a spawn never became one.
@@ -481,20 +500,25 @@ class SubagentSpawner:
             try:
                 child.run(objective)
             except ProviderError as exc:
-                return self._record(self._provider_failed(child, exc))
+                result = self._provider_failed(child, exc)
             except RuntimeError as exc:
-                return self._record(self._capped(child, exc))
-            return self._record(self._finished(child))
+                result = self._capped(child, exc)
+            else:
+                result = self._finished(child)
+            return self._record(result, child, objective, number, agent)
 
-    async def _arun(self, child, objective: str) -> SubagentResult:
+    async def _arun(self, child, objective: str, number: int = 0,
+                    agent: str = "") -> SubagentResult:
         async with self._aslots:
             try:
                 await child.run(objective)
             except ProviderError as exc:
-                return self._record(self._provider_failed(child, exc))
+                result = self._provider_failed(child, exc)
             except RuntimeError as exc:
-                return self._record(self._capped(child, exc))
-            return self._record(self._finished(child))
+                result = self._capped(child, exc)
+            else:
+                result = self._finished(child)
+            return self._record(result, child, objective, number, agent)
 
     @staticmethod
     def _provider_failed(child, exc: Exception) -> SubagentResult:
@@ -549,7 +573,31 @@ class SubagentSpawner:
                     return text
         return ""
 
-    def _record(self, result: SubagentResult) -> SubagentResult:
+    @staticmethod
+    def _steps(child: Agent | AsyncAgent) -> list[tuple[str, bool]]:
+        """Every tool call the child made, in order, and whether it worked.
+
+        Read from the child's HISTORY after it stops, not from its event
+        stream: the stream tee carries only raw model output (notes/08),
+        and history is the one record that is complete whichever of the
+        three ways the child ended. A call with no result at all -- the
+        child was cut off mid-batch -- did not succeed.
+        """
+        history = getattr(child, "history", [])
+        worked = {block.tool_call_id: not block.is_error
+                  for message in history for block in message.content
+                  if isinstance(block, ToolResult)}
+        return [(call.name, worked.get(call.id, False))
+                for message in history if message.role == "assistant"
+                for call in message.tool_calls()]
+
+    def _record(self, result: SubagentResult, child=None, objective: str = "",
+                number: int = 0, agent: str = "") -> SubagentResult:
+        if child is not None:
+            result.number, result.agent = number, agent
+            result.model = getattr(child, "model", "")
+            result.objective = objective
+            result.steps = self._steps(child)
         self.results.append(result)
         return result
 

@@ -329,7 +329,8 @@ class Repl:
             # when it ends badly.
             stream = watch(user_input, stream, self.trace.record,
                            provider=getattr(self.agent.provider, "name", ""),
-                           model=self.agent.model, detail=self.trace.detail)
+                           model=self.agent.model, detail=self.trace.detail,
+                           spawner=getattr(self.agent, "subagents", None))
         spinner = self.console.status("[dim]… connecting[/dim]", spinner="dots")
         spinner.start()
         self._spinner = spinner  # _on_stream_event drops it at first delta
