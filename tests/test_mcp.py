@@ -181,23 +181,33 @@ class TestServerInitiatedRequests:
     def test_ping_answered(self, tmp_path):
         # if we ignored the ping, the server blocks waiting for its reply
         # and tools/list times out -- this test FAILS in that world.
+        # The server handles messages in ANY order: the client's reply, its
+        # notifications/initialized and its tools/list race each other, and
+        # a fake server that assumed an order flaked under load.
         body = """\
             import json, sys
             def send(m): sys.stdout.write(json.dumps(m) + "\\n"); sys.stdout.flush()
+            answered = False
             while True:
                 line = sys.stdin.readline()
                 if not line:
                     break
                 msg = json.loads(line)
                 method, mid = msg.get("method"), msg.get("id")
-                if method == "initialize":
+                if method is None and mid == 99:          # the ping's reply
+                    assert msg.get("result") == {}
+                    answered = True
+                elif method == "initialize":
                     send({"jsonrpc": "2.0", "id": mid, "result": {
                         "protocolVersion": msg["params"]["protocolVersion"],
                         "capabilities": {}, "serverInfo": {"name": "f", "v": "0"}}})
                     send({"jsonrpc": "2.0", "id": 99, "method": "ping"})
-                    reply = json.loads(sys.stdin.readline())
-                    assert reply["id"] == 99 and reply.get("result") == {}
                 elif method == "tools/list":
+                    while not answered:                   # no tools until pinged back
+                        reply = json.loads(sys.stdin.readline())
+                        if reply.get("method") is None and reply.get("id") == 99:
+                            assert reply.get("result") == {}
+                            answered = True
                     send({"jsonrpc": "2.0", "id": mid,
                           "result": {"tools": []}})
         """
@@ -209,26 +219,34 @@ class TestServerInitiatedRequests:
             session.close()
 
     def test_unknown_request_gets_method_not_found(self, tmp_path):
+        # Order-agnostic, as above: the error reply may arrive before or
+        # after notifications/initialized and tools/list.
         body = """\
             import json, sys
             def send(m): sys.stdout.write(json.dumps(m) + "\\n"); sys.stdout.flush()
-            EMPTY = {"jsonrpc": "2.0", "id": 0, "result": {"tools": []}}
+            def is_the_reply(m):
+                if m.get("method") is None and m.get("id") == 98:
+                    assert m["error"]["code"] == -32601
+                    return True
+                return False
+            answered = False
             while True:
                 line = sys.stdin.readline()
                 if not line:
                     break
                 msg = json.loads(line)
                 method, mid = msg.get("method"), msg.get("id")
-                if method == "initialize":
+                if is_the_reply(msg):
+                    answered = True
+                elif method == "initialize":
                     send({"jsonrpc": "2.0", "id": mid, "result": {
                         "protocolVersion": msg["params"]["protocolVersion"],
                         "capabilities": {}, "serverInfo": {"n": "f"}}})
                     send({"jsonrpc": "2.0", "id": 98,
                           "method": "sampling/createMessage"})
-                    reply = json.loads(sys.stdin.readline())
-                    assert reply["id"] == 98
-                    assert reply["error"]["code"] == -32601
                 elif method == "tools/list":
+                    while not answered:
+                        answered = is_the_reply(json.loads(sys.stdin.readline()))
                     send({"jsonrpc": "2.0", "id": mid, "result": {"tools": []}})
         """
         from yantra.mcp import connect_mcp
