@@ -52,6 +52,14 @@ nothing new is kept anywhere -- and how far back to look is the list of
 files the operator names. What pooling refuses to do is add together runs
 that were not samples of the same thing: a different model or a different
 package version is a different rate, pooled on its own and never summed.
+The same files hold every case's dollars, so a pooled case also says what
+one run of it cost in the oldest report and the newest (notes/66) -- per
+run, because ten repeats and three are not the same bill -- and the pool
+can be written down as its own format, never mistaken for a report.
+
+A REPORT NAMES THE TURNS BEHIND IT when the suite ran with ``--trace``
+(notes/65): each case row lists the trace ids of its runs, so a red line
+leads to what the agent actually did.
 
 JSON, one object, with a format tag. A report is written by one version
 of this program and read by another -- possibly months later, by a CI job
@@ -95,6 +103,10 @@ class CaseRecord:
     #: model had no known price -- or that the report predates this key,
     #: which reads the same way and correctly: nobody wrote a figure down.
     usd: float | None = None
+    #: The recorded turns behind these runs, when the suite ran with
+    #: ``--trace`` (notes/65): ids in the trace file, one per run that
+    #: reached a model. Empty otherwise, and on every older report.
+    traces: list[str] = field(default_factory=list)
 
     @property
     def tally(self) -> str:
@@ -239,6 +251,7 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
             tokens=o.tokens_used, seconds=round(o.duration_seconds, 3),
             ran_model=o.ran_model, failures=list(o.failures),
             usd=getattr(o, "usd", None),
+            traces=list(getattr(o, "traces", [])),
         ) for o in outcomes],
     )
 
@@ -261,19 +274,28 @@ def write_report(path: Path, run: SuiteRun) -> None:
         "pricing": run.pricing.to_json() if run.pricing else None,
         "passed": run.passed,
         "tokens": run.tokens,
-        "cases": [{
-            "id": c.id, "passed": c.passed, "attempts": c.attempts,
-            "passes": c.passes, "min_pass_rate": c.min_pass_rate,
-            "tokens": c.tokens, "seconds": c.seconds,
-            "ran_model": c.ran_model, "failures": c.failures,
-            "usd": c.usd,
-        } for c in run.cases],
+        "cases": [_case_json(c) for c in run.cases],
     }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     except OSError as exc:
         raise ConfigError(f"cannot write eval report {path}: {exc}") from None
+
+
+def _case_json(case: CaseRecord) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "id": case.id, "passed": case.passed, "attempts": case.attempts,
+        "passes": case.passes, "min_pass_rate": case.min_pass_rate,
+        "tokens": case.tokens, "seconds": case.seconds,
+        "ran_model": case.ran_model, "failures": case.failures,
+        "usd": case.usd,
+    }
+    if case.traces:
+        # Only when a trace file was kept, so a report from a run that
+        # recorded nothing reads exactly as it always did.
+        row["traces"] = case.traces
+    return row
 
 
 def read_report(path: Path) -> SuiteRun:
@@ -316,6 +338,7 @@ def read_report(path: Path) -> SuiteRun:
                 tokens=c["tokens"], seconds=c["seconds"],
                 ran_model=c["ran_model"], failures=list(c.get("failures", [])),
                 usd=c.get("usd"),
+                traces=list(c.get("traces", [])),
             ) for c in raw["cases"]],
         )
     except (KeyError, TypeError) as exc:
@@ -550,6 +573,14 @@ class PooledCase:
     min_pass_rate: float        # the NEWEST report's claim
     claim_changed: bool         # an older report claimed something else
     disagree: bool              # two runs' own intervals do not overlap
+    #: Dollars PER RUN in the oldest and newest report that priced this
+    #: case (notes/66), or None when none did. Per run, because
+    #: a report of ten repeats and one of three are not the same bill.
+    usd_first: float | None = None
+    usd_last: float | None = None
+    #: Whether those two reports were priced at different rates: when
+    #: True, part of the move is the vendor's, not the agent's (notes/62).
+    price_moved: bool = False
 
     @property
     def tally(self) -> str:
@@ -558,6 +589,14 @@ class PooledCase:
     @property
     def confidence(self) -> tuple[float, float]:
         return wilson_bounds(self.passes, self.attempts)
+
+    @property
+    def usd_growth(self) -> float | None:
+        """Newest per-run cost over the oldest, or None when there is no
+        pair of priced, non-zero figures to divide."""
+        if not self.usd_first or self.usd_last is None:
+            return None
+        return self.usd_last / self.usd_first
 
     @property
     def standing(self) -> str:
@@ -640,6 +679,13 @@ def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
                 continue
             intervals = [wilson_bounds(c.passes, c.attempts) for c in rolled]
             claims = {c.min_pass_rate for c in rolled}
+            # The same files already hold every run's dollars; which case
+            # got expensive is the same kind of sum as which got flaky.
+            priced = [(run, c) for run in members for c in run.cases
+                      if c.id == case_id and c.ran_model and c.attempts
+                      and c.usd is not None]
+            first = priced[0] if priced else None
+            last = priced[-1] if priced else None
             cases.append(PooledCase(
                 id=case_id,
                 passes=sum(c.passes for c in rolled),
@@ -649,7 +695,56 @@ def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
                 claim_changed=len(claims) > 1,
                 disagree=(max(lo for lo, _ in intervals)
                           > min(hi for _, hi in intervals)),
+                usd_first=(first[1].usd / first[1].attempts if first
+                           else None),
+                usd_last=(last[1].usd / last[1].attempts if last else None),
+                price_moved=bool(
+                    first and last and first[0] is not last[0]
+                    and first[0].pricing is not None
+                    and last[0].pricing is not None
+                    and first[0].pricing.rates != last[0].pricing.rates),
             ))
         pools.append(Pool(suite=suite, where=where, runs=members,
                           cases=cases, roster_only=roster_only))
     return pools
+
+
+#: The pooled file's own tag. A pool is not a report -- it has no verdict
+#: and no single run behind it -- so it gets a format of its own rather
+#: than a report that ``--against`` would try, and fail, to compare with.
+POOL_FORMAT = "yantra.pool.v1"
+
+
+def write_pool(path: Path, pools: Sequence[Pool]) -> None:
+    """Write what ``--pool`` printed, as JSON (notes/66).
+
+    For whatever tracks the pooled range over time -- a dashboard, a
+    weekly job -- which should not have to scrape a terminal. Everything
+    derived is written as well as the counts it came from (the interval,
+    the standing), because the reader is a program that should not need
+    this module to know what "unsettled" means.
+    """
+    payload = {
+        "format": POOL_FORMAT,
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "pools": [{
+            "suite": group.suite,
+            "where": group.where,
+            "runs": [run.at for run in group.runs],
+            "roster_only": group.roster_only,
+            "cases": [{
+                "id": c.id, "passes": c.passes, "attempts": c.attempts,
+                "runs": c.runs, "low": round(c.confidence[0], 4),
+                "high": round(c.confidence[1], 4),
+                "min_pass_rate": c.min_pass_rate, "standing": c.standing,
+                "claim_changed": c.claim_changed, "disagree": c.disagree,
+                "usd_first": c.usd_first, "usd_last": c.usd_last,
+                "price_moved": c.price_moved,
+            } for c in group.cases],
+        } for group in pools],
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"cannot write pool {path}: {exc}") from None

@@ -77,7 +77,8 @@ class TestTheSpawnerKeepsTheChildsSteps:
         agent, spawner = delegating_agent(tmp_path, ["notes.txt", "gone.txt"])
         agent.run("go")
         (result,) = spawner.results
-        assert result.steps == [("read_file", True), ("read_file", False)]
+        assert result.steps == [("read_file", True, None),
+                                ("read_file", False, None)]
         assert (result.number, result.agent, result.model) == (
             1, SPAWN_TOOL_NAME, "m")
 

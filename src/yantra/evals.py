@@ -68,6 +68,7 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import math
+import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -84,6 +85,7 @@ from yantra.spec import AgentSpec
 from yantra.subagent import (DeclaredSubagent, SpawnSubagent, SubagentSpec,
                              SubagentSpawner, resolve_child_tools)
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
+from yantra.trace import from_history
 from yantra.types import Message, TextBlock
 
 
@@ -237,6 +239,10 @@ class EvalResult:
     #: that bills nothing; None when the model has no known price, which is
     #: not the same thing and is never rendered as $0.00.
     usd: float | None = None
+    #: The id this run's turn was recorded under, when the suite ran with
+    #: a trace file (notes/65) -- what ``--fossil`` takes, and the way from
+    #: a red line in a report to what the agent actually did.
+    trace: str | None = None
 
 
 @dataclass(slots=True)
@@ -343,6 +349,12 @@ class CaseOutcome:
         """
         priced = [r.usd for r in self.runs if r.usd is not None]
         return sum(priced) if priced else None
+
+    @property
+    def traces(self) -> list[str]:
+        """The recorded turns behind this outcome, in run order; empty when
+        nothing was recorded."""
+        return [r.trace for r in self.runs if r.trace is not None]
 
     @property
     def marks(self) -> str:
@@ -775,6 +787,37 @@ def _agent_for(case: EvalCase, seen: list[str], *, agent_cls,
                  provider_name=provider_name, model=model, **extra)
 
 
+#: ``Agent.run`` says why a turn produced no reply in its message, as
+#: "(max_iterations after 10 iterations)"; this reads the reason back.
+_ENDED = re.compile(r"\((\w+) after \d+ iterations\)")
+
+
+def _recorded(runner: Any, case: EvalCase, agent: Any, start: float,
+              exc: Exception | None, result: EvalResult) -> EvalResult:
+    """Write this run into the runner's trace file, if it has one, and put
+    the turn's id on the result (notes/65).
+
+    AFTER GRADING, NEVER INSTEAD OF IT. The run was driven and scored
+    exactly as it would be with no trace file; this only reads what the
+    agent kept. A turn that crashed is recorded too -- it is the one most
+    worth a look -- with the reason ``Agent.run`` gave when it can be read
+    back (``max_iterations``, ``over_budget``), else ``crashed``.
+    """
+    log = getattr(runner, "trace", None)
+    if log is None:
+        return result
+    outcome = "end_turn"
+    if exc is not None:
+        found = _ENDED.search(str(exc)) if isinstance(exc, RuntimeError) else None
+        outcome = found.group(1) if found else "crashed"
+    result.trace = log.record(from_history(
+        agent, case.user_message, provider=runner.provider_name or "",
+        model=runner.model, detail=log.detail, outcome=outcome,
+        seconds=round(time.monotonic() - start, 3), usd=result.usd,
+        case=case.id))
+    return result
+
+
 class EvalRunner:
     """Runs cases sequentially against a live provider.
 
@@ -787,7 +830,8 @@ class EvalRunner:
                  permissions: Callable[[Any], bool], max_iterations: int = 25,
                  context_window: int | None = None,
                  cwd: Any = None, spec: AgentSpec | None = None,
-                 provider_name: str | None = None) -> None:
+                 provider_name: str | None = None,
+                 trace: Any | None = None) -> None:
         self.provider = provider
         self.model = model
         self.base_tools = tools
@@ -800,6 +844,9 @@ class EvalRunner:
         #: harness, wrong for measuring somebody's agent (see _agent_for).
         self.spec = spec
         self.provider_name = provider_name
+        #: A ``TrajectoryLog`` to write every model run into, or None
+        #: (notes/65). Read by ``_recorded`` and nowhere else.
+        self.trace = trace
         self.seen: list[str] = []  # shared with the proxies; cleared per case
 
     def _agent(self, case: EvalCase, seen: list[str], **extra):
@@ -846,7 +893,7 @@ class EvalRunner:
             # completion failure is a RESULT, not a raise: one broken
             # case must not abort the suite (ProviderError, iteration
             # cap RuntimeError, anything unexpected)
-            return EvalResult(
+            return _recorded(self, case, agent, start, exc, EvalResult(
                 case_id=case.id, passed=False,
                 failures=[f"crashed: {type(exc).__name__}: {exc}"],
                 final_answer="", tokens_used=agent.total_usage.input_tokens
@@ -856,12 +903,12 @@ class EvalRunner:
                 duration_seconds=time.monotonic() - start,
                 error=f"{type(exc).__name__}: {exc}",
                 usd=self._usd(agent),
-            )
+            ))
         duration = time.monotonic() - start
         answer = response.message.text().strip()
         tokens = agent.total_usage.input_tokens + agent.total_usage.output_tokens
-        return self._result(case, agent, list(self.seen), answer, tokens,
-                            duration)
+        return _recorded(self, case, agent, start, None, self._result(
+            case, agent, list(self.seen), answer, tokens, duration))
 
     def run_all(self, cases: list[EvalCase]) -> list[EvalResult]:
         """One run per case, flat. The old shape, kept: a caller that never
@@ -959,7 +1006,8 @@ class AsyncEvalRunner:
                  permissions: Callable[[Any], bool], max_iterations: int = 25,
                  context_window: int | None = None, cwd: Any = None,
                  concurrency: int = 4, spec: AgentSpec | None = None,
-                 provider_name: str | None = None) -> None:
+                 provider_name: str | None = None,
+                 trace: Any | None = None) -> None:
         self.provider = provider
         self.model = model
         self.base_tools = tools
@@ -970,6 +1018,7 @@ class AsyncEvalRunner:
         self.concurrency = concurrency
         self.spec = spec
         self.provider_name = provider_name
+        self.trace = trace   # the sync twin's, and written the same way
 
     async def run_case(self, case: EvalCase) -> EvalResult:
         seen: list[str] = []  # per case: concurrent cases must not share
@@ -993,7 +1042,7 @@ class AsyncEvalRunner:
         try:
             response = await agent.run(case.user_message)
         except Exception as exc:
-            return EvalResult(
+            return _recorded(self, case, agent, start, exc, EvalResult(
                 case_id=case.id, passed=False,
                 failures=[f"crashed: {type(exc).__name__}: {exc}"],
                 final_answer="",
@@ -1004,13 +1053,13 @@ class AsyncEvalRunner:
                 duration_seconds=time.monotonic() - start,
                 error=f"{type(exc).__name__}: {exc}",
                 usd=EvalRunner._usd(self, agent),
-            )
+            ))
         answer = response.message.text().strip()
         tokens = agent.total_usage.input_tokens + agent.total_usage.output_tokens
         # grading rules are the SYNC runner's, verbatim
-        return EvalRunner._result(
+        return _recorded(self, case, agent, start, None, EvalRunner._result(
             self, case, agent, list(seen), answer,
-            tokens, time.monotonic() - start)
+            tokens, time.monotonic() - start))
 
     async def run_all(self, cases: list[EvalCase]) -> list[EvalResult]:
         gate = asyncio.Semaphore(self.concurrency)
@@ -1162,6 +1211,9 @@ def spawn_setup(*, max_per_session: int = 3,
         spawner = SubagentSpawner(agent, max_per_session=max_per_session,
                                   default_max_iterations=default_max_iterations)
         agent.registry.register(SpawnSubagent(spawner))
+        # Where every host looks for a session's children -- the recorder
+        # included, so a suite's trace keeps them (notes/65).
+        agent.subagents = spawner
     return setup
 
 

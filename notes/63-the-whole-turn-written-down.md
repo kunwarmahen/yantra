@@ -172,11 +172,14 @@ later.
   red when the recording is FULL. Was: The banner in the
   terminal says so; the browser tab does not. Anyone using the page on a
   shared machine should be able to see it too.
-* **Refusal codes for a child's calls are not kept.** The parent's steps
+* ~~**Refusal codes for a child's calls are not kept.**~~ Shipped in
+  [note 65](65-the-turn-behind-the-red-line.md): each agent keeps its
+  turn's refusals, and a child step carries the code. Was: The parent's steps
   record *why* the permission gate refused a call ([notes/39](39-a-clock-and-a-word.md)).
   A child's history only has an error result, not the code, so a child
   refused by the gate looks the same as a child whose read failed.
-* **Nothing cross-references a trace with an eval report.** Still true
+* ~~**Nothing cross-references a trace with an eval report.**~~ Shipped
+  in [note 65](65-the-turn-behind-the-red-line.md). Was: Still true
   from note 57.
 
 ## Receipt

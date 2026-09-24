@@ -229,6 +229,14 @@ uv run yantra --reports runs/*.json --pool          # add runs up, case by case
 
 `--pool` only adds runs of the same package version on the same model;
 anything else is pooled separately. `notes/62-the-reports-you-already-have.md`.
+Under each case it also prints dollars per run, oldest report against
+newest; `--pool-json FILE` writes the pool as JSON
+(`notes/66-what-each-case-cost.md`).
+
+To see what a red case actually DID, run the suite with `--trace
+FILE`: each failing case prints its turn ids, the report keeps them, and
+`--fossil ID --trace FILE` turns one into a case
+(`notes/65-the-turn-behind-the-red-line.md`).
 
 ## Graders: checking the answer text
 
@@ -297,7 +305,9 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--no-mcp` | do not start the package's declared servers (their tools are then absent) |
 | `--report FILE` | write this run as JSON, green or red |
 | `--against FILE` | print what moved since an earlier report; changes no verdict |
+| `--trace FILE` | record every run of every case; a red case names its turns |
 | `--reports FILE ...` | read reports without running (not with `--eval`); `--pool` adds them up |
+| `--pool-json FILE` | with `--reports`: pool them and write the pool as JSON |
 
 **About `--yolo`.** By default the suite auto-approves read-only tools
 and REFUSES everything that writes or executes, because nobody is sitting

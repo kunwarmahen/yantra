@@ -901,6 +901,12 @@ charged at, so when you compare two paid runs you can tell whether the
 agent got cheaper or the vendor did
 ([notes/62](notes/62-the-reports-you-already-have.md)).
 
+On a paid model the pool also shows what each case cost **per run**,
+in the oldest report against the newest, and names the case whose cost
+grew fastest. `--pool-json runs/pool.json` does the same pooling and
+saves the numbers to a file, so a chart or a weekly job can read them
+([notes/66](notes/66-what-each-case-cost.md)).
+
 And then the file answers the question you actually asked first — *what
 broke, and is it fixed?* `--failed FILE` runs the cases that report
 recorded as red, and with no `FILE` it uses the one `--against` names, so
@@ -973,6 +979,23 @@ sub-agent's steps are saved inside the same line: which tools it used,
 and whether each one worked. If something failed inside the sub-agent,
 the turn counts as failed even if the main agent carried on and
 answered anyway ([notes/63](notes/63-the-whole-turn-written-down.md)).
+If the permission gate stopped one of the sub-agent's calls, the line
+says so and gives the reason, so you can tell "it was not allowed" from
+"it tried and failed".
+
+`--trace` works with `--eval` as well. Every run of every case is
+recorded, and when a case fails, the line under it shows the id of the
+turn that failed:
+
+```
+  FAIL  outlines-a-one-word-lookup  ✗✗ 0/2 runs · …
+        required tool not used: outline (2 of 2 runs)
+        turns: 08ad4e35 cac47280
+```
+
+Pass one of those ids to `--fossil` to see exactly what the agent did
+instead. The report file keeps the same ids, so you can still find the
+turn weeks later ([notes/65](notes/65-the-turn-behind-the-red-line.md)).
 
 ### Embedding a package instead of running it
 

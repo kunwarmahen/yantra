@@ -198,11 +198,13 @@ class SubagentResult:
     #: was given, and every tool call it made with whether that call
     #: succeeded, in order. The parent model never sees any of these --
     #: the tool returns ``summary`` -- which is the point of a child.
+    #: A step is ``(tool, worked, refusal)``: the gate's refusal code when
+    #: the call never ran (notes/65), None when it ran, well or badly.
     number: int = 0
     agent: str = ""
     model: str = ""
     objective: str = ""
-    steps: list[tuple[str, bool]] = field(default_factory=list)
+    steps: list[tuple[str, bool, str | None]] = field(default_factory=list)
 
 
 #: Why a child did not finish. Two, because two things go wrong -- and
@@ -574,20 +576,27 @@ class SubagentSpawner:
         return ""
 
     @staticmethod
-    def _steps(child: Agent | AsyncAgent) -> list[tuple[str, bool]]:
-        """Every tool call the child made, in order, and whether it worked.
+    def _steps(child: Agent | AsyncAgent
+               ) -> list[tuple[str, bool, str | None]]:
+        """Every tool call the child made, in order, whether it worked, and
+        the gate's refusal code if it never ran.
 
         Read from the child's HISTORY after it stops, not from its event
         stream: the stream tee carries only raw model output (notes/08),
         and history is the one record that is complete whichever of the
         three ways the child ended. A call with no result at all -- the
         child was cut off mid-batch -- did not succeed.
+
+        History alone cannot tell a refused call from a failed one: both
+        are an error result. The child's ``turn_refusals`` can, and it
+        covers exactly this run, because a child runs one turn.
         """
         history = getattr(child, "history", [])
+        refused = getattr(child, "turn_refusals", {})
         worked = {block.tool_call_id: not block.is_error
                   for message in history for block in message.content
                   if isinstance(block, ToolResult)}
-        return [(call.name, worked.get(call.id, False))
+        return [(call.name, worked.get(call.id, False), refused.get(call.id))
                 for message in history if message.role == "assistant"
                 for call in message.tool_calls()]
 

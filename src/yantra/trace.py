@@ -46,7 +46,15 @@ parent's line under ``children``, at the same level of detail as the
 parent: its tool calls in order and whether each worked, its iterations,
 tokens and how it stopped, always; the task the parent gave it and what
 it answered, only at FULL -- the parent model WROTE that task out of
-whatever it had read, so it is content, not shape.
+whatever it had read, so it is content, not shape. A child's step keeps
+the gate's refusal code too (notes/65), so a child turned away by a rule
+does not read as a child whose call failed.
+
+A SUITE RECORDS WHAT IT GRADED (notes/65). ``--eval --trace`` writes
+every run of every case, tagged with the case's id, and the report names
+those turns back. The eval runners call ``agent.run()`` and have no
+stream to tee, so ``from_history`` writes the line afterwards from what
+the agent kept -- recording must not change how the graded run was driven.
 
 APPEND-ONLY JSONL, one turn per line, because the failure being recorded
 may be a crash: a format that has to be closed to be valid loses the one
@@ -141,6 +149,10 @@ class Trajectory:
     #: Sub-agents this turn spawned, in the order they FINISHED (two may
     #: run at once, notes/55); ``number`` says the order they started.
     children: list[ChildRun] = field(default_factory=list)
+    #: The eval case this turn was a run of, when a suite recorded it
+    #: (notes/65); None for a turn somebody typed. The report names the
+    #: turn from the other side, so either file finds the other.
+    case: str | None = None
 
     @property
     def tools_used(self) -> list[str]:
@@ -277,6 +289,8 @@ def _as_json(trajectory: Trajectory) -> dict[str, Any]:
         payload["steps"].append(row)
     if trajectory.answer is not None:
         payload["answer"] = trajectory.answer
+    if trajectory.case is not None:
+        payload["case"] = trajectory.case
     if trajectory.children:
         # Only when there were any, so a turn without delegation reads
         # exactly as it always did.
@@ -289,12 +303,21 @@ def _child_json(child: ChildRun) -> dict[str, Any]:
         "number": child.number, "agent": child.agent, "model": child.model,
         "iterations": child.iterations, "tokens": child.tokens,
         "code": child.code,
-        "steps": [{"name": s.name, "ok": s.ok} for s in child.steps],
+        "steps": [_child_step_json(s) for s in child.steps],
     }
     if child.task is not None:
         row["task"] = child.task
     if child.answer is not None:
         row["answer"] = child.answer
+    return row
+
+
+def _child_step_json(step: ToolStep) -> dict[str, Any]:
+    # Refusal only when there was one, as in the parent's steps: a child
+    # step recorded before notes/65 and one that simply ran read the same.
+    row: dict[str, Any] = {"name": step.name, "ok": step.ok}
+    if step.refusal is not None:
+        row["refusal"] = step.refusal
     return row
 
 
@@ -313,11 +336,13 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         outcome=raw.get("outcome", "end_turn"), answer=raw.get("answer"),
         children=[ChildRun(
             number=c["number"], agent=c["agent"], model=c.get("model", ""),
-            steps=[ToolStep(name=s["name"], ok=s["ok"])
+            steps=[ToolStep(name=s["name"], ok=s["ok"],
+                            refusal=s.get("refusal"))
                    for s in c.get("steps", [])],
             iterations=c.get("iterations", 0), tokens=c.get("tokens", 0),
             code=c.get("code"), task=c.get("task"), answer=c.get("answer"),
         ) for c in raw.get("children", [])],
+        case=raw.get("case"),
     )
 
 
@@ -325,7 +350,8 @@ def _child_run(result: Any, detail: str) -> ChildRun:
     """A spawner's ``SubagentResult`` -> the shape a recording keeps."""
     child = ChildRun(
         number=result.number, agent=result.agent, model=result.model,
-        steps=[ToolStep(name=name, ok=ok) for name, ok in result.steps],
+        steps=[ToolStep(name=name, ok=ok, refusal=refusal)
+               for name, ok, refusal in result.steps],
         iterations=result.iterations_used,
         tokens=result.input_tokens + result.output_tokens, code=result.code,
     )
@@ -405,3 +431,59 @@ def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
             trajectory.children = [_child_run(r, detail)
                                    for r in spawner.results[already:]]
         sink(trajectory)
+
+
+def from_history(agent: Any, task: str, *, provider: str = "",
+                 model: str = "", detail: str = SHAPE,
+                 outcome: str = "end_turn", seconds: float = 0.0,
+                 usd: float | None = None, case: str | None = None
+                 ) -> Trajectory:
+    """A turn that was RUN rather than streamed, written down afterwards.
+
+    ``watch`` needs the event stream, and an eval runner does not have
+    one: it calls ``agent.run()``, on purpose, so that grading drives the
+    agent exactly the way a library caller would. Changing HOW a case is
+    run in order to record it would make the recording a witness to a
+    different run than the one graded. So this reads what the agent kept
+    instead -- its history, its usage, and ``turn_refusals`` -- which
+    holds everything a SHAPE line needs.
+
+    For an agent that has run ONE turn, which is what a suite builds for
+    every run of every case: a longer history would put earlier turns'
+    calls into this one.
+    """
+    history = getattr(agent, "history", [])
+    refused = getattr(agent, "turn_refusals", {})
+    results = {block.tool_call_id: block for message in history
+               for block in message.content
+               if type(block).__name__ == "ToolResult"}
+    trajectory = Trajectory(id=uuid.uuid4().hex, at=_now(), provider=provider,
+                            model=model, detail=detail, task=task,
+                            outcome=outcome, seconds=seconds, usd=usd,
+                            case=case)
+    for message in history:
+        if message.role != "assistant":
+            continue
+        trajectory.iterations += 1
+        for call in message.tool_calls():
+            result = results.get(call.id)
+            step = ToolStep(name=call.name,
+                            ok=result is not None and not result.is_error,
+                            refusal=refused.get(call.id))
+            if detail == FULL:
+                step.arguments = dict(call.arguments)
+                if result is not None:
+                    step.result = _clip(str(result.content))
+            trajectory.steps.append(step)
+    usage = getattr(agent, "total_usage", None)
+    if usage is not None:
+        trajectory.tokens = usage.input_tokens + usage.output_tokens
+    if detail == FULL:
+        for message in reversed(history):
+            if message.role == "assistant" and message.text().strip():
+                trajectory.answer = _clip(message.text().strip())
+                break
+    spawner = getattr(agent, "subagents", None)
+    if isinstance(getattr(spawner, "results", None), list):
+        trajectory.children = [_child_run(r, detail) for r in spawner.results]
+    return trajectory

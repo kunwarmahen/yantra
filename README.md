@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1589 tests. The
+The harness underneath is complete and covered by 1711 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1134,6 +1134,24 @@ whether a cost change was the vendor's or the agent's. Like `--against`,
 none of this is a verdict: it exits 0 whatever the reports say. See
 [notes/62](notes/62-the-reports-you-already-have.md).
 
+The pool also says **what each case cost, per run, oldest report
+against newest**, names the case whose cost grew fastest, and says when
+the rates moved between those reports as well as the agent. A free
+(local) case prints no dollars. `--pool-json FILE` does the same pooling
+and writes it all to a file with its own format tag, so a dashboard can
+track the range without scraping a terminal:
+
+```
+$ uv run yantra --reports runs/aug.json runs/sep.json --pool-json runs/pool.json
+  x         2/2 over 2 run(s) · 0.34..1.00 · claims 1 · holds
+    $0.0100 → $0.0400 per run (x4.0)
+  dearest move: x costs x4.0 per run what it did in the oldest priced report
+
+pool: runs/pool.json
+```
+
+See [notes/66](notes/66-what-each-case-cost.md).
+
 **And a report can choose the next run, not only judge it.** `--failed
 FILE` runs the cases that were red in a report written earlier; with no
 `FILE`, the one `--against` names:
@@ -1197,6 +1215,27 @@ parent wrote for the child counts as content and is kept only with
 `--trace-full`. `--fossil` names what the children did on stderr and
 does not assert it. See
 [notes/63](notes/63-the-whole-turn-written-down.md).
+
+**A red case names the turn behind it.** `--eval --trace FILE` records
+every run of every case that reaches a model, with the case id on the
+line, and the report lists those turn ids on the case's row:
+
+```
+$ uv run yantra --agent . --eval --repeat 2 --trace runs/red.jsonl --report runs/red.json
+  FAIL  outlines-a-one-word-lookup  ✗✗ 0/2 runs · 0.00-0.66 at 95% · 5.0s · 10245 tok
+        required tool not used: outline (2 of 2 runs)
+        turns: 08ad4e35 cac47280
+
+SUITE RED · 0/1 passed · 2 runs · 10245 tokens
+a red run's turn becomes a case with: --fossil ID --trace runs/red.jsonl
+```
+
+The runners still call `agent.run()`, and the line is built afterwards
+from what the agent kept. Recording cannot change what was graded. A
+child's step also keeps the gate's **refusal code**, so a child turned
+away by a rule no longer looks like a child whose read failed
+(`read_file (refused: policy)` under `--fossil`). See
+[notes/65](notes/65-the-turn-behind-the-red-line.md).
 
 **The servers the package declares are under test too.** `--eval` starts
 them and their tools register as `mcp__<server>__<tool>`, so
@@ -1409,7 +1448,10 @@ src/yantra/
 │                   interrupt_check hook — hosts cancel mid-stream, same unwind as Ctrl-C;
 │                   BudgetWarning — the one event that reports what is about to
 │                   happen rather than what did
-│                   ([notes/36](notes/36-a-warning-before-the-stop.md))
+│                   ([notes/36](notes/36-a-warning-before-the-stop.md));
+│                   turn_refusals keeps the turn's refusal codes after the
+│                   stream is gone, for a caller that never read it
+│                   ([notes/65](notes/65-the-turn-behind-the-red-line.md))
 ├── async_agent.py  the loop's async twin: same rules, awaited -- one event
 │                   loop drives K independent conversations ([notes/11](notes/11-async.md));
 │                   batch width capped by max_parallel_tools (semaphore inside
@@ -1433,7 +1475,8 @@ src/yantra/
 │                   a disabled tool is unreachable, not present -- shared by
 │                   the spawn, the refusal, read_only and the eval assertion.
 │                   Each result keeps the child's number, name, model and
-│                   tool steps for a recorder, never for the model
+│                   tool steps (with the gate's refusal code, notes/65)
+│                   for a recorder, never for the model
 │                   ([notes/08](notes/08-sub-agents.md),
 │                   [notes/34](notes/34-budgets.md),
 │                   [notes/40](notes/40-a-package-that-delegates.md),
@@ -1560,7 +1603,10 @@ src/yantra/
 │                   OfflineProvider is what a roster-only run builds against
 │                   -- build() unchanged, every method raising, so the free
 │                   gate needs no key
-│                   ([notes/41](notes/41-a-gate-you-can-point.md))
+│                   ([notes/41](notes/41-a-gate-you-can-point.md)).
+│                   trace= writes every model run into a trace file AFTER
+│                   grading, under its case id, and puts the turn's id on
+│                   the result ([notes/65](notes/65-the-turn-behind-the-red-line.md))
 ├── eval_suite.py   a package's acceptance gate: evals/cases.toml ->
 │                   EvalCase, check = "graders:fn" resolved by path at LOAD
 │                   time, unknown keys refused ([notes/33](notes/33-evals-as-a-gate.md));
@@ -1599,7 +1645,12 @@ src/yantra/
 │                   A report records the RATES its figures were priced at,
 │                   and pool() adds reports up by case -- samples of one
 │                   suite version on one model, or separate pools
-│                   ([notes/62](notes/62-the-reports-you-already-have.md))
+│                   ([notes/62](notes/62-the-reports-you-already-have.md)).
+│                   A case row names its recorded turns (traces); a pooled
+│                   case carries dollars per run, oldest against newest,
+│                   and write_pool keeps the pool as yantra.pool.v1
+│                   ([notes/65](notes/65-the-turn-behind-the-red-line.md),
+│                   [notes/66](notes/66-what-each-case-cost.md))
 ├── trace.py        a TURN written down, so a real failure can become a
 │                   case: append-only JSONL, one object per turn, recorded
 │                   through a TEE (the renderer still sees every event) and
@@ -1612,7 +1663,10 @@ src/yantra/
 │                   ([notes/57](notes/57-a-turn-written-down.md)). A
 │                   turn's CHILDREN ride in its line, steps read off the
 │                   spawner; the web UI's loop is teed the same way
-│                   ([notes/63](notes/63-the-whole-turn-written-down.md))
+│                   ([notes/63](notes/63-the-whole-turn-written-down.md)).
+│                   from_history writes a turn that was RUN, not streamed
+│                   -- how a suite records its cases, each line tagged with
+│                   its case id ([notes/65](notes/65-the-turn-behind-the-red-line.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

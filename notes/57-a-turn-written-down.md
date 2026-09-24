@@ -150,7 +150,10 @@ redirect above does not swallow it.
   child's name on it ([notes/40](40-a-package-that-delegates.md)). Where
   the delegation failed inside the child is still gone when the turn
   ends.
-* **Nothing cross-references a trace with an eval report.** A fossil
+* ~~**Nothing cross-references a trace with an eval report.**~~ Shipped
+  in [note 65](65-the-turn-behind-the-red-line.md): `--eval --trace`
+  records every run of every case under its case id, and the report
+  names those turns. Was: A fossil
   case and the run that produced it are two files with no link between
   them beyond a date; `case_from_trajectory` puts the trace id in the
   case id, which is the cheapest possible version of that link.

@@ -261,6 +261,13 @@ class Agent:
         # code is the CALLER's copy of a refusal, and the caller is
         # whoever is consuming this event stream.
         self._refusals: dict[str, str] = {}
+        #: Every refusal of the turn just run, call id -> code, kept after
+        #: the events are gone. ``_refusals`` is drained onto the stream;
+        #: a caller that never saw the stream -- a spawner running a child
+        #: with ``run()`` -- reads the turn's refusals here instead, so a
+        #: child the gate turned away is not recorded as a child whose
+        #: read failed (notes/65). Reset when a turn begins.
+        self.turn_refusals: dict[str, str] = {}
 
     def _interrupted(self) -> bool:
         """Poll the host's cancel flag, if one is wired."""
@@ -316,6 +323,7 @@ class Agent:
         # opaque: an agent and its sub-agents are different turns, and a
         # counter could repeat across two agents where a uuid cannot.
         self._turn_id = uuid.uuid4().hex
+        self.turn_refusals = {}
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
             for iteration in range(1, self.max_iterations + 1):
@@ -682,6 +690,7 @@ class Agent:
             # consumer, the sentence to the model -- two readers, two
             # registers, and neither has to parse the other's.
             self._refusals[call.id] = denial_code(request)
+            self.turn_refusals[call.id] = self._refusals[call.id]
             return ToolResult(call.id, denial_text(request), is_error=True)
         if request.arguments is not call.arguments:
             # The gate EDITED the arguments before approving (identity

@@ -207,10 +207,13 @@ changing meaning, so older readers keep working.
 
 ## What is not here yet
 
-* **Pooled figures do not go into a file.** The pool is printed, not
+* ~~**Pooled figures do not go into a file.**~~ Shipped in
+  [note 66](66-what-each-case-cost.md): `--pool-json FILE`. Was: The pool is printed, not
   written. A JSON pool would let a dashboard track the narrowing range
   over time.
-* **No cost per case over time.** The same files hold every case's
+* ~~**No cost per case over time.**~~ Shipped in
+  [note 66](66-what-each-case-cost.md): dollars per run, oldest against
+  newest, under each pooled case. Was: The same files hold every case's
   dollars. "Which case got expensive" is the same kind of sum, and is
   not printed.
 * **A version that was never bumped cannot be caught.** The disagreement

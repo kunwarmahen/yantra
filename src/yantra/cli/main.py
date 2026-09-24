@@ -36,7 +36,7 @@ from yantra.config import (
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
 from yantra.eval_report import (Matrix, Pool, PriceRecord, SuiteRun, compare,
                                 line_up, pool, read_report, record_run,
-                                write_report)
+                                write_pool, write_report)
 from yantra.eval_suite import (CASES, SUITE_DIR, find_suite, load_cases,
                                render_case)
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
@@ -194,6 +194,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "are evidence of. Runs of a different model or "
                              "package version are pooled separately, never "
                              "summed")
+    parser.add_argument("--pool-json", metavar="FILE", default=None,
+                        dest="pool_json",
+                        help="with --reports: pool them (as --pool does) and "
+                             "also write the pooled figures to FILE as JSON, "
+                             "for whatever tracks the range over time")
     parser.add_argument("--no-mcp", action="store_true", dest="no_mcp",
                         help="with --eval: do not start the MCP servers the "
                              "package declares. The agent under test is then "
@@ -268,7 +273,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="append every turn of this session to FILE as "
                              "JSONL -- the task, which tools ran (a sub-agent's "
                              "too), and what it cost; the terminal and --web "
-                             "alike. A real failure can then become a "
+                             "alike, and every run of every case under --eval, "
+                             "which the report then names. A real failure can "
+                             "then become a "
                              "regression case with --fossil. Keeps the SHAPE "
                              "of a turn and not its contents; --trace-full "
                              "adds arguments, results and the answer, which "
@@ -492,12 +499,20 @@ def _fossil_mode(args, console: Console) -> int:
         # Said, not asserted: a child's steps are the delegation's inner
         # workings, and a case that pinned them would break every time the
         # child found a better route to the same answer (notes/63).
-        steps = ", ".join(f"{s.name}{'' if s.ok else ' (failed)'}"
+        steps = ", ".join(f"{s.name}{_step_note(s)}"
                           for s in child.steps) or "no tool calls"
         ended = child.code or "finished"
         print(f"note: sub-agent #{child.number} {child.agent} on "
               f"{child.model}: {steps}; {ended}", file=sys.stderr)
     return 0
+
+
+def _step_note(step) -> str:
+    """A child step's suffix: nothing when it worked, the refusal code when
+    the gate turned it away, "failed" when it ran and errored."""
+    if step.ok:
+        return ""
+    return f" (refused: {step.refusal})" if step.refusal else " (failed)"
 
 
 def _select_cases(cases: list, patterns: list[str]) -> tuple[list, str | None]:
@@ -757,6 +772,21 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                           f"lowest claim among them at 95%, all green "
                           f"(--case PATTERN points it)[/dim]")
 
+    # --trace under --eval records every run of every case (notes/65), and
+    # the report names them. Checked BEFORE the suite: a trace that cannot
+    # be written must not cost a suite's worth of tokens to find out.
+    trace = _trace_log(args)
+    if trace is not None:
+        try:
+            trace.path.parent.mkdir(parents=True, exist_ok=True)
+            trace.path.open("a", encoding="utf-8").close()
+        except OSError as exc:
+            print(f"error: cannot write trace {trace.path}: {exc}",
+                  file=sys.stderr)
+            return 2
+        console.print(f"[dim]recording runs -> {escape(str(trace.path))} "
+                      f"({trace.detail}); a red case names its turns[/dim]")
+
     tools = default_registry(sandbox)
     mcp_manager = None
     if spec.mcp and not args.no_mcp:
@@ -781,7 +811,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
             runner = AsyncEvalRunner(
                 provider, model, tools=tools, permissions=gate, cwd=cwd,
                 spec=spec, provider_name=provider_name,
-                concurrency=args.eval_async,
+                concurrency=args.eval_async, trace=trace,
             )
             outcomes = asyncio.run(runner.run_suite(
                 cases, repeat=args.repeat, on_outcome=report))
@@ -789,6 +819,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
             runner = EvalRunner(
                 provider, model, tools=tools, permissions=gate,
                 cwd=cwd, spec=spec, provider_name=provider_name,
+                trace=trace,
             )
             # Printed as each case lands rather than in one table at the
             # end: a live suite is minutes of silence otherwise, and the
@@ -849,6 +880,9 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         console.print(f"[dim]report: {escape(args.report)}[/dim]")
+    if trace is not None and any(o.traces and not o.passed for o in outcomes):
+        console.print(f"[dim]a red run's turn becomes a case with: --fossil "
+                      f"ID --trace {escape(str(trace.path))}[/dim]")
     if len(baselines) == 1:
         _render_comparison(console, compare(baselines[0], run))
     elif baselines:
@@ -897,6 +931,11 @@ def _render_comparison(console: Console, cmp) -> None:
                 if not delta.movement_is_evidence:
                     tally += ("  [dim](intervals overlap: not evidence of a "
                               "change)[/dim]")
+            if delta.kind == "broke" and delta.after.traces:
+                # Where it broke, when the run kept its turns (notes/65).
+                tally += (f"  [dim]turns: "
+                          f"{' '.join(t[:8] for t in delta.after.traces)}"
+                          f"[/dim]")
             console.print(f"  {marks[delta.kind]}  {escape(delta.id)}{tally}")
         elif delta.rate_moved:
             # Same verdict, different count. A case going 9/10 -> 6/10 is
@@ -976,8 +1015,16 @@ def _reports_mode(args, console: Console) -> int:
         except ConfigError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-    if args.pool:
-        _render_pools(console, pool(runs))
+    if args.pool or args.pool_json:
+        pools = pool(runs)
+        _render_pools(console, pools)
+        if args.pool_json:
+            try:
+                write_pool(Path(args.pool_json), pools)
+            except ConfigError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            console.print(f"\n[dim]pool: {escape(args.pool_json)}[/dim]")
         return 0
     if len(runs) < 2:
         print("error: one report is not a comparison; name two or more, or "
@@ -1024,11 +1071,26 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
                     f"{lo:.2f}..{hi:.2f} · {claim} · "
                     f"{marks[case.standing]}")
             console.print(line)
+            cost = _pooled_cost(case)
+            if cost:
+                console.print(f"    [dim]{cost}[/dim]")
             if case.disagree:
                 console.print("    [yellow]two of these runs do not overlap "
                               "at all -- something changed between them, and "
                               "the pooled number averages two different "
                               "agents[/yellow]")
+        grew = [c for c in group.cases
+                if c.usd_growth is not None and c.usd_growth > 1]
+        if grew:
+            # The one line a long list of costs hides: which case got
+            # dearer fastest. Named, not judged -- a case that now does
+            # more work for the same verdict may be worth it.
+            worst = max(grew, key=lambda c: c.usd_growth or 0)
+            console.print(f"  [dim]dearest move: {escape(worst.id)} costs "
+                          f"x{worst.usd_growth:.1f} per run what it did in "
+                          f"the oldest priced report"
+                          + (" (the rates moved too)" if worst.price_moved
+                             else "") + "[/dim]")
         if group.roster_only:
             console.print(f"  [dim]roster only, nothing to pool: "
                           f"{escape(', '.join(group.roster_only))}[/dim]")
@@ -1039,6 +1101,25 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
                           f"evidence spans their claim. More runs narrow it "
                           f"-- {need} all-green runs in one go would hold the "
                           f"hardest claim among them on their own[/dim]")
+
+
+def _pooled_cost(case) -> str:
+    """"$0.0012 → $0.0031 per run (x2.6)" for one pooled case, or "".
+
+    Nothing for a case no report priced, or one that was free both times:
+    a local model's $0 beside every line reads as a broken meter.
+    """
+    first, last = case.usd_first, case.usd_last
+    if first is None or last is None or (not first and not last):
+        return ""
+    if case.runs == 1 or first == last:
+        return f"${last:.4f} per run"
+    line = f"${first:.4f} → ${last:.4f} per run"
+    if case.usd_growth is not None:
+        line += f" (x{case.usd_growth:.1f})"
+    if case.price_moved:
+        line += " -- the rates moved between those reports, not only the agent"
+    return line
 
 
 def _evidence_note(console: Console, outcomes) -> None:
@@ -1151,6 +1232,12 @@ def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
     for failure in outcome.failures:
         console.print(f"        {failure}", style="red",
                       markup=False, highlight=False)
+    red = [r.trace for r in outcome.runs if r.trace and not r.passed]
+    if red:
+        # The failing runs only: a green run's turn is not what anyone
+        # opens the trace file for (notes/65).
+        console.print(f"        [dim]turn{'s' if len(red) > 1 else ''}: "
+                      f"{' '.join(t[:8] for t in red)}[/dim]")
 
 
 def _browse_login(url: str, console: Console) -> int:
@@ -1370,9 +1457,9 @@ def main(argv: list[str] | None = None) -> int:
               "suite is driven, and a session has one trajectory",
               file=sys.stderr)
         return 2
-    if args.pool and args.reports is None:
-        print("error: --pool adds up reports; name them with --reports FILE "
-              "[FILE ...]", file=sys.stderr)
+    if (args.pool or args.pool_json) and args.reports is None:
+        print("error: --pool and --pool-json add up reports; name them with "
+              "--reports FILE [FILE ...]", file=sys.stderr)
         return 2
     if args.reports is not None and (args.eval or args.build or args.web
                                      or args.prompt or args.prompt_positional
