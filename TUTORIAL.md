@@ -1033,7 +1033,9 @@ The rules worth knowing before you rely on it:
 * **Local models bill nothing**, so the ceiling is inert and says so on
   screen. Give your own Ollama tag a price in `$YANTRA_PRICES` and it
   becomes real — which is how you rehearse a ceiling without pointing it
-  at an account with a card behind it.
+  at an account with a card behind it. Once you price it, the cost line
+  and eval reports use that price too, so every number agrees
+  ([notes/64](notes/64-a-price-for-the-free-road.md)).
 * **A metered model nobody can price refuses to carry a ceiling**, before
   a token is spent, rather than quietly metering `$0.00`.
 * **`--max-usd` overrides the package, up or down.** Unlike `tools.deny`,

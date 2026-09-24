@@ -364,7 +364,8 @@ class Agent:
                 self.last_context_tokens = response.usage.window_tokens()
                 if self.budget is not None:
                     self.budget.charge(response.usage,
-                                       response.model or self.model)
+                                       response.model or self.model,
+                                       spender=self)
 
                 calls = response.message.tool_calls()
                 if response.stop_reason != "tool_use" or not calls:

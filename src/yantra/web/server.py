@@ -58,7 +58,7 @@ from yantra.context import estimate_history
 from yantra.errors import ProviderError, UserUnavailable
 from yantra.images import image_block_from_bytes
 from yantra.permissions import REFUSED_USER, PermissionRequest, refuse
-from yantra.pricing import session_cost
+from yantra.pricing import is_free, session_cost
 from yantra.prompt import recompose
 from yantra.providers import get_provider
 from yantra.session import SessionStore, apply_payload
@@ -92,7 +92,10 @@ def _budget_meter(agent: Agent) -> dict[str, Any] | None:
     if budget is None:
         return None
     return {"spent": round(budget.spent, 6), "max_usd": budget.max_usd,
-            "metered": budget.metered, "tells_agent": budget.notify_agent}
+            "metered": budget.metered, "tells_agent": budget.notify_agent,
+            # The sub-agents' share of ``spent`` (notes/64): already in
+            # it, and the one thing a single bar could not say.
+            "delegated": round(budget.delegated, 6)}
 
 
 def cost_line(agent: Agent) -> str:
@@ -101,7 +104,7 @@ def cost_line(agent: Agent) -> str:
     buckets = agent.usage_by_model
     if not buckets:
         return ""
-    if agent.provider.name == "ollama":
+    if all(is_free(agent.provider.name, m) for m in buckets):
         return "$0.00 (local model)"
     total, complete = session_cost(buckets)
     if total == 0.0 and not complete:
@@ -488,6 +491,12 @@ class WebSession:
             # false where one exists and can never fire (a local model) --
             # a full bar that will never move is worse than no bar.
             "budget_meter": _budget_meter(agent),
+            # Where turns are being written, or None (notes/64). The
+            # terminal banner says so once at startup; the PAGE is what
+            # somebody at a shared machine actually looks at.
+            "recording": ({"path": str(self.trace.path),
+                           "detail": self.trace.detail}
+                          if self.trace is not None else None),
             "utilization": agent.utilization(),
             # The honest numbers behind the pressure bar: what the last
             # request actually filled and how big the window is at all.

@@ -758,7 +758,10 @@ test: the agent builds a project from a spec — or repairs a seeded
 broken one without touching its checksummed tests — and the demo
 independently re-verifies; exit code doubles as a CI gate),
 [`examples/cache_demo.py`](examples/cache_demo.py) (prompt-cache hit,
-measured live), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+measured live),
+[`examples/budget_notice_trial.py`](examples/budget_notice_trial.py)
+(does `--budget-notice` change what the model does? The same turn with
+and without it, counted — free on a local model you price yourself), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation
@@ -1343,7 +1346,10 @@ The rules worth knowing before you rely on it:
   `budget: $0.50 per turn -- inert here, a local model bills nothing`.
   Give your own Ollama tag a price in `$YANTRA_PRICES` and it becomes
   real — which is how you rehearse a ceiling without pointing it at an
-  account with a card behind it.
+  account with a card behind it. That price then applies everywhere:
+  the meter, the eval report and the cost line agree. The built-in table
+  never prices a local model
+  ([notes/64](notes/64-a-price-for-the-free-road.md)).
 * **A metered model nobody can price refuses to carry a ceiling**, before
   a token is spent, rather than quietly metering $0.00:
   `error: budget: no list price is known for 'gizmo-9', so a $0.50 ceiling
@@ -1616,7 +1622,10 @@ src/yantra/
 │                   priced, and those are different numbers
 │                   ([notes/48](notes/48-what-the-run-cost.md)); price_source
 │                   says which table a price came from
-│                   ([notes/62](notes/62-the-reports-you-already-have.md))
+│                   ([notes/62](notes/62-the-reports-you-already-have.md));
+│                   is_free is the ONE answer to "does this run cost
+│                   anything": a local model is free until YOU price it
+│                   ([notes/64](notes/64-a-price-for-the-free-road.md))
 ├── budget.py       those dollars as a DECISION: a per-turn ceiling the loop
 │                   stops at between iterations (over_budget, with the numbers
 │                   in it). ONE meter shared with sub-agents, cleared only by
@@ -1626,10 +1635,13 @@ src/yantra/
 │                   from the request about to go out -- only one of them can
 │                   afford to be wrong. The AGENT may be told too
 │                   (--budget-notice): a DEADLINE, never a figure, because a
-│                   model handed a number to optimise optimises for it
+│                   model handed a number to optimise optimises for it.
+│                   The sub-agents' share of the spend is kept apart
+│                   (delegated) so the bar can say where it went
 │                   ([notes/34](notes/34-budgets.md),
 │                   [notes/36](notes/36-a-warning-before-the-stop.md),
-│                   [notes/43](notes/43-a-bar-and-a-deadline.md))
+│                   [notes/43](notes/43-a-bar-and-a-deadline.md),
+│                   [notes/64](notes/64-a-price-for-the-free-road.md))
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
 │   │               ModelResponse (protocol cores shared by both skins);

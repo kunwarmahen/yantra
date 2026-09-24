@@ -153,6 +153,7 @@ function applyHeader(s) {
     (s.tools ? s.tools.length : "—") + (off ? ` · ${off} off` : "");
   renderPressure(s);
   renderBudget(s);
+  renderRecording(s);
   setTurnUI(s.turn_active);
 }
 
@@ -198,10 +199,29 @@ function renderBudget(s) {
     + (pct >= 80 ? " danger" : pct >= 60 ? " warn" : "");
   $("#budget-left").textContent = `$${left.toFixed(left < 0.01 ? 4 : 2)} left`;
   $("#chip-budget").classList.toggle("chip-ctx-danger", pct >= 80);
+  // The sub-agents' share: already inside ``spent``, said separately
+  // because one bar cannot show that most of a turn went to a child.
+  const delegated = meter.delegated
+    ? `, ~$${meter.delegated.toFixed(4)} of it by sub-agents` : "";
   $("#chip-budget").title =
     `this turn has spent ~$${meter.spent.toFixed(4)} of its ` +
-    `$${meter.max_usd.toFixed(2)} ceiling; the turn stops between ` +
-    `iterations once it is crossed${told}`;
+    `$${meter.max_usd.toFixed(2)} ceiling${delegated}; the turn stops ` +
+    `between iterations once it is crossed${told}`;
+}
+
+/* The recording chip: visible only while --trace is writing turns down.
+   "shape" keeps the task, the tools and the counts; "full" keeps what the
+   agent read as well, which is the one worth noticing from across a room. */
+function renderRecording(s) {
+  const rec = s.recording;
+  $("#chip-rec").classList.toggle("hidden", !rec);
+  if (!rec) return;
+  $("#rec-label").textContent = rec.detail;
+  $("#chip-rec").classList.toggle("chip-ctx-danger", rec.detail === "full");
+  $("#chip-rec").title = `every turn is being recorded to ${rec.path} (` +
+    (rec.detail === "full"
+      ? "FULL: tool arguments, results and answers -- whatever the agent read"
+      : "shape: the task, which tools ran and the counts; no contents") + ")";
 }
 
 /* Context-window pressure. The bar mirrors auto-compaction's thresholds

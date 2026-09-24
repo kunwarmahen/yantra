@@ -89,6 +89,13 @@
          has used. Same bar, same thresholds, so the pair reads as one
          instrument rather than two widgets. Hidden when there is no
          ceiling at all. -->
+    <!-- Shown only while --trace is writing this session's turns down,
+         so anybody at the page can see it, not only whoever read the
+         terminal banner. -->
+    <span class="chip chip-static hidden" id="chip-rec">
+      <span class="chip-key">rec</span><span class="chip-label" id="rec-label"></span>
+    </span>
+
     <span class="chip chip-static hidden" id="chip-budget">
       <span class="ctxbar"><span class="ctxbar-fill" id="budget-fill"></span></span>
       <span id="budget-left"></span>

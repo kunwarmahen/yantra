@@ -238,7 +238,12 @@ bar belongs and now has one.
 * **No forecast of the reply.** Unchanged from note 36: output tokens are
   unknowable in advance, so an output-heavy turn still leans on the
   `WARN_AT` floor rather than on the number that would help.
-* **Nothing measures whether the notice works.** An eval case could
+* ~~**Nothing measures whether the notice works.**~~ Measured in
+  [note 64](64-a-price-for-the-free-road.md), on a local model priced for
+  the purpose, with `examples/budget_notice_trial.py` to repeat it:
+  6 of 10 told turns finished against 1 of 10 untold, a large difference
+  that is not yet evidence by note 47's rule (the intervals still
+  overlap). Was: An eval case could
   compare a warned turn against an unwarned one — same prompt, same
   ceiling, does the warned one stop opening files? — and it would need
   many samples of a genuinely borderline turn to say anything
@@ -249,7 +254,10 @@ bar belongs and now has one.
   footer string beside it, and the two never meet. A session ceiling
   needs a store and an identity, which is still a service's problem
   ([note 34](34-budgets.md)).
-* **A sub-agent's spend is invisible in the bar.** It charges the same
+* ~~**A sub-agent's spend is invisible in the bar.**~~ Shipped in
+  [note 64](64-a-price-for-the-free-road.md): the meter keeps the
+  sub-agents' share apart (`delegated`), and the bar's tooltip says it.
+  Was: It charges the same
   meter, so the number is right; what the bar cannot show is that
   three-quarters of this turn's money went to one delegated child
   ([note 40](40-a-package-that-delegates.md)).

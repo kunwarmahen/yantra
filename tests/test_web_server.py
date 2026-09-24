@@ -967,7 +967,7 @@ def test_the_ceiling_reaches_the_browser_as_numbers_too():
     client = TestClient(make_app(session))
     meter = client.get("/api/state").json()["budget_meter"]
     assert meter == {"spent": 0.0, "max_usd": 0.50, "metered": True,
-                     "tells_agent": False}
+                     "tells_agent": False, "delegated": 0.0}
 
 
 def test_an_inert_ceiling_says_so_in_the_numbers_not_only_the_sentence():

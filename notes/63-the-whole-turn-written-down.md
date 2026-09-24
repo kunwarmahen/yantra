@@ -167,7 +167,9 @@ later.
 
 ## What is not here yet
 
-* **The page does not show that it is recording.** The banner in the
+* ~~**The page does not show that it is recording.**~~ Shipped in
+  [note 64](64-a-price-for-the-free-road.md): a `rec` chip in the header,
+  red when the recording is FULL. Was: The banner in the
   terminal says so; the browser tab does not. Anyone using the page on a
   shared machine should be able to see it too.
 * **Refusal codes for a child's calls are not kept.** The parent's steps

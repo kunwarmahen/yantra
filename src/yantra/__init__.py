@@ -67,8 +67,8 @@ from yantra.permissions import (
     with_wait_budget,
     yolo,
 )
-from yantra.pricing import (ModelPrice, bills_nothing, cost_of, price_for,
-                            session_cost)
+from yantra.pricing import (ModelPrice, bills_nothing, cost_of, is_free,
+                            price_for, session_cost)
 from yantra.prompt import SystemPrompt, attach_prompt, recompose
 from yantra.providers import get_provider
 from yantra.providers.base import Provider, ProviderSettings, collect
@@ -168,6 +168,7 @@ __all__ = [
     "Provider",
     "recompose",
     "bills_nothing",
+    "is_free",
     "price_for",
     "session_cost",
     "ProviderSettings",

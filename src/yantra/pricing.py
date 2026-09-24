@@ -248,6 +248,24 @@ def bills_nothing(provider_name: str) -> bool:
     return provider_name in FREE_PROVIDERS
 
 
+def is_free(provider_name: str | None, model: str) -> bool:
+    """Whether a run on this provider and model costs nothing, full stop.
+
+    ``bills_nothing`` says the provider sends no invoice. This adds the one
+    exception, and every caller that prices a run asks this rather than
+    that (notes/64): A LOCAL MODEL IS FREE UNTIL YOU PRICE IT. An entry
+    for it in your own ``YANTRA_PRICES`` file is a deliberate statement --
+    electricity and a GPU are real money, or you want to try a ceiling
+    out on a model that costs nothing to run -- and the meter, the report
+    and the cost line all honour it the same way. The built-in table
+    never does: a local tag that happens to share a prefix with a hosted
+    model's name is not a bill.
+    """
+    if not provider_name or not bills_nothing(provider_name):
+        return False
+    return price_source(model)[1] != "YANTRA_PRICES"
+
+
 def cost_of(usage: Usage, price: ModelPrice) -> float:
     """Dollars for one Usage under one price (see module docstring).
 
@@ -288,7 +306,7 @@ def cost_now(usage: Usage, provider_name: str | None, model: str
       teach exactly the wrong instinct about what a suite costs.
     * a float -- the weighted sum, same arithmetic as everywhere else.
     """
-    if provider_name and bills_nothing(provider_name):
+    if is_free(provider_name, model):
         return 0.0
     price = price_for(model)
     return cost_of(usage, price) if price is not None else None

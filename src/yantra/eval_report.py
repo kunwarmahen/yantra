@@ -70,7 +70,7 @@ from typing import Any
 
 from yantra.confidence import overlaps, wilson_bounds
 from yantra.errors import ConfigError
-from yantra.pricing import bills_nothing, price_source
+from yantra.pricing import is_free, price_source
 
 #: Bumped only when an OLD reader would misread a NEW file. Adding a key
 #: that readers may ignore does not bump it; changing what a key means
@@ -135,7 +135,7 @@ class PriceRecord:
     @classmethod
     def for_model(cls, provider_name: str | None, model: str) -> PriceRecord:
         """What ``cost_now`` will use for this run, read the same way."""
-        if provider_name and bills_nothing(provider_name):
+        if is_free(provider_name, model):
             return cls(source="free")
         price, origin = price_source(model)
         if price is None or origin is None:

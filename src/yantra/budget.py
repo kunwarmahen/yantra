@@ -113,7 +113,7 @@ billed in silence is a turn this ceiling does not see.
 from __future__ import annotations
 
 from yantra.errors import ConfigError
-from yantra.pricing import ModelPrice, bills_nothing, cost_of, price_for
+from yantra.pricing import ModelPrice, cost_of, is_free, price_for
 from yantra.types import Usage
 
 #: Fraction of the ceiling that earns a heads-up on its own. The floor
@@ -143,6 +143,11 @@ class Budget:
         #: still say on screen that it will never fire.
         self.metered = metered
         self.spent = 0.0
+        #: The part of ``spent`` charged by anything OTHER than the agent
+        #: that owns the turn -- its sub-agents (notes/64). Already inside
+        #: ``spent``; kept apart only so a host can show where the money
+        #: went, which one shared number cannot.
+        self.delegated = 0.0
         #: Set when a charge arrives for a model with no list price. The
         #: turn stops: a meter that has gone blind mid-run cannot honour
         #: the ceiling, and carrying on regardless is the failure this
@@ -167,14 +172,14 @@ class Budget:
         ceiling on a model nobody can price learns at startup, not at
         whatever hour the bill arrives.
         """
-        if price_for(model) is not None:
-            # Deliberately ahead of the free-provider check: a price you
-            # put in $YANTRA_PRICES is a thing you asked for, and asking
-            # to meter your own local model is how you try a ceiling out
-            # before pointing it at an account with a card behind it.
-            return cls(max_usd, metered=True, notify_agent=notify_agent)
-        if bills_nothing(provider_name):
+        if is_free(provider_name, model):
             return cls(max_usd, metered=False, notify_agent=notify_agent)
+        if price_for(model) is not None:
+            # A local model reaches here only when YOU priced it in
+            # $YANTRA_PRICES (pricing.is_free) -- which is how you try a
+            # ceiling out before pointing it at an account with a card
+            # behind it, and how the notice was measured (notes/64).
+            return cls(max_usd, metered=True, notify_agent=notify_agent)
         raise ConfigError(
             f"budget: no list price is known for {model!r}, so a "
             f"${max_usd:.2f} ceiling could never stop anything. Add the "
@@ -195,14 +200,18 @@ class Budget:
             self._owner = owner
         if self._owner is owner:
             self.spent = 0.0
+            self.delegated = 0.0
             self.unpriced_model = None
             self._warned = False
 
-    def charge(self, usage: Usage, model: str) -> None:
+    def charge(self, usage: Usage, model: str, *,
+               spender: object | None = None) -> None:
         """Add one response's cost to the meter.
 
         A model with no list price is recorded rather than guessed at --
         ``pricing.py``'s rule, and here it is also the trigger for a stop.
+        ``spender`` is the agent that made the call; when it is not the
+        turn's owner the cost is also counted as ``delegated``.
         """
         if not self.metered:
             return
@@ -210,7 +219,11 @@ class Budget:
         if price is None:
             self.unpriced_model = model
             return
-        self.spent += cost_of(usage, price)
+        cost = cost_of(usage, price)
+        self.spent += cost
+        if spender is not None and self._owner is not None \
+                and spender is not self._owner:
+            self.delegated += cost
 
     def exceeded(self) -> bool:
         """Has this turn earned the right to another model call?"""

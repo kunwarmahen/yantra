@@ -124,7 +124,10 @@ it; changing what a key means does.*
   gap was the agent getting cheaper or the vendor getting dearer. The
   fix is to store the four rates beside the figure, which is four more
   numbers per case and an argument about per-case versus per-run.
-* **A local run's zero hides real money.** Electricity and a GPU are not
+* ~~**A local run's zero hides real money.**~~ Yours to price now
+  ([note 64](64-a-price-for-the-free-road.md)): a local model you give a
+  price in `$YANTRA_PRICES` is metered, reported and shown at that price
+  everywhere, and the built-in table still never prices one. Was: Electricity and a GPU are not
   free; they are just not billed per token. `bills_nothing` means "this
   provider does not invoice you", which is the honest scope for a harness
   and is not the same sentence as "this was free".
