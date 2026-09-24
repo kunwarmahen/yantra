@@ -398,22 +398,7 @@ def with_wait_budget(inner: PermissionFn, seconds: float, *,
     state: dict[str, Any] = {"turn": None, "left": seconds}
 
     def spent_out(request: PermissionRequest, code: str) -> bool:
-        """The verdict, with the two causes phrased as the two things they
-        are. Reached only when the allowance is gone, which is why both
-        sentences can say so."""
-        if on_timeout == "allow":
-            return True
-        asked = ("the approval request went unanswered"
-                 if code == REFUSED_TIMEOUT else
-                 "nobody was asked, because this turn had no waiting left")
-        return refuse(
-            request,
-            f"{request.tool_name} was denied: {asked}. This turn may spend "
-            f"{seconds:g} seconds in total waiting for approval, and that "
-            f"is now spent. Nobody refused it -- try a read-only route, or "
-            f"say what you need and let the person answer in their own "
-            f"time.",
-            code=code)
+        return wait_spent(request, seconds, code, on_timeout=on_timeout)
 
     async def wait(answer: Awaitable[bool], request: PermissionRequest,
                    allowance: float) -> bool:
@@ -444,6 +429,30 @@ def with_wait_budget(inner: PermissionFn, seconds: float, *,
         return wait(answer, request, state["left"])
 
     return gate
+
+
+def wait_spent(request: PermissionRequest, seconds: float, code: str, *,
+               on_timeout: str) -> bool:
+    """The verdict once a turn's waiting allowance is gone, with the two
+    causes phrased as the two things they are.
+
+    Shared by ``with_wait_budget`` and the browser's own gate (notes/78),
+    which cannot be wrapped -- it blocks a worker thread rather than
+    suspending -- so a model hears the same sentence from either.
+    """
+    if on_timeout == "allow":
+        return True
+    asked = ("the approval request went unanswered"
+             if code == REFUSED_TIMEOUT else
+             "nobody was asked, because this turn had no waiting left")
+    return refuse(
+        request,
+        f"{request.tool_name} was denied: {asked}. This turn may spend "
+        f"{seconds:g} seconds in total waiting for approval, and that "
+        f"is now spent. Nobody refused it -- try a read-only route, or "
+        f"say what you need and let the person answer in their own "
+        f"time.",
+        code=code)
 
 
 def _never_awaited(answer: Awaitable[bool]) -> None:

@@ -42,6 +42,7 @@ import base64
 import json
 import queue
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,7 +58,15 @@ from yantra.config import default_model, load_settings
 from yantra.context import estimate_history
 from yantra.errors import ConfigError, ProviderError, UserUnavailable
 from yantra.images import image_block_from_bytes
-from yantra.permissions import REFUSED_USER, PermissionRequest, refuse
+from yantra.permissions import (
+    ON_TIMEOUT,
+    REFUSED_OUT_OF_TIME,
+    REFUSED_TIMEOUT,
+    REFUSED_USER,
+    PermissionRequest,
+    refuse,
+    wait_spent,
+)
 from yantra.pricing import is_free, session_cost
 from yantra.prompt import recompose
 from yantra.providers import get_provider
@@ -126,6 +135,10 @@ class _Client:
     events: asyncio.Queue
 
 
+class _Expired(Exception):
+    """The turn's waiting allowance ran out while a question was up."""
+
+
 @dataclass
 class _Pending:
     """One open question to the human (permission or ask), answered by id."""
@@ -157,6 +170,25 @@ class WebSession:
         #: a flag that recorded one frontend and silently not the other
         #: would be a store with holes nobody could see.
         self.trace: Any | None = None
+        #: How long ONE TURN may spend, in total, waiting for approvals
+        #: (notes/78) -- ``with_wait_budget``'s rule, kept here because
+        #: this gate blocks a worker thread and cannot be wrapped. None is
+        #: no budget: every question waits as long as the person takes.
+        self.wait_budget: float | None = None
+        #: What an unanswered question means once the allowance is gone:
+        #: "deny" or "allow". No default, for with_deadline's reason.
+        self.on_timeout: str | None = None
+        self._wait_left: float | None = None
+
+    def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
+        """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
+        if on_timeout not in ON_TIMEOUT:
+            raise ValueError(f"unknown on_timeout {on_timeout!r} "
+                             f"(want one of {', '.join(ON_TIMEOUT)})")
+        if seconds <= 0:
+            raise ValueError(f"a turn's waiting budget must be positive, "
+                             f"got {seconds!r}")
+        self.wait_budget, self.on_timeout = seconds, on_timeout
 
     # ---- wiring -------------------------------------------------------------
 
@@ -226,10 +258,14 @@ class WebSession:
         if pending is not None:
             pending.answers.put_nowait(CANCELLED)
 
-    def _wait_for_answer(self, pending: _Pending) -> dict[str, Any]:
+    def _wait_for_answer(self, pending: _Pending,
+                         deadline: float | None = None) -> dict[str, Any]:
         """Worker-side block: poll the answer queue AND the cancel flag.
         Polling (not a bare blocking get) is what lets cancel interrupt a
-        wait without anyone knowing which thread notices first."""
+        wait without anyone knowing which thread notices first.
+
+        ``deadline`` (a ``time.monotonic()``) is the turn's waiting
+        allowance running out; reaching it raises ``_Expired``."""
         while True:
             try:
                 item = pending.answers.get(timeout=0.2)
@@ -238,18 +274,24 @@ class WebSession:
                     # turn-cancel, REPL semantics; the empty poll is
                     # the timer, not the cause
                     raise KeyboardInterrupt from None
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise _Expired from None
                 continue
             if item is CANCELLED:
                 raise KeyboardInterrupt
             return item
 
-    def _ask_human(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        """Broadcast a question, block for its answer, clean up after."""
+    def _ask_human(self, envelope: dict[str, Any],
+                   deadline: float | None = None) -> dict[str, Any]:
+        """Broadcast a question, block for its answer, clean up after.
+        The ``resolved`` in the finally is also what withdraws a question
+        whose time ran out: the page closes it rather than leaving a
+        prompt up that has already been decided."""
         pending = _Pending(kind=envelope["type"], envelope=envelope)
         self._pending = pending
         try:
             self.broadcast(envelope)
-            return self._wait_for_answer(pending)
+            return self._wait_for_answer(pending, deadline)
         finally:
             self._pending = None
             self.broadcast({"type": "resolved", "id": envelope.get("id")})
@@ -269,14 +311,41 @@ class WebSession:
                 return True
             edited = False
             while True:
-                answer = self._ask_human({
+                if self._wait_left is not None and self._wait_left <= 0:
+                    # NOTHING IS ASKED ONCE THE ALLOWANCE IS GONE: a
+                    # question nobody will wait for is not posted
+                    # (with_wait_budget's rule, notes/51 and 71).
+                    return wait_spent(request, self.wait_budget,
+                                      REFUSED_OUT_OF_TIME,
+                                      on_timeout=self.on_timeout)
+                started = time.monotonic()
+                deadline = (started + self._wait_left
+                            if self._wait_left is not None else None)
+                envelope = {
                     "type": "permission_request",
                     "id": uuid.uuid4().hex[:8],
                     "tool_name": request.tool_name,
                     "summary": request.summary,
                     "arguments": request.arguments,
                     "edited": edited,
-                })
+                }
+                if self._wait_left is not None:
+                    # Seconds, not a timestamp: the page's clock and
+                    # this one need not agree.
+                    envelope["wait_left"] = round(self._wait_left, 1)
+                try:
+                    answer = self._ask_human(envelope, deadline)
+                except _Expired:
+                    return wait_spent(request, self.wait_budget,
+                                      REFUSED_TIMEOUT,
+                                      on_timeout=self.on_timeout)
+                finally:
+                    # Deducted however the wait ended -- an answer, the
+                    # clock, or a Stop -- because the time was spent.
+                    if self._wait_left is not None:
+                        self._wait_left = max(
+                            0.0, self._wait_left
+                            - (time.monotonic() - started))
                 decision = answer.get("decision")
                 if decision == "approve":
                     return True
@@ -339,6 +408,9 @@ class WebSession:
         turns; this is single-operator, one-turn-at-a-time by design."""
         self._cancel.clear()
         self.turn_active = True
+        # The allowance is per TURN, and this is the one place a turn
+        # starts -- no inferring it from gaps between questions.
+        self._wait_left = self.wait_budget
         self.broadcast({"type": "turn_started"})
         threading.Thread(target=self._run_turn, args=(text, images),
                          daemon=True, name="yantra-turn").start()
@@ -523,6 +595,11 @@ class WebSession:
             # Where turns are being written, or None (notes/64). The
             # terminal banner says so once at startup; the PAGE is what
             # somebody at a shared machine actually looks at.
+            # The per-turn allowance for approvals (notes/78), so the page
+            # can say why a prompt carries a clock.
+            "wait_budget": ({"seconds": self.wait_budget,
+                             "on_timeout": self.on_timeout}
+                            if self.wait_budget is not None else None),
             "recording": ({"path": str(self.trace.path),
                            "detail": self.trace.detail}
                           if self.trace is not None else None),
@@ -1187,10 +1264,13 @@ def launch(session: WebSession, agent: Agent, store: SessionStore | None,
     servers = f" · mcp servers={len(mcp.sessions)}" if mcp else ""
     recording = (f"  recording turns -> {session.trace.path} "
                  f"({session.trace.detail})\n" if session.trace else "")
+    waiting = (f"  approvals: {session.wait_budget:g}s of waiting per turn, "
+               f"then {session.on_timeout}\n"
+               if session.wait_budget is not None else "")
     print(f"\n  yantra web UI -> http://{host}:{port}\n"
           f"  provider={agent.provider.name} · model={agent.model} · "
           f"tools={len(agent.registry)}{servers} · cwd={agent.ctx.cwd}\n"
-          f"{recording}"
+          f"{recording}{waiting}"
           "  ctrl-c stops the server\n")
     uvicorn.run(app, host=host, port=port, log_level="warning")
     return 0

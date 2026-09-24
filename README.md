@@ -685,6 +685,12 @@ from timing or call counts, which would reset the budget at the wrong
 moment and never raise. See
 [notes/51](notes/51-a-turns-worth-of-waiting.md).
 
+The browser has it as a flag: `yantra --web --wait-budget 60
+--on-timeout deny` gives each turn sixty seconds of waiting on approval
+prompts, and the prompt counts down. The terminal has no such flag,
+because it asks you directly and nothing is left waiting
+([notes/78](notes/78-a-clock-on-the-page.md)).
+
 Both frontends read that token rather than drawing every refusal as a
 crash. A refused call **never ran** — it is not an error, and `user` and
 `timeout` are a decision and an absence:
@@ -1622,7 +1628,10 @@ src/yantra/
 │                   and
 │                   the request carries turn_id so the wrapper is told
 │                   where a turn begins rather than inferring it
-│                   ([notes/51](notes/51-a-turns-worth-of-waiting.md))
+│                   ([notes/51](notes/51-a-turns-worth-of-waiting.md));
+│                   wait_spent() is its refusal, shared with the browser's
+│                   blocking gate, which cannot be wrapped
+│                   ([notes/78](notes/78-a-clock-on-the-page.md))
 ├── context.py      compaction: mask old tool results, then summarize (red
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes
@@ -1939,7 +1948,11 @@ src/yantra/
 │                   [notes/43](notes/43-a-bar-and-a-deadline.md)). A
 │                   recorded turn ends with good/bad buttons: the SAME
 │                   mark() --mark calls, idle only
-│                   ([notes/77](notes/77-a-mark-taken-back.md))
+│                   ([notes/77](notes/77-a-mark-taken-back.md)).
+│                   --wait-budget keeps with_wait_budget's rule inside
+│                   the session, where the blocking gate already polls:
+│                   reset at start_turn, prompt withdrawn on expiry
+│                   ([notes/78](notes/78-a-clock-on-the-page.md))
 └── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per

@@ -47,9 +47,11 @@ has no allowance to run out of, so it never had this problem.
 
 ## What is not here yet
 
-* **No frontend passes a wait budget.** Still true from note 51: the
-  terminal answers inline, and the browser has no flag for it. dvara
-  uses its own daily check.
+* ~~**No frontend passes a wait budget.**~~ The browser does since
+  [note 78](78-a-clock-on-the-page.md), keeping this note's rule: once
+  the time is gone, only a prompt that would wait is refused. Was: Still
+  true from note 51: the terminal answers inline, and the browser has no
+  flag for it. dvara uses its own daily check.
 
 ## Receipt
 

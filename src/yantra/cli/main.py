@@ -259,6 +259,20 @@ def build_parser() -> argparse.ArgumentParser:
                              "terminal REPL (chat, live streaming, approval "
                              "buttons, session controls). Needs the web "
                              "extra: uv sync --extra web")
+    parser.add_argument("--wait-budget", type=float, default=None,
+                        metavar="SECONDS", dest="wait_budget",
+                        help="with --web: how long ONE TURN may spend, in "
+                             "total, waiting for you to approve things. "
+                             "Each prompt waits for what is left; once it "
+                             "is spent, nothing more is asked that turn. "
+                             "Needs --on-timeout. The terminal asks you "
+                             "directly, so nothing waits there")
+    parser.add_argument("--on-timeout", choices=["deny", "allow"],
+                        default=None, dest="on_timeout",
+                        help="with --wait-budget: what an unanswered "
+                             "approval means. No default -- 'deny' is right "
+                             "for a deploy and wrong for a job you left "
+                             "running so it would carry on")
     parser.add_argument("--host", default="127.0.0.1", metavar="ADDR",
                         help="bind address for --web (default: localhost only)")
     parser.add_argument("--port", type=int, default=8321, metavar="PORT",
@@ -1749,6 +1763,22 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --eval runs the package's suite and reports a verdict; "
               "drop --build/--prompt/PROMPT/--web", file=sys.stderr)
         return 2
+    if args.wait_budget is not None and not args.web:
+        print("error: --wait-budget times the browser's approval prompts; "
+              "the terminal asks you directly and nothing waits there. "
+              "Add --web", file=sys.stderr)
+        return 2
+    if (args.wait_budget is None) != (args.on_timeout is None):
+        print("error: --wait-budget and --on-timeout go together: one says "
+              "how long a turn may wait, the other what silence means "
+              "(deny or allow), and neither has a default",
+              file=sys.stderr)
+        return 2
+    if args.wait_budget is not None and args.wait_budget <= 0:
+        print(f"error: --wait-budget must be positive (got "
+              f"{args.wait_budget:g}); to wait without limit, leave it off",
+              file=sys.stderr)
+        return 2
     if args.trace_full and args.trace is None:
         print("error: --trace-full says what to keep, and --trace says "
               "where; pass --trace FILE", file=sys.stderr)
@@ -1914,6 +1944,9 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
             return 2
         web_session = WebSession()
+        if args.wait_budget is not None:
+            web_session.set_wait_budget(args.wait_budget,
+                                        on_timeout=args.on_timeout)
 
     # The ask-gate is whatever surface the human sits on (terminal y/n/e or
     # browser modal); sandbox-trust composes into it, then a SwitchableGate

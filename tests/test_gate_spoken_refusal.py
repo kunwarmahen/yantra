@@ -124,7 +124,7 @@ class TestTheBrowser:
         from yantra.web.server import WebSession
 
         session = WebSession()
-        session._ask_human = lambda payload: answer  # type: ignore[method-assign]
+        session._ask_human = lambda payload, deadline=None: answer  # type: ignore[method-assign]
         return session.permission_gate()
 
     def test_a_reason_typed_in_the_modal_reaches_the_model(self):

@@ -731,6 +731,15 @@ pre.md-code {
 .mark-btn[data-v="bad"]:hover { color: var(--danger); }
 .mark-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 
+/* The turn's approval allowance, counting down (notes/78). */
+.wait-clock {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.wait-clock-low { color: var(--danger); }
+
 /* ---- tool cards ---- */
 
 .tool-card {

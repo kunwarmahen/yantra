@@ -116,7 +116,10 @@ policy and belongs to whoever owns the conversation.
   still consulted, and only an answer that would wait is refused. Was:
   once spent, every call in the turn was refused without asking.
 
-* **No frontend passes one.** The terminal gate answers inline (nothing
+* ~~**No frontend passes one.**~~ The browser does since
+  [note 78](78-a-clock-on-the-page.md): `--web --wait-budget SECONDS
+  --on-timeout deny|allow`. The terminal still does not, by design. Was:
+  The terminal gate answers inline (nothing
   is ever waited for, so nothing can be timed), and the browser's gate
   has no flag for it yet — the same state `with_deadline` has been in
   since note 39. The consumer for both is a service where the person is

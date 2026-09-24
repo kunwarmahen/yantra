@@ -551,6 +551,7 @@ function showModal(html) {
 function closeModalIf(id) {
   if (ui.modalId === id) {
     ui.modalId = null;
+    clearInterval(ui.waitTimer);
     $("#modal-backdrop").classList.add("hidden");
   }
 }
@@ -561,6 +562,7 @@ function showPermissionModal(env) {
     <div class="kind-tag">approval needed</div>
     <h3>${esc(env.tool_name)}() ${env.edited
       ? '<span class="edited-flag">(edited)</span>' : ""}</h3>
+    ${env.wait_left != null ? '<div class="wait-clock" id="wait-clock"></div>' : ""}
     <div class="summary">${esc(env.summary)}</div>
     <details><summary>raw arguments</summary>
       <pre class="args">${esc(JSON.stringify(env.arguments ?? {}, null, 2))}</pre>
@@ -572,6 +574,7 @@ function showPermissionModal(env) {
       <button class="m-btn danger" data-act="deny">deny</button>
       <button class="m-btn primary" data-act="approve">approve ⏎</button>
     </div>`);
+  startWaitClock(env);
   const answer = (payload) => send({ type: "answer", id: env.id, ...payload });
   const onKey = (e) => {
     // Enter approves only while THIS modal is up and no edit box is open
@@ -603,6 +606,30 @@ function showPermissionModal(env) {
     }
     if (act === "edit") renderEditBox(env, answer, onKey);
   };
+}
+
+/* This turn's approval allowance (--wait-budget, notes/78), counting down.
+   The server keeps the real clock and withdraws the prompt when it runs
+   out; this is only so the person can see it coming. */
+function startWaitClock(env) {
+  clearInterval(ui.waitTimer);
+  if (env.wait_left == null) return;
+  // Once per prompt: "back" from the edit box redraws this modal, and
+  // must not hand the person their seconds back.
+  env.waitUntil ??= performance.now() + env.wait_left * 1000;
+  const until = env.waitUntil;
+  const silence = ui.lastState?.wait_budget?.on_timeout === "allow"
+    ? "it goes ahead" : "it is refused";
+  const tick = () => {
+    const el = $("#wait-clock");
+    if (!el) { clearInterval(ui.waitTimer); return; }
+    const left = Math.max(0, (until - performance.now()) / 1000);
+    el.textContent = `${left.toFixed(0)}s of this turn's waiting left — `
+      + `unanswered, ${silence}`;
+    el.classList.toggle("wait-clock-low", left < 10);
+  };
+  tick();
+  ui.waitTimer = setInterval(tick, 500);
 }
 
 function renderEditBox(env, answer, dismissKeyHandler) {
