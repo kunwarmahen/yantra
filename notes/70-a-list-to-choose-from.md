@@ -90,7 +90,8 @@ fact.
 ## What is not here yet
 
 * **Nothing decides whether a typed turn was a failure.** Still true
-  from note 57, on purpose. A person does.
+  from note 57, on purpose. A person does, and since [note 74](74-a-verdict-you-write-down.md) can write it
+  down with `--mark ID good|bad --why ...`.
 
 ## Receipt
 

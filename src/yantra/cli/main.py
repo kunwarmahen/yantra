@@ -309,6 +309,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "filter flags (ended badly, or a tool or "
                              "sub-agent failed). A list to choose from, not "
                              "a verdict: pass an id to --fossil")
+    parser.add_argument("--mark", nargs=2, metavar=("TRACE_ID", "good|bad"),
+                        default=None,
+                        help="with --trace FILE: write YOUR verdict on a "
+                             "recorded turn into its line and exit. Yantra "
+                             "does not decide whether a turn failed; this is "
+                             "where the person who did writes it down, for "
+                             "--turns and --fossil. An id prefix is enough")
+    parser.add_argument("--why", metavar="TEXT", default=None,
+                        help="with --mark: the reason, in your words; "
+                             "--fossil uses it as the case's description")
     parser.add_argument("--tool-pack", action="append", default=[],
                         metavar="NAME", dest="tool_pack",
                         help="load the tools an INSTALLED distribution "
@@ -504,6 +514,11 @@ def _fossil_mode(args, console: Console) -> int:
         return 2
     reason = (f"recorded {trajectory.at} on {trajectory.provider}/"
               f"{trajectory.model}; ended {trajectory.outcome}")
+    if trajectory.judged_by == "person" and trajectory.why:
+        # The person's own words are the best description a regression
+        # case can have (notes/74).
+        verdict = "good" if trajectory.passed else "bad"
+        reason = f"marked {verdict}: {trajectory.why} ({reason})"
     case = case_from_trajectory(trajectory, reason)
     # Written to stdout so it can be redirected; everything else this
     # mode says goes to stderr, or a redirect would capture the advice.
@@ -544,6 +559,26 @@ def _trace_prune_mode(args, console: Console) -> int:
     return 0
 
 
+def _mark_mode(args, console: Console) -> int:
+    """--mark ID good|bad [--why TEXT] --trace FILE (notes/74)."""
+    trace_id, verdict = args.mark
+    if verdict not in ("good", "bad"):
+        print(f"error: --mark takes a verdict of good or bad, not "
+              f"{verdict!r}", file=sys.stderr)
+        return 2
+    try:
+        turn = TrajectoryLog(Path(args.trace)).mark(
+            trace_id, passed=verdict == "good", why=args.why)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    console.print(f"{turn.id[:8]} marked {verdict}"
+                  + (f": {escape(args.why)}" if args.why else "")
+                  + f" [dim]({escape(' '.join(turn.task.split())[:60])})"
+                    f"[/dim]")
+    return 0
+
+
 def _turns_mode(args, console: Console) -> int:
     """--turns [failed] --trace FILE: the recording, one line a turn.
 
@@ -562,7 +597,9 @@ def _turns_mode(args, console: Console) -> int:
         return 2
     shown = [t for t in turns if args.turns == "all" or _flagged(t)]
     for turn in shown:
-        mark = "[red]✗[/red]" if _flagged(turn) else " "
+        mark = ("[red]✗[/red]" if _flagged(turn)
+                else "[green]✓[/green]" if turn.judged_by == "person"
+                else " ")
         case = f" [dim]case {escape(turn.case)}[/dim]" if turn.case else ""
         why = _why_flagged(turn)
         task = " ".join(turn.task.split())
@@ -576,8 +613,9 @@ def _turns_mode(args, console: Console) -> int:
     console.print(f"\n[dim]{len(turns)} turn(s), {flagged} flagged"
                   + (f", {log.unreadable} unreadable line(s) skipped"
                      if log.unreadable else "")
-                  + " -- by the cheap filter or by a case's own grader; "
-                    "an unflagged turn can still be wrong. A case from one: "
+                  + " -- by the cheap filter, a case's own grader, or a "
+                    "person's --mark; an unflagged turn can still be wrong. "
+                    "A case from one: "
                     "--fossil ID "
                     f"--trace {escape(str(log.path))}[/dim]")
     return 0
@@ -587,8 +625,12 @@ def _flagged(turn) -> bool:
     """The cheap filter (``Trajectory.failed``), or a grader that said no.
 
     A grader's verdict is the one judgement a trace carries that Yantra
-    did not make: a person wrote the case (notes/70).
+    did not make: a person wrote the case (notes/70). A PERSON'S MARK
+    (notes/74) outranks both: they read the answer, and a turn they
+    called good is not flagged by a tool error it recovered from.
     """
+    if turn.judged_by == "person":
+        return turn.passed is False
     return turn.failed or turn.passed is False
 
 
@@ -596,6 +638,11 @@ def _why_flagged(turn) -> str:
     """Every reason a turn is flagged, or "". All of them, because the
     grader's no and a tool that failed are two different leads."""
     why = []
+    if turn.judged_by == "person":
+        if turn.passed is False:
+            return ("marked bad by a person"
+                    + (f": {turn.why}" if turn.why else ""))
+        return ""
     if turn.passed is False:
         why.append("red in its case -- the grader said no")
     if turn.outcome != "end_turn":
@@ -1657,6 +1704,22 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --fossil prints one recorded turn as a case and exits; "
               "drop --eval/--build/--web/--prompt/PROMPT", file=sys.stderr)
         return 2
+    if args.mark is not None and args.trace is None:
+        print("error: --mark writes into a recording, so it needs the file: "
+              "--mark ID good|bad --trace FILE", file=sys.stderr)
+        return 2
+    if args.why is not None and args.mark is None:
+        print("error: --why is the reason for a --mark", file=sys.stderr)
+        return 2
+    if args.mark is not None and (
+            args.eval or args.build or args.web or args.prompt
+            or args.prompt_positional or args.fossil is not None
+            or args.reports is not None or args.turns is not None
+            or args.trace_prune is not None or args.trace_full):
+        print("error: --mark writes one verdict and exits; drop "
+              "--eval/--build/--web/--fossil/--reports/--turns/"
+              "--trace-prune/--trace-full/--prompt/PROMPT", file=sys.stderr)
+        return 2
     if args.turns is not None and args.trace is None:
         print("error: --turns lists a recording, so it needs the file: "
               "--turns --trace FILE", file=sys.stderr)
@@ -1727,6 +1790,8 @@ def main(argv: list[str] | None = None) -> int:
         return _trace_prune_mode(args, console)
     if args.turns is not None:
         return _turns_mode(args, console)
+    if args.mark is not None:
+        return _mark_mode(args, console)
 
     # Reports are files. Reading them needs no package, no provider and no
     # key, so this goes before any of those are resolved (notes/62).

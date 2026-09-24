@@ -245,7 +245,9 @@ FILE`: each failing case prints its turn ids, the report keeps them, and
 (`notes/65-the-turn-behind-the-red-line.md`). `--turns failed --trace
 FILE` lists the flagged turns with their reasons, including a grader's
 no, so an id can be found without opening the file
-(`notes/70-a-list-to-choose-from.md`).
+(`notes/70-a-list-to-choose-from.md`). `--mark ID good|bad --why TEXT`
+writes a person's own verdict into a turn, and `--fossil` uses the reason
+(`notes/74-a-verdict-you-write-down.md`).
 
 ## Graders: checking the answer text
 

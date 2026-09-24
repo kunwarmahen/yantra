@@ -97,6 +97,10 @@ SHAPE = "shape"
 FULL = "full"
 LEVELS = (SHAPE, FULL)
 
+#: Who gave a turn its ``passed`` (notes/74): a suite's case, or a person.
+GRADER = "grader"
+PERSON = "person"
+
 #: Longest tool argument/result string kept at FULL. A trajectory is
 #: evidence, not an archive: a 200KB file read makes the store unusable
 #: for the thing it exists for.
@@ -171,6 +175,11 @@ class Trajectory:
     #: Kept at SHAPE -- a boolean, not the grader's words, which may quote
     #: whatever the agent said.
     passed: bool | None = None
+    #: Who gave ``passed``: ``"grader"`` (a suite's case) or ``"person"``
+    #: (``--mark``, notes/74). None on a line from before either existed.
+    judged_by: str | None = None
+    #: The person's own reason, when they gave one with ``--mark``.
+    why: str | None = None
 
     @property
     def tools_used(self) -> list[str]:
@@ -297,12 +306,7 @@ class TrajectoryLog:
         cutoff = time.strftime(
             "%Y-%m-%dT%H:%M:%SZ",
             time.gmtime((time.time() if now is None else now) - days * 86400))
-        try:
-            data = self.path.read_bytes()
-        except FileNotFoundError:
-            raise ConfigError(f"no trace file at {self.path}") from None
-        except OSError as exc:
-            raise ConfigError(f"cannot read trace {self.path}: {exc}") from None
+        data = self._raw()
         kept: list[bytes] = []
         result = Pruned(path=self.path, days=days)
         for line in data.splitlines():
@@ -319,12 +323,63 @@ class TrajectoryLog:
                 kept.append(line)
         if not result.removed:
             return result
+        self._rewrite(data, kept)
+        return result
+
+    def mark(self, trace_id: str, *, passed: bool,
+             why: str | None = None) -> Trajectory:
+        """Write a PERSON's verdict into one recorded turn (notes/74).
+
+        Yantra still decides nothing about whether a turn was a failure
+        (notes/57); this is where the person who did decide writes it
+        down, so ``--turns`` can show it and ``--fossil`` can use the
+        reason. The line is rewritten in place -- the same rename swap as
+        ``prune`` -- rather than a second line appended, because an older
+        reader would count that second line as unreadable and say so.
+        A person's mark replaces a grader's: the person has read the
+        answer, and the grader only checked its shape.
+        """
+        target = self.get(trace_id)
+        data = self._raw()
+        lines: list[bytes] = []
+        for line in data.splitlines():
+            if not line.strip():
+                continue
+            try:
+                raw = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                lines.append(line)
+                continue
+            if isinstance(raw, dict) and raw.get("id") == target.id:
+                raw["passed"] = passed
+                raw["judged_by"] = PERSON
+                if why:
+                    raw["why"] = why
+                else:
+                    raw.pop("why", None)
+                line = json.dumps(raw, ensure_ascii=False).encode()
+            lines.append(line)
+        self._rewrite(data, lines)
+        target.passed, target.judged_by, target.why = passed, PERSON, why
+        return target
+
+    def _raw(self) -> bytes:
+        try:
+            return self.path.read_bytes()
+        except FileNotFoundError:
+            raise ConfigError(f"no trace file at {self.path}") from None
+        except OSError as exc:
+            raise ConfigError(f"cannot read trace {self.path}: {exc}") from None
+
+    def _rewrite(self, data: bytes, lines: list[bytes]) -> None:
+        """Swap in ``lines`` for the file ``data`` was read from, keeping
+        anything appended since the read (see ``prune``)."""
         temp = None
         try:
             handle, temp = tempfile.mkstemp(dir=self.path.parent,
                                             prefix=f".{self.path.name}.")
             with os.fdopen(handle, "wb") as out:
-                out.write(b"".join(line + b"\n" for line in kept))
+                out.write(b"".join(line + b"\n" for line in lines))
                 with self.path.open("rb") as current:
                     current.seek(len(data))
                     out.write(current.read())   # appended while we read
@@ -334,7 +389,6 @@ class TrajectoryLog:
             if temp is not None and os.path.exists(temp):
                 os.unlink(temp)           # the original is untouched
             raise ConfigError(f"cannot rewrite trace {self.path}: {exc}") from None
-        return result
 
 
 @dataclass(slots=True)
@@ -394,6 +448,10 @@ def _as_json(trajectory: Trajectory) -> dict[str, Any]:
         payload["case"] = trajectory.case
     if trajectory.passed is not None:
         payload["passed"] = trajectory.passed
+    if trajectory.judged_by is not None:
+        payload["judged_by"] = trajectory.judged_by
+    if trajectory.why is not None:
+        payload["why"] = trajectory.why
     if trajectory.children:
         # Only when there were any, so a turn without delegation reads
         # exactly as it always did.
@@ -447,6 +505,8 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         ) for c in raw.get("children", [])],
         case=raw.get("case"),
         passed=raw.get("passed"),
+        judged_by=raw.get("judged_by"),
+        why=raw.get("why"),
     )
 
 
@@ -564,7 +624,8 @@ def from_history(agent: Any, task: str, *, provider: str = "",
     trajectory = Trajectory(id=uuid.uuid4().hex, at=_now(), provider=provider,
                             model=model, detail=detail, task=task,
                             outcome=outcome, seconds=seconds, usd=usd,
-                            case=case, passed=passed)
+                            case=case, passed=passed,
+                            judged_by=GRADER if passed is not None else None)
     for message in history:
         if message.role != "assistant":
             continue

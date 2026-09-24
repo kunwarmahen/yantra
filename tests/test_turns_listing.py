@@ -127,3 +127,68 @@ class TestTheFlag:
     def test_it_is_its_own_mode(self, tmp_path, capsys):
         assert main(["--turns", "--trace", str(tmp_path / "t.jsonl"),
                      "--eval"]) == 2
+
+
+class TestAPersonsMark:
+    """notes/74: Yantra does not decide; a person can write it down."""
+
+    def recording(self, tmp_path, *turns):
+        path = tmp_path / "t.jsonl"
+        log = TrajectoryLog(path)
+        for t in turns:
+            log.record(t)
+        return path
+
+    def test_a_bad_mark_flags_a_clean_turn_with_the_persons_words(
+            self, tmp_path, capsys):
+        path = self.recording(tmp_path, turn("aaaaaaaa"))
+        assert main(["--mark", "aaaa", "bad", "--why", "wrong file",
+                     "--trace", str(path)]) == 0
+        main(["--turns", "failed", "--trace", str(path)])
+        out = capsys.readouterr().out
+        assert "marked bad by a person: wrong file" in out
+
+    def test_a_good_mark_outranks_the_cheap_filter_and_the_grader(
+            self, tmp_path, capsys):
+        path = self.recording(tmp_path, turn(
+            "aaaaaaaa", passed=False, case="x",
+            steps=[ToolStep("read_file", ok=False)]))
+        main(["--mark", "aaaa", "good", "--trace", str(path)])
+        main(["--turns", "failed", "--trace", str(path)])
+        assert "1 turn(s), 0 flagged" in " ".join(
+            capsys.readouterr().out.split())
+
+    def test_the_line_is_rewritten_not_appended(self, tmp_path):
+        path = self.recording(tmp_path, turn("aaaaaaaa"), turn("bbbbbbbb"))
+        TrajectoryLog(path).mark("bbbb", passed=False, why="no")
+        lines = path.read_text().splitlines()
+        assert len(lines) == 2
+        raw = json.loads(lines[1])
+        assert (raw["passed"], raw["judged_by"], raw["why"]) == \
+            (False, "person", "no")
+        log = TrajectoryLog(path)
+        assert len(log.read()) == 2 and log.unreadable == 0
+
+    def test_fossil_takes_the_persons_reason(self, tmp_path, capsys):
+        path = self.recording(tmp_path, turn("aaaaaaaa"))
+        main(["--mark", "aaaa", "bad", "--why", "cited nothing",
+              "--trace", str(path)])
+        capsys.readouterr()
+        main(["--fossil", "aaaa", "--trace", str(path)])
+        assert 'description = "marked bad: cited nothing' in \
+            capsys.readouterr().out
+
+    def test_a_suite_turns_verdict_says_it_was_the_grader(self, tmp_path):
+        from yantra.trace import from_history
+
+        class Nothing:
+            history = []
+        recorded = from_history(Nothing(), "t", case="x", passed=True)
+        assert recorded.judged_by == "grader"
+
+    def test_the_verdict_must_be_good_or_bad(self, tmp_path, capsys):
+        path = self.recording(tmp_path, turn("aaaaaaaa"))
+        assert main(["--mark", "aaaa", "meh", "--trace", str(path)]) == 2
+
+    def test_why_needs_a_mark(self, capsys):
+        assert main(["--why", "x"]) == 2

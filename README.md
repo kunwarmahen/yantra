@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1796 tests. The
+The harness underneath is complete and covered by 1803 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1204,6 +1204,12 @@ suite's turn, **its own case's grader said no**, which `--eval --trace`
 now writes into the line as a boolean. It decides nothing: the footer
 says an unflagged turn can still be wrong.
 
+When **you** decide, write it down: `--mark ID bad --why "cited a file
+it never opened" --trace FILE` puts your verdict into that turn's line.
+`--turns` flags it with your words, a turn you marked good is not
+flagged whatever the cheap filter says, and `--fossil` uses your reason
+as the case's description ([notes/74](notes/74-a-verdict-you-write-down.md)).
+
 ```
 $ uv run yantra --turns failed --trace runs/turns.jsonl
 ✗ f8d557f7  2026-09-24T15:04:55Z   2 tool(s)  Which file in sources/ mentions ... case outlines-a-one-word-lookup
@@ -1770,7 +1776,9 @@ src/yantra/
 │                   what it cannot date ([notes/67](notes/67-the-agent-or-the-vendor.md)).
 │                   A suite's line keeps its grader's verdict (passed), so
 │                   --turns can flag a clean turn that was wrong
-│                   ([notes/70](notes/70-a-list-to-choose-from.md))
+│                   ([notes/70](notes/70-a-list-to-choose-from.md)); mark()
+│                   writes a PERSON's verdict in place, which outranks both
+│                   ([notes/74](notes/74-a-verdict-you-write-down.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
