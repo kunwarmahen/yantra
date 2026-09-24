@@ -107,9 +107,11 @@ priced in full, it would warn on every call of every turn
 
 ## What is not here yet
 
-* **A reply longer than any before it is still a surprise.** The first
-  long reply of a turn is not forecast; the `WARN_AT` floor is all
-  that catches it.
+* **A reply longer than any before it is still a surprise.** The
+  `WARN_AT` floor is all that catches it. The first call of a turn in a
+  session now borrows the previous turn's largest reply
+  ([note 73](73-the-turn-before.md)); a fresh agent's first call is
+  still priced on its input alone.
 * **The cloud trial.** Still one command, still not run
   ([notes/67](67-the-agent-or-the-vendor.md)).
 

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1792 tests. The
+The harness underneath is complete and covered by 1796 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1451,7 +1451,9 @@ From a turn's second call on, the forecast also counts **a reply as long
 as the longest this turn has had**, because a model that thinks at length
 before one call does it before the next. On `qwen3.8:latest` that cut
 the turns stopped without any warning from eight in twenty to one
-([notes/69](notes/69-a-reply-the-turn-has-seen-before.md)).
+([notes/69](notes/69-a-reply-the-turn-has-seen-before.md)). A turn's
+first call, before it has a reply of its own, borrows the previous
+turn's ([notes/73](notes/73-the-turn-before.md)).
 
 The rules worth knowing before you rely on it:
 

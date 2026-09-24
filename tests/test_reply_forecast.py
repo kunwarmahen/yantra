@@ -8,8 +8,10 @@ the request, and the money went out in the reply. The tests pin:
 * a turn whose replies run long is warned a call earlier than the input
   alone would say -- including the exact turn that used to be stopped
   without a word;
-* the first call of a turn is forecast on its input alone (there is
-  nothing to go on), so nothing is invented;
+* the first call of a FRESH agent is forecast on its input alone (there
+  is nothing to go on), so nothing is invented -- but a later turn's
+  first call uses the previous turn's largest reply (notes/73), and only
+  the previous turn's, so one huge answer does not haunt a session;
 * a sub-agent's replies do not set the owner's forecast;
 * a fresh turn starts with no reply on record;
 * the sentence says the replies were counted.
@@ -74,6 +76,35 @@ class TestTheMeter:
         budget.begin_turn(owner)
         assert budget.largest_reply == 0
 
+    def test_a_turns_first_call_expects_last_turns_reply(self):
+        """notes/73: the gap note 69 left -- the first call of a turn.
+        A fresh meter: $0.15 of context fits $0.50; another $0.60 reply
+        like last turn's does not."""
+        budget, owner = metered(ceiling=0.50)
+        budget.charge(LONG_REPLY, PRICED, spender=owner)
+        budget.begin_turn(owner)                        # a new turn
+        assert budget.largest_reply == 0
+        advice = budget.take_warning(owner, next_input_tokens=50_000,
+                                     model=PRICED)
+        assert advice is not None
+        assert "replies last turn have run to ~40,000 tokens" in advice
+
+    def test_this_turns_own_reply_replaces_last_turns(self):
+        budget, owner = metered(ceiling=100.0)
+        budget.charge(LONG_REPLY, PRICED, spender=owner)
+        budget.begin_turn(owner)
+        budget.charge(Usage(output_tokens=100), PRICED, spender=owner)
+        advice_reply = budget.largest_reply or budget.last_turn_reply
+        assert advice_reply == 100
+
+    def test_only_the_previous_turn_not_the_whole_session(self):
+        budget, owner = metered(ceiling=100.0)
+        budget.charge(LONG_REPLY, PRICED, spender=owner)      # turn 1: huge
+        budget.begin_turn(owner)
+        budget.charge(Usage(output_tokens=500), PRICED, spender=owner)
+        budget.begin_turn(owner)                              # turn 3
+        assert budget.last_turn_reply == 500
+
     def test_without_a_reply_the_sentence_is_the_old_one(self):
         budget, owner = metered(ceiling=0.10)
         advice = budget.take_warning(owner, next_input_tokens=50_000,
@@ -113,3 +144,13 @@ def test_the_turn_that_used_to_be_stopped_unannounced_is_warned_first():
     assert end.reason == "over_budget"
     assert len(warnings) == 1 and warnings[0].iterations == 2
     assert events.index(warnings[0]) < events.index(end)
+
+
+def test_a_ceiling_between_whole_cents_is_said_as_written():
+    """Found in note 73's receipt: "~$0.0120 is left of the $0.01 ceiling"
+    for a $0.012 ceiling -- two decimals misstated it."""
+    budget, owner = metered(ceiling=0.012)
+    advice = budget.take_warning(owner, next_input_tokens=50_000,
+                                 model=PRICED)
+    assert "$0.012 ceiling" in advice
+    assert "$0.25 per turn" in Budget(0.25).describe()

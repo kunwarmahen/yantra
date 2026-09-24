@@ -90,9 +90,12 @@ twenty turns jumped from comfortably under the ceiling to over it in one
 call, never warned, because the forecast priced the request and not the
 reply. So the forecast adds the LARGEST reply this turn has had so far --
 the largest, not the average, because an under-forecast is the direction
-that loses warnings, and a warning a call early costs a sentence. The
-first call of a turn has no replies to go on, and is still forecast on
-its input alone.
+that loses warnings, and a warning a call early costs a sentence. Before
+the turn has a reply of its own, the PREVIOUS turn's largest stands in
+(notes/73): the same agent in the same session, a turn ago. Only the one
+turn before, never the session's all-time largest, so a single huge
+answer early on does not make every later turn warn early. A fresh
+agent's first call has nothing to go on and is forecast on its input.
 
 That still undercounts a reply longer than any before it, which is why
 ``WARN_AT`` stays on as a floor: a turn whose cost is mostly output would
@@ -148,7 +151,7 @@ class Budget:
                  notify_agent: bool = False) -> None:
         if max_usd <= 0:
             raise ConfigError(
-                f"a budget of ${max_usd:.2f} is not a ceiling, it is a "
+                f"a budget of {_usd(max_usd)} is not a ceiling, it is a "
                 f"refusal to run; omit the ceiling instead"
             )
         self.max_usd = float(max_usd)
@@ -176,6 +179,9 @@ class Budget:
         #: are left out -- they are a different agent's habit, and the
         #: call being forecast is the owner's.
         self.largest_reply = 0
+        #: The previous turn's ``largest_reply``: the forecast for a turn
+        #: that has not had a reply of its own yet (notes/73).
+        self.last_turn_reply = 0
         #: Whether the MODEL is told, as well as the operator. Off by
         #: default and deliberately not a package key: see ``notice``.
         self.notify_agent = notify_agent
@@ -201,7 +207,7 @@ class Budget:
             return cls(max_usd, metered=True, notify_agent=notify_agent)
         raise ConfigError(
             f"budget: no list price is known for {model!r}, so a "
-            f"${max_usd:.2f} ceiling could never stop anything. Add the "
+            f"{_usd(max_usd)} ceiling could never stop anything. Add the "
             f"model to a $YANTRA_PRICES file, or drop the ceiling"
         )
 
@@ -222,6 +228,7 @@ class Budget:
             self.delegated = 0.0
             self.unpriced_model = None
             self._warned = False
+            self.last_turn_reply = self.largest_reply or self.last_turn_reply
             self.largest_reply = 0
 
     def charge(self, usage: Usage, model: str, *,
@@ -281,7 +288,8 @@ class Budget:
             return None
         if not self.metered or self._warned or self.exceeded():
             return None
-        reply = self.largest_reply
+        reply = self.largest_reply or self.last_turn_reply
+        from_last_turn = not self.largest_reply and bool(reply)
         price = (price_for(model) if model and (next_input_tokens or reply)
                  else None)
         forecast = (0.0 if price is None
@@ -294,16 +302,17 @@ class Budget:
         left = self.max_usd - self.spent
         if forecast and self.spent + forecast >= self.max_usd:
             if reply:
+                when = "last turn" if from_last_turn else "this turn"
                 return (f"the next call carries ~{next_input_tokens:,} tokens "
-                        f"of context, and replies this turn have run to "
+                        f"of context, and replies {when} have run to "
                         f"~{reply:,} tokens -- about ${forecast:.4f} for both, "
                         f"and ~${left:.4f} is left of the "
-                        f"${self.max_usd:.2f} ceiling for this turn")
+                        f"{_usd(self.max_usd)} ceiling for this turn")
             return (f"the next call carries ~{next_input_tokens:,} tokens of "
                     f"context, about ${forecast:.4f} before the reply -- and "
-                    f"~${left:.4f} is left of the ${self.max_usd:.2f} ceiling "
+                    f"~${left:.4f} is left of the {_usd(self.max_usd)} ceiling "
                     f"for this turn")
-        return (f"spent ~${self.spent:.4f} of the ${self.max_usd:.2f} "
+        return (f"spent ~${self.spent:.4f} of the {_usd(self.max_usd)} "
                 f"ceiling for this turn -- ~${left:.4f} left")
 
     #: What the MODEL is told when ``notify_agent`` is on. No figures in
@@ -348,15 +357,26 @@ class Budget:
         """
         if self.unpriced_model is not None:
             return (f"no list price for {self.unpriced_model!r}, so the "
-                    f"${self.max_usd:.2f} ceiling stopped seeing the bill")
-        return (f"spent ~${self.spent:.4f} of the ${self.max_usd:.2f} "
+                    f"{_usd(self.max_usd)} ceiling stopped seeing the bill")
+        return (f"spent ~${self.spent:.4f} of the {_usd(self.max_usd)} "
                 f"ceiling for this turn")
 
     def describe(self) -> str:
         """The startup line: the ceiling, and whether it can ever fire."""
         if not self.metered:
-            return (f"${self.max_usd:.2f} per turn -- inert here, a local "
+            return (f"{_usd(self.max_usd)} per turn -- inert here, a local "
                     f"model bills nothing")
         told = " (the agent is told too)" if self.notify_agent else ""
-        return (f"${self.max_usd:.2f} per turn -- a heads-up once one "
+        return (f"{_usd(self.max_usd)} per turn -- a heads-up once one "
                 f"more call would not fit{told}")
+
+
+def _usd(amount: float) -> str:
+    """A ceiling as its owner wrote it: "$0.25", "$2.00", and "$0.012"
+    rather than "$0.01" -- two decimals would misstate any ceiling set
+    between whole cents, and the warning then contradicts itself
+    ("$0.0120 left of the $0.01 ceiling")."""
+    cents = amount * 100
+    if abs(cents - round(cents)) < 1e-9:
+        return f"${amount:.2f}"
+    return f"${amount:g}"
