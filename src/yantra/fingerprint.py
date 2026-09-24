@@ -24,6 +24,16 @@ must not split the history of every other case -- and anything hidden
 ``__pycache__`` and compiled ``.pyc`` files, which are the machine's
 copies of files already hashed.
 
+TWO MORE THINGS CHANGE A RATE UNDER AN UNCHANGED NAME (notes/72), and
+each gets a fingerprint of its own rather than joining this one:
+
+* A CASE's definition -- its table as written, minus the prose
+  ``description``, plus the grader module when it names one. Per case,
+  because editing one case must split that case's history and no other.
+* The MODEL's weights behind a local tag. ``ollama pull`` can put new
+  weights behind ``qwen3.8:latest`` without the tag changing, and Ollama
+  reports the digest; a cloud provider does not, so there it is unknown.
+
 Short on purpose: twelve hex characters is a label a person can read in
 a terminal and compare by eye, and a collision between two edits of one
 package is not a risk worth a longer line.
@@ -32,11 +42,14 @@ package is not a risk worth a longer line.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from collections.abc import Iterator
 from importlib import metadata
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 #: Directories under the package root that are not the agent.
 NOT_THE_AGENT = frozenset({"evals"})
@@ -72,6 +85,53 @@ def fingerprint(spec: Any) -> str | None:
             version = "<not installed>"
         digest.update(f"pack:{pack}=={version}\0".encode())
     return digest.hexdigest()[:12]
+
+
+def case_fingerprint(entry: dict, graders: Path | None) -> str:
+    """One ``[[case]]`` table as written, plus its grader file (notes/72).
+
+    ``description`` is left out: it is prose for the reader, and a typo
+    fixed in it grades nothing differently. The whole grader module
+    (``graders.py`` for ``check = "graders:..."``) is hashed rather than
+    the one function, because a grader leans on the module around it (a
+    constant, a helper) and a function's source alone would miss the edit
+    that mattered.
+    """
+    digest = hashlib.sha256()
+    graded = {k: v for k, v in entry.items() if k != "description"}
+    digest.update(json.dumps(graded, sort_keys=True, default=str).encode())
+    if graders is not None and "check" in entry:
+        try:
+            digest.update(b"\0graders:" + graders.read_bytes())
+        except OSError:
+            digest.update(b"\0graders:<unreadable>")
+    return digest.hexdigest()[:12]
+
+
+def weights(provider_name: str, base_url: str | None, model: str,
+            *, timeout: float = 3.0) -> str | None:
+    """The digest of the weights behind a LOCAL model tag, or None.
+
+    Asked of Ollama's own ``/api/tags`` -- the one road where the tag and
+    the weights can drift apart on the operator's own machine. Anything
+    that goes wrong (another provider, the server down, a tag it does not
+    list) is None: unknown, which a pool treats as unknown, never as a
+    match or a difference. A report is not worth failing over this.
+    """
+    if provider_name != "ollama" or not base_url:
+        return None
+    root = base_url.rstrip("/").removesuffix("/v1")
+    try:
+        response = httpx.get(f"{root}/api/tags", timeout=timeout)
+        models = response.json().get("models", [])
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return None
+    wanted = {model, f"{model}:latest"}
+    for entry in models if isinstance(models, list) else []:
+        if isinstance(entry, dict) and entry.get("name") in wanted:
+            digest = str(entry.get("digest") or "")
+            return digest.removeprefix("sha256:")[:12] or None
+    return None
 
 
 def _inside(path: Path, root: Path) -> bool:

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1772 tests. The
+The harness underneath is complete and covered by 1792 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1152,6 +1152,14 @@ edited without a version bump, so what moved below may be the edit
 
 See [notes/68](notes/68-the-version-nobody-bumped.md).
 
+Two more things change a rate under an unchanged name, and both are
+caught the same way. **An edited case** (its table, or the grader module
+it names) pools apart from its earlier definition, one row each, and
+`--against` marks it "the case was edited between these runs". **A
+re-pulled local model**: on Ollama the report records the digest of the
+weights behind the tag, and one tag with two digests pools as two. See
+[notes/72](notes/72-what-changed-under-a-name.md).
+
 The pool also says **what each case cost, per run, oldest report
 against newest**, names the case whose cost grew fastest, and says when
 the rates moved between those reports as well as the agent. A free
@@ -1736,7 +1744,10 @@ src/yantra/
 ├── fingerprint.py  what a package WAS when a suite ran it: a 12-hex hash of
 │                   every file the agent is built from (not evals/, not
 │                   hidden files), so one version holding two packages
-│                   pools as two ([notes/68](notes/68-the-version-nobody-bumped.md))
+│                   pools as two ([notes/68](notes/68-the-version-nobody-bumped.md)).
+│                   Per CASE too (its table + grader module), and the
+│                   weights behind a local tag, asked of Ollama
+│                   ([notes/72](notes/72-what-changed-under-a-name.md))
 ├── trace.py        a TURN written down, so a real failure can become a
 │                   case: append-only JSONL, one object per turn, recorded
 │                   through a TEE (the renderer still sees every event) and

@@ -226,3 +226,13 @@ def assistant_tool_call(call_id: str, name: str, arguments: dict,
         usage=usage or Usage(),
         model=model,
     )
+
+
+@pytest.fixture(autouse=True)
+def _no_model_digest_lookups(monkeypatch):
+    """A suite run under ``--provider ollama`` asks the local server for
+    the weights behind the tag (notes/72). The tests must not depend on
+    whether an Ollama happens to be running on the machine that runs
+    them, so the lookup answers "unknown" unless a test says otherwise."""
+    import yantra.cli.main as cli_main
+    monkeypatch.setattr(cli_main, "weights", lambda *a, **k: None)

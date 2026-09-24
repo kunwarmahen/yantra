@@ -121,8 +121,10 @@ version bump. It splits and says so, and exits 0 like the rest of
 
 ## What is not here yet
 
-* **An edited grader still pools silently**, for the reason above.
-* **A re-pulled model tag still pools silently**, for the reason above.
+* ~~**An edited grader still pools silently.**~~ Shipped in [note 72](72-what-changed-under-a-name.md): a
+  fingerprint per case, of its table and its grader module.
+* ~~**A re-pulled model tag still pools silently.**~~ Shipped in [note 72](72-what-changed-under-a-name.md):
+  on Ollama the report records the weights' digest.
 
 ## Receipt
 

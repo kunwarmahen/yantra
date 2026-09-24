@@ -232,6 +232,9 @@ anything else is pooled separately. `notes/62-the-reports-you-already-have.md`.
 Each report also carries a fingerprint of the package's files, so an
 edit made without a version bump pools apart and is named
 (`notes/68-the-version-nobody-bumped.md`) -- but bump the version anyway.
+Editing a case, or its grader module, pools that case apart from its
+earlier runs, and a re-pulled Ollama tag pools apart by its weights
+(`notes/72-what-changed-under-a-name.md`).
 Under each case it also prints dollars per run, oldest report against
 newest; `--pool-json FILE` writes the pool as JSON
 (`notes/66-what-each-case-cost.md`).

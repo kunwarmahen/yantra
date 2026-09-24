@@ -911,7 +911,10 @@ If you edit your agent and forget to bump its version, the pool notices
 anyway. Every report records a fingerprint of the package's files, and
 two different packages under one version are pooled separately, with a
 line telling you to bump the version
-([notes/68](notes/68-the-version-nobody-bumped.md)).
+([notes/68](notes/68-the-version-nobody-bumped.md)). The same goes for a
+case you edit (its runs before and after are pooled separately) and for
+a local model you re-pull with `ollama pull`, which can put new weights
+behind the same tag ([notes/72](notes/72-what-changed-under-a-name.md)).
 
 Beside the dollars it shows **tokens per run**, oldest against newest.
 Prices change and token counts do not, so if a case's cost went up but
@@ -2312,7 +2315,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) [68](notes/68-the-version-nobody-bumped.md) [70](notes/70-a-list-to-choose-from.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) [68](notes/68-the-version-nobody-bumped.md) [70](notes/70-a-list-to-choose-from.md) [72](notes/72-what-changed-under-a-name.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) [69](notes/69-a-reply-the-turn-has-seen-before.md) [71](notes/71-a-limit-on-waiting-not-on-work.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |

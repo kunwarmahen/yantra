@@ -90,6 +90,7 @@ from typing import Any
 
 from yantra.errors import ConfigError
 from yantra.evals import EVERY_CHILD, EvalCase
+from yantra.fingerprint import case_fingerprint
 from yantra.tools.discover import load_module_file
 
 #: The conventional suite directory inside a package.
@@ -485,6 +486,9 @@ def load_cases(where: Path) -> list[EvalCase]:
             check_answer=(None if check is None else
                           _grader(_str(entry, "check", path, where_label),
                                   suite, path, where_label)),
+            fingerprint=case_fingerprint(
+                entry, (suite / f"{check.partition(':')[0]}.py"
+                        if isinstance(check, str) else None)),
         ))
     return cases
 

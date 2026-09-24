@@ -41,7 +41,7 @@ from yantra.eval_suite import (CASES, SUITE_DIR, find_suite, load_cases,
                                render_case)
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
                           OfflineProvider, case_from_trajectory)
-from yantra.fingerprint import fingerprint
+from yantra.fingerprint import fingerprint, weights
 from yantra.images import load_image_block
 from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
@@ -976,7 +976,15 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                      filtered=filters or None,
                      pricing=(PriceRecord.for_model(provider_name, model)
                               if needs_model else None),
-                     package=fingerprint(spec))
+                     package=fingerprint(spec),
+                     # The weights behind a local tag, and each case as it
+                     # was loaded (notes/72): both can change a rate while
+                     # every name stays the same.
+                     weights=(weights(canonical_provider(provider_name),
+                                      getattr(settings, "base_url", None),
+                                      model)
+                              if needs_model else None),
+                     definitions={c.id: c.fingerprint for c in every_case})
     if args.report is not None:
         try:
             write_report(Path(args.report), run)
@@ -1014,6 +1022,12 @@ def _render_comparison(console: Console, cmp) -> None:
         # cheaper model -- so it is named, not refused.
         console.print(f"[dim]different model: {escape(before.where)} → "
                       f"{escape(after.where)}[/dim]")
+    if cmp.weights_changed:
+        # The tag says nothing moved and Ollama says otherwise (notes/72).
+        console.print(f"[yellow]same tag, different weights: "
+                      f"{before.weights} → {after.weights} -- "
+                      f"{escape(after.model)} was re-pulled between these "
+                      f"runs, so what moved below may be the model[/yellow]")
     if cmp.package_changed:
         # The version says nothing moved, and the files say otherwise
         # (notes/68). Everything below may be the edit, not the model.
@@ -1042,6 +1056,8 @@ def _render_comparison(console: Console, cmp) -> None:
                 if not delta.movement_is_evidence:
                     tally += ("  [dim](intervals overlap: not evidence of a "
                               "change)[/dim]")
+            if delta.definition_changed:
+                tally += "  [dim](the case was edited between these runs)[/dim]"
             if delta.kind == "broke" and delta.after.traces:
                 # Where it broke, when the run kept its turns (notes/65).
                 tally += (f"  [dim]turns: "
@@ -1166,9 +1182,12 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
     marks = {"holds": "[green]holds[/green]", "below": "[red]below[/red]",
              "unsettled": "[yellow]unsettled[/yellow]"}
     said_split: set[tuple[str, str]] = set()
+    said_weights: set[tuple[str, str, str | None]] = set()
     for group in pools:
         package = (f" [dim](package {group.package or 'unknown'})[/dim]"
                    if group.split_from else "")
+        if group.weights_split:
+            package += f" [dim](weights {group.weights or 'unknown'})[/dim]"
         console.print(f"\n[bold]pooled[/bold] {len(group.runs)} run(s) of "
                       f"{escape(group.suite)} on {escape(group.where)}"
                       f"{package}\n[dim]{escape(group.span)}[/dim]")
@@ -1178,6 +1197,13 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
                           f"{group.split_from} different packages under one "
                           f"version; each is pooled on its own -- bump the "
                           f"version when the agent changes[/yellow]")
+        if (group.weights_split and (group.suite, group.where, group.package)
+                not in said_weights):
+            said_weights.add((group.suite, group.where, group.package))
+            console.print(f"  [yellow]{escape(group.where)} pointed at "
+                          f"{group.weights_split} different weights across "
+                          f"these runs (re-pulled); each is pooled on its "
+                          f"own[/yellow]")
         if group.split_from and group.package is None:
             console.print("  [dim]these reports predate fingerprints, so "
                           "which package they ran cannot be told; pooled "
@@ -1191,15 +1217,26 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
             console.print("  [dim]no case in these runs reached a model; "
                           "there is nothing to pool[/dim]")
         width = max([len(c.id) for c in group.cases] + [4])
+        said_edited: set[str] = set()
         for case in group.cases:
             lo, hi = case.confidence
             claim = f"claims {case.min_pass_rate:g}"
             if case.claim_changed:
                 claim += " (newest; it changed)"
+            if case.definitions and case.id not in said_edited:
+                # One row per definition of an edited case (notes/72),
+                # oldest first, and the reason said once.
+                said_edited.add(case.id)
+                console.print(f"  [yellow]{escape(case.id)} was edited "
+                              f"between these runs ({case.definitions} "
+                              f"definitions); each is pooled on its "
+                              f"own[/yellow]")
             line = (f"  {escape(case.id).ljust(width)}  "
                     f"{case.tally.rjust(7)} over {case.runs} run(s) · "
                     f"{lo:.2f}..{hi:.2f} · {claim} · "
-                    f"{marks[case.standing]}")
+                    f"{marks[case.standing]}"
+                    + (f" [dim](definition {case.definition or 'unknown'})"
+                       f"[/dim]" if case.definitions else ""))
             console.print(line)
             cost = _pooled_cost(case)
             if cost:

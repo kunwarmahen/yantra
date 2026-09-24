@@ -187,6 +187,10 @@ class EvalCase:
     min_pass_rate: float = 1.0
     setup: Callable[[Agent], None] | None = None  # per-case agent wiring
                                       # (e.g. spawn_setup() -> sub-agents)
+    #: What this case WAS when loaded -- its table and its grader file,
+    #: hashed (fingerprint.case_fingerprint, notes/72). None for a case
+    #: built in Python, which has no table to hash.
+    fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         # A case with neither a task nor a roster assertion is a case that

@@ -113,6 +113,10 @@ class CaseRecord:
     #: ``--trace`` (notes/65): ids in the trace file, one per run that
     #: reached a model. Empty otherwise, and on every older report.
     traces: list[str] = field(default_factory=list)
+    #: What the CASE was when this ran -- its table and grader module,
+    #: hashed (notes/72). None on an older report, and unknown is not
+    #: evidence that it changed.
+    definition: str | None = None
 
     @property
     def tally(self) -> str:
@@ -208,6 +212,10 @@ class SuiteRun:
     #: hash of the files it is built from. None on an older report, or
     #: for an agent with no package directory -- unknown, not "same".
     package: str | None = None
+    #: The digest of the weights behind a local model tag (notes/72), so a
+    #: re-pulled ``qwen3.8:latest`` is not pooled as the same model. None
+    #: on a cloud provider, which does not say, and on older reports.
+    weights: str | None = None
 
     @property
     def passed(self) -> int:
@@ -247,7 +255,10 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
                model: str, repeat: int, cases_in_suite: int,
                filtered: list[str] | None = None,
                pricing: PriceRecord | None = None,
-               package: str | None = None) -> SuiteRun:
+               package: str | None = None,
+               weights: str | None = None,
+               definitions: dict[str, str | None] | None = None
+               ) -> SuiteRun:
     """``CaseOutcome``s -> the record. Reads only the public properties, so
     an outcome type that grows a field does not have to grow one here."""
     return SuiteRun(
@@ -255,7 +266,7 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
         at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         repeat=repeat, cases_in_suite=cases_in_suite,
         filtered=list(filtered) if filtered else None,
-        pricing=pricing, package=package,
+        pricing=pricing, package=package, weights=weights,
         cases=[CaseRecord(
             id=o.case_id, passed=o.passed, attempts=o.attempts,
             passes=o.passes, min_pass_rate=o.min_pass_rate,
@@ -263,6 +274,7 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
             ran_model=o.ran_model, failures=list(o.failures),
             usd=getattr(o, "usd", None),
             traces=list(getattr(o, "traces", [])),
+            definition=(definitions or {}).get(o.case_id),
         ) for o in outcomes],
     )
 
@@ -284,6 +296,7 @@ def write_report(path: Path, run: SuiteRun) -> None:
         "filtered": run.filtered,
         "pricing": run.pricing.to_json() if run.pricing else None,
         "package": run.package,
+        "weights": run.weights,
         "passed": run.passed,
         "tokens": run.tokens,
         "cases": [_case_json(c) for c in run.cases],
@@ -303,6 +316,8 @@ def _case_json(case: CaseRecord) -> dict[str, Any]:
         "ran_model": case.ran_model, "failures": case.failures,
         "usd": case.usd,
     }
+    if case.definition is not None:
+        row["definition"] = case.definition
     if case.traces:
         # Only when a trace file was kept, so a report from a run that
         # recorded nothing reads exactly as it always did.
@@ -345,6 +360,7 @@ def read_report(path: Path) -> SuiteRun:
             filtered=raw.get("filtered"),
             pricing=PriceRecord.from_json(raw.get("pricing")),
             package=raw.get("package"),
+            weights=raw.get("weights"),
             cases=[CaseRecord(
                 id=c["id"], passed=c["passed"], attempts=c["attempts"],
                 passes=c["passes"], min_pass_rate=c["min_pass_rate"],
@@ -352,6 +368,7 @@ def read_report(path: Path) -> SuiteRun:
                 ran_model=c["ran_model"], failures=list(c.get("failures", [])),
                 usd=c.get("usd"),
                 traces=list(c.get("traces", [])),
+                definition=c.get("definition"),
             ) for c in raw["cases"]],
         )
     except (KeyError, TypeError) as exc:
@@ -369,6 +386,15 @@ class CaseDelta:
     kind: str                       # fixed | broke | same | added | gone
     before: CaseRecord | None
     after: CaseRecord | None
+
+    @property
+    def definition_changed(self) -> bool:
+        """This case was edited between the two runs (notes/72), so a
+        moved verdict may be the edit. False when either side is unknown."""
+        return (self.before is not None and self.after is not None
+                and self.before.definition is not None
+                and self.after.definition is not None
+                and self.before.definition != self.after.definition)
 
     @property
     def rate_moved(self) -> bool:
@@ -486,6 +512,15 @@ class Comparison:
         if self.before.pricing is None or self.after.pricing is None:
             return None
         return self.before.pricing.rates != self.after.pricing.rates
+
+    @property
+    def weights_changed(self) -> bool:
+        """The same tag on both sides, and different weights behind it
+        (notes/72): the model was re-pulled between the runs."""
+        return (self.before.where == self.after.where
+                and self.before.weights is not None
+                and self.after.weights is not None
+                and self.before.weights != self.after.weights)
 
     @property
     def package_changed(self) -> bool:
@@ -614,6 +649,11 @@ class PooledCase:
     #: written before rates were kept, they are the only figure there is.
     tokens_first: float | None = None
     tokens_last: float | None = None
+    #: The case definition this row pools (notes/72), and how many
+    #: definitions of this case the runs held when that is more than one
+    #: -- an edited case is pooled apart, one row per definition.
+    definition: str | None = None
+    definitions: int = 0
 
     @property
     def tally(self) -> str:
@@ -685,6 +725,10 @@ class Pool:
     #: Runs pooled here with no fingerprint (older reports). They join the
     #: one known package when there is exactly one, as they always did.
     unknown: int = 0
+    #: The model weights every known run here shares (notes/72), and how
+    #: many different weights one tag held when this pool is one of them.
+    weights: str | None = None
+    weights_split: int = 0
 
     @property
     def span(self) -> str:
@@ -712,77 +756,112 @@ def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
     Only runs that reached a model count. A run that stopped at a failed
     roster assertion is a verdict about the tool list, not a die roll.
     """
-    groups: dict[tuple[str, str, str | None], list[SuiteRun]] = {}
-    split: dict[tuple[str, str], int] = {}
-    for (suite, where), members in _by_label(runs).items():
-        known = sorted({r.package for r in members if r.package is not None})
-        if len(known) > 1:
-            # One version, several packages: the author edited without
-            # bumping. Each package is its own pool; runs that recorded
-            # none cannot be placed, so they pool together, apart.
-            split[(suite, where)] = len(known)
-            # Known packages first, oldest first; the unplaceable last.
-            for run in sorted(members,
-                              key=lambda r: (r.package is None, r.at)):
-                groups.setdefault((suite, where, run.package), []).append(run)
-        else:
-            groups[(suite, where, known[0] if known else None)] = members
     pools: list[Pool] = []
-    for (suite, where, package), members in groups.items():
+    for (suite, where), members in _by_label(runs).items():
         members = sorted(members, key=lambda r: r.at)
-        ids: list[str] = []
-        for run in reversed(members):             # newest run's order first
-            for case in run.cases:
-                if case.id not in ids:
-                    ids.append(case.id)
-        cases: list[PooledCase] = []
-        roster_only: list[str] = []
-        for case_id in ids:
-            rolled = [c for run in members for c in run.cases
-                      if c.id == case_id and c.ran_model and c.attempts]
-            if not rolled:
-                roster_only.append(case_id)
-                continue
-            intervals = [wilson_bounds(c.passes, c.attempts) for c in rolled]
-            claims = {c.min_pass_rate for c in rolled}
-            # The same files already hold every run's dollars; which case
-            # got expensive is the same kind of sum as which got flaky.
-            priced = [(run, c) for run in members for c in run.cases
-                      if c.id == case_id and c.ran_model and c.attempts
-                      and c.usd is not None]
-            first = priced[0] if priced else None
-            last = priced[-1] if priced else None
-            # A run that reached a model and counted no tokens is a
-            # provider that reported no usage -- an unknown, not a zero.
-            counted = [c for c in rolled if c.tokens]
-            cases.append(PooledCase(
-                id=case_id,
-                passes=sum(c.passes for c in rolled),
-                attempts=sum(c.attempts for c in rolled),
-                runs=len(rolled),
-                min_pass_rate=rolled[-1].min_pass_rate,
-                claim_changed=len(claims) > 1,
-                disagree=(max(lo for lo, _ in intervals)
-                          > min(hi for _, hi in intervals)),
-                usd_first=(first[1].usd / first[1].attempts if first
-                           else None),
-                usd_last=(last[1].usd / last[1].attempts if last else None),
-                price_moved=bool(
-                    first and last and first[0] is not last[0]
-                    and first[0].pricing is not None
-                    and last[0].pricing is not None
-                    and first[0].pricing.rates != last[0].pricing.rates),
-                tokens_first=(counted[0].tokens / counted[0].attempts
-                              if counted else None),
-                tokens_last=(counted[-1].tokens / counted[-1].attempts
-                             if counted else None),
-            ))
-        pools.append(Pool(
-            suite=suite, where=where, runs=members, cases=cases,
-            roster_only=roster_only, package=package,
-            split_from=split.get((suite, where), 0),
-            unknown=sum(1 for r in members if r.package is None)))
+        by_package = _split(members, lambda r: r.package)
+        for package, of_package in by_package:
+            by_weights = _split(of_package, lambda r: r.weights)
+            for weights, group in by_weights:
+                pools.append(_pooled(
+                    suite, where, group, package=package,
+                    split_from=len(by_package) if len(by_package) > 1 else 0,
+                    weights=weights,
+                    weights_split=(len(by_weights) if len(by_weights) > 1
+                                   else 0)))
     return pools
+
+
+def _split(items: Sequence[Any], key) -> list[tuple[Any, list[Any]]]:
+    """Items grouped by ``key``, where None is UNKNOWN, NOT DIFFERENT.
+
+    The one rule every fingerprint in a pool follows (notes/68, notes/72):
+    no known value, or exactly one, and everything is one group under it
+    -- an older report joins the only thing it could have been. Several
+    known values, and each is its own group, with the unknowns together
+    in a last group of their own, because they cannot be placed. Groups
+    come in the order their value first appears, which for runs sorted
+    by time is oldest first.
+    """
+    known = list(dict.fromkeys(key(i) for i in items if key(i) is not None))
+    if len(known) <= 1:
+        return [(known[0] if known else None, list(items))]
+    groups = [(value, [i for i in items if key(i) == value])
+              for value in known]
+    unplaced = [i for i in items if key(i) is None]
+    if unplaced:
+        groups.append((None, unplaced))
+    return groups
+
+
+def _pooled(suite: str, where: str, members: list[SuiteRun], *,
+            package: str | None, split_from: int, weights: str | None,
+            weights_split: int) -> Pool:
+    """One pool's worth of runs, summed case by case."""
+    members = sorted(members, key=lambda r: r.at)
+    ids: list[str] = []
+    for run in reversed(members):             # newest run's order first
+        for case in run.cases:
+            if case.id not in ids:
+                ids.append(case.id)
+    cases: list[PooledCase] = []
+    roster_only: list[str] = []
+    for case_id in ids:
+        rolled_runs = [(run, c) for run in members for c in run.cases
+                       if c.id == case_id and c.ran_model and c.attempts]
+        if not rolled_runs:
+            roster_only.append(case_id)
+            continue
+        # An edited case is a different question under the same id: its
+        # runs pool apart, one row per definition (notes/72).
+        by_definition = _split(rolled_runs, lambda pair: pair[1].definition)
+        for definition, pairs in by_definition:
+            cases.append(_pooled_case(
+                case_id, pairs, definition=definition,
+                definitions=(len(by_definition) if len(by_definition) > 1
+                             else 0)))
+    return Pool(suite=suite, where=where, runs=members, cases=cases,
+                roster_only=roster_only, package=package,
+                split_from=split_from,
+                unknown=sum(1 for r in members if r.package is None),
+                weights=weights, weights_split=weights_split)
+
+
+def _pooled_case(case_id: str, pairs: list[tuple[SuiteRun, CaseRecord]], *,
+                 definition: str | None, definitions: int) -> PooledCase:
+    rolled = [c for _, c in pairs]
+    intervals = [wilson_bounds(c.passes, c.attempts) for c in rolled]
+    claims = {c.min_pass_rate for c in rolled}
+    # The same files already hold every run's dollars; which case got
+    # expensive is the same kind of sum as which got flaky.
+    priced = [(run, c) for run, c in pairs if c.usd is not None]
+    first = priced[0] if priced else None
+    last = priced[-1] if priced else None
+    # A run that reached a model and counted no tokens is a provider that
+    # reported no usage -- an unknown, not a zero.
+    counted = [c for c in rolled if c.tokens]
+    return PooledCase(
+        id=case_id,
+        passes=sum(c.passes for c in rolled),
+        attempts=sum(c.attempts for c in rolled),
+        runs=len(rolled),
+        min_pass_rate=rolled[-1].min_pass_rate,
+        claim_changed=len(claims) > 1,
+        disagree=(max(lo for lo, _ in intervals)
+                  > min(hi for _, hi in intervals)),
+        usd_first=(first[1].usd / first[1].attempts if first else None),
+        usd_last=(last[1].usd / last[1].attempts if last else None),
+        price_moved=bool(
+            first and last and first[0] is not last[0]
+            and first[0].pricing is not None
+            and last[0].pricing is not None
+            and first[0].pricing.rates != last[0].pricing.rates),
+        tokens_first=(counted[0].tokens / counted[0].attempts
+                      if counted else None),
+        tokens_last=(counted[-1].tokens / counted[-1].attempts
+                     if counted else None),
+        definition=definition, definitions=definitions,
+    )
 
 
 def _by_label(runs: Sequence[SuiteRun]) -> dict[tuple[str, str],
@@ -816,6 +895,8 @@ def write_pool(path: Path, pools: Sequence[Pool]) -> None:
             "where": group.where,
             "package": group.package,
             "split_from": group.split_from,
+            "weights": group.weights,
+            "weights_split": group.weights_split,
             "runs": [run.at for run in group.runs],
             "roster_only": group.roster_only,
             "cases": [{
@@ -826,6 +907,7 @@ def write_pool(path: Path, pools: Sequence[Pool]) -> None:
                 "claim_changed": c.claim_changed, "disagree": c.disagree,
                 "usd_first": c.usd_first, "usd_last": c.usd_last,
                 "price_moved": c.price_moved,
+                "definition": c.definition, "definitions": c.definitions,
                 "tokens_first": _rounded(c.tokens_first),
                 "tokens_last": _rounded(c.tokens_last),
             } for c in group.cases],
