@@ -58,7 +58,7 @@ from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools import default_registry
 from yantra.tools.ask_user import AskUser, TerminalChannel
 from yantra.tools.discover import package_tool_names
-from yantra.trace import FULL, SHAPE, TrajectoryLog
+from yantra.trace import FULL, REDACTED, SHAPE, TrajectoryLog
 from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
     DEFAULT_TOOLS_PER_TURN,
@@ -310,6 +310,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "and the model's answer too. Opt-in, and recorded "
                              "in every line, because a trajectory holds "
                              "whatever the agent read")
+    parser.add_argument("--trace-redact", action="append", default=[],
+                        metavar="PATTERN", dest="trace_redact",
+                        help="with --trace: replace every match with "
+                             "[redacted] before a line is written -- in the "
+                             "task, and at --trace-full in arguments, "
+                             "results and answers too. A regular "
+                             "expression, or 'email' or 'token' (API keys, "
+                             "GitHub/Slack/AWS tokens, JWTs, bearer "
+                             "headers). Repeatable")
     parser.add_argument("--fossil", metavar="TRACE_ID", default=None,
                         help="with --trace FILE: print the [[case]] block for "
                              "that recorded turn and exit -- 'every real "
@@ -517,7 +526,8 @@ def _trace_log(args):
     if args.trace is None:
         return None
     return TrajectoryLog(Path(args.trace),
-                         detail=FULL if args.trace_full else SHAPE)
+                         detail=FULL if args.trace_full else SHAPE,
+                         redact=args.trace_redact)
 
 
 def _fossil_mode(args, console: Console) -> int:
@@ -552,6 +562,12 @@ def _fossil_mode(args, console: Console) -> int:
     print("note: assertions are the SHAPE of that turn -- its task and the "
           "tools it used. Edit the id and description before committing; "
           "the ceiling is what it cost x1.5.", file=sys.stderr)
+    if REDACTED in trajectory.task:
+        # The case would replay the placeholder, not what was typed
+        # (notes/79). Said rather than guessed back: the file never had it.
+        print(f"note: the task was scrubbed when it was recorded; put the "
+              f"real words back in user_message where it says {REDACTED}",
+              file=sys.stderr)
     for child in trajectory.children:
         # Said, not asserted: a child's steps are the delegation's inner
         # workings, and a case that pinned them would break every time the
@@ -972,7 +988,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                   file=sys.stderr)
             return 2
         console.print(f"[dim]recording runs -> {escape(str(trace.path))} "
-                      f"({trace.detail}); a red case names its turns[/dim]")
+                      f"({escape(trace.label)}); a red case names its turns[/dim]")
 
     tools = default_registry(sandbox)
     mcp_manager = None
@@ -1783,6 +1799,24 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --trace-full says what to keep, and --trace says "
               "where; pass --trace FILE", file=sys.stderr)
         return 2
+    if args.trace_redact and args.trace is None:
+        print("error: --trace-redact says what to scrub from a recording, "
+              "and --trace says where it goes; pass --trace FILE",
+              file=sys.stderr)
+        return 2
+    if args.trace_redact and (
+            args.fossil is not None or args.mark is not None
+            or args.turns is not None or args.trace_prune is not None):
+        print("error: --trace-redact scrubs turns as they are recorded; a "
+              "file already written is not re-scrubbed, so drop it from "
+              "--fossil/--mark/--turns/--trace-prune", file=sys.stderr)
+        return 2
+    if args.trace_redact:
+        try:
+            _trace_log(args)          # a bad pattern fails here, not mid-run
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.fossil is not None and (args.eval or args.build or args.web
                                     or args.prompt or args.prompt_positional):
         print("error: --fossil prints one recorded turn as a case and exits; "

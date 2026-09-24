@@ -319,6 +319,7 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--report FILE` | write this run as JSON, green or red |
 | `--against FILE` | print what moved since an earlier report; changes no verdict |
 | `--trace FILE` | record every run of every case; a red case names its turns |
+| `--trace-redact PATTERN` | with `--trace`: scrub `email`, `token` or a regex from every line before it is written (`notes/79-scrubbed-before-it-is-written.md`) |
 | `--reports FILE ...` | read reports without running (not with `--eval`); `--pool` adds them up |
 | `--pool-json FILE` | with `--reports`: pool them and write the pool as JSON |
 

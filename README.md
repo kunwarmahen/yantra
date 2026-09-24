@@ -1283,7 +1283,11 @@ order, whether each worked, the counts — never tool arguments, tool
 results or the answer, because a trajectory holds whatever the *agent
 read* and a verdict does not. `--trace-full` adds them, opt-in, and every
 line records which level wrote it, so you can tell whether a file is safe
-to hand over without reading it. That is not a trade against usefulness:
+to hand over without reading it. `--trace-redact email --trace-redact
+token` (or any regular expression) replaces matches with `[redacted]` in
+the task, arguments, results and answers **before the line is written**,
+and the line says how many it replaced
+([notes/79](notes/79-scrubbed-before-it-is-written.md)). That is not a trade against usefulness:
 a case asserting on the contents of a file goes red the day somebody
 edits that file. The block is **printed rather than appended** — a
 suite is its author's file. See
@@ -1801,7 +1805,11 @@ src/yantra/
 │                   writes a PERSON's verdict in place, which outranks both
 │                   ([notes/74](notes/74-a-verdict-you-write-down.md));
 │                   clearing it gives a grader's verdict back, kept under
-│                   graded ([notes/77](notes/77-a-mark-taken-back.md))
+│                   graded ([notes/77](notes/77-a-mark-taken-back.md)).
+│                   redact= scrubs CONTENT (task, arguments, results,
+│                   answers), never shape, at the one place a line is
+│                   written, and counts what it replaced
+│                   ([notes/79](notes/79-scrubbed-before-it-is-written.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

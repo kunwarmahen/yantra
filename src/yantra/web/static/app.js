@@ -222,7 +222,9 @@ function renderRecording(s) {
   $("#chip-rec").title = `every turn is being recorded to ${rec.path} (` +
     (rec.detail === "full"
       ? "FULL: tool arguments, results and answers -- whatever the agent read"
-      : "shape: the task, which tools ran and the counts; no contents") + ")";
+      : "shape: the task, which tools ran and the counts; no contents") + ")"
+    + (rec.redacting ? `; ${rec.redacting} redaction pattern(s) scrubbed `
+      + "before anything is written" : "");
 }
 
 /* Context-window pressure. The bar mirrors auto-compaction's thresholds

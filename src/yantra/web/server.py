@@ -601,7 +601,9 @@ class WebSession:
                              "on_timeout": self.on_timeout}
                             if self.wait_budget is not None else None),
             "recording": ({"path": str(self.trace.path),
-                           "detail": self.trace.detail}
+                           "detail": self.trace.detail,
+                           "redacting": getattr(self.trace,
+                                                "redact_count", 0)}
                           if self.trace is not None else None),
             "utilization": agent.utilization(),
             # The honest numbers behind the pressure bar: what the last
@@ -1263,7 +1265,7 @@ def launch(session: WebSession, agent: Agent, store: SessionStore | None,
     app = make_app(session)
     servers = f" · mcp servers={len(mcp.sessions)}" if mcp else ""
     recording = (f"  recording turns -> {session.trace.path} "
-                 f"({session.trace.detail})\n" if session.trace else "")
+                 f"({session.trace.label})\n" if session.trace else "")
     waiting = (f"  approvals: {session.wait_budget:g}s of waiting per turn, "
                f"then {session.on_timeout}\n"
                if session.wait_budget is not None else "")

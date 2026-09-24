@@ -138,9 +138,12 @@ redirect above does not swallow it.
 * ~~**No retention, no rotation.**~~ Shipped in [note 67](67-the-agent-or-the-vendor.md):
   `--trace-prune DAYS` removes turns by age, on request. Was: the file
   grows until somebody deletes it.
-* **No redaction.** A service wanting "drop anything matching this
-  pattern" writes it in ten lines against JSONL, which is why the format
-  is JSONL.
+* ~~**No redaction.**~~ Shipped in
+  [note 79](79-scrubbed-before-it-is-written.md): `--trace-redact
+  PATTERN` (or `email`, `token`) scrubs the content of every line before
+  it is written, and the line says how many it replaced. Was: A service
+  wanting "drop anything matching this pattern" writes it in ten lines
+  against JSONL, which is why the format is JSONL.
 * ~~**The web UI records nothing.**~~ Shipped in
   [note 63](63-the-whole-turn-written-down.md): `--trace` records the
   browser's turns too, and the banner says so. Was: `--trace` is a terminal flag; the

@@ -63,6 +63,17 @@ turn worth keeping. A malformed line is skipped on read with a count, not
 raised -- half a line at the end of a file is what a killed process
 leaves behind, and it must not cost you the two hundred turns above it.
 
+A PATTERN IS SCRUBBED BEFORE IT IS WRITTEN (notes/79). Shape keeps
+arguments and results out, but not the task a person typed, and FULL
+keeps whatever the agent read. ``redact`` takes regular expressions --
+or the names ``email`` and ``token`` for the two everybody needs -- and
+every match in the task, the arguments, the results and the answers
+becomes ``[redacted]`` on the way to disk. The line says how many were
+replaced, even when that is none, so a reader can tell a scrubbed file
+from one nobody scrubbed without reading either. Scrubbing a file that
+was already written is not offered: a pattern added afterwards is a
+pattern the file was shared without.
+
 AGE IS THE ONLY THING THAT PRUNES, AND ONLY WHEN ASKED (notes/67). A suite
 run with ``--repeat 10 --trace`` writes ten lines a case, so the file
 grows as fast as anybody evaluates. ``prune`` removes turns older than a
@@ -77,6 +88,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -100,6 +112,27 @@ LEVELS = (SHAPE, FULL)
 #: Who gave a turn its ``passed`` (notes/74): a suite's case, or a person.
 GRADER = "grader"
 PERSON = "person"
+
+#: What a redacted match becomes (notes/79).
+REDACTED = "[redacted]"
+
+#: Patterns common enough to have a name, for ``--trace-redact``. Anything
+#: else passed there is a regular expression. Deliberately conservative:
+#: a token pattern that fired on every long word would scrub the evidence
+#: the recording exists to keep.
+REDACT_PRESETS = {
+    "email": r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}",
+    "token": "|".join((
+        r"\bsk-[A-Za-z0-9_-]{16,}",                    # OpenAI, Anthropic
+        r"\bgh[pousr]_[A-Za-z0-9]{20,}",               # GitHub
+        r"\bgithub_pat_[A-Za-z0-9_]{20,}",
+        r"\bxox[abprs]-[A-Za-z0-9-]{10,}",             # Slack
+        r"\bAKIA[0-9A-Z]{16}\b",                       # AWS access key id
+        r"\bAIza[0-9A-Za-z_-]{35}",                    # Google API key
+        r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}",  # JWT
+        r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]{16,}=*",
+    )),
+}
 
 #: Longest tool argument/result string kept at FULL. A trajectory is
 #: evidence, not an archive: a 200KB file read makes the store unusable
@@ -184,6 +217,9 @@ class Trajectory:
     #: clearing the mark gives it back (notes/77). None when no grader
     #: had judged the turn, or nobody has marked it.
     graded: bool | None = None
+    #: How many matches ``--trace-redact`` replaced in this line
+    #: (notes/79); None when the line was written without any patterns.
+    redacted: int | None = None
 
     @property
     def tools_used(self) -> list[str]:
@@ -227,7 +263,8 @@ class TrajectoryLog:
     is a store nobody starts using.
     """
 
-    def __init__(self, path: Path | str, *, detail: str = SHAPE) -> None:
+    def __init__(self, path: Path | str, *, detail: str = SHAPE,
+                 redact: Iterable[str] = ()) -> None:
         if detail not in LEVELS:
             raise ConfigError(
                 f"trace detail must be one of {'|'.join(LEVELS)}, got "
@@ -236,10 +273,25 @@ class TrajectoryLog:
                 f"answer -- which is whatever the agent read")
         self.path = Path(path)
         self.detail = detail
+        #: What is scrubbed before a line is written (notes/79); None is
+        #: nothing, and a line written without it carries no count.
+        patterns = list(redact)
+        self.redact = _compile_redactions(patterns)
+        self.redact_count = len(patterns)
+
+    @property
+    def label(self) -> str:
+        """The level, and whether anything is scrubbed -- for a banner."""
+        if not self.redact_count:
+            return self.detail
+        return f"{self.detail}, redacting {self.redact_count} pattern(s)"
 
     def record(self, trajectory: Trajectory) -> str:
         """Append one turn; return its id."""
-        line = json.dumps(_as_json(trajectory), ensure_ascii=False)
+        payload = _as_json(trajectory)
+        if self.redact is not None:
+            payload = _redacted(payload, self.redact)
+        line = json.dumps(payload, ensure_ascii=False)
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with self.path.open("a", encoding="utf-8") as handle:
@@ -432,6 +484,70 @@ def _apply_mark(raw: dict[str, Any], passed: bool | None,
         raw.pop("why", None)
 
 
+def _compile_redactions(patterns: list[str]) -> re.Pattern[str] | None:
+    """Names and regular expressions -> one pattern, or None for none.
+
+    A pattern that does not compile, or one that matches the empty
+    string, is an error at startup rather than a surprise in the file:
+    ``a*`` would "redact" between every character and scrub nothing.
+    """
+    if not patterns:
+        return None
+    parts = []
+    for pattern in patterns:
+        source = REDACT_PRESETS.get(pattern, pattern)
+        try:
+            compiled = re.compile(source)
+        except re.error as exc:
+            raise ConfigError(
+                f"--trace-redact {pattern!r} is not a regular expression "
+                f"({exc}); the names {', '.join(REDACT_PRESETS)} are "
+                f"built in") from None
+        if compiled.match(""):
+            raise ConfigError(
+                f"--trace-redact {pattern!r} matches an empty string, so it "
+                f"would scrub nothing; make it match at least one character")
+        parts.append(f"(?:{source})")
+    return re.compile("|".join(parts))
+
+
+#: The parts of a line that hold what somebody typed or the agent read.
+#: Everything else is shape -- names, counts, codes, timestamps -- and is
+#: left alone so a scrubbed line is still a line ``--turns`` can read.
+_CONTENT_KEYS = ("task", "answer", "arguments", "result")
+
+
+def _redacted(payload: dict[str, Any], pattern: re.Pattern[str]
+              ) -> dict[str, Any]:
+    """A copy of a line with every match in its content replaced, and a
+    count of how many there were. A copy, because the arguments dicts are
+    the live ones the turn ran with."""
+    count = 0
+
+    def scrub(value: Any) -> Any:
+        nonlocal count
+        if isinstance(value, str):
+            value, n = pattern.subn(REDACTED, value)
+            count += n
+            return value
+        if isinstance(value, dict):
+            return {k: scrub(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [scrub(v) for v in value]
+        return value
+
+    def content(row: dict[str, Any]) -> dict[str, Any]:
+        return {k: scrub(v) if k in _CONTENT_KEYS else v
+                for k, v in row.items()}
+
+    out = content(payload)
+    out["steps"] = [content(step) for step in payload.get("steps", [])]
+    if "children" in payload:
+        out["children"] = [content(child) for child in payload["children"]]
+    out["redacted"] = count
+    return out
+
+
 def _recorded_at(line: bytes) -> str | None:
     """A trace line's ``at``, or None when the line cannot say.
 
@@ -539,6 +655,7 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         judged_by=raw.get("judged_by"),
         why=raw.get("why"),
         graded=raw.get("graded"),
+        redacted=raw.get("redacted"),
     )
 
 
