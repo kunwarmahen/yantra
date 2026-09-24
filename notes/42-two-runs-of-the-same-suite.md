@@ -257,9 +257,13 @@ twice.
   prints — the movement happened — and carries "(intervals overlap: not
   evidence of a change)" when the two counts are consistent with the same
   underlying rate ([note 47](47-what-seven-of-ten-is-evidence-of.md)).
-* **Nothing reads a report except a human.** There is no
-  `yantra --eval-report-summary`, no HTML, no chart. The file is JSON so
-  that whatever somebody wants can be written in ten lines elsewhere.
+* **Nothing reads a report except a human.** There is no HTML and no
+  chart. The file is JSON so that whatever somebody wants can be written
+  in ten lines elsewhere. ~~A comparison exists only at the end of a
+  run.~~ Now [note 62](62-the-reports-you-already-have.md):
+  `--reports FILE ...` lines reports up without running anything, and
+  `--pool` adds them together. It exits 0 whatever they say, so it
+  cannot become a second gate.
 * ~~**No way to compare more than two runs.**~~ Shipped in
   [note 49](49-three-runs-side-by-side.md): `--against` is repeatable,
   and two or more reports line up as a table — one column per run, the

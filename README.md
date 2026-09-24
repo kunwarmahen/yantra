@@ -1105,6 +1105,32 @@ grade is `--` rather than a dropped row; every file is read before a
 token is spent; and the verdict is still this run's alone. See
 [notes/49](notes/49-three-runs-side-by-side.md).
 
+**Reports on disk can be read without running anything.** `--reports
+FILE ...` needs no package, provider or key. Two files print what moved,
+three or more print the table, and `--pool` adds them up case by case
+instead:
+
+```
+$ uv run yantra --reports runs/qwen-1.json runs/qwen-2.json runs/gemma.json --pool
+2 different suite/model pairs in these reports; each is pooled on its own -- runs of
+different models or package versions are not samples of one rate
+
+pooled 2 run(s) of researcher 0.1.0 on ollama/qwen3.8:latest
+  cites-what-it-read      6/6 over 2 run(s) · 0.61..1.00 · claims 1 · holds
+
+pooled 1 run(s) of researcher 0.1.0 on ollama/gemma4:e4b
+  cites-what-it-read      1/3 over 1 run(s) · 0.06..0.79 · claims 1 · below
+```
+
+Each case is marked **holds**, **below** or **unsettled** against its
+own claim. Runs of a different model or package version are pooled
+separately and never added together, and two runs of one case that
+disagree outright are flagged. Every report also records the **rates it
+was priced at** and where they came from, so a comparison can say
+whether a cost change was the vendor's or the agent's. Like `--against`,
+none of this is a verdict: it exits 0 whatever the reports say. See
+[notes/62](notes/62-the-reports-you-already-have.md).
+
 **And a report can choose the next run, not only judge it.** `--failed
 FILE` runs the cases that were red in a report written earlier; with no
 `FILE`, the one `--against` names:
@@ -1551,7 +1577,11 @@ src/yantra/
 │                   one back as the SELECTION for the next run: --failed).
 │                   line_up puts three or more runs in one TABLE -- a pair
 │                   is a difference, three is a different question
-│                   ([notes/49](notes/49-three-runs-side-by-side.md))
+│                   ([notes/49](notes/49-three-runs-side-by-side.md)).
+│                   A report records the RATES its figures were priced at,
+│                   and pool() adds reports up by case -- samples of one
+│                   suite version on one model, or separate pools
+│                   ([notes/62](notes/62-the-reports-you-already-have.md))
 ├── trace.py        a TURN written down, so a real failure can become a
 │                   case: append-only JSONL, one object per turn, recorded
 │                   through a TEE (the renderer still sees every event) and
@@ -1569,7 +1599,9 @@ src/yantra/
 │                   cost_now prices ONE run for storing -- 0.0 for a
 │                   provider that bills nothing, None for a model nobody
 │                   priced, and those are different numbers
-│                   ([notes/48](notes/48-what-the-run-cost.md))
+│                   ([notes/48](notes/48-what-the-run-cost.md)); price_source
+│                   says which table a price came from
+│                   ([notes/62](notes/62-the-reports-you-already-have.md))
 ├── budget.py       those dollars as a DECISION: a per-turn ceiling the loop
 │                   stops at between iterations (over_budget, with the numbers
 │                   in it). ONE meter shared with sub-agents, cleared only by

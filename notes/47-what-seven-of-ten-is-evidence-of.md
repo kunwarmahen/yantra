@@ -177,7 +177,10 @@ think*.
 
 ## What is not here yet
 
-* **Nothing compares a case against its own history.** The interval is
+* ~~**Nothing compares a case against its own history.**~~ Shipped in
+  [note 62](62-the-reports-you-already-have.md) as `--reports FILE ...
+  --pool`. The store turned out to be the reports themselves, and "how
+  far back" is the list of files you name. Was: The interval is
   computed from one run's counts; twenty runs of the same case across
   twenty days are twenty separate intervals, and pooling them would be
   the genuinely interesting number. That needs a store keyed by case

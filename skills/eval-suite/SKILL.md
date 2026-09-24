@@ -220,6 +220,16 @@ code. Read it as counts (`7/10 → 6/10`), not percentages, and expect
 which `--case` guarantees. `notes/42-two-runs-of-the-same-suite.md` has
 the reasoning.
 
+To look at reports you already have, run nothing:
+
+```bash
+uv run yantra --reports qwen.json gemma.json        # what moved, or a table for 3+
+uv run yantra --reports runs/*.json --pool          # add runs up, case by case
+```
+
+`--pool` only adds runs of the same package version on the same model;
+anything else is pooled separately. `notes/62-the-reports-you-already-have.md`.
+
 ## Graders: checking the answer text
 
 Only when a trajectory check will not do. Plain functions, one argument,
@@ -287,6 +297,7 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--no-mcp` | do not start the package's declared servers (their tools are then absent) |
 | `--report FILE` | write this run as JSON, green or red |
 | `--against FILE` | print what moved since an earlier report; changes no verdict |
+| `--reports FILE ...` | read reports without running (not with `--eval`); `--pool` adds them up |
 
 **About `--yolo`.** By default the suite auto-approves read-only tools
 and REFUSES everything that writes or executes, because nobody is sitting

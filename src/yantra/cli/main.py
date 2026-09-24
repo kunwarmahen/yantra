@@ -34,8 +34,9 @@ from yantra.config import (
     load_settings,
 )
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
-from yantra.eval_report import (Matrix, SuiteRun, compare, line_up,
-                                read_report, record_run, write_report)
+from yantra.eval_report import (Matrix, Pool, PriceRecord, SuiteRun, compare,
+                                line_up, pool, read_report, record_run,
+                                write_report)
 from yantra.eval_suite import (CASES, SUITE_DIR, find_suite, load_cases,
                                render_case)
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
@@ -182,6 +183,17 @@ def build_parser() -> argparse.ArgumentParser:
                              "REPEATABLE -- two or more reports line up as a "
                              "table instead, one column per run, which is "
                              "how you put three models side by side")
+    parser.add_argument("--reports", metavar="FILE", nargs="+", default=None,
+                        help="line up reports an earlier --eval --report "
+                             "wrote, WITHOUT running anything: two print what "
+                             "moved, three or more print a table. Needs no "
+                             "package, no provider and no key")
+    parser.add_argument("--pool", action="store_true",
+                        help="with --reports: add the reports up case by "
+                             "case instead, and print what the pooled counts "
+                             "are evidence of. Runs of a different model or "
+                             "package version are pooled separately, never "
+                             "summed")
     parser.add_argument("--no-mcp", action="store_true", dest="no_mcp",
                         help="with --eval: do not start the MCP servers the "
                              "package declares. The agent under test is then "
@@ -817,7 +829,9 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     run = record_run(outcomes, suite=label or (spec.name or "agent"),
                      provider=provider_name, model=model, repeat=args.repeat,
                      cases_in_suite=len(every_case),
-                     filtered=filters or None)
+                     filtered=filters or None,
+                     pricing=(PriceRecord.for_model(provider_name, model)
+                              if needs_model else None))
     if args.report is not None:
         try:
             write_report(Path(args.report), run)
@@ -905,6 +919,116 @@ def _render_comparison(console: Console, cmp) -> None:
         console.print("[dim]cost: that run recorded no dollar figure "
                       "(unpriced model, or written before costs were "
                       "kept)[/dim]")
+    if (before.usd or after.usd) and cmp.prices_moved is not None:
+        # The half of a cost line a figure cannot carry: whether the
+        # vendor moved, or the agent did (notes/62). Tokens are printed
+        # above, so a reader can see which one explains the dollars.
+        if cmp.prices_moved:
+            console.print(f"[dim]prices: {escape(before.pricing.describe)} → "
+                          f"{escape(after.pricing.describe)} -- part of the "
+                          f"cost change is the price, not the agent[/dim]")
+        else:
+            console.print("[dim]prices: the same rates both runs, so the "
+                          "cost change is the agent's[/dim]")
+    elif before.usd or after.usd:
+        console.print("[dim]prices: one of these runs did not write its "
+                      "rates down, so nothing can say whether the price or "
+                      "the agent moved[/dim]")
+
+
+def _reports_mode(args, console: Console) -> int:
+    """--reports: what the reports on disk say, without making another one.
+
+    NOTE 42 SAID NO, AND WAS RIGHT AT THE TIME. A comparison only existed
+    at the end of a run, because the run was the thing being judged and
+    the files were JSON so anything else could read them. That held until
+    there were four reports on disk and the only way to line them up was
+    to pay for a fifth. Reading is not judging: this prints no verdict and
+    exits 0 whatever the reports say, so it cannot become a second gate by
+    accident. A file that cannot be read is still an error, for the same
+    reason as ``--against``: a comparison asked for and not delivered is
+    the silent pass.
+    """
+    paths: list[Path] = []
+    for name in args.reports:
+        path = Path(name)
+        if path.resolve() in {p.resolve() for p in paths}:
+            # Twice the same file is twice the same run, which pooling
+            # would count as twice the evidence.
+            console.print(f"[yellow]{escape(name)} named twice; read "
+                          f"once[/yellow]")
+            continue
+        paths.append(path)
+    runs: list[SuiteRun] = []
+    for path in paths:
+        try:
+            runs.append(read_report(path))
+        except ConfigError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.pool:
+        _render_pools(console, pool(runs))
+        return 0
+    if len(runs) < 2:
+        print("error: one report is not a comparison; name two or more, or "
+              "add --pool to see what its counts are evidence of",
+              file=sys.stderr)
+        return 2
+    if len(runs) == 2:
+        _render_comparison(console, compare(runs[0], runs[1]))
+    else:
+        stems = [p.stem for p in paths]
+        labels = stems if len(set(stems)) == len(stems) else [str(p) for p in paths]
+        _render_matrix(console, line_up(runs), labels)
+    return 0
+
+
+def _render_pools(console: Console, pools: list[Pool]) -> None:
+    """Each (suite, model) pool, one line per case, then what it adds up to.
+
+    Never a verdict (notes/47): ``below`` is a statement about evidence,
+    and the exit code is 0 whatever it says.
+    """
+    if len(pools) > 1:
+        console.print(f"[yellow]{len(pools)} different suite/model pairs in "
+                      f"these reports; each is pooled on its own -- runs of "
+                      f"different models or package versions are not samples "
+                      f"of one rate[/yellow]")
+    marks = {"holds": "[green]holds[/green]", "below": "[red]below[/red]",
+             "unsettled": "[yellow]unsettled[/yellow]"}
+    for group in pools:
+        console.print(f"\n[bold]pooled[/bold] {len(group.runs)} run(s) of "
+                      f"{escape(group.suite)} on {escape(group.where)}\n"
+                      f"[dim]{escape(group.span)}[/dim]")
+        if not group.cases:
+            console.print("  [dim]no case in these runs reached a model; "
+                          "there is nothing to pool[/dim]")
+        width = max([len(c.id) for c in group.cases] + [4])
+        for case in group.cases:
+            lo, hi = case.confidence
+            claim = f"claims {case.min_pass_rate:g}"
+            if case.claim_changed:
+                claim += " (newest; it changed)"
+            line = (f"  {escape(case.id).ljust(width)}  "
+                    f"{case.tally.rjust(7)} over {case.runs} run(s) · "
+                    f"{lo:.2f}..{hi:.2f} · {claim} · "
+                    f"{marks[case.standing]}")
+            console.print(line)
+            if case.disagree:
+                console.print("    [yellow]two of these runs do not overlap "
+                              "at all -- something changed between them, and "
+                              "the pooled number averages two different "
+                              "agents[/yellow]")
+        if group.roster_only:
+            console.print(f"  [dim]roster only, nothing to pool: "
+                          f"{escape(', '.join(group.roster_only))}[/dim]")
+        unsettled = [c for c in group.cases if c.standing == "unsettled"]
+        if unsettled:
+            need = max(perfect_runs_needed(c.min_pass_rate) for c in unsettled)
+            console.print(f"  [dim]{len(unsettled)} case(s) unsettled: the "
+                          f"evidence spans their claim. More runs narrow it "
+                          f"-- {need} all-green runs in one go would hold the "
+                          f"hardest claim among them on their own[/dim]")
 
 
 def _evidence_note(console: Console, outcomes) -> None:
@@ -944,6 +1068,8 @@ def _render_matrix(console: Console, table: Matrix, labels: list[str]) -> None:
                   f"{escape(table.runs[-1].suite)}")
     for label, run in zip(labels, table.runs, strict=True):
         cost = f" · ${run.usd:.4f}" if run.usd else ""
+        if run.usd and run.pricing is not None:
+            cost += f" at {run.pricing.describe}"
         console.print(f"  [dim]{escape(label)}: {escape(run.where)} · "
                       f"{run.at} · {run.passed}/{len(run.cases)} passed · "
                       f"{run.tokens} tok{cost}[/dim]")
@@ -1234,6 +1360,17 @@ def main(argv: list[str] | None = None) -> int:
               "suite is driven, and a session has one trajectory",
               file=sys.stderr)
         return 2
+    if args.pool and args.reports is None:
+        print("error: --pool adds up reports; name them with --reports FILE "
+              "[FILE ...]", file=sys.stderr)
+        return 2
+    if args.reports is not None and (args.eval or args.build or args.web
+                                     or args.prompt or args.prompt_positional
+                                     or args.fossil is not None):
+        print("error: --reports reads reports and runs nothing; drop "
+              "--eval/--build/--web/--fossil/--prompt/PROMPT (to compare a "
+              "NEW run, use --eval --against FILE)", file=sys.stderr)
+        return 2
     if args.build and (args.prompt or args.prompt_positional):
         print("error: --build takes the spec itself; drop --prompt/PROMPT",
               file=sys.stderr)
@@ -1243,6 +1380,11 @@ def main(argv: list[str] | None = None) -> int:
               "PROMPT (send messages from the browser instead)",
               file=sys.stderr)
         return 2
+
+    # Reports are files. Reading them needs no package, no provider and no
+    # key, so this goes before any of those are resolved (notes/62).
+    if args.reports is not None:
+        return _reports_mode(args, console)
 
     # Login setup never touches a model, so it must work without any API
     # key -- dispatched before provider resolution on purpose.

@@ -114,7 +114,11 @@ it; changing what a key means does.*
 
 ## What is not here yet
 
-* **Nothing records WHICH price table was used.** The figure is stored;
+* ~~**Nothing records WHICH price table was used.**~~ Shipped in
+  [note 62](62-the-reports-you-already-have.md): a report carries the
+  four rates and their source, once per run (one row priced every
+  figure), and a comparison says whether the price or the agent moved.
+  Was: The figure is stored;
   the prices behind it are not. Two runs priced a year apart are
   comparable as money spent, and neither one can tell you whether the
   gap was the agent getting cheaper or the vendor getting dearer. The

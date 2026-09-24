@@ -54,6 +54,11 @@ from yantra.types import Usage
 # List-price snapshot: 2026-08 (Anthropic via current model docs; OpenAI
 # via the published API pricing page). Per 1M tokens, USD.
 
+#: The built-in table's name, as a report writes it down (notes/62). Moved
+#: whenever a built-in number moves, so two reports can say whether they
+#: were priced by the same table without comparing forty rows.
+TABLE = "built-in 2026-08"
+
 
 @dataclass(frozen=True)
 class ModelPrice:
@@ -203,20 +208,33 @@ def price_for(model: str) -> ModelPrice | None:
     Never guesses: callers must omit the dollar figure for None rather
     than invent one.
     """
+    return price_source(model)[0]
+
+
+def price_source(model: str) -> tuple[ModelPrice | None, str | None]:
+    """``price_for``, plus WHERE the price came from: ``TABLE`` or
+    ``"YANTRA_PRICES"``, and None beside a None price.
+
+    The origin is what a report needs to be able to say "these two runs
+    were priced differently" (notes/62). The rates alone would say it
+    too, but a changed rate with a changed origin is a different story
+    from a changed rate under the same one.
+    """
     override_exact, override_prefixes = _load_overrides()
     candidates = _candidates(model)
     for slug in candidates:  # overrides win over built-ins at every stage
         if slug in override_exact:
-            return override_exact[slug]
+            return override_exact[slug], "YANTRA_PRICES"
     for slug in candidates:
         if slug in _EXACT:
-            return _EXACT[slug]
-    for table in (override_prefixes, _PREFIXES):  # longest prefix wins
+            return _EXACT[slug], TABLE
+    for table, origin in ((override_prefixes, "YANTRA_PRICES"),
+                          (_PREFIXES, TABLE)):  # longest prefix wins
         for key in sorted(table, key=len, reverse=True):
             for slug in candidates:
                 if slug.startswith(key):
-                    return table[key]
-    return None
+                    return table[key], origin
+    return None, None
 
 
 def bills_nothing(provider_name: str) -> bool:

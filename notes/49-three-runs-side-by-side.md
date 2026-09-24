@@ -116,7 +116,9 @@ nobody asked for, which is exactly the failure note 46 exists to avoid.
   models do not, and the terminal wraps them into nonsense. A real fix
   means paging columns, which is a rendering project rather than a
   comparison one.
-* **Nothing reads a report without running the suite.** Four reports on
+* ~~**Nothing reads a report without running the suite.**~~ Shipped in
+  [note 62](62-the-reports-you-already-have.md) as `--reports FILE ...`,
+  which prints the same difference or table and exits 0. Was: Four reports on
   disk and no way to line them up except by running a fifth. That is
   still deliberate ([notes/42](42-two-runs-of-the-same-suite.md): the
   file is JSON so that anything else can be written in ten lines

@@ -883,6 +883,24 @@ Name `--against` more than once and the runs line up as a table instead
 these three models should this package run on?"
 ([notes/49](notes/49-three-runs-side-by-side.md)).
 
+You do not need a new run to look at old ones. `--reports` reads report
+files and nothing else: no package, no model, no key.
+
+```bash
+uv run yantra --reports runs/qwen.json runs/gemma.json          # what moved
+uv run yantra --reports runs/qwen-*.json --pool                  # add them up
+```
+
+`--pool` adds each case's passes and attempts across every file you
+name, and says whether the total **holds** the case's claim, falls
+**below** it, or is still **unsettled** (the range of likely pass rates
+covers the claim, so more runs would help). Runs on a different model or
+package version are kept in separate pools, because they are not
+measuring the same thing. Each report also records the prices it was
+charged at, so when you compare two paid runs you can tell whether the
+agent got cheaper or the vendor did
+([notes/62](notes/62-the-reports-you-already-have.md)).
+
 And then the file answers the question you actually asked first — *what
 broke, and is it fixed?* `--failed FILE` runs the cases that report
 recorded as red, and with no `FILE` it uses the one `--against` names, so
@@ -2218,7 +2236,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |

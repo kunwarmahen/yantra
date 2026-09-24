@@ -38,6 +38,21 @@ silently, in the one file somebody keeps precisely because it does not
 change. A report from before this key existed has no figure, which reads
 correctly as "nobody wrote one down".
 
+AND THE PRICES BEHIND THEM ARE WRITTEN DOWN TOO (notes/62). A figure
+without its rates can say that a run got cheaper and never why: the agent
+spending fewer tokens and the vendor cutting a price print the same
+number. So a report carries the four rates it was priced at and where
+they came from, once per run -- every figure in a run is priced by one
+model's row, so one row is what was used.
+
+A REPORT IS ALSO A SAMPLE (notes/62). Twenty runs of one case across
+twenty days are twenty intervals, each too wide to say much; pooled, they
+are one narrow one. The reports on disk ARE the store keyed by case --
+nothing new is kept anywhere -- and how far back to look is the list of
+files the operator names. What pooling refuses to do is add together runs
+that were not samples of the same thing: a different model or a different
+package version is a different rate, pooled on its own and never summed.
+
 JSON, one object, with a format tag. A report is written by one version
 of this program and read by another -- possibly months later, by a CI job
 nobody has looked at since -- so an unreadable file has to say so rather
@@ -55,6 +70,7 @@ from typing import Any
 
 from yantra.confidence import overlaps, wilson_bounds
 from yantra.errors import ConfigError
+from yantra.pricing import bills_nothing, price_source
 
 #: Bumped only when an OLD reader would misread a NEW file. Adding a key
 #: that readers may ignore does not bump it; changing what a key means
@@ -99,6 +115,62 @@ class CaseRecord:
         return wilson_bounds(self.passes, self.attempts)
 
 
+@dataclass(frozen=True, slots=True)
+class PriceRecord:
+    """The rates a run's figures were priced at, and where they came from.
+
+    ``source`` is one of the pricing table's names (``pricing.TABLE``),
+    ``"YANTRA_PRICES"`` for an operator's override file, ``"free"`` for a
+    provider that bills nothing, or ``"unpriced"`` for a model nobody has
+    a row for. Rates are dollars per million tokens, None where the row
+    has no separate rate (cached tokens then bill at the input rate).
+    """
+
+    source: str
+    input: float | None = None
+    output: float | None = None
+    cache_read: float | None = None
+    cache_write: float | None = None
+
+    @classmethod
+    def for_model(cls, provider_name: str | None, model: str) -> PriceRecord:
+        """What ``cost_now`` will use for this run, read the same way."""
+        if provider_name and bills_nothing(provider_name):
+            return cls(source="free")
+        price, origin = price_source(model)
+        if price is None or origin is None:
+            return cls(source="unpriced")
+        return cls(source=origin, input=price.input_per_mtok,
+                   output=price.output_per_mtok,
+                   cache_read=price.cache_read_per_mtok,
+                   cache_write=price.cache_write_per_mtok)
+
+    @property
+    def rates(self) -> tuple[float | None, ...]:
+        return (self.input, self.output, self.cache_read, self.cache_write)
+
+    @property
+    def describe(self) -> str:
+        """"$3.00 in / $15.00 out per Mtok (built-in 2026-08)"."""
+        if self.input is None or self.output is None:
+            return self.source
+        return (f"${self.input:.2f} in / ${self.output:.2f} out per Mtok "
+                f"({self.source})")
+
+    def to_json(self) -> dict[str, Any]:
+        return {"source": self.source, "input": self.input,
+                "output": self.output, "cache_read": self.cache_read,
+                "cache_write": self.cache_write}
+
+    @classmethod
+    def from_json(cls, raw: Any) -> PriceRecord | None:
+        if not isinstance(raw, dict) or "source" not in raw:
+            return None
+        return cls(source=raw["source"], input=raw.get("input"),
+                   output=raw.get("output"), cache_read=raw.get("cache_read"),
+                   cache_write=raw.get("cache_write"))
+
+
 @dataclass(slots=True)
 class SuiteRun:
     """One whole ``--eval`` run, as it will be written to disk."""
@@ -111,6 +183,9 @@ class SuiteRun:
     cases: list[CaseRecord]
     cases_in_suite: int         # how many the file HAS, filtered or not
     filtered: list[str] | None = None
+    #: The rates behind every ``usd`` in this run (notes/62). None on a
+    #: report written before prices were kept.
+    pricing: PriceRecord | None = None
 
     @property
     def passed(self) -> int:
@@ -148,7 +223,8 @@ class SuiteRun:
 
 def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
                model: str, repeat: int, cases_in_suite: int,
-               filtered: list[str] | None = None) -> SuiteRun:
+               filtered: list[str] | None = None,
+               pricing: PriceRecord | None = None) -> SuiteRun:
     """``CaseOutcome``s -> the record. Reads only the public properties, so
     an outcome type that grows a field does not have to grow one here."""
     return SuiteRun(
@@ -156,6 +232,7 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
         at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         repeat=repeat, cases_in_suite=cases_in_suite,
         filtered=list(filtered) if filtered else None,
+        pricing=pricing,
         cases=[CaseRecord(
             id=o.case_id, passed=o.passed, attempts=o.attempts,
             passes=o.passes, min_pass_rate=o.min_pass_rate,
@@ -181,6 +258,7 @@ def write_report(path: Path, run: SuiteRun) -> None:
         "repeat": run.repeat,
         "cases_in_suite": run.cases_in_suite,
         "filtered": run.filtered,
+        "pricing": run.pricing.to_json() if run.pricing else None,
         "passed": run.passed,
         "tokens": run.tokens,
         "cases": [{
@@ -231,6 +309,7 @@ def read_report(path: Path) -> SuiteRun:
             at=raw["at"], repeat=raw["repeat"],
             cases_in_suite=raw["cases_in_suite"],
             filtered=raw.get("filtered"),
+            pricing=PriceRecord.from_json(raw.get("pricing")),
             cases=[CaseRecord(
                 id=c["id"], passed=c["passed"], attempts=c["attempts"],
                 passes=c["passes"], min_pass_rate=c["min_pass_rate"],
@@ -359,6 +438,19 @@ class Comparison:
             return None
         return self.after.usd - self.before.usd
 
+    @property
+    def prices_moved(self) -> bool | None:
+        """Whether the two runs were priced at different rates, or None
+        when one of them did not write its rates down.
+
+        True is the sentence notes/48 could not say: part of the cost line
+        is the vendor, not the agent. Across two models it is simply
+        expected, and still worth the line.
+        """
+        if self.before.pricing is None or self.after.pricing is None:
+            return None
+        return self.before.pricing.rates != self.after.pricing.rates
+
 
 @dataclass(slots=True)
 class Matrix:
@@ -445,3 +537,119 @@ def compare(before: SuiteRun, after: SuiteRun) -> Comparison:
             deltas.append(CaseDelta(id=case.id, kind="gone", before=case,
                                     after=None))
     return Comparison(before=before, after=after, deltas=deltas)
+
+
+@dataclass(slots=True)
+class PooledCase:
+    """One case's counts, summed over every run that rolled its die."""
+
+    id: str
+    passes: int
+    attempts: int
+    runs: int                   # how many reports contributed
+    min_pass_rate: float        # the NEWEST report's claim
+    claim_changed: bool         # an older report claimed something else
+    disagree: bool              # two runs' own intervals do not overlap
+
+    @property
+    def tally(self) -> str:
+        return f"{self.passes}/{self.attempts}"
+
+    @property
+    def confidence(self) -> tuple[float, float]:
+        return wilson_bounds(self.passes, self.attempts)
+
+    @property
+    def standing(self) -> str:
+        """``holds``, ``below`` or ``unsettled`` against the case's claim.
+
+        ``holds`` when even the low end of the pooled interval reaches the
+        claim; ``below`` when even the high end misses it; ``unsettled``
+        is everything in between -- the honest word for most cases on
+        most evidence, and the one that says more runs would help.
+
+        A claim of 1.0 is read the way the gate reads it: one failure
+        breaks it, and no number of greens can lift an interval's low end
+        all the way to 1, so "no run failed" is what ``holds`` means there.
+        """
+        if self.min_pass_rate >= 1:
+            return "holds" if self.passes == self.attempts else "below"
+        lo, hi = self.confidence
+        if lo >= self.min_pass_rate:
+            return "holds"
+        if hi < self.min_pass_rate:
+            return "below"
+        return "unsettled"
+
+
+@dataclass(slots=True)
+class Pool:
+    """Every named run of ONE suite version on ONE model, pooled by case.
+
+    ``runs`` are oldest first. ``roster_only`` names cases that never
+    reached a model in any of them: they roll no die, so there is nothing
+    to pool, and they are named rather than silently missing.
+    """
+
+    suite: str
+    where: str
+    runs: list[SuiteRun]
+    cases: list[PooledCase]
+    roster_only: list[str]
+
+    @property
+    def span(self) -> str:
+        """"2026-09-01T..Z .. 2026-09-20T..Z", or the one time."""
+        first, last = self.runs[0].at, self.runs[-1].at
+        return first if first == last else f"{first} .. {last}"
+
+
+def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
+    """Several reports -> one pool per (suite, model), cases summed.
+
+    SAMPLES OF THE SAME THING OR NOTHING. A report is keyed by the suite
+    label (the package's name AND version) and the provider/model it ran
+    against; runs that differ in either are separate pools, because 9/10
+    on one model and 2/10 on another is not 11/20 of anything. The version
+    is only as good as the author's habit of bumping it -- an edited
+    prompt under the same version pools as if nothing changed, which is
+    why ``disagree`` exists: two runs of one case whose intervals do not
+    even overlap are evidence that something moved between them.
+
+    Only runs that reached a model count. A run that stopped at a failed
+    roster assertion is a verdict about the tool list, not a die roll.
+    """
+    groups: dict[tuple[str, str], list[SuiteRun]] = {}
+    for run in runs:
+        groups.setdefault((run.suite, run.where), []).append(run)
+    pools: list[Pool] = []
+    for (suite, where), members in groups.items():
+        members = sorted(members, key=lambda r: r.at)
+        ids: list[str] = []
+        for run in reversed(members):             # newest run's order first
+            for case in run.cases:
+                if case.id not in ids:
+                    ids.append(case.id)
+        cases: list[PooledCase] = []
+        roster_only: list[str] = []
+        for case_id in ids:
+            rolled = [c for run in members for c in run.cases
+                      if c.id == case_id and c.ran_model and c.attempts]
+            if not rolled:
+                roster_only.append(case_id)
+                continue
+            intervals = [wilson_bounds(c.passes, c.attempts) for c in rolled]
+            claims = {c.min_pass_rate for c in rolled}
+            cases.append(PooledCase(
+                id=case_id,
+                passes=sum(c.passes for c in rolled),
+                attempts=sum(c.attempts for c in rolled),
+                runs=len(rolled),
+                min_pass_rate=rolled[-1].min_pass_rate,
+                claim_changed=len(claims) > 1,
+                disagree=(max(lo for lo, _ in intervals)
+                          > min(hi for _, hi in intervals)),
+            ))
+        pools.append(Pool(suite=suite, where=where, runs=members,
+                          cases=cases, roster_only=roster_only))
+    return pools
