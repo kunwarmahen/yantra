@@ -61,11 +61,22 @@ may be a crash: a format that has to be closed to be valid loses the one
 turn worth keeping. A malformed line is skipped on read with a count, not
 raised -- half a line at the end of a file is what a killed process
 leaves behind, and it must not cost you the two hundred turns above it.
+
+AGE IS THE ONLY THING THAT PRUNES, AND ONLY WHEN ASKED (notes/67). A suite
+run with ``--repeat 10 --trace`` writes ten lines a case, so the file
+grows as fast as anybody evaluates. ``prune`` removes turns older than a
+number of days, as its own command -- never as a side effect of recording,
+because a recorder that deletes is a recorder nobody can leave switched
+on without reading its fine print. A line it cannot read has no date, so
+it is kept: the prune's job is age, and deciding a line is garbage is not
+the same judgement.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator
@@ -260,6 +271,89 @@ class TrajectoryLog:
                 f"({', '.join(t.id[:8] for t in matches[:5])}...); give more "
                 f"of the id")
         return matches[0]
+
+
+    def prune(self, days: int, *, now: float | None = None) -> Pruned:
+        """Remove every turn recorded more than ``days`` days ago.
+
+        The file is rewritten beside itself and swapped in with one
+        rename, so a reader never sees half of it. A session still
+        appending while this runs is the one hazard: lines written after
+        the read are copied across before the swap, which leaves only the
+        instant between that copy and the rename -- small, and named here
+        rather than papered over. Nothing is rewritten when nothing is old.
+        """
+        if days < 1:
+            raise ConfigError(
+                f"--trace-prune takes a number of days of at least 1, got "
+                f"{days}; to drop every turn, delete {self.path}")
+        cutoff = time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ",
+            time.gmtime((time.time() if now is None else now) - days * 86400))
+        try:
+            data = self.path.read_bytes()
+        except FileNotFoundError:
+            raise ConfigError(f"no trace file at {self.path}") from None
+        except OSError as exc:
+            raise ConfigError(f"cannot read trace {self.path}: {exc}") from None
+        kept: list[bytes] = []
+        result = Pruned(path=self.path, days=days)
+        for line in data.splitlines():
+            if not line.strip():
+                continue
+            at = _recorded_at(line)
+            if at is None:
+                result.unreadable += 1
+                kept.append(line)
+            elif at < cutoff:
+                result.removed += 1
+            else:
+                result.kept += 1
+                kept.append(line)
+        if not result.removed:
+            return result
+        temp = None
+        try:
+            handle, temp = tempfile.mkstemp(dir=self.path.parent,
+                                            prefix=f".{self.path.name}.")
+            with os.fdopen(handle, "wb") as out:
+                out.write(b"".join(line + b"\n" for line in kept))
+                with self.path.open("rb") as current:
+                    current.seek(len(data))
+                    out.write(current.read())   # appended while we read
+            os.chmod(temp, self.path.stat().st_mode & 0o777)
+            os.replace(temp, self.path)
+        except OSError as exc:
+            if temp is not None and os.path.exists(temp):
+                os.unlink(temp)           # the original is untouched
+            raise ConfigError(f"cannot rewrite trace {self.path}: {exc}") from None
+        return result
+
+
+@dataclass(slots=True)
+class Pruned:
+    """What ``TrajectoryLog.prune`` did, for the line the CLI prints."""
+
+    path: Path
+    days: int
+    removed: int = 0
+    kept: int = 0
+    #: Lines with no readable date, kept because age cannot judge them.
+    unreadable: int = 0
+
+
+def _recorded_at(line: bytes) -> str | None:
+    """A trace line's ``at``, or None when the line cannot say.
+
+    Only the timestamp is read -- not the whole turn -- so a line written
+    by a newer version with keys this one does not know still has an age.
+    """
+    try:
+        raw = json.loads(line)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    at = raw.get("at") if isinstance(raw, dict) else None
+    return at if isinstance(at, str) and len(at) == 20 else None
 
 
 def _as_json(trajectory: Trajectory) -> dict[str, Any]:

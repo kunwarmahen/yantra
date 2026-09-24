@@ -121,10 +121,10 @@ cost already exists, per turn, in the package ([notes/34](34-budgets.md)).
 * **A version that was never bumped still pools silently.** Still true
   from note 62: `disagree` only catches a change big enough that two
   ranges miss each other entirely.
-* **Tokens are not pooled.** Dollars move with prices and tokens do
-  not, so a per-run token line would separate "the agent works harder"
-  from "the vendor charges more" even for reports written before rates
-  were kept.
+* ~~**Tokens are not pooled.**~~ Shipped in [note 67](67-the-agent-or-the-vendor.md):
+  tokens per run, oldest against newest, beside the dollars. Was:
+  dollars move with prices and tokens do not, so a per-run token line
+  would separate "the agent works harder" from "the vendor charges more".
 
 ## Receipt
 

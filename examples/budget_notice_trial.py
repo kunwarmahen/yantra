@@ -102,6 +102,9 @@ def main() -> int:
                         help="turns PER ARM")
     parser.add_argument("--task", default=TASK)
     args = parser.parse_args()
+    # A cloud key usually lives in .env, as it does for the CLI.
+    from yantra.config import _load_dotenv
+    _load_dotenv()
 
     spec = replace(load_package(args.agent), max_usd_per_turn=args.ceiling,
                    provider=args.provider or None, model=args.model or None)

@@ -150,8 +150,10 @@ of `jq`.
 * **Nothing decides what was a failure.** Still true from note 57: a
   green run can be wrong, and a red run's turn is where to *start*
   looking, not a verdict on what went wrong.
-* **No retention, rotation or redaction.** Still true from note 57, and
-  more pressing now: `--repeat 10` on a suite writes ten lines a case.
+* ~~**No retention or rotation.**~~ Shipped in [note 67](67-the-agent-or-the-vendor.md):
+  `--trace-prune DAYS`. Was: still true from note 57, and more pressing
+  now that `--repeat 10` on a suite writes ten lines a case.
+* **No redaction.** Still true from note 57.
 
 ## Receipt
 

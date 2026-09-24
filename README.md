@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1711 tests. The
+The harness underneath is complete and covered by 1734 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1152,6 +1152,24 @@ pool: runs/pool.json
 
 See [notes/66](notes/66-what-each-case-cost.md).
 
+**Tokens per run sit beside the dollars**, oldest report against newest.
+Dollars move when the vendor changes a price and tokens do not, so the
+pair tells *the agent does more work* apart from *the vendor charges
+more*, and a free (local) run, which has no dollars to show, gets the
+token line and a `heaviest move` summary of its own:
+
+```
+  x         2/2 over 2 run(s) · 0.34..1.00 · claims 1 · holds
+    1,200 → 3,000 tokens per run (x2.5)
+  heaviest move: x uses x2.5 the tokens per run it did in the oldest report
+```
+
+A move under 10% is run-to-run jitter and prints nothing. A moved price
+over a flat count says so: `$0.0100 → $0.0200 per run (x2.0) · about the
+same tokens per run (~1,000) -- the rates moved between those reports,
+not only the agent`. `--pool-json` carries `tokens_first` and
+`tokens_last`. See [notes/67](notes/67-the-agent-or-the-vendor.md).
+
 **And a report can choose the next run, not only judge it.** `--failed
 FILE` runs the cases that were red in a report written earlier; with no
 `FILE`, the one `--against` names:
@@ -1236,6 +1254,20 @@ child's step also keeps the gate's **refusal code**, so a child turned
 away by a rule no longer looks like a child whose read failed
 (`read_file (refused: policy)` under `--fossil`). See
 [notes/65](notes/65-the-turn-behind-the-red-line.md).
+
+**A recording only shrinks when you ask it to.** `--trace-prune DAYS`
+removes the turns recorded more than `DAYS` days ago and exits. It never
+runs as a side effect of recording, a line with no readable date is
+kept, and a turn another session appends while it runs is copied across
+before the file is swapped:
+
+```
+$ uv run yantra --trace runs/today.jsonl --trace-prune 30
+runs/today.jsonl: removed 4 turn(s) recorded more than 30 day(s) ago, kept 2
+1 line(s) with no readable date kept as they were -- age cannot judge them
+```
+
+See [notes/67](notes/67-the-agent-or-the-vendor.md).
 
 **The servers the package declares are under test too.** `--eval` starts
 them and their tools register as `mcp__<server>__<tool>`, so
@@ -1406,7 +1438,10 @@ The rules worth knowing before you rely on it:
   neither is the work. Off by default, and the operator's call rather than
   the package author's, because it changes how the model behaves. The
   notice is *sent*, never written to history — it is true of one turn, and
-  history gets replayed.
+  history gets replayed. Measured on `gemma4:12b` at a ceiling just under
+  one turn: 13 of 15 told turns finished against 1 of 15 untold, ranges
+  that do not overlap ([notes/64](notes/64-a-price-for-the-free-road.md),
+  [notes/67](notes/67-the-agent-or-the-vendor.md)).
 * **The browser draws what is left.** The header carries a budget bar
   beside the context-pressure one — same widget, same thresholds — showing
   `$0.07 left` rather than what has been spent, and moving mid-turn rather
@@ -1650,7 +1685,9 @@ src/yantra/
 │                   case carries dollars per run, oldest against newest,
 │                   and write_pool keeps the pool as yantra.pool.v1
 │                   ([notes/65](notes/65-the-turn-behind-the-red-line.md),
-│                   [notes/66](notes/66-what-each-case-cost.md))
+│                   [notes/66](notes/66-what-each-case-cost.md)); tokens
+│                   per run beside them, so a move is the agent's or the
+│                   vendor's ([notes/67](notes/67-the-agent-or-the-vendor.md))
 ├── trace.py        a TURN written down, so a real failure can become a
 │                   case: append-only JSONL, one object per turn, recorded
 │                   through a TEE (the renderer still sees every event) and
@@ -1666,7 +1703,9 @@ src/yantra/
 │                   ([notes/63](notes/63-the-whole-turn-written-down.md)).
 │                   from_history writes a turn that was RUN, not streamed
 │                   -- how a suite records its cases, each line tagged with
-│                   its case id ([notes/65](notes/65-the-turn-behind-the-red-line.md))
+│                   its case id ([notes/65](notes/65-the-turn-behind-the-red-line.md)).
+│                   prune removes turns by AGE, only when asked, keeping
+│                   what it cannot date ([notes/67](notes/67-the-agent-or-the-vendor.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

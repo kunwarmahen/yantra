@@ -56,6 +56,9 @@ The same files hold every case's dollars, so a pooled case also says what
 one run of it cost in the oldest report and the newest (notes/66) -- per
 run, because ten repeats and three are not the same bill -- and the pool
 can be written down as its own format, never mistaken for a report.
+Tokens per run are pooled the same way (notes/67): dollars move with
+prices and tokens do not, so the pair says whether it was the agent that
+changed or the vendor -- and on a free road they are the only figure.
 
 A REPORT NAMES THE TURNS BEHIND IT when the suite ran with ``--trace``
 (notes/65): each case row lists the trace ids of its runs, so a red line
@@ -581,6 +584,12 @@ class PooledCase:
     #: Whether those two reports were priced at different rates: when
     #: True, part of the move is the vendor's, not the agent's (notes/62).
     price_moved: bool = False
+    #: Tokens PER RUN in the oldest and newest report that counted any
+    #: (notes/67). Dollars move with prices and tokens do not, so these
+    #: say whether the AGENT changed -- on a free road, and in reports
+    #: written before rates were kept, they are the only figure there is.
+    tokens_first: float | None = None
+    tokens_last: float | None = None
 
     @property
     def tally(self) -> str:
@@ -597,6 +606,14 @@ class PooledCase:
         if not self.usd_first or self.usd_last is None:
             return None
         return self.usd_last / self.usd_first
+
+    @property
+    def tokens_growth(self) -> float | None:
+        """Newest per-run token count over the oldest, or None without two
+        reports that counted any."""
+        if not self.tokens_first or self.tokens_last is None:
+            return None
+        return self.tokens_last / self.tokens_first
 
     @property
     def standing(self) -> str:
@@ -686,6 +703,9 @@ def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
                       and c.usd is not None]
             first = priced[0] if priced else None
             last = priced[-1] if priced else None
+            # A run that reached a model and counted no tokens is a
+            # provider that reported no usage -- an unknown, not a zero.
+            counted = [c for c in rolled if c.tokens]
             cases.append(PooledCase(
                 id=case_id,
                 passes=sum(c.passes for c in rolled),
@@ -703,6 +723,10 @@ def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
                     and first[0].pricing is not None
                     and last[0].pricing is not None
                     and first[0].pricing.rates != last[0].pricing.rates),
+                tokens_first=(counted[0].tokens / counted[0].attempts
+                              if counted else None),
+                tokens_last=(counted[-1].tokens / counted[-1].attempts
+                             if counted else None),
             ))
         pools.append(Pool(suite=suite, where=where, runs=members,
                           cases=cases, roster_only=roster_only))
@@ -740,6 +764,8 @@ def write_pool(path: Path, pools: Sequence[Pool]) -> None:
                 "claim_changed": c.claim_changed, "disagree": c.disagree,
                 "usd_first": c.usd_first, "usd_last": c.usd_last,
                 "price_moved": c.price_moved,
+                "tokens_first": _rounded(c.tokens_first),
+                "tokens_last": _rounded(c.tokens_last),
             } for c in group.cases],
         } for group in pools],
     }
@@ -748,3 +774,9 @@ def write_pool(path: Path, pools: Sequence[Pool]) -> None:
         path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     except OSError as exc:
         raise ConfigError(f"cannot write pool {path}: {exc}") from None
+
+
+def _rounded(tokens: float | None) -> float | None:
+    """A per-run token count to one decimal: 1234.333... is not a figure
+    anybody measured."""
+    return None if tokens is None else round(tokens, 1)

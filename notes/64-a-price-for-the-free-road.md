@@ -159,9 +159,12 @@ every model.
 
 ## What is not here yet
 
-* **One model, one task.** The trial script takes `--provider`,
-  `--model` and `--task`, so the same measurement on a cloud model, or
-  on a turn shaped differently, is one command. It has not been run.
+* ~~**One model, one task.**~~ Shipped in
+  [note 67](67-the-agent-or-the-vendor.md): `gemma4:12b` on a different
+  task, 13 of 15 told turns finished against 1 of 15, with ranges that do
+  not overlap. Was: the same measurement on a cloud model, or on a turn
+  shaped differently, is one command, and it had not been run. A cloud
+  model is still unmeasured.
 * **Nothing forecasts the reply.** Still true from notes 36 and 43, and
   the measurement shows why it matters: the expensive part of these
   turns was an answer nobody could price in advance.

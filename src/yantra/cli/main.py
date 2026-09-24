@@ -293,6 +293,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "prefix is enough. Printed rather than written: "
                              "a package's cases.toml belongs to its author "
                              "(append it yourself with >>)")
+    parser.add_argument("--trace-prune", metavar="DAYS", type=int,
+                        default=None, dest="trace_prune",
+                        help="with --trace FILE: remove the turns recorded "
+                             "more than DAYS days ago and exit. Never done "
+                             "while recording -- a recorder that deletes is "
+                             "one nobody can leave on. A line with no "
+                             "readable date is kept")
     parser.add_argument("--tool-pack", action="append", default=[],
                         metavar="NAME", dest="tool_pack",
                         help="load the tools an INSTALLED distribution "
@@ -504,6 +511,27 @@ def _fossil_mode(args, console: Console) -> int:
         ended = child.code or "finished"
         print(f"note: sub-agent #{child.number} {child.agent} on "
               f"{child.model}: {steps}; {ended}", file=sys.stderr)
+    return 0
+
+
+def _trace_prune_mode(args, console: Console) -> int:
+    """--trace-prune DAYS --trace FILE: drop old turns, say what went.
+
+    A report may name a turn this removes (notes/65); ``--fossil`` then
+    says there is no such turn, which is true. Keeping reports and traces
+    in step is the operator's retention policy, not a guess made here.
+    """
+    try:
+        pruned = TrajectoryLog(Path(args.trace)).prune(args.trace_prune)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    console.print(f"{escape(str(pruned.path))}: removed {pruned.removed} "
+                  f"turn(s) recorded more than {pruned.days} day(s) ago, "
+                  f"kept {pruned.kept}")
+    if pruned.unreadable:
+        console.print(f"[dim]{pruned.unreadable} line(s) with no readable "
+                      f"date kept as they were -- age cannot judge them[/dim]")
     return 0
 
 
@@ -1091,6 +1119,22 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
                           f"the oldest priced report"
                           + (" (the rates moved too)" if worst.price_moved
                              else "") + "[/dim]")
+        heavier = [c for c in group.cases
+                   if c.tokens_growth is not None
+                   and c.tokens_growth >= 1 + TOKEN_JITTER]
+        if heavier:
+            # The same line in tokens, for the road with no dollars and for
+            # a case that got hungrier while a price cut hid it (notes/67).
+            # Skipped only when it would repeat the dearest line: same case,
+            # same factor, so the tokens are the whole of the move.
+            heaviest = max(heavier, key=lambda c: c.tokens_growth or 0)
+            same = (grew and heaviest is worst
+                    and f"{worst.usd_growth:.1f}"
+                    == f"{heaviest.tokens_growth:.1f}")
+            if not same:
+                console.print(f"  [dim]heaviest move: {escape(heaviest.id)} "
+                              f"uses x{heaviest.tokens_growth:.1f} the tokens "
+                              f"per run it did in the oldest report[/dim]")
         if group.roster_only:
             console.print(f"  [dim]roster only, nothing to pool: "
                           f"{escape(', '.join(group.roster_only))}[/dim]")
@@ -1104,22 +1148,56 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
 
 
 def _pooled_cost(case) -> str:
-    """"$0.0012 → $0.0031 per run (x2.6)" for one pooled case, or "".
+    """"$0.0012 → $0.0031 per run (x2.6) · 1,200 → 3,100 tokens per run
+    (x2.6)" for one pooled case, or "".
 
-    Nothing for a case no report priced, or one that was free both times:
-    a local model's $0 beside every line reads as a broken meter.
+    No dollars for a case no report priced, or one that was free both
+    times: a local model's $0 beside every line reads as a broken meter.
+    Tokens only once there are two reports to set against each other, and
+    only when they moved past run-to-run jitter -- except under a moved
+    price, where "about the same tokens" is the line that says the change
+    was the vendor's.
     """
+    parts: list[str] = []
     first, last = case.usd_first, case.usd_last
-    if first is None or last is None or (not first and not last):
-        return ""
-    if case.runs == 1 or first == last:
-        return f"${last:.4f} per run"
-    line = f"${first:.4f} → ${last:.4f} per run"
-    if case.usd_growth is not None:
-        line += f" (x{case.usd_growth:.1f})"
-    if case.price_moved:
+    dollars_moved = False
+    if first is not None and last is not None and (first or last):
+        if case.runs == 1 or first == last:
+            parts.append(f"${last:.4f} per run")
+        else:
+            dollars_moved = True
+            line = f"${first:.4f} → ${last:.4f} per run"
+            if case.usd_growth is not None:
+                line += f" (x{case.usd_growth:.1f})"
+            parts.append(line)
+    tokens = _pooled_tokens(case, dollars_moved)
+    if tokens:
+        parts.append(tokens)
+    line = " · ".join(parts)
+    if line and case.price_moved and dollars_moved:
         line += " -- the rates moved between those reports, not only the agent"
     return line
+
+
+#: How far a case's tokens per run may move before the pool calls it a
+#: move (notes/67). The same case on the same model reads a slightly
+#: different amount and writes a slightly different answer every run; on
+#: the researcher suite two green runs a minute apart differed by up to
+#: 4%, and a line under every case saying "x1.0" was noise.
+TOKEN_JITTER = 0.10
+
+
+def _pooled_tokens(case, dollars_moved: bool) -> str:
+    """The token half of a pooled case's line (notes/67), or ""."""
+    first, last = case.tokens_first, case.tokens_last
+    growth = case.tokens_growth
+    if case.runs == 1 or first is None or last is None or growth is None:
+        return ""
+    if abs(growth - 1) < TOKEN_JITTER:
+        return (f"about the same tokens per run (~{round(last):,})"
+                if dollars_moved else "")
+    return (f"{round(first):,} → {round(last):,} tokens per run "
+            f"(x{growth:.1f})")
 
 
 def _evidence_note(console: Console, outcomes) -> None:
@@ -1440,6 +1518,20 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --fossil prints one recorded turn as a case and exits; "
               "drop --eval/--build/--web/--prompt/PROMPT", file=sys.stderr)
         return 2
+    if args.trace_prune is not None and args.trace is None:
+        print("error: --trace-prune removes old turns from a recording, so "
+              "it needs the file: --trace-prune DAYS --trace FILE",
+              file=sys.stderr)
+        return 2
+    if args.trace_prune is not None and (
+            args.eval or args.build or args.web or args.prompt
+            or args.prompt_positional or args.fossil is not None
+            or args.trace_full or args.reports is not None):
+        print("error: --trace-prune tidies a recording and exits; drop "
+              "--eval/--build/--web/--fossil/--reports/--trace-full/"
+              "--prompt/PROMPT",
+              file=sys.stderr)
+        return 2
     if args.repeat < 1:
         print(f"error: --repeat must be at least 1 (got {args.repeat}); a "
               f"suite that runs nothing passes everything", file=sys.stderr)
@@ -1477,6 +1569,10 @@ def main(argv: list[str] | None = None) -> int:
               "PROMPT (send messages from the browser instead)",
               file=sys.stderr)
         return 2
+
+    # A recording is a file too (notes/67).
+    if args.trace_prune is not None:
+        return _trace_prune_mode(args, console)
 
     # Reports are files. Reading them needs no package, no provider and no
     # key, so this goes before any of those are resolved (notes/62).

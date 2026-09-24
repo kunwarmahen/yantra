@@ -907,6 +907,13 @@ grew fastest. `--pool-json runs/pool.json` does the same pooling and
 saves the numbers to a file, so a chart or a weekly job can read them
 ([notes/66](notes/66-what-each-case-cost.md)).
 
+Beside the dollars it shows **tokens per run**, oldest against newest.
+Prices change and token counts do not, so if a case's cost went up but
+its tokens stayed the same, the vendor raised the price; if the tokens
+went up, the agent is doing more work. On a local model there are no
+dollars at all, so this is the line that tells you a case got heavier
+([notes/67](notes/67-the-agent-or-the-vendor.md)).
+
 And then the file answers the question you actually asked first — *what
 broke, and is it fixed?* `--failed FILE` runs the cases that report
 recorded as red, and with no `FILE` it uses the one `--against` names, so
@@ -996,6 +1003,18 @@ turn that failed:
 Pass one of those ids to `--fossil` to see exactly what the agent did
 instead. The report file keeps the same ids, so you can still find the
 turn weeks later ([notes/65](notes/65-the-turn-behind-the-red-line.md)).
+
+A trace file only grows, and `--repeat 10` makes it grow quickly. When
+you want to trim it, say how many days to keep:
+
+```bash
+uv run yantra --trace runs/today.jsonl --trace-prune 30
+```
+
+That removes turns older than 30 days and nothing else. Recording never
+deletes anything on its own. Remember that a report may still name a
+turn you have pruned; `--fossil` will then tell you it is gone
+([notes/67](notes/67-the-agent-or-the-vendor.md)).
 
 ### Embedding a package instead of running it
 
@@ -2268,7 +2287,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
