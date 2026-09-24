@@ -155,7 +155,9 @@ of `jq`.
 * ~~**No retention or rotation.**~~ Shipped in [note 67](67-the-agent-or-the-vendor.md):
   `--trace-prune DAYS`. Was: still true from note 57, and more pressing
   now that `--repeat 10` on a suite writes ten lines a case.
-* **No redaction.** Still true from note 57.
+* ~~**No redaction.**~~ Shipped in
+  [note 79](79-scrubbed-before-it-is-written.md): `--trace-redact`. Was:
+  Still true from note 57.
 
 ## Receipt
 
