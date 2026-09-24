@@ -216,10 +216,11 @@ changing meaning, so older readers keep working.
   newest, under each pooled case. Was: The same files hold every case's
   dollars. "Which case got expensive" is the same kind of sum, and is
   not printed.
-* **A version that was never bumped cannot be caught.** The disagreement
-  flag only catches a change large enough that the two ranges miss each
-  other entirely. A small prompt edit that moved a rate from 0.9 to 0.8
-  pools silently.
+* ~~**A version that was never bumped cannot be caught.**~~ Shipped in
+  [note 68](68-the-version-nobody-bumped.md): every report carries a fingerprint of the package, and one
+  version holding two packages pools as two. Was: the disagreement flag
+  only catches a change large enough that the two ranges miss each other
+  entirely.
 
 ## Receipt
 

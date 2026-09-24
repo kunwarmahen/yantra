@@ -217,8 +217,8 @@ that list is the operator's retention policy again.
 
 ## What is not here yet
 
-* **A version that was never bumped still pools silently.** Still true
-  from notes 62 and 66.
+* ~~**A version that was never bumped still pools silently.**~~ Shipped
+  in [note 68](68-the-version-nobody-bumped.md): a package fingerprint in every report.
 * **No redaction.** Still true from note 57.
 * **The budget notice on a cloud model.** Two local models and two tasks
   agree now. A cloud model is the one road not yet measured.

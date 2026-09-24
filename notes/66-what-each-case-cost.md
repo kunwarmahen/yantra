@@ -118,9 +118,9 @@ cost already exists, per turn, in the package ([notes/34](34-budgets.md)).
 
 ## What is not here yet
 
-* **A version that was never bumped still pools silently.** Still true
-  from note 62: `disagree` only catches a change big enough that two
-  ranges miss each other entirely.
+* ~~**A version that was never bumped still pools silently.**~~ Shipped
+  in [note 68](68-the-version-nobody-bumped.md): a package fingerprint in every report. Was: `disagree` only
+  catches a change big enough that two ranges miss each other entirely.
 * ~~**Tokens are not pooled.**~~ Shipped in [note 67](67-the-agent-or-the-vendor.md):
   tokens per run, oldest against newest, beside the dollars. Was:
   dollars move with prices and tokens do not, so a per-run token line

@@ -41,6 +41,7 @@ from yantra.eval_suite import (CASES, SUITE_DIR, find_suite, load_cases,
                                render_case)
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
                           OfflineProvider, case_from_trajectory)
+from yantra.fingerprint import fingerprint
 from yantra.images import load_image_block
 from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
@@ -900,7 +901,8 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                      cases_in_suite=len(every_case),
                      filtered=filters or None,
                      pricing=(PriceRecord.for_model(provider_name, model)
-                              if needs_model else None))
+                              if needs_model else None),
+                     package=fingerprint(spec))
     if args.report is not None:
         try:
             write_report(Path(args.report), run)
@@ -938,6 +940,13 @@ def _render_comparison(console: Console, cmp) -> None:
         # cheaper model -- so it is named, not refused.
         console.print(f"[dim]different model: {escape(before.where)} → "
                       f"{escape(after.where)}[/dim]")
+    if cmp.package_changed:
+        # The version says nothing moved, and the files say otherwise
+        # (notes/68). Everything below may be the edit, not the model.
+        console.print(f"[yellow]same version, different package: "
+                      f"{before.package} → {after.package} -- the agent was "
+                      f"edited without a version bump, so what moved below "
+                      f"may be the edit[/yellow]")
     if not cmp.comparable:
         console.print("[yellow]the two runs did not grade the same cases; "
                       "added/gone below are about the SELECTION, not about "
@@ -1074,17 +1083,36 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
     Never a verdict (notes/47): ``below`` is a statement about evidence,
     and the exit code is 0 whatever it says.
     """
-    if len(pools) > 1:
-        console.print(f"[yellow]{len(pools)} different suite/model pairs in "
+    pairs = {(group.suite, group.where) for group in pools}
+    if len(pairs) > 1:
+        console.print(f"[yellow]{len(pairs)} different suite/model pairs in "
                       f"these reports; each is pooled on its own -- runs of "
                       f"different models or package versions are not samples "
                       f"of one rate[/yellow]")
     marks = {"holds": "[green]holds[/green]", "below": "[red]below[/red]",
              "unsettled": "[yellow]unsettled[/yellow]"}
+    said_split: set[tuple[str, str]] = set()
     for group in pools:
+        package = (f" [dim](package {group.package or 'unknown'})[/dim]"
+                   if group.split_from else "")
         console.print(f"\n[bold]pooled[/bold] {len(group.runs)} run(s) of "
-                      f"{escape(group.suite)} on {escape(group.where)}\n"
-                      f"[dim]{escape(group.span)}[/dim]")
+                      f"{escape(group.suite)} on {escape(group.where)}"
+                      f"{package}\n[dim]{escape(group.span)}[/dim]")
+        if group.split_from and (group.suite, group.where) not in said_split:
+            said_split.add((group.suite, group.where))
+            console.print(f"  [yellow]{escape(group.suite)} ran as "
+                          f"{group.split_from} different packages under one "
+                          f"version; each is pooled on its own -- bump the "
+                          f"version when the agent changes[/yellow]")
+        if group.split_from and group.package is None:
+            console.print("  [dim]these reports predate fingerprints, so "
+                          "which package they ran cannot be told; pooled "
+                          "apart from the ones that can[/dim]")
+        elif group.unknown and group.package is not None:
+            console.print(f"  [dim]{group.unknown} report(s) predate "
+                          f"fingerprints; counted as package "
+                          f"{group.package}, the only one these runs "
+                          f"show[/dim]")
         if not group.cases:
             console.print("  [dim]no case in these runs reached a model; "
                           "there is nothing to pool[/dim]")

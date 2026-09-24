@@ -52,6 +52,9 @@ nothing new is kept anywhere -- and how far back to look is the list of
 files the operator names. What pooling refuses to do is add together runs
 that were not samples of the same thing: a different model or a different
 package version is a different rate, pooled on its own and never summed.
+A version the author forgot to bump is caught by the package's
+fingerprint, which every report carries (notes/68): one label, two
+packages, two pools.
 The same files hold every case's dollars, so a pooled case also says what
 one run of it cost in the oldest report and the newest (notes/66) -- per
 run, because ten repeats and three are not the same bill -- and the pool
@@ -201,6 +204,10 @@ class SuiteRun:
     #: The rates behind every ``usd`` in this run (notes/62). None on a
     #: report written before prices were kept.
     pricing: PriceRecord | None = None
+    #: What the package WAS when this ran (fingerprint.py, notes/68): a
+    #: hash of the files it is built from. None on an older report, or
+    #: for an agent with no package directory -- unknown, not "same".
+    package: str | None = None
 
     @property
     def passed(self) -> int:
@@ -239,7 +246,8 @@ class SuiteRun:
 def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
                model: str, repeat: int, cases_in_suite: int,
                filtered: list[str] | None = None,
-               pricing: PriceRecord | None = None) -> SuiteRun:
+               pricing: PriceRecord | None = None,
+               package: str | None = None) -> SuiteRun:
     """``CaseOutcome``s -> the record. Reads only the public properties, so
     an outcome type that grows a field does not have to grow one here."""
     return SuiteRun(
@@ -247,7 +255,7 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
         at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         repeat=repeat, cases_in_suite=cases_in_suite,
         filtered=list(filtered) if filtered else None,
-        pricing=pricing,
+        pricing=pricing, package=package,
         cases=[CaseRecord(
             id=o.case_id, passed=o.passed, attempts=o.attempts,
             passes=o.passes, min_pass_rate=o.min_pass_rate,
@@ -275,6 +283,7 @@ def write_report(path: Path, run: SuiteRun) -> None:
         "cases_in_suite": run.cases_in_suite,
         "filtered": run.filtered,
         "pricing": run.pricing.to_json() if run.pricing else None,
+        "package": run.package,
         "passed": run.passed,
         "tokens": run.tokens,
         "cases": [_case_json(c) for c in run.cases],
@@ -335,6 +344,7 @@ def read_report(path: Path) -> SuiteRun:
             cases_in_suite=raw["cases_in_suite"],
             filtered=raw.get("filtered"),
             pricing=PriceRecord.from_json(raw.get("pricing")),
+            package=raw.get("package"),
             cases=[CaseRecord(
                 id=c["id"], passed=c["passed"], attempts=c["attempts"],
                 passes=c["passes"], min_pass_rate=c["min_pass_rate"],
@@ -476,6 +486,20 @@ class Comparison:
         if self.before.pricing is None or self.after.pricing is None:
             return None
         return self.before.pricing.rates != self.after.pricing.rates
+
+    @property
+    def package_changed(self) -> bool:
+        """The same suite label on both sides, and two different packages
+        behind it (notes/68): the version was not bumped, and "fixed" or
+        "broke" below may be the edit rather than the model's luck.
+
+        False when either side has no fingerprint -- an older report is
+        unknown, and unknown is not evidence of a change.
+        """
+        return (self.before.suite == self.after.suite
+                and self.before.package is not None
+                and self.after.package is not None
+                and self.before.package != self.after.package)
 
 
 @dataclass(slots=True)
@@ -652,6 +676,15 @@ class Pool:
     runs: list[SuiteRun]
     cases: list[PooledCase]
     roster_only: list[str]
+    #: The fingerprint every known run in this pool shares (notes/68), or
+    #: None when no run in it recorded one.
+    package: str | None = None
+    #: Set when ONE suite label on one model held several packages, so
+    #: this pool is one of those split apart. The count of packages found.
+    split_from: int = 0
+    #: Runs pooled here with no fingerprint (older reports). They join the
+    #: one known package when there is exactly one, as they always did.
+    unknown: int = 0
 
     @property
     def span(self) -> str:
@@ -667,19 +700,35 @@ def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
     label (the package's name AND version) and the provider/model it ran
     against; runs that differ in either are separate pools, because 9/10
     on one model and 2/10 on another is not 11/20 of anything. The version
-    is only as good as the author's habit of bumping it -- an edited
-    prompt under the same version pools as if nothing changed, which is
-    why ``disagree`` exists: two runs of one case whose intervals do not
-    even overlap are evidence that something moved between them.
+    is only as good as the author's habit of bumping it, so a report also
+    carries the package's FINGERPRINT (notes/68), and one label holding
+    two fingerprints is split into a pool per package. A report too old to
+    have one is unknown, not different: it joins the only known package
+    when there is one, and pools apart when there are several. What is
+    left for ``disagree`` is the edit nobody fingerprinted -- two runs of
+    one case whose intervals do not even overlap are evidence that
+    something moved between them anyway.
 
     Only runs that reached a model count. A run that stopped at a failed
     roster assertion is a verdict about the tool list, not a die roll.
     """
-    groups: dict[tuple[str, str], list[SuiteRun]] = {}
-    for run in runs:
-        groups.setdefault((run.suite, run.where), []).append(run)
+    groups: dict[tuple[str, str, str | None], list[SuiteRun]] = {}
+    split: dict[tuple[str, str], int] = {}
+    for (suite, where), members in _by_label(runs).items():
+        known = sorted({r.package for r in members if r.package is not None})
+        if len(known) > 1:
+            # One version, several packages: the author edited without
+            # bumping. Each package is its own pool; runs that recorded
+            # none cannot be placed, so they pool together, apart.
+            split[(suite, where)] = len(known)
+            # Known packages first, oldest first; the unplaceable last.
+            for run in sorted(members,
+                              key=lambda r: (r.package is None, r.at)):
+                groups.setdefault((suite, where, run.package), []).append(run)
+        else:
+            groups[(suite, where, known[0] if known else None)] = members
     pools: list[Pool] = []
-    for (suite, where), members in groups.items():
+    for (suite, where, package), members in groups.items():
         members = sorted(members, key=lambda r: r.at)
         ids: list[str] = []
         for run in reversed(members):             # newest run's order first
@@ -728,9 +777,20 @@ def pool(runs: Sequence[SuiteRun]) -> list[Pool]:
                 tokens_last=(counted[-1].tokens / counted[-1].attempts
                              if counted else None),
             ))
-        pools.append(Pool(suite=suite, where=where, runs=members,
-                          cases=cases, roster_only=roster_only))
+        pools.append(Pool(
+            suite=suite, where=where, runs=members, cases=cases,
+            roster_only=roster_only, package=package,
+            split_from=split.get((suite, where), 0),
+            unknown=sum(1 for r in members if r.package is None)))
     return pools
+
+
+def _by_label(runs: Sequence[SuiteRun]) -> dict[tuple[str, str],
+                                                list[SuiteRun]]:
+    groups: dict[tuple[str, str], list[SuiteRun]] = {}
+    for run in runs:
+        groups.setdefault((run.suite, run.where), []).append(run)
+    return groups
 
 
 #: The pooled file's own tag. A pool is not a report -- it has no verdict
@@ -754,6 +814,8 @@ def write_pool(path: Path, pools: Sequence[Pool]) -> None:
         "pools": [{
             "suite": group.suite,
             "where": group.where,
+            "package": group.package,
+            "split_from": group.split_from,
             "runs": [run.at for run in group.runs],
             "roster_only": group.roster_only,
             "cases": [{

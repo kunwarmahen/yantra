@@ -229,6 +229,9 @@ uv run yantra --reports runs/*.json --pool          # add runs up, case by case
 
 `--pool` only adds runs of the same package version on the same model;
 anything else is pooled separately. `notes/62-the-reports-you-already-have.md`.
+Each report also carries a fingerprint of the package's files, so an
+edit made without a version bump pools apart and is named
+(`notes/68-the-version-nobody-bumped.md`) -- but bump the version anyway.
 Under each case it also prints dollars per run, oldest report against
 newest; `--pool-json FILE` writes the pool as JSON
 (`notes/66-what-each-case-cost.md`).

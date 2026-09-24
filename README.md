@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1734 tests. The
+The harness underneath is complete and covered by 1750 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1134,6 +1134,21 @@ whether a cost change was the vendor's or the agent's. Like `--against`,
 none of this is a verdict: it exits 0 whatever the reports say. See
 [notes/62](notes/62-the-reports-you-already-have.md).
 
+**A version nobody bumped is caught.** Every report records a
+**fingerprint** of the package: a short hash of the files the agent is
+built from (everything in the package except `evals/` and hidden
+files). Edit the prompt without bumping the version and `--pool` pools
+the two packages apart, saying so once; `--against` names it above the
+case lines. A report written before fingerprints existed is unknown,
+not different:
+
+```
+same version, different package: 54226bfdb601 → a89ed1c578e1 -- the agent was
+edited without a version bump, so what moved below may be the edit
+```
+
+See [notes/68](notes/68-the-version-nobody-bumped.md).
+
 The pool also says **what each case cost, per run, oldest report
 against newest**, names the case whose cost grew fastest, and says when
 the rates moved between those reports as well as the agent. A free
@@ -1688,6 +1703,10 @@ src/yantra/
 │                   [notes/66](notes/66-what-each-case-cost.md)); tokens
 │                   per run beside them, so a move is the agent's or the
 │                   vendor's ([notes/67](notes/67-the-agent-or-the-vendor.md))
+├── fingerprint.py  what a package WAS when a suite ran it: a 12-hex hash of
+│                   every file the agent is built from (not evals/, not
+│                   hidden files), so one version holding two packages
+│                   pools as two ([notes/68](notes/68-the-version-nobody-bumped.md))
 ├── trace.py        a TURN written down, so a real failure can become a
 │                   case: append-only JSONL, one object per turn, recorded
 │                   through a TEE (the renderer still sees every event) and
