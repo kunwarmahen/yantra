@@ -1026,7 +1026,7 @@ def _browse_login(url: str, console: Console) -> int:
     headless run ([notes/28](../notes/28-browser-tools.md)).
     """
     from yantra.tools.browser import (  # lazy: [browse] extra
-        check_profile_reachable, run_login_session)
+        LoginInterrupted, check_profile_reachable, run_login_session)
 
     profile = browser_profile()
     if profile is None:
@@ -1064,7 +1064,22 @@ def _browse_login(url: str, console: Console) -> int:
             "browser\nthat wrote it.")
     try:
         cookies = run_login_session(profile, url)
+    except LoginInterrupted as stop:
+        # Ctrl-C asked the browser to quit rather than killing it, so
+        # there are two different endings and they get different
+        # sentences: one where the login is on disk, and one where the
+        # browser would not close and nothing is certain.
+        if stop.closed:
+            console.print(f"\n[yellow](cancelled)[/yellow] the browser was "
+                          f"asked to close and did, so what you signed "
+                          f"into is kept -- {stop.cookies} cookies")
+        else:
+            console.print("\n[yellow](cancelled)[/yellow] the browser was "
+                          "killed before it finished closing, so a sign-in "
+                          "you just finished may not have reached disk")
+        return 130
     except KeyboardInterrupt:
+        # Playwright's own window, which has no quit to ask for.
         console.print("\n[yellow](cancelled -- the window was killed rather "
                       "than closed, so a sign-in you just finished may not "
                       "have reached disk)[/yellow]")

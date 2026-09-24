@@ -19,6 +19,8 @@ and that headed mode never leaves an Xvfb behind.
 
 from __future__ import annotations
 
+import signal
+import subprocess
 import sys
 import threading
 import types
@@ -32,7 +34,8 @@ from yantra.tools import BrowserClick, BrowserClose, BrowserFill, \
     BrowserOpen, default_registry
 from yantra.tools.base import ToolContext
 from yantra.tools.browser import MAX_ELEMENTS, BrowserSession, \
-    _COOKIE_KEY_ARG, _VirtualDisplay, _cookie_count, run_login_session
+    _COOKIE_KEY_ARG, LoginInterrupted, _VirtualDisplay, _cookie_count, \
+    run_login_session
 
 URL = "https://fake.local/"
 
@@ -602,7 +605,7 @@ class TestUnautomatedLogin:
         install_fake_playwright(monkeypatch, chromium)
         calls = []
         monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
-                            lambda argv: calls.append(argv) or FakeProc())
+                            lambda argv, **kw: calls.append(argv) or FakeProc())
         monkeypatch.setattr("yantra.tools.browser._profile_has_state",
                             lambda profile: True)
         run_login_session(tmp_path, URL, executable="/usr/bin/brave")
@@ -618,7 +621,7 @@ class TestUnautomatedLogin:
         monkeypatch.setattr("yantra.config.shutil.which",
                             lambda name: f"/usr/bin/{name}")
         monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
-                            lambda argv: calls.append(argv) or FakeProc())
+                            lambda argv, **kw: calls.append(argv) or FakeProc())
         monkeypatch.setattr("yantra.tools.browser._profile_has_state",
                             lambda profile: True)
         run_login_session(tmp_path, None, executable="chrome")
@@ -627,7 +630,7 @@ class TestUnautomatedLogin:
     def test_a_window_that_saved_nothing_is_refused_not_celebrated(
             self, monkeypatch, tmp_path):
         monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
-                            lambda argv: FakeProc())
+                            lambda argv, **kw: FakeProc())
         # nothing writes the profile -- exactly what snap confinement and
         # a browser handing off to a running copy both look like
         with pytest.raises(ToolError, match="ALREADY RUNNING"):
@@ -639,6 +642,136 @@ class TestUnautomatedLogin:
         install_fake_playwright(monkeypatch, chromium)
         run_login_session(tmp_path, URL, executable=None)
         assert len(chromium.persistent_calls) == 1  # unchanged fallback
+
+
+class InterruptedProc:
+    """A login browser the person Ctrl-C's out of, instead of closing.
+
+    The first wait() is the window sitting open, interrupted by the
+    keyboard. What happens next is the browser's answer to the signal
+    it was sent: ``quits_in`` seconds to shut down cleanly, or None for
+    a browser that never does. ``again`` is a second Ctrl-C arriving
+    while it is still closing.
+    """
+
+    pid = 4242
+
+    def __init__(self, quits_in: float | None = 0.5, again: bool = False):
+        self.quits_in = quits_in
+        self.again = again
+        self.signals: list[int] = []
+        self.killed = False
+        self._waits = 0
+
+    def wait(self, timeout=None):
+        self._waits += 1
+        if self._waits == 1:
+            raise KeyboardInterrupt
+        if self.killed:
+            return -9
+        if self.again and self._waits == 2:
+            raise KeyboardInterrupt
+        if self.quits_in is None or (timeout is not None
+                                     and self.quits_in > timeout):
+            raise subprocess.TimeoutExpired("chrome", timeout)
+        return 0
+
+    def send_signal(self, sig):
+        self.signals.append(sig)
+
+    def terminate(self):
+        self.signals.append(signal.SIGTERM)
+
+    def kill(self):
+        self.killed = True
+
+
+class TestCtrlCDuringLogin:
+    """A Ctrl-C used to race the login browser's own shutdown -- the
+    old path's two signals, sent to a real Chrome, kept a fresh sign-in
+    3 times in 10. The browser now runs in its own session and is ASKED
+    to quit with the one signal after which Chromium writes its
+    cookies."""
+
+    def _launch(self, monkeypatch, tmp_path, proc):
+        seen = {}
+
+        def popen(argv, **kw):
+            seen.update(kw)
+            return proc
+
+        monkeypatch.setattr("yantra.tools.browser.subprocess.Popen", popen)
+        groups = []
+
+        def killpg(pid, sig):
+            groups.append((pid, sig))
+            proc.killed = True
+
+        monkeypatch.setattr("yantra.tools.browser.os.killpg", killpg)
+        monkeypatch.setattr("yantra.tools.browser._cookie_count",
+                            lambda profile: 12)
+        with pytest.raises(LoginInterrupted) as caught:
+            run_login_session(tmp_path, URL, executable="/usr/bin/brave")
+        return caught.value, seen, groups
+
+    def test_the_browser_gets_its_own_session_so_ctrl_c_is_not_its(
+            self, monkeypatch, tmp_path):
+        _, seen, _ = self._launch(monkeypatch, tmp_path, InterruptedProc())
+        assert seen.get("start_new_session") is True
+
+    def test_it_is_asked_to_quit_with_one_sigint_and_nothing_else(
+            self, monkeypatch, tmp_path):
+        # SIGTERM exits just as fast and writes nothing; a second signal
+        # on top of a quit under way is a race. One SIGINT, then wait.
+        proc = InterruptedProc()
+        stop, _, groups = self._launch(monkeypatch, tmp_path, proc)
+        assert proc.signals == [signal.SIGINT]
+        assert groups == [] and not proc.killed
+        assert stop.closed is True and stop.cookies == 12
+
+    def test_a_browser_that_will_not_close_is_killed_group_and_all(
+            self, monkeypatch, tmp_path):
+        proc = InterruptedProc(quits_in=None)
+        stop, _, groups = self._launch(monkeypatch, tmp_path, proc)
+        assert groups == [(proc.pid, signal.SIGKILL)]
+        assert stop.closed is False
+
+    def test_a_second_ctrl_c_is_someone_insisting_and_is_obeyed(
+            self, monkeypatch, tmp_path):
+        proc = InterruptedProc(again=True)
+        stop, _, groups = self._launch(monkeypatch, tmp_path, proc)
+        assert groups == [(proc.pid, signal.SIGKILL)]
+        assert stop.closed is False
+
+    def test_it_is_still_a_keyboard_interrupt_to_anyone_who_asks(self):
+        assert issubclass(LoginInterrupted, KeyboardInterrupt)
+
+    def test_a_clean_close_says_the_login_was_kept(self, monkeypatch,
+                                                    tmp_path, capsys):
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", str(tmp_path))
+
+        def interrupted(profile, url=None):
+            raise LoginInterrupted(closed=True, cookies=46)
+
+        monkeypatch.setattr("yantra.tools.browser.run_login_session",
+                            interrupted)
+        assert cli_main.main(["--browse-login", URL]) == 130
+        out = " ".join(capsys.readouterr().out.split())  # rich wraps
+        assert "is kept -- 46 cookies" in out
+        assert "may not have reached disk" not in out
+
+    def test_a_kill_says_the_login_may_be_lost(self, monkeypatch, tmp_path,
+                                              capsys):
+        monkeypatch.setenv("YANTRA_BROWSER_PROFILE", str(tmp_path))
+
+        def interrupted(profile, url=None):
+            raise LoginInterrupted(closed=False, cookies=0)
+
+        monkeypatch.setattr("yantra.tools.browser.run_login_session",
+                            interrupted)
+        assert cli_main.main(["--browse-login", URL]) == 130
+        assert "may not have reached disk" in " ".join(
+            capsys.readouterr().out.split())
 
 
 class TestSnapProfileGuard:
@@ -676,7 +809,7 @@ class TestSnapProfileGuard:
     def test_a_snap_browser_is_fine_with_a_visible_profile(
             self, monkeypatch, tmp_path):
         monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
-                            lambda argv: FakeProc())
+                            lambda argv, **kw: FakeProc())
         monkeypatch.setattr("yantra.tools.browser._profile_has_state",
                             lambda profile: True)
         run_login_session(tmp_path / "visible", URL,
@@ -685,7 +818,7 @@ class TestSnapProfileGuard:
     def test_a_non_snap_browser_may_use_a_hidden_profile(
             self, monkeypatch, tmp_path):
         monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
-                            lambda argv: FakeProc())
+                            lambda argv, **kw: FakeProc())
         monkeypatch.setattr("yantra.tools.browser._profile_has_state",
                             lambda profile: True)
         run_login_session(tmp_path / ".local" / "prof", URL,
@@ -718,7 +851,7 @@ class TestCookieKeyStore:
             self, monkeypatch, tmp_path):
         calls = []
         monkeypatch.setattr("yantra.tools.browser.subprocess.Popen",
-                            lambda argv: calls.append(argv) or FakeProc())
+                            lambda argv, **kw: calls.append(argv) or FakeProc())
         monkeypatch.setattr("yantra.tools.browser._profile_has_state",
                             lambda profile: True)
         run_login_session(tmp_path, URL, executable="/usr/bin/brave")

@@ -162,7 +162,10 @@ and matched it would work on the machine it was written on and produce
 a *different* profile format per desktop environment, which is a bug
 generator with a long tail. One key everywhere is duller and right.
 
-**Ctrl-C is still not a clean exit.** `--browse-login` runs the browser
+~~**Ctrl-C is still not a clean exit.**~~ — fixed in
+[notes/61](61-the-signal-that-saves.md), which found the kill was
+really a race, and that the polite signal is the wrong one. Was:
+`--browse-login` runs the browser
 in the terminal's foreground process group, so Ctrl-C reaches Chrome
 directly and kills it mid-flight, and a session it had not yet written
 is lost. The cancel message no longer claims otherwise, but the honest

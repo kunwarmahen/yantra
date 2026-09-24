@@ -524,8 +524,9 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   and run `uv run yantra --browse-login <url>` once — a visible
   window opens, you sign in yourself (2FA included), close it — and
   every later session starts signed-in. Closing the window is what
-  writes the session to disk; interrupting the command is not the same
-  thing. The command then counts what landed rather than assuming:
+  writes the session to disk; Ctrl-C now asks the browser to close in
+  the one way that writes it too, and says whether it did
+  ([notes/61](notes/61-the-signal-that-saves.md)). The command then counts what landed rather than assuming:
   `profile saved -- 46 cookies`, or `nothing was saved` with a non-zero
   exit, because a directory that merely looks like a profile always did
   ([notes/59](notes/59-one-key-both-halves.md)). Cookies never enter
@@ -1641,7 +1642,11 @@ src/yantra/
 │   │               it cannot decrypt, so two halves that disagree destroy the
 │   │               login instead of ignoring it; _cookie_count makes "profile
 │   │               saved" a row count that can be wrong out loud
-│   │               ([notes/59](notes/59-one-key-both-halves.md))
+│   │               ([notes/59](notes/59-one-key-both-halves.md)).
+│   │               The login window runs in its own process group and a
+│   │               Ctrl-C sends it ONE SIGINT -- measured, the only signal
+│   │               after which Chrome writes its cookies (SIGTERM saves
+│   │               none) ([notes/61](notes/61-the-signal-that-saves.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,

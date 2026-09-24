@@ -41,6 +41,15 @@ Scope decisions worth writing down:
   not ignore it, it DELETES it -- so the login beaten by hand vanishes
   the first time the agent opens the profile, with "profile saved"
   already printed. Both doors pass _COOKIE_KEY_ARG.
+* CTRL-C ASKS THE LOGIN WINDOW TO CLOSE; IT DOES NOT KILL IT. The
+  login browser runs in its OWN process group, so the terminal's
+  Ctrl-C reaches Yantra alone, and Yantra sends the browser exactly
+  one SIGINT -- the one signal, measured, after which Chromium writes
+  its cookie store on the way out (SIGTERM exits as fast and saves
+  nothing) -- then waits. A second Ctrl-C, or a browser that has not
+  closed in LOGIN_CLOSE_SECONDS, is killed. Sharing the terminal's
+  group made it a race: the terminal's SIGINT started a clean quit and
+  Yantra's own terminate() landed on top of it.
 * THE BROWSER CAN BE ONE THE MACHINE ALREADY HAS.
   $YANTRA_BROWSER_EXECUTABLE takes a Playwright channel ('chrome') or
   a path ('/snap/bin/brave'); $YANTRA_BROWSER_HEADED=1 runs with a
@@ -67,6 +76,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import sqlite3
 import subprocess
 import time
@@ -123,6 +133,12 @@ _AUTOMATION_DEFAULT_ARGS_DROPPED = ("--enable-automation",)
 #: persistence depend on an unlocked keyring, which a server and a
 #: container do not have.
 _COOKIE_KEY_ARG = "--password-store=basic"
+
+#: How long a login browser asked to quit gets to write its profile
+#: before it is killed. A normal quit takes a second or two; the margin
+#: is for a slow disk and a big profile, and a person who wants it gone
+#: sooner presses Ctrl-C again.
+LOGIN_CLOSE_SECONDS = 15.0
 
 _BROWSER_EXTRA_HINT = (
     "playwright is not installed -- the browser_* tools are the optional "
@@ -197,6 +213,63 @@ def _terminate(proc: subprocess.Popen) -> None:
         proc.wait(timeout=5)
     except Exception:
         proc.kill()
+
+
+class LoginInterrupted(KeyboardInterrupt):
+    """Ctrl-C during --browse-login, and whether the login survived it.
+
+    A KeyboardInterrupt still -- every caller that stops on one keeps
+    stopping -- carrying the two facts the caller needs to say something
+    true: whether the browser QUIT (and so wrote its profile) or had to
+    be killed, and how many cookies the profile holds either way.
+    """
+
+    def __init__(self, *, closed: bool, cookies: int) -> None:
+        super().__init__()
+        self.closed = closed
+        self.cookies = cookies
+
+
+def _close_login_browser(proc: subprocess.Popen) -> bool:
+    """Ask the login browser to quit; kill it only if it will not.
+
+    True when it quit on its own, which is the only way a sign-in
+    finished seconds ago is certain to be on disk: Chromium writes its
+    cookie store on a timer and at shutdown, and a kill skips both.
+
+    SIGINT, NOT SIGTERM, AND ONLY ONE. Measured against a real Chrome,
+    headed and headless, with a cookie set five seconds earlier: after
+    SIGINT the cookie is on disk every time; after SIGTERM, never --
+    it exits just as quickly and skips the write. And a signal landing
+    on a quit already under way makes it a race, which is what the
+    terminal's SIGINT followed by a terminate() used to be. So one
+    SIGINT, and nothing more while it closes -- except from a person
+    who presses Ctrl-C again, deciding they would rather have it gone
+    than saved, which is obeyed.
+
+    The kill takes the whole GROUP. The browser was started as the
+    leader of its own session, and its renderer and GPU helpers are in
+    that group with it; killing the leader alone can leave them running
+    with the profile still locked.
+    """
+    proc.send_signal(signal.SIGINT)
+    try:
+        proc.wait(timeout=LOGIN_CLOSE_SECONDS)
+        return True
+    except (subprocess.TimeoutExpired, KeyboardInterrupt):
+        _kill_group(proc)
+        return False
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def _is_snap(executable: str) -> bool:
@@ -633,15 +706,19 @@ def _run_unautomated_login(command: str, profile: Path,
     if url:
         argv.append(url)
     try:
-        proc = subprocess.Popen(argv)
+        # ITS OWN SESSION, so the terminal's Ctrl-C reaches Yantra and
+        # not the browser -- see _close_login_browser for what Yantra
+        # does with it instead.
+        proc = subprocess.Popen(argv, start_new_session=True)
     except OSError as exc:
         raise ToolError(
             f"could not run {command}: {type(exc).__name__}: {exc}") from exc
     try:
         proc.wait()  # the window IS the progress bar
     except KeyboardInterrupt:
-        _terminate(proc)
-        raise
+        closed = _close_login_browser(proc)
+        raise LoginInterrupted(closed=closed,
+                               cookies=_cookie_count(profile)) from None
     if not _profile_has_state(profile):
         # Two ways to get here, and the user cannot tell them apart from
         # the outside: snap confinement refusing a hidden directory
