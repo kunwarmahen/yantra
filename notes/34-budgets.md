@@ -321,11 +321,13 @@ kept.
 
 ## What is not here yet
 
-* **A session or daily ceiling.** Named above as the thing a harness
-  cannot honestly offer: it needs a store and an identity to attach a
-  total to. That is a service's job, and when it exists the two compose —
-  the package's ceiling and the owner's policy, lower wins, and whatever
-  stopped the run says which one it was.
+* ~~**A session or daily ceiling.**~~ Built in dvara, the always-on
+  service that runs Yantra agents for people and has the store and the
+  identities this needed: a per-person `max_usd_per_day`, enforced as a
+  per-turn ceiling that shrinks as the day is spent (its note 06), and a
+  per-person `max_wait_per_day` for time spent waiting on their answers
+  (its note 14). Was: named above as the thing a harness cannot honestly
+  offer: it needs a store and an identity to attach a total to.
 * **A ceiling in tokens.** Dollars are the unit of the problem, and
   `EvalCase.max_tokens` already covers tokens for the one place they are
   the better unit ([notes/33](33-evals-as-a-gate.md)) — a regression case
