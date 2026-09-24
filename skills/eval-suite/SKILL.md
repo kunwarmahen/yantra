@@ -247,7 +247,9 @@ FILE` lists the flagged turns with their reasons, including a grader's
 no, so an id can be found without opening the file
 (`notes/70-a-list-to-choose-from.md`). `--mark ID good|bad --why TEXT`
 writes a person's own verdict into a turn, and `--fossil` uses the reason
-(`notes/74-a-verdict-you-write-down.md`).
+(`notes/74-a-verdict-you-write-down.md`); `--mark ID clear` takes it back
+and restores a grader's verdict, and the web UI has buttons for both
+(`notes/77-a-mark-taken-back.md`).
 
 ## Graders: checking the answer text
 

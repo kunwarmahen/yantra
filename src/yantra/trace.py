@@ -180,6 +180,10 @@ class Trajectory:
     judged_by: str | None = None
     #: The person's own reason, when they gave one with ``--mark``.
     why: str | None = None
+    #: The grader's verdict a person's mark replaced, kept so that
+    #: clearing the mark gives it back (notes/77). None when no grader
+    #: had judged the turn, or nobody has marked it.
+    graded: bool | None = None
 
     @property
     def tools_used(self) -> list[str]:
@@ -326,9 +330,10 @@ class TrajectoryLog:
         self._rewrite(data, kept)
         return result
 
-    def mark(self, trace_id: str, *, passed: bool,
+    def mark(self, trace_id: str, *, passed: bool | None,
              why: str | None = None) -> Trajectory:
-        """Write a PERSON's verdict into one recorded turn (notes/74).
+        """Write a PERSON's verdict into one recorded turn (notes/74), or
+        take it back (``passed=None``, notes/77).
 
         Yantra still decides nothing about whether a turn was a failure
         (notes/57); this is where the person who did decide writes it
@@ -338,6 +343,11 @@ class TrajectoryLog:
         reader would count that second line as unreadable and say so.
         A person's mark replaces a grader's: the person has read the
         answer, and the grader only checked its shape.
+
+        REPLACED, NOT LOST. The grader's verdict a mark replaces is kept
+        under ``graded``, so clearing the mark puts the turn back exactly
+        as the suite left it. A mark cleared on a turn nobody graded
+        leaves no verdict at all.
         """
         target = self.get(trace_id)
         data = self._raw()
@@ -351,16 +361,11 @@ class TrajectoryLog:
                 lines.append(line)
                 continue
             if isinstance(raw, dict) and raw.get("id") == target.id:
-                raw["passed"] = passed
-                raw["judged_by"] = PERSON
-                if why:
-                    raw["why"] = why
-                else:
-                    raw.pop("why", None)
+                _apply_mark(raw, passed, why)
                 line = json.dumps(raw, ensure_ascii=False).encode()
+                target = _from_json(raw)
             lines.append(line)
         self._rewrite(data, lines)
-        target.passed, target.judged_by, target.why = passed, PERSON, why
         return target
 
     def _raw(self) -> bytes:
@@ -401,6 +406,30 @@ class Pruned:
     kept: int = 0
     #: Lines with no readable date, kept because age cannot judge them.
     unreadable: int = 0
+
+
+def _apply_mark(raw: dict[str, Any], passed: bool | None,
+                why: str | None) -> None:
+    """A person's verdict onto one raw line; ``passed=None`` clears it."""
+    if raw.get("judged_by") != PERSON and "passed" in raw:
+        # A line from before ``judged_by`` existed that has a verdict got
+        # it from a suite: note 70 wrote ``passed`` and nothing else did.
+        raw["graded"] = raw["passed"]
+    if passed is None:
+        graded = raw.pop("graded", None)
+        raw.pop("why", None)
+        if graded is None:
+            raw.pop("passed", None)
+            raw.pop("judged_by", None)
+        else:
+            raw["passed"], raw["judged_by"] = graded, GRADER
+        return
+    raw["passed"] = passed
+    raw["judged_by"] = PERSON
+    if why:
+        raw["why"] = why
+    else:
+        raw.pop("why", None)
 
 
 def _recorded_at(line: bytes) -> str | None:
@@ -452,6 +481,8 @@ def _as_json(trajectory: Trajectory) -> dict[str, Any]:
         payload["judged_by"] = trajectory.judged_by
     if trajectory.why is not None:
         payload["why"] = trajectory.why
+    if trajectory.graded is not None:
+        payload["graded"] = trajectory.graded
     if trajectory.children:
         # Only when there were any, so a turn without delegation reads
         # exactly as it always did.
@@ -507,6 +538,7 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         passed=raw.get("passed"),
         judged_by=raw.get("judged_by"),
         why=raw.get("why"),
+        graded=raw.get("graded"),
     )
 
 

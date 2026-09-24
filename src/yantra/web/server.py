@@ -55,7 +55,7 @@ from fastapi.staticfiles import StaticFiles
 from yantra.agent import Agent, BudgetWarning, ToolExecuted, TurnEnd
 from yantra.config import default_model, load_settings
 from yantra.context import estimate_history
-from yantra.errors import ProviderError, UserUnavailable
+from yantra.errors import ConfigError, ProviderError, UserUnavailable
 from yantra.images import image_block_from_bytes
 from yantra.permissions import REFUSED_USER, PermissionRequest, refuse
 from yantra.pricing import is_free, session_cost
@@ -349,7 +349,7 @@ class WebSession:
         agent = self.agent
         stream = agent.run_streaming(text, images=images or None)
         if self.trace is not None:
-            stream = watch(text, stream, self.trace.record,
+            stream = watch(text, stream, self._record,
                            provider=getattr(agent.provider, "name", ""),
                            model=agent.model, detail=self.trace.detail,
                            spawner=getattr(agent, "subagents", None))
@@ -381,6 +381,31 @@ class WebSession:
         self._cancel.clear()
         self.broadcast({"type": "state", **self.state()})
         self.broadcast({"type": "turn_done"})
+
+    def _record(self, trajectory) -> None:
+        """The recorder's sink: write the line, then tell the page its id.
+
+        The id is what a mark is written against (notes/77). It goes out
+        AFTER the line is on disk, so a page can never offer to judge a
+        turn the file does not have yet -- and before ``turn_done``,
+        because ``watch`` hands the turn over as the stream closes.
+        """
+        self.trace.record(trajectory)
+        self.broadcast({"type": "recorded", "id": trajectory.id})
+
+    def mark(self, trace_id: str, verdict: str,
+             why: str | None = None) -> dict[str, Any]:
+        """A person's verdict from the page: ``--mark`` without leaving it.
+
+        The same ``TrajectoryLog.mark`` the terminal command calls, so the
+        line a button writes is the line ``--mark`` would have written.
+        ``clear`` takes it back and gives a suite's verdict back.
+        """
+        passed = {"good": True, "bad": False, "clear": None}[verdict]
+        turn = self.trace.mark(trace_id, passed=passed,
+                               why=why if passed is not None else None)
+        return {"id": turn.id, "passed": turn.passed,
+                "judged_by": turn.judged_by, "why": turn.why}
 
     def _emit(self, event) -> None:
         """AgentEvent/StreamEvent -> envelope(s). Mirrors render.py's match."""
@@ -1082,6 +1107,28 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(404, str(exc)) from exc
         session.broadcast({"type": "state", **session.state()})
         return {"removed": removed, **session.state()}
+
+    @app.post("/api/mark")
+    async def mark(req: Request) -> dict[str, Any]:
+        """A person's verdict on a recorded turn (notes/77). Idle only:
+        the recorder writes as a turn ends, and a rewrite racing an append
+        is exactly the swap that must not lose a line."""
+        require_idle()
+        if session.trace is None:
+            raise HTTPException(400, "nothing is being recorded -- start "
+                                     "the server with --trace FILE")
+        body = await req.json()
+        trace_id, verdict = body.get("id"), body.get("verdict")
+        if not isinstance(trace_id, str) or not trace_id:
+            raise HTTPException(400, "id is required")
+        if verdict not in ("good", "bad", "clear"):
+            raise HTTPException(400, "verdict must be good, bad or clear")
+        why = body.get("why")
+        why = why.strip() if isinstance(why, str) and why.strip() else None
+        try:
+            return session.mark(trace_id, verdict, why)
+        except ConfigError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.post("/api/save")
     async def save(req: Request) -> dict[str, Any]:

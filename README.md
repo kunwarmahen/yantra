@@ -1213,6 +1213,10 @@ it never opened" --trace FILE` puts your verdict into that turn's line.
 `--turns` flags it with your words, a turn you marked good is not
 flagged whatever the cheap filter says, and `--fossil` uses your reason
 as the case's description ([notes/74](notes/74-a-verdict-you-write-down.md)).
+`--mark ID clear` takes a mark back, and a suite's turn gets its
+grader's verdict back. With `--web --trace FILE`, each recorded turn in
+the page ends with **good** / **bad** buttons that write the same line
+([notes/77](notes/77-a-mark-taken-back.md)).
 
 ```
 $ uv run yantra --turns failed --trace runs/turns.jsonl
@@ -1786,7 +1790,9 @@ src/yantra/
 │                   --turns can flag a clean turn that was wrong
 │                   ([notes/70](notes/70-a-list-to-choose-from.md)); mark()
 │                   writes a PERSON's verdict in place, which outranks both
-│                   ([notes/74](notes/74-a-verdict-you-write-down.md))
+│                   ([notes/74](notes/74-a-verdict-you-write-down.md));
+│                   clearing it gives a grader's verdict back, kept under
+│                   graded ([notes/77](notes/77-a-mark-taken-back.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -1930,7 +1936,10 @@ src/yantra/
 │                   bar shares the context meter's widget and thresholds --
 │                   same kind of fact, so it reads as one instrument
 │                   ([notes/22](notes/22-web-ui.md),
-│                   [notes/43](notes/43-a-bar-and-a-deadline.md))
+│                   [notes/43](notes/43-a-bar-and-a-deadline.md)). A
+│                   recorded turn ends with good/bad buttons: the SAME
+│                   mark() --mark calls, idle only
+│                   ([notes/77](notes/77-a-mark-taken-back.md))
 └── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per

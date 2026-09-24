@@ -98,6 +98,7 @@ function route(env) {
     case "turn_end":       onTurnEnd(env); break;
     case "turn_error":     addBanner(env.message, true); break;
     case "turn_cancelled": addBanner("turn cancelled", false, true); break;
+    case "recorded":       addMarkRow(env.id); break;
     case "turn_done":      endTurn(); break;
 
     /* history replay shapes */
@@ -494,6 +495,49 @@ function onTurnEnd(env) {
   const wrap = ensureAssistant().parentElement;
   wrap.append(foot);
   ui.currentAssistant = null;
+  scrollDown();
+}
+
+/* A person's verdict on the turn just recorded (notes/77): the browser's
+   --mark. Yantra never judges a turn; this row only writes down what the
+   reader decided, into the same line the terminal command would. Offered
+   only for turns recorded while this page watched -- a replayed
+   transcript has no trace ids to write against. */
+function addMarkRow(id) {
+  const row = document.createElement("div");
+  row.className = "turn-mark";
+  const paint = (mark) => {
+    const verdict = mark.judged_by === "person"
+      ? (mark.passed ? "good" : "bad") : null;
+    row.innerHTML = `<span class="turn-mark-q">${verdict
+        ? `you marked this <b>${verdict}</b>${mark.why
+          ? ` — ${esc(mark.why)}` : ""}`
+        : "was this turn right?"}</span>`
+      + (verdict
+        ? `<button class="mark-btn" data-v="clear">take it back</button>`
+        : `<button class="mark-btn" data-v="good">${icon("check", "ico-sm")}good</button>`
+          + `<button class="mark-btn" data-v="bad">${icon("x", "ico-sm")}bad</button>`)
+      + `<span class="turn-mark-id" title="the id --turns and --fossil know it by">${esc(id.slice(0, 8))}</span>`;
+  };
+  row.onclick = async (e) => {
+    const verdict = e.target.closest("button")?.dataset?.v;
+    if (!verdict) return;
+    let why = null;
+    if (verdict === "bad") {
+      why = await openDialog({
+        title: "what was wrong?",
+        body: "optional — your words become the description of the "
+          + "regression case if this turn is ever turned into one.",
+        placeholder: "e.g. cited a file it never opened",
+        confirm: "mark bad",
+      });
+      if (why === null) return;     // backed out: nothing is written
+    }
+    const mark = await post("/api/mark", { id, verdict, why });
+    if (mark) paint(mark);
+  };
+  paint({});
+  transcript.append(row);
   scrollDown();
 }
 

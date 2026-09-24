@@ -695,6 +695,42 @@ pre.md-code {
   color: var(--ink-3);
 }
 
+/* A person's verdict on a recorded turn (notes/77). Quiet on purpose:
+   it is an offer, not a question the page is waiting on. */
+.turn-mark {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.turn-mark-q { margin-right: 4px; }
+.turn-mark-q b { color: var(--ink-2); font-weight: 600; }
+.turn-mark-id {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.mark-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.mark-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.mark-btn[data-v="good"]:hover { color: var(--ok); }
+.mark-btn[data-v="bad"]:hover { color: var(--danger); }
+.mark-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
 /* ---- tool cards ---- */
 
 .tool-card {

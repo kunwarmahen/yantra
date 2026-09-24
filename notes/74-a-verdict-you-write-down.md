@@ -59,13 +59,17 @@ model deciding what failed. `--mark` needs an id and a word typed by
 someone.
 
 **No `--mark` from the browser.** The web UI records turns
-([notes/63](63-the-whole-turn-written-down.md)) but has no button to
-judge one. The terminal command is the whole feature for now.
+([notes/63](63-the-whole-turn-written-down.md)) but had no button to
+judge one. Since [note 77](77-a-mark-taken-back.md) it does: a good/bad
+row under each recorded turn, writing the same line `--mark` writes.
 
 ## What is not here yet
 
-* **A mark cannot be taken back** except by marking again. There is no
-  "unmark"; marking good or bad overwrites the previous mark.
+* ~~**A mark cannot be taken back**~~ Shipped in
+  [note 77](77-a-mark-taken-back.md): `--mark ID clear` removes it, and
+  a suite's turn gets its grader's verdict back. Was: except by marking
+  again. There is no "unmark"; marking good or bad overwrites the
+  previous mark.
 
 ## Receipt
 

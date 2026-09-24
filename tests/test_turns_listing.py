@@ -192,3 +192,60 @@ class TestAPersonsMark:
 
     def test_why_needs_a_mark(self, capsys):
         assert main(["--why", "x"]) == 2
+
+
+class TestTakingAMarkBack:
+    """notes/77: a mark can be cleared, and clearing gives back exactly
+    what was there before -- including a grader's verdict it replaced."""
+
+    def recording(self, tmp_path, *turns):
+        path = tmp_path / "t.jsonl"
+        log = TrajectoryLog(path)
+        for t in turns:
+            log.record(t)
+        return path
+
+    def test_clearing_a_mark_on_a_typed_turn_leaves_no_verdict(
+            self, tmp_path):
+        path = self.recording(tmp_path, turn("aaaaaaaa"))
+        log = TrajectoryLog(path)
+        log.mark("aaaa", passed=False, why="wrong")
+        log.mark("aaaa", passed=None)
+        raw = json.loads(path.read_text())
+        assert not {"passed", "judged_by", "why", "graded"} & raw.keys()
+
+    def test_clearing_gives_the_graders_verdict_back(self, tmp_path):
+        path = self.recording(tmp_path, turn("aaaaaaaa", passed=False,
+                                             case="x"))
+        log = TrajectoryLog(path)
+        log.mark("aaaa", passed=True)
+        log.mark("aaaa", passed=False)     # a second mark keeps the first's
+        cleared = log.mark("aaaa", passed=None)
+        assert (cleared.passed, cleared.judged_by) == (False, "grader")
+        assert "graded" not in json.loads(path.read_text())
+
+    def test_a_line_from_before_judged_by_counts_its_verdict_as_the_graders(
+            self, tmp_path):
+        path = tmp_path / "t.jsonl"
+        TrajectoryLog(path).record(turn("aaaaaaaa", passed=True, case="x"))
+        raw = json.loads(path.read_text())
+        raw.pop("judged_by", None)          # as note 70 wrote it
+        path.write_text(json.dumps(raw) + "\n")
+        log = TrajectoryLog(path)
+        log.mark("aaaa", passed=False)
+        assert log.mark("aaaa", passed=None).passed is True
+
+    def test_the_command_says_what_is_left(self, tmp_path, capsys):
+        path = self.recording(tmp_path, turn("aaaaaaaa", passed=False,
+                                             case="x"))
+        main(["--mark", "aaaa", "good", "--trace", str(path)])
+        assert main(["--mark", "aaaa", "clear", "--trace", str(path)]) == 0
+        out = " ".join(capsys.readouterr().out.split())
+        assert "mark cleared, back to its grader's fail" in out
+        main(["--turns", "failed", "--trace", str(path)])
+        assert "red in its case" in capsys.readouterr().out
+
+    def test_clear_takes_no_reason(self, tmp_path, capsys):
+        path = self.recording(tmp_path, turn("aaaaaaaa"))
+        assert main(["--mark", "aaaa", "clear", "--why", "x",
+                     "--trace", str(path)]) == 2

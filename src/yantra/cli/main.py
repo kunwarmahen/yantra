@@ -318,13 +318,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "filter flags (ended badly, or a tool or "
                              "sub-agent failed). A list to choose from, not "
                              "a verdict: pass an id to --fossil")
-    parser.add_argument("--mark", nargs=2, metavar=("TRACE_ID", "good|bad"),
+    parser.add_argument("--mark", nargs=2,
+                        metavar=("TRACE_ID", "good|bad|clear"),
                         default=None,
                         help="with --trace FILE: write YOUR verdict on a "
                              "recorded turn into its line and exit. Yantra "
                              "does not decide whether a turn failed; this is "
                              "where the person who did writes it down, for "
-                             "--turns and --fossil. An id prefix is enough")
+                             "--turns and --fossil. 'clear' takes a mark "
+                             "back, and a suite's own verdict returns. An id "
+                             "prefix is enough")
     parser.add_argument("--why", metavar="TEXT", default=None,
                         help="with --mark: the reason, in your words; "
                              "--fossil uses it as the case's description")
@@ -569,22 +572,33 @@ def _trace_prune_mode(args, console: Console) -> int:
 
 
 def _mark_mode(args, console: Console) -> int:
-    """--mark ID good|bad [--why TEXT] --trace FILE (notes/74)."""
+    """--mark ID good|bad|clear [--why TEXT] --trace FILE (notes/74, 77)."""
     trace_id, verdict = args.mark
-    if verdict not in ("good", "bad"):
-        print(f"error: --mark takes a verdict of good or bad, not "
+    if verdict not in ("good", "bad", "clear"):
+        print(f"error: --mark takes a verdict of good, bad or clear, not "
               f"{verdict!r}", file=sys.stderr)
         return 2
+    if verdict == "clear" and args.why is not None:
+        print("error: --why is the reason for a verdict, and 'clear' takes "
+              "one back; drop --why", file=sys.stderr)
+        return 2
+    passed = None if verdict == "clear" else verdict == "good"
     try:
         turn = TrajectoryLog(Path(args.trace)).mark(
-            trace_id, passed=verdict == "good", why=args.why)
+            trace_id, passed=passed, why=args.why)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    task = f" [dim]({escape(' '.join(turn.task.split())[:60])})[/dim]"
+    if verdict == "clear":
+        # Say what is left, so nobody has to list the file to find out
+        # whether the grader's no came back.
+        left = ("unjudged" if turn.passed is None else
+                f"back to its grader's {'pass' if turn.passed else 'fail'}")
+        console.print(f"{turn.id[:8]} mark cleared, {left}{task}")
+        return 0
     console.print(f"{turn.id[:8]} marked {verdict}"
-                  + (f": {escape(args.why)}" if args.why else "")
-                  + f" [dim]({escape(' '.join(turn.task.split())[:60])})"
-                    f"[/dim]")
+                  + (f": {escape(args.why)}" if args.why else "") + task)
     return 0
 
 
@@ -1746,7 +1760,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.mark is not None and args.trace is None:
         print("error: --mark writes into a recording, so it needs the file: "
-              "--mark ID good|bad --trace FILE", file=sys.stderr)
+              "--mark ID good|bad|clear --trace FILE", file=sys.stderr)
         return 2
     if args.why is not None and args.mark is None:
         print("error: --why is the reason for a --mark", file=sys.stderr)
