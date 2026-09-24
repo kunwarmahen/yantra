@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1803 tests. The
+The harness underneath is complete and covered by 1809 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1158,7 +1158,11 @@ it names) pools apart from its earlier definition, one row each, and
 `--against` marks it "the case was edited between these runs". **A
 re-pulled local model**: on Ollama the report records the digest of the
 weights behind the tag, and one tag with two digests pools as two. See
-[notes/72](notes/72-what-changed-under-a-name.md).
+[notes/72](notes/72-what-changed-under-a-name.md). A hosted model has no
+digest, so the report records what the provider **said** answered: the
+dated snapshot behind an alias, and OpenAI's `system_fingerprint`. One
+name answered by two snapshots pools as two
+([notes/75](notes/75-what-answered.md)).
 
 The pool also says **what each case cost, per run, oldest report
 against newest**, names the case whose cost grew fastest, and says when

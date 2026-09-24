@@ -247,6 +247,9 @@ class EvalResult:
     #: a trace file (notes/65) -- what ``--fossil`` takes, and the way from
     #: a red line in a report to what the agent actually did.
     trace: str | None = None
+    #: What answered this run, as the provider named it -- snapshot and
+    #: build (notes/75). Empty for a run that reached no model.
+    served: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -353,6 +356,11 @@ class CaseOutcome:
         """
         priced = [r.usd for r in self.runs if r.usd is not None]
         return sum(priced) if priced else None
+
+    @property
+    def served(self) -> list[str]:
+        """Every model identity that answered any run of this case."""
+        return sorted({name for r in self.runs for name in r.served})
 
     @property
     def traces(self) -> list[str]:
@@ -807,6 +815,7 @@ def _recorded(runner: Any, case: EvalCase, agent: Any, start: float,
     worth a look -- with the reason ``Agent.run`` gave when it can be read
     back (``max_iterations``, ``over_budget``), else ``crashed``.
     """
+    result.served = sorted(getattr(agent, "served", ()))
     log = getattr(runner, "trace", None)
     if log is None:
         return result

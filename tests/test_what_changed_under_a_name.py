@@ -112,6 +112,9 @@ def run(at, *, weights_=None, definition=None, passes=1):
                           definition=definition)])
 
 
+#: Two Ollama weights digests, as the report records them.
+D1, D2 = "22130167c4c2", "4eb23ef187e2"
+
 T1, T2, T3 = ("2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z",
               "2026-09-03T00:00:00Z")
 
@@ -141,14 +144,14 @@ class TestThePool:
 
     def test_both_are_said_out_loud(self, tmp_path, capsys):
         paths = []
-        for n, r in enumerate((run(T1, weights_="w1", definition="d1"),
-                               run(T2, weights_="w2", definition="d2"))):
+        for n, r in enumerate((run(T1, weights_=D1, definition="d1"),
+                               run(T2, weights_=D2, definition="d2"))):
             paths.append(str(tmp_path / f"{n}.json"))
             write_report(tmp_path / f"{n}.json", r)
         assert main(["--reports", *paths, "--pool"]) == 0
         out = " ".join(capsys.readouterr().out.split())
         assert out.count("pointed at 2 different weights") == 1
-        assert "(weights w1)" in out and "(weights w2)" in out
+        assert "(weights 22130167c4c2)" in out and "(weights 4eb23ef187e2)" in out
 
     def test_an_edited_case_is_said_once_and_its_rows_run_oldest_first(
             self, tmp_path, capsys):
@@ -179,11 +182,11 @@ class TestAgainst:
 
     def test_the_cli_says_both(self, tmp_path, capsys):
         before, after = tmp_path / "a.json", tmp_path / "b.json"
-        write_report(before, run(T1, weights_="w1", definition="d1"))
-        write_report(after, run(T2, weights_="w2", definition="d2", passes=0))
+        write_report(before, run(T1, weights_=D1, definition="d1"))
+        write_report(after, run(T2, weights_=D2, definition="d2", passes=0))
         assert main(["--reports", str(before), str(after)]) == 0
         out = " ".join(capsys.readouterr().out.split())
-        assert "same tag, different weights: w1 → w2" in out
+        assert "same tag, different weights: 22130167c4c2 → 4eb23ef187e2" in out
         assert "the case was edited between these runs" in out
 
 
@@ -207,3 +210,38 @@ class TestTheReport:
         raw = json.loads(report.read_text())
         assert raw["weights"] == "w1"
         assert raw["cases"][0]["definition"] == fp_of(root)
+
+
+class TestAHostedModel:
+    """notes/75: no digest to ask for, so what the provider NAMED."""
+
+    def test_the_served_snapshot_and_build_are_what_answered(self):
+        from yantra.types import Message, ModelResponse, served_as
+        reply = ModelResponse(message=Message("assistant", []),
+                              stop_reason="end_turn",
+                              model="claude-sonnet-4-5-20250929")
+        assert served_as(reply, "claude-sonnet-4-5") == \
+            "claude-sonnet-4-5-20250929"
+        reply.fingerprint = "fp_1a2b"
+        assert served_as(reply) == "claude-sonnet-4-5-20250929/fp_1a2b"
+        reply.model = ""
+        assert served_as(reply, "asked") == "asked/fp_1a2b"
+
+    def test_a_moved_alias_is_named_as_a_snapshot(self, tmp_path, capsys):
+        before, after = tmp_path / "a.json", tmp_path / "b.json"
+        write_report(before, run(T1, weights_="claude-x-20250929"))
+        write_report(after, run(T2, weights_="claude-x-20260101"))
+        main(["--reports", str(before), str(after)])
+        out = " ".join(capsys.readouterr().out.split())
+        assert ("same model name, different snapshot answered: "
+                "claude-x-20250929 → claude-x-20260101") in out
+
+
+def test_an_agent_remembers_what_answered_it():
+    from conftest import ScriptedProvider, assistant_text
+    from yantra.agent import Agent
+    provider = ScriptedProvider([assistant_text("one",
+                                                model="claude-x-20250929")])
+    agent = Agent(provider, model="claude-x")
+    agent.run("hi")
+    assert agent.served == {"claude-x-20250929"}

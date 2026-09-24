@@ -332,6 +332,7 @@ class OpenAIProvider(Provider):
             usage=usage,
             model=data.get("model", ""),
             raw=data,
+            fingerprint=data.get("system_fingerprint") or "",
         )
 
     def _error_for(self, response: httpx.Response) -> ProviderError:
@@ -529,7 +530,9 @@ class OpenAIStreamRouter:
         if chunk.get("model"):
             if not self.started:
                 self.started = True
-                out.append(StartEvent(model=chunk["model"]))
+                out.append(StartEvent(
+                    model=chunk["model"],
+                    fingerprint=chunk.get("system_fingerprint") or ""))
 
         reported_usage = chunk.get("usage")
         if reported_usage:

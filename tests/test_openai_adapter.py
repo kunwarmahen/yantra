@@ -330,3 +330,41 @@ def test_reasoning_field_becomes_thinking_block(openai_settings):
                                       system=None, tools=[], model="m",
                                       max_tokens=10)
     assert out["messages"] == [{"role": "assistant", "content": "the answer"}]
+
+
+class TestWhatAnswered:
+    """notes/75: the build fingerprint rides out of both paths, because a
+    hosted model has no weights digest and this is the nearest thing."""
+
+    def test_complete_keeps_the_system_fingerprint(self, openai_settings):
+        body = {**_fixture("openai_text.json"), "system_fingerprint": "fp_1a2b"}
+        provider, _ = _provider(openai_settings,
+                                lambda r: httpx.Response(200, json=body))
+        response = provider.complete(messages=[Message("user", [TextBlock("x")])],
+                                     system=None, tools=[], model="m",
+                                     max_tokens=100)
+        assert (response.model, response.fingerprint) == ("gpt-4o-mini",
+                                                          "fp_1a2b")
+
+    def test_the_stream_keeps_it_too(self, openai_settings):
+        from yantra.providers.base import collect
+        sse = (FIXTURES / "openai_text.sse").read_text().replace(
+            '"model":"gpt-4o-mini"',
+            '"model":"gpt-4o-mini","system_fingerprint":"fp_1a2b"')
+        provider, _ = _provider(
+            openai_settings,
+            lambda r: httpx.Response(200, content=sse.encode(),
+                                     headers={"content-type": "text/event-stream"}))
+        response = collect(provider.stream(
+            messages=[Message("user", [TextBlock("hi")])], system=None,
+            tools=[], model="m", max_tokens=100))
+        assert response.fingerprint == "fp_1a2b"
+
+    def test_no_fingerprint_is_empty_not_invented(self, openai_settings):
+        provider, _ = _provider(
+            openai_settings,
+            lambda r: httpx.Response(200, json=_fixture("openai_text.json")))
+        response = provider.complete(messages=[Message("user", [TextBlock("x")])],
+                                     system=None, tools=[], model="m",
+                                     max_tokens=100)
+        assert response.fingerprint == ""

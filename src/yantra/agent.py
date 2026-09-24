@@ -39,6 +39,7 @@ from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
                                 coerce_arguments)
 from yantra.tools.selector import ToolCatalog, query_from_transcript
 from yantra.types import (
+    served_as,
     Block,
     ImageBlock,
     Message,
@@ -228,6 +229,11 @@ class Agent:
         # per-model sum because a /model switch mid-session changes the
         # price sheet mid-stream (see yantra.pricing).
         self.usage_by_model: dict[str, Usage] = {}
+        #: Every model identity that answered this agent (notes/75): the
+        #: served snapshot, with the provider's build fingerprint when it
+        #: gives one. What a report records for a model with no weights
+        #: digest to ask for.
+        self.served: set[str] = set()
         # This iteration's visible tool set; None = whole registry.
         self._turn_tools: list | None = None
         # Provider-reported size of the last request (all four usage
@@ -367,6 +373,9 @@ class Agent:
                 bucket = self.usage_by_model.setdefault(
                     response.model or self.model, Usage())
                 bucket.add(response.usage)
+                # What actually answered: the snapshot the provider names,
+                # and its build where it says (notes/75).
+                self.served.add(served_as(response, self.model))
                 # Window footprint, not just fresh input: a cached request
                 # bills ~nothing fresh yet still fills the window.
                 self.last_context_tokens = response.usage.window_tokens()

@@ -1027,9 +1027,8 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                      # The weights behind a local tag, and each case as it
                      # was loaded (notes/72): both can change a rate while
                      # every name stays the same.
-                     weights=(weights(canonical_provider(provider_name),
-                                      getattr(settings, "base_url", None),
-                                      model)
+                     weights=(_what_answered(provider_name, settings, model,
+                                             outcomes)
                               if needs_model else None),
                      definitions={c.id: c.fingerprint for c in every_case})
     if args.report is not None:
@@ -1070,11 +1069,17 @@ def _render_comparison(console: Console, cmp) -> None:
         console.print(f"[dim]different model: {escape(before.where)} → "
                       f"{escape(after.where)}[/dim]")
     if cmp.weights_changed:
-        # The tag says nothing moved and Ollama says otherwise (notes/72).
-        console.print(f"[yellow]same tag, different weights: "
-                      f"{before.weights} → {after.weights} -- "
-                      f"{escape(after.model)} was re-pulled between these "
-                      f"runs, so what moved below may be the model[/yellow]")
+        # The name says nothing moved and the provider says otherwise
+        # (notes/72 on Ollama, notes/75 on a hosted model).
+        if _is_digest(after.weights):
+            said = (f"same tag, different weights: {before.weights} → "
+                    f"{after.weights} -- {escape(after.model)} was re-pulled "
+                    f"between these runs")
+        else:
+            said = (f"same model name, different snapshot answered: "
+                    f"{escape(before.weights)} → {escape(after.weights)}")
+        console.print(f"[yellow]{said}, so what moved below may be the "
+                      f"model[/yellow]")
     if cmp.package_changed:
         # The version says nothing moved, and the files say otherwise
         # (notes/68). Everything below may be the edit, not the model.
@@ -1214,6 +1219,30 @@ def _reports_mode(args, console: Console) -> int:
     return 0
 
 
+def _is_digest(value: str | None) -> bool:
+    """Twelve hex characters: an Ollama weights digest, not a snapshot name."""
+    return bool(value) and len(value) == 12 and all(
+        c in "0123456789abcdef" for c in value)
+
+
+def _what_answered(provider_name: str, settings, model: str,
+                   outcomes) -> str | None:
+    """The report's ``weights``: what model actually answered the suite.
+
+    On Ollama, the digest of the weights behind the tag (notes/72). On a
+    hosted provider there is no digest to ask for, so it is what the
+    provider NAMED as having answered -- the dated snapshot behind an
+    alias, and OpenAI's build fingerprint (notes/75). Several identities
+    (an alias that moved mid-suite) are all kept, joined, so the change
+    is visible rather than averaged. None when nothing says.
+    """
+    name = canonical_provider(provider_name)
+    if name == "ollama":
+        return weights(name, getattr(settings, "base_url", None), model)
+    served = sorted({s for o in outcomes for s in getattr(o, "served", [])})
+    return " + ".join(served) or None
+
+
 def _render_pools(console: Console, pools: list[Pool]) -> None:
     """Each (suite, model) pool, one line per case, then what it adds up to.
 
@@ -1234,7 +1263,8 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
         package = (f" [dim](package {group.package or 'unknown'})[/dim]"
                    if group.split_from else "")
         if group.weights_split:
-            package += f" [dim](weights {group.weights or 'unknown'})[/dim]"
+            package += (f" [dim](weights {escape(group.weights or 'unknown')})"
+                        f"[/dim]")
         console.print(f"\n[bold]pooled[/bold] {len(group.runs)} run(s) of "
                       f"{escape(group.suite)} on {escape(group.where)}"
                       f"{package}\n[dim]{escape(group.span)}[/dim]")
@@ -1247,10 +1277,11 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
         if (group.weights_split and (group.suite, group.where, group.package)
                 not in said_weights):
             said_weights.add((group.suite, group.where, group.package))
+            kind = ("weights (re-pulled)" if _is_digest(group.weights)
+                    else "snapshots answering under one name")
             console.print(f"  [yellow]{escape(group.where)} pointed at "
-                          f"{group.weights_split} different weights across "
-                          f"these runs (re-pulled); each is pooled on its "
-                          f"own[/yellow]")
+                          f"{group.weights_split} different {kind} across "
+                          f"these runs; each is pooled on its own[/yellow]")
         if group.split_from and group.package is None:
             console.print("  [dim]these reports predate fingerprints, so "
                           "which package they ran cannot be told; pooled "

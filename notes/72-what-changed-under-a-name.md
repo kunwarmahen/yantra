@@ -75,8 +75,10 @@ they are unknown and change nothing.
 
 ## What was deliberately not built
 
-**No weights from cloud providers.** They do not say, and a model name
-like `claude-sonnet-5` is the vendor's promise that it means one thing.
+~~**No weights from cloud providers.**~~ Superseded by [note 75](75-what-answered.md): a
+hosted provider publishes no digest, but its responses name the dated
+snapshot that answered, and OpenAI adds a build fingerprint; the report
+records those instead.
 
 **No split on a `description` edit**, as above.
 

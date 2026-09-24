@@ -192,7 +192,20 @@ class ModelResponse:
     usage: Usage = field(default_factory=Usage)  # zeros are normal (see Usage)
     model: str = ""
     raw: dict[str, Any] | None = None  # untouched provider JSON: for learning/debug
+    #: The backend build that answered, where the provider says (OpenAI's
+    #: ``system_fingerprint``); "" elsewhere. With ``model`` -- the dated
+    #: snapshot a provider reports, not the alias asked for -- it is the
+    #: nearest a hosted model comes to naming its weights (notes/75).
+    fingerprint: str = ""
 
+
+
+def served_as(response: ModelResponse, asked: str = "") -> str:
+    """"claude-sonnet-4-5-20250929", or "gpt-4o-mini/fp_1a2b" -- what
+    answered, as the provider named it (notes/75). Falls back to the model
+    that was asked for when the provider named nothing."""
+    name = response.model or asked
+    return f"{name}/{response.fingerprint}" if response.fingerprint else name
 
 # ---------------------------------------------------------------------------
 # Stream events -- what Provider.stream() yields
@@ -209,6 +222,8 @@ class StartEvent:
     """First event of a stream: names the model that answered."""
 
     model: str
+    #: The provider's build fingerprint, when it sends one (notes/75).
+    fingerprint: str = ""
 
 
 @dataclass(slots=True)

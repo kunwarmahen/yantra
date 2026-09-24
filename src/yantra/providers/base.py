@@ -249,6 +249,7 @@ class ResponseFolder:
 
     def __init__(self) -> None:
         self.model = ""
+        self.fingerprint = ""
         self.stop_reason: StopReason = "other"
         self.usage = Usage()
         self.ordered: list[Block] = []  # final message content, arrival order
@@ -258,8 +259,9 @@ class ResponseFolder:
 
     def feed(self, event: StreamEvent) -> None:
         match event:
-            case StartEvent(model=name):
+            case StartEvent(model=name, fingerprint=build):
                 self.model = name
+                self.fingerprint = build
             case TextDelta(text=fragment):
                 ordered = self.ordered
                 if ordered and isinstance(ordered[-1], TextBlock):
@@ -308,6 +310,7 @@ class ResponseFolder:
             stop_reason=self.stop_reason,
             usage=self.usage,
             model=self.model,
+            fingerprint=self.fingerprint,
         )
 
 
