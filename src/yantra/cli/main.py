@@ -57,7 +57,8 @@ from yantra.session import SessionStore, apply_payload
 from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools import default_registry
 from yantra.tools.ask_user import AskUser, TerminalChannel
-from yantra.tools.discover import package_tool_names
+from yantra.tools.discover import (ENTRY_POINT_GROUP, entry_point_packs,
+                                   package_tool_names)
 from yantra.trace import FULL, REDACTED, SHAPE, TrajectoryLog
 from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
@@ -363,6 +364,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "on what happens to be in the virtualenv would "
                              "be a different agent on every machine. A name "
                              "nothing publishes is an error")
+    parser.add_argument("--packs", action="store_true",
+                        help="list the tool packs installed in this "
+                             "environment -- what --tool-pack could name -- "
+                             "and exit. Read from installed metadata: "
+                             "nothing is imported, so a broken pack is "
+                             "listed rather than run")
     parser.add_argument("--skills-dir", action="append", default=[],
                         metavar="DIR", dest="skills_dir",
                         help="extra directory to load skills from (repeatable). "
@@ -629,6 +636,36 @@ def _mark_mode(args, console: Console) -> int:
         return 0
     console.print(f"{turn.id[:8]} marked {verdict}"
                   + (f": {escape(args.why)}" if args.why else "") + task)
+    return 0
+
+
+def _packs_mode(console: Console) -> int:
+    """--packs: what --tool-pack could name, and exit (notes/53).
+
+    A LISTING, NOT A LOAD. ``entry_point_packs`` reads installed metadata
+    and imports nothing, so a pack that would blow up on import is still
+    listed -- which is when a person most needs to see it is there. It
+    follows that the tool names are not shown: those live in the code, and
+    finding them out means running it. The entry points are shown instead,
+    because they say where to look.
+    """
+    packs = entry_point_packs()
+    if not packs:
+        console.print(f"no tool packs installed: nothing in this environment "
+                      f"publishes {ENTRY_POINT_GROUP!r}")
+        return 0
+    for name in sorted(packs):
+        entries = packs[name]
+        dist = getattr(entries[0], "dist", None)
+        version = getattr(dist, "version", None)
+        console.print(f"[bold]{escape(name)}[/bold]"
+                      + (f" [dim]{escape(str(version))}[/dim]"
+                         if version else ""))
+        for entry in entries:
+            console.print(f"  {escape(entry.name)} = {escape(entry.value)}")
+    console.print(f"\n[dim]{len(packs)} pack(s) installed, none loaded. "
+                  "An agent gets one only by naming it: --tool-pack NAME, or "
+                  "packs = [\"NAME\"] in agent.toml[/dim]")
     return 0
 
 
@@ -1851,6 +1888,16 @@ def main(argv: list[str] | None = None) -> int:
               "--eval/--build/--web/--fossil/--reports/--trace-prune/"
               "--trace-full/--prompt/PROMPT", file=sys.stderr)
         return 2
+    if args.packs and (
+            args.eval or args.build or args.web or args.prompt
+            or args.prompt_positional or args.fossil is not None
+            or args.reports is not None or args.turns is not None
+            or args.mark is not None or args.trace_prune is not None
+            or args.tool_pack):
+        print("error: --packs lists what is installed and exits; drop "
+              "--eval/--build/--web/--fossil/--reports/--turns/--mark/"
+              "--trace-prune/--tool-pack/--prompt/PROMPT", file=sys.stderr)
+        return 2
     if args.trace_prune is not None and args.trace is None:
         print("error: --trace-prune removes old turns from a recording, so "
               "it needs the file: --trace-prune DAYS --trace FILE",
@@ -1902,6 +1949,9 @@ def main(argv: list[str] | None = None) -> int:
               "PROMPT (send messages from the browser instead)",
               file=sys.stderr)
         return 2
+
+    if args.packs:
+        return _packs_mode(console)
 
     # A recording is a file too (notes/67).
     if args.trace_prune is not None:

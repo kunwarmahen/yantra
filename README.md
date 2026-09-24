@@ -1923,7 +1923,9 @@ src/yantra/
 │   │               PIP: the "yantra.tools" entry-point group, loaded only
 │   │               for the distributions a manifest NAMES -- an agent
 │   │               whose roster depended on what is installed would be a
-│   │               different agent on every machine
+│   │               different agent on every machine.
+│   │               entry_point_packs() lists them without importing any
+│   │               -- `yantra --packs` prints it
 │   │               ([notes/53](notes/53-a-tool-that-arrives-by-pip.md))
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
 │   │               description, transcript-derived query, core pins +

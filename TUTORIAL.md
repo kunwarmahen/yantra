@@ -646,6 +646,8 @@ virtualenv — different tools on your colleague's machine, and nothing in
 `agent.toml` to say why. A name nothing publishes is an error that lists
 what *is* installed, and startup prints `tool packs: tide-pack`, because
 pip-installed code is still somebody else's code running as you.
+To see which names you could use, `uv run yantra --packs` lists every
+installed pack and where its tools live, without importing any of them.
 ([notes/53](notes/53-a-tool-that-arrives-by-pip.md))
 
 ## 12 · A package that delegates

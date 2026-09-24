@@ -92,6 +92,28 @@ That is the same rule a `tools/` directory follows: an author who wrote
 the line believes they shipped the tool, and an agent quietly missing it
 is exactly the failure this area exists to prevent.
 
+## Asking what is installed
+
+Naming a pack assumes you know its name. `--packs` answers that from the
+shell:
+
+```
+$ yantra --packs
+tide-pack 0.2.0
+  tides = tidepack.tools
+
+1 pack(s) installed, none loaded. An agent gets one only by naming it:
+--tool-pack NAME, or packs = ["NAME"] in agent.toml
+```
+
+It shows the entry points, not the tool names. **A LISTING IS NOT A
+LOAD.** Nothing is imported, because finding out which tools a module
+defines means running it, and asking what is installed should not run
+anybody's code. That also means a pack that fails on import still shows
+up in the list, which is the moment you most need to know it is there.
+The entry point says where its tools live; `--tool-pack` is what loads
+them.
+
 ## What an entry point may point at
 
 Two shapes:
@@ -150,6 +172,7 @@ tool packs: tide-pack
 * **The group is not versioned.** `yantra.tools` will mean whatever
   `Tool` means in whatever version is installed; a pack built against an
   older base class fails at registration rather than at install.
-* **Nothing lists packs from the command line.** `entry_point_packs()`
-  exists and no flag prints it, so "what could I load?" has an answer in
-  Python and none in the shell.
+* ~~**Nothing lists packs from the command line.**~~ `yantra --packs`
+  prints them; see [Asking what is installed](#asking-what-is-installed)
+  above. Was: `entry_point_packs()` existed and no flag printed it, so
+  "what could I load?" had an answer in Python and none in the shell.

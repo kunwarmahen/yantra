@@ -219,3 +219,43 @@ class TestThroughTheSpec:
             '[agent]\nname = "p"\n[tools]\npack = ["weather-pack"]\n')
         with pytest.raises(ConfigError, match=r"unknown key\(s\) in \[tools\]: pack"):
             load_package(tmp_path)
+
+
+class TestListedFromTheShell:
+    """notes/53: ``--packs`` answers "what could I load?" without loading.
+
+    The bias is the same ambient-behaviour one, turned around: a listing
+    that imported each pack to name its tools would run somebody's code
+    just because a person asked what was installed.
+    """
+
+    def test_it_names_the_pack_and_its_entry_points(self, installed, capsys):
+        from yantra.cli.main import main
+        installed(FakeEntry("weather", "fakepack:Weather", Weather),
+                  FakeEntry("tides", "fakepack.tools", Tides,
+                            dist="tide-pack"))
+        assert main(["--packs"]) == 0
+        out = capsys.readouterr().out
+        assert "tide-pack" in out and "weather-pack" in out
+        assert "weather = fakepack:Weather" in out
+        assert "2 pack(s) installed, none loaded" in out
+
+    def test_a_pack_that_would_blow_up_is_still_listed(self, installed,
+                                                       capsys):
+        from yantra.cli.main import main
+        installed(FakeEntry("weather", "fakepack:Weather",
+                            ImportError("would have raised")))
+        assert main(["--packs"]) == 0
+        assert "weather-pack" in capsys.readouterr().out
+
+    def test_nothing_installed_says_so(self, installed, capsys):
+        from yantra.cli.main import main
+        installed()
+        assert main(["--packs"]) == 0
+        assert "no tool packs installed" in capsys.readouterr().out
+
+    def test_it_is_its_own_mode(self, installed, capsys):
+        from yantra.cli.main import main
+        installed()
+        assert main(["--packs", "--eval"]) == 2
+        assert "--packs lists what is installed" in capsys.readouterr().err
