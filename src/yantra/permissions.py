@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -397,6 +398,12 @@ def with_wait_budget(inner: PermissionFn, seconds: float, *,
     #: belongs to, and how much of it is left.
     state: dict[str, Any] = {"turn": None, "left": seconds}
 
+    def notice(turn_id: str) -> str | None:
+        # A turn this wrapper has not seen yet has spent nothing.
+        if not turn_id or turn_id != state["turn"]:
+            return None
+        return approval_notice(state["left"], seconds)
+
     def spent_out(request: PermissionRequest, code: str) -> bool:
         return wait_spent(request, seconds, code, on_timeout=on_timeout)
 
@@ -428,7 +435,45 @@ def with_wait_budget(inner: PermissionFn, seconds: float, *,
             return spent_out(request, REFUSED_OUT_OF_TIME)
         return wait(answer, request, state["left"])
 
+    #: What the agent tells the model about the time left (notes/80). A
+    #: gate is a plain function, so this rides on it as an attribute: a
+    #: host hands it to ``Agent.approval_notice`` alongside the gate.
+    gate.approval_notice = notice
     return gate
+
+
+def approval_notice(left: float, seconds: float) -> str | None:
+    """The sentence for the MODEL about a turn's approval time, or None.
+
+    Shared by ``with_wait_budget`` and the browser's own gate, for
+    ``wait_spent``'s reason: a model reads the same words from either.
+
+    Nothing until some of the allowance has been spent. A turn that never
+    asks for approval never needs telling, and a notice on every first
+    request would be one more paragraph in every turn for the sake of
+    the few that ask.
+
+    THE MODEL IS TOLD THE NUMBER, which the dollar notice refuses to do
+    (budget.Budget.notice). A dollar figure is something the model can
+    spend: it trims the answer to save money nobody asked it to save. The
+    model does not spend these seconds. The person does, by being slow to
+    answer, and the only thing the model can change is how many prompts
+    it puts in front of them. "Twelve seconds left" helps it choose which
+    one to ask for, and does not tempt it to shorten anything.
+    """
+    if left >= seconds:
+        return None
+    if left <= 0:
+        return (f"[approval notice] This turn has used all {seconds:g} "
+                f"seconds it may spend waiting for approval. Anything that "
+                f"needs approval will now be refused without the person "
+                f"being asked. Read-only tools still work. Finish with what "
+                f"you have, and say what you would need approved.")
+    return (f"[approval notice] {math.ceil(left)} of this turn's "
+            f"{seconds:g} seconds for waiting on approval are left. Each "
+            f"approval prompt spends from it, and once it is gone anything "
+            f"that needs approval is refused without asking. If you still "
+            f"need approvals, ask for the one you need most first.")
 
 
 def wait_spent(request: PermissionRequest, seconds: float, code: str, *,

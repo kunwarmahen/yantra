@@ -1274,6 +1274,12 @@ is required: only you know whether silence should mean no or go ahead.
 The terminal has no such flag, because there the agent simply waits
 until you type ([notes/78](notes/78-a-clock-on-the-page.md)).
 
+The agent is told how much time is left, too. After a prompt uses some
+of it, the agent sees a line like "3 of this turn's 8 seconds for
+waiting on approval are left", so it can ask for the one thing it most
+needs rather than finding out when it is refused
+([notes/80](notes/80-the-time-left-told.md)).
+
 **Every refusal carries a machine token beside the sentence**, so a host
 can branch without matching on English:
 

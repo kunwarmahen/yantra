@@ -140,6 +140,23 @@ def _batch_message(batch: list[ToolResult]) -> Message:
     return Message("user", blocks)
 
 
+def _with_approval_notice(agent, messages: list[Message]) -> list[Message]:
+    """The approval clock's sentence, when it has changed (notes/80).
+
+    Asked at every model call, and told only when the sentence differs
+    from the last one this turn: after a prompt that took time, not on
+    every request. Sent, never stored, for ``_with_notice``'s reason.
+    Shared by both loops so the twins cannot drift.
+    """
+    if agent.approval_notice is None:
+        return messages
+    said = agent.approval_notice(agent._turn_id)
+    if said is None or said == agent._approval_told:
+        return messages
+    agent._approval_told = said
+    return _with_notice(messages, said)
+
+
 def _with_notice(messages: list[Message], notice: str) -> list[Message]:
     """One request carrying a notice for the model, without a fossil.
 
@@ -248,6 +265,13 @@ class Agent:
         #: first one starts: a gate driven before any turn belongs to no
         #: turn, which is what the empty string says.
         self._turn_id = ""
+        #: Optional: turn id -> the sentence telling the model how much
+        #: approval time this turn has left, or None (notes/80). Set by a
+        #: host whose gate has a clock -- ``with_wait_budget``'s
+        #: ``approval_notice`` attribute, or the browser session's. None
+        #: means no clock, and nothing is said.
+        self.approval_notice: Callable[[str], str | None] | None = None
+        self._approval_told: str | None = None
         self.last_compaction: dict | None = None
         # Cooperative cancellation for hosts where the loop runs on a worker
         # thread that no signal can reach (the web UI's cancel button). When
@@ -329,6 +353,7 @@ class Agent:
         # opaque: an agent and its sub-agents are different turns, and a
         # counter could repeat across two agents where a uuid cannot.
         self._turn_id = uuid.uuid4().hex
+        self._approval_told = None
         self.turn_refusals = {}
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
@@ -363,6 +388,7 @@ class Agent:
                         notice = self.budget.notice()
                         if notice is not None:
                             messages = _with_notice(messages, notice)
+                messages = _with_approval_notice(self, messages)
                 self._sent_through = len(messages)
                 response = collect(
                     self._tee(

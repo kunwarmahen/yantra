@@ -105,9 +105,10 @@ allowance already covers.
 
 ## What is not here yet
 
-* **Nothing tells the model how much time is left.** Still true from
-  note 51: a model that knew it had twelve seconds of approval left could
-  ask for the one thing it most needs.
+* ~~**Nothing tells the model how much time is left.**~~ It is told
+  since [note 80](80-the-time-left-told.md): after a prompt uses some of
+  the time, the next request says how many seconds remain. Was: still
+  true from note 51.
 * **A refused turn cannot be resumed.** Still true from note 51.
 
 ## Receipt

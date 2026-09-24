@@ -64,6 +64,7 @@ from yantra.permissions import (
     REFUSED_TIMEOUT,
     REFUSED_USER,
     PermissionRequest,
+    approval_notice,
     refuse,
     wait_spent,
 )
@@ -190,11 +191,21 @@ class WebSession:
                              f"got {seconds!r}")
         self.wait_budget, self.on_timeout = seconds, on_timeout
 
+    def approval_notice(self, turn_id: str) -> str | None:
+        """What the model is told about this turn's approval time
+        (notes/80): ``with_wait_budget``'s sentence, from this clock."""
+        if self._wait_left is None or self.wait_budget is None:
+            return None
+        return approval_notice(self._wait_left, self.wait_budget)
+
     # ---- wiring -------------------------------------------------------------
 
     def attach(self, agent: Agent, store: SessionStore | None,
                mcp: Any | None = None) -> None:
         self.agent = agent
+        # The clock is kept here, so the model's view of it comes from
+        # here too (notes/80). Without a budget it answers None.
+        agent.approval_notice = self.approval_notice
         self.store = store
         if mcp is not None:
             self.mcp = mcp

@@ -691,6 +691,15 @@ prompts, and the prompt counts down. The terminal has no such flag,
 because it asks you directly and nothing is left waiting
 ([notes/78](notes/78-a-clock-on-the-page.md)).
 
+The model is told too. Once a prompt has used some of the time, the next
+request carries `[approval notice] 3 of this turn's 8 seconds for
+waiting on approval are left`, so the model can ask for the approval
+that matters most instead of learning the rule from a refusal. It gets
+a number, which the dollar notice never does, because the person spends
+these seconds, not the model. The browser wires this up itself; with the
+library wrapper, pass `agent.approval_notice = gate.approval_notice`
+([notes/80](notes/80-the-time-left-told.md)).
+
 Both frontends read that token rather than drawing every refusal as a
 crash. A refused call **never ran** — it is not an error, and `user` and
 `timeout` are a decision and an absence:
@@ -1635,7 +1644,10 @@ src/yantra/
 │                   ([notes/51](notes/51-a-turns-worth-of-waiting.md));
 │                   wait_spent() is its refusal, shared with the browser's
 │                   blocking gate, which cannot be wrapped
-│                   ([notes/78](notes/78-a-clock-on-the-page.md))
+│                   ([notes/78](notes/78-a-clock-on-the-page.md));
+│                   approval_notice() is what the MODEL is told of the
+│                   time left, in seconds, sent and never stored
+│                   ([notes/80](notes/80-the-time-left-told.md))
 ├── context.py      compaction: mask old tool results, then summarize (red
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes
@@ -1962,7 +1974,9 @@ src/yantra/
 │                   --wait-budget keeps with_wait_budget's rule inside
 │                   the session, where the blocking gate already polls:
 │                   reset at start_turn, prompt withdrawn on expiry
-│                   ([notes/78](notes/78-a-clock-on-the-page.md))
+│                   ([notes/78](notes/78-a-clock-on-the-page.md)), and
+│                   the same clock tells the model what is left
+│                   ([notes/80](notes/80-the-time-left-told.md))
 └── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per

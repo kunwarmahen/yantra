@@ -133,7 +133,9 @@ policy and belongs to whoever owns the conversation.
   included ([note 71](71-a-limit-on-waiting-not-on-work.md) fixed that).
   Was: "this person may be asked for two minutes a day" needs a store
   and an identity, which is a service's problem.
-* **Nothing tells the model how much patience is left.** The budget
+* ~~**Nothing tells the model how much patience is left.**~~ It is told
+  since [note 80](80-the-time-left-told.md), once some of the time has
+  been spent, in whole seconds. Was: the budget
   notice ([notes/43](43-a-bar-and-a-deadline.md)) does this for dollars —
   a deadline the model can plan around — and the same trick would work
   here: *there are twelve seconds of approval left in this turn, so ask

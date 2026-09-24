@@ -56,6 +56,7 @@ from yantra.agent import (
     TurnEnd,
     _batch_message,
     _truncate_middle,
+    _with_approval_notice,
     _with_notice,
 )
 from yantra.budget import Budget
@@ -159,6 +160,9 @@ class AsyncAgent:
         #: first one starts: a gate driven before any turn belongs to no
         #: turn, which is what the empty string says.
         self._turn_id = ""
+        #: The sync twin's approval clock, same contract (notes/80).
+        self.approval_notice: Callable[[str], str | None] | None = None
+        self._approval_told: str | None = None
         self.last_compaction: dict | None = None
         # Per-turn dollar ceiling -- identical contract to the sync
         # twin's, including that sub-agents share this meter rather than
@@ -227,6 +231,7 @@ class AsyncAgent:
         # opaque: an agent and its sub-agents are different turns, and a
         # counter could repeat across two agents where a uuid cannot.
         self._turn_id = uuid.uuid4().hex
+        self._approval_told = None
         self.turn_refusals = {}
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
@@ -260,6 +265,7 @@ class AsyncAgent:
                         notice = self.budget.notice()
                         if notice is not None:
                             messages = _with_notice(messages, notice)
+                messages = _with_approval_notice(self, messages)
                 self._sent_through = len(messages)
                 response = await acollect(
                     self._atee(
