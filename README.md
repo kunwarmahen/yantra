@@ -1232,7 +1232,10 @@ as the case's description ([notes/74](notes/74-a-verdict-you-write-down.md)).
 `--mark ID clear` takes a mark back, and a suite's turn gets its
 grader's verdict back. With `--web --trace FILE`, each recorded turn in
 the page ends with **good** / **bad** buttons that write the same line
-([notes/77](notes/77-a-mark-taken-back.md)).
+([notes/77](notes/77-a-mark-taken-back.md)), and the `rec` chip opens
+every turn in the file, newest first and flagged by the same rule
+`--turns` uses, so a turn from before a reload can still be marked
+([notes/81](notes/81-the-turns-the-page-never-saw.md)).
 
 ```
 $ uv run yantra --turns failed --trace runs/turns.jsonl
@@ -1822,7 +1825,10 @@ src/yantra/
 │                   redact= scrubs CONTENT (task, arguments, results,
 │                   answers), never shape, at the one place a line is
 │                   written, and counts what it replaced
-│                   ([notes/79](notes/79-scrubbed-before-it-is-written.md))
+│                   ([notes/79](notes/79-scrubbed-before-it-is-written.md)).
+│                   flagged()/why_flagged() are the one rule --turns and
+│                   the page's turns panel both use
+│                   ([notes/81](notes/81-the-turns-the-page-never-saw.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -1973,7 +1979,10 @@ src/yantra/
 │                   ([notes/52](notes/52-the-word-for-what-happened.md)). A
 │                   recorded turn ends with good/bad buttons: the SAME
 │                   mark() --mark calls, idle only
-│                   ([notes/77](notes/77-a-mark-taken-back.md)).
+│                   ([notes/77](notes/77-a-mark-taken-back.md)); the rec
+│                   chip lists the whole file (GET /api/turns), flagged
+│                   by trace.flagged() -- --turns's own rule
+│                   ([notes/81](notes/81-the-turns-the-page-never-saw.md)).
 │                   --wait-budget keeps with_wait_budget's rule inside
 │                   the session, where the blocking gate already polls:
 │                   reset at start_turn, prompt withdrawn on expiry

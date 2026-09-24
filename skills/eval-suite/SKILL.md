@@ -249,7 +249,9 @@ no, so an id can be found without opening the file
 writes a person's own verdict into a turn, and `--fossil` uses the reason
 (`notes/74-a-verdict-you-write-down.md`); `--mark ID clear` takes it back
 and restores a grader's verdict, and the web UI has buttons for both
-(`notes/77-a-mark-taken-back.md`).
+(`notes/77-a-mark-taken-back.md`); its `rec` chip lists the whole file,
+including turns from before the page loaded
+(`notes/81-the-turns-the-page-never-saw.md`).
 
 ## Graders: checking the answer text
 

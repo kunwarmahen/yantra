@@ -73,7 +73,7 @@ from yantra.prompt import recompose
 from yantra.providers import get_provider
 from yantra.session import SessionStore, apply_payload
 from yantra.skills.loader import SkillError
-from yantra.trace import watch
+from yantra.trace import flagged, watch, why_flagged
 from yantra.types import (
     EndEvent,
     ImageBlock,
@@ -126,6 +126,10 @@ def cost_line(agent: Agent) -> str:
 # ---------------------------------------------------------------------------
 # Session: owns the bridge between worker threads and websocket clients
 # ---------------------------------------------------------------------------
+
+
+#: How many recorded turns the page's panel lists, newest first.
+TURNS_SHOWN = 100
 
 
 def _refusal_tally(agent) -> dict[str, int]:
@@ -503,6 +507,30 @@ class WebSession:
                                why=why if passed is not None else None)
         return {"id": turn.id, "passed": turn.passed,
                 "judged_by": turn.judged_by, "why": turn.why}
+
+    def turns(self, limit: int = TURNS_SHOWN) -> dict[str, Any]:
+        """The recording, newest first: ``--turns`` for the page (notes/81).
+
+        The end-of-turn mark row only exists for turns recorded while the
+        page was open. A reload, a second tab, or yesterday's session all
+        leave turns the page never saw, and marking them meant going to a
+        terminal. This reads the same file ``--turns`` reads and flags
+        with the same rule (``trace.flagged``), so the two lists agree.
+
+        Newest first and capped, because the turn a person wants to judge
+        is almost always a recent one, and a year of recording should not
+        become one very long page. ``total`` says how many there are.
+        """
+        turns = self.trace.read()
+        rows = [{
+            "id": t.id, "at": t.at, "task": " ".join(t.task.split())[:200],
+            "tools": len(t.steps), "case": t.case,
+            "flagged": flagged(t), "flag_why": why_flagged(t),
+            "passed": t.passed, "judged_by": t.judged_by, "why": t.why,
+        } for t in reversed(turns[-limit:])]
+        return {"path": str(self.trace.path), "total": len(turns),
+                "flagged": sum(1 for t in turns if flagged(t)),
+                "unreadable": self.trace.unreadable, "turns": rows}
 
     def _emit(self, event) -> None:
         """AgentEvent/StreamEvent -> envelope(s). Mirrors render.py's match."""
@@ -1213,6 +1241,24 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(404, str(exc)) from exc
         session.broadcast({"type": "state", **session.state()})
         return {"removed": removed, **session.state()}
+
+    @app.get("/api/turns")
+    def turns_list() -> dict[str, Any]:
+        """The turns panel's data (notes/81). Readable mid-turn: a read of
+        an append-only file races nothing, and the recorder's line lands
+        whole or not at all."""
+        if session.trace is None:
+            raise HTTPException(400, "nothing is being recorded -- start "
+                                     "the server with --trace FILE")
+        if not session.trace.path.exists():
+            # --trace names a file the first turn creates: before then
+            # there is simply nothing recorded yet, which is not an error.
+            return {"path": str(session.trace.path), "total": 0,
+                    "flagged": 0, "unreadable": 0, "turns": []}
+        try:
+            return session.turns()
+        except ConfigError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.post("/api/mark")
     async def mark(req: Request) -> dict[str, Any]:

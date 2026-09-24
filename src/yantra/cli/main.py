@@ -59,7 +59,8 @@ from yantra.tools import default_registry
 from yantra.tools.ask_user import AskUser, TerminalChannel
 from yantra.tools.discover import (ENTRY_POINT_GROUP, entry_point_packs,
                                    package_tool_names)
-from yantra.trace import FULL, REDACTED, SHAPE, TrajectoryLog
+from yantra.trace import (FULL, REDACTED, SHAPE, TrajectoryLog, flagged,
+                          step_note, why_flagged)
 from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
     DEFAULT_TOOLS_PER_TURN,
@@ -579,7 +580,7 @@ def _fossil_mode(args, console: Console) -> int:
         # Said, not asserted: a child's steps are the delegation's inner
         # workings, and a case that pinned them would break every time the
         # child found a better route to the same answer (notes/63).
-        steps = ", ".join(f"{s.name}{_step_note(s)}"
+        steps = ", ".join(f"{s.name}{step_note(s)}"
                           for s in child.steps) or "no tool calls"
         ended = child.code or "finished"
         print(f"note: sub-agent #{child.number} {child.agent} on "
@@ -685,13 +686,13 @@ def _turns_mode(args, console: Console) -> int:
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    shown = [t for t in turns if args.turns == "all" or _flagged(t)]
+    shown = [t for t in turns if args.turns == "all" or flagged(t)]
     for turn in shown:
-        mark = ("[red]✗[/red]" if _flagged(turn)
+        mark = ("[red]✗[/red]" if flagged(turn)
                 else "[green]✓[/green]" if turn.judged_by == "person"
                 else " ")
         case = f" [dim]case {escape(turn.case)}[/dim]" if turn.case else ""
-        why = _why_flagged(turn)
+        why = why_flagged(turn)
         task = " ".join(turn.task.split())
         if len(task) > 60:
             task = task[:57] + "..."
@@ -699,8 +700,8 @@ def _turns_mode(args, console: Console) -> int:
                       f"{len(turn.steps):>2} tool(s)  {escape(task)}{case}"
                       + (f"\n             [dim]{escape(why)}[/dim]"
                          if why else ""))
-    flagged = sum(1 for t in turns if _flagged(t))
-    console.print(f"\n[dim]{len(turns)} turn(s), {flagged} flagged"
+    n_flagged = sum(1 for t in turns if flagged(t))
+    console.print(f"\n[dim]{len(turns)} turn(s), {n_flagged} flagged"
                   + (f", {log.unreadable} unreadable line(s) skipped"
                      if log.unreadable else "")
                   + " -- by the cheap filter, a case's own grader, or a "
@@ -709,50 +710,6 @@ def _turns_mode(args, console: Console) -> int:
                     "--fossil ID "
                     f"--trace {escape(str(log.path))}[/dim]")
     return 0
-
-
-def _flagged(turn) -> bool:
-    """The cheap filter (``Trajectory.failed``), or a grader that said no.
-
-    A grader's verdict is the one judgement a trace carries that Yantra
-    did not make: a person wrote the case (notes/70). A PERSON'S MARK
-    (notes/74) outranks both: they read the answer, and a turn they
-    called good is not flagged by a tool error it recovered from.
-    """
-    if turn.judged_by == "person":
-        return turn.passed is False
-    return turn.failed or turn.passed is False
-
-
-def _why_flagged(turn) -> str:
-    """Every reason a turn is flagged, or "". All of them, because the
-    grader's no and a tool that failed are two different leads."""
-    why = []
-    if turn.judged_by == "person":
-        if turn.passed is False:
-            return ("marked bad by a person"
-                    + (f": {turn.why}" if turn.why else ""))
-        return ""
-    if turn.passed is False:
-        why.append("red in its case -- the grader said no")
-    if turn.outcome != "end_turn":
-        why.append(f"ended {turn.outcome}")
-    why += [f"{step.name}{_step_note(step)}" for step in turn.steps
-            if not step.ok]
-    for child in turn.children:
-        if child.failed:
-            why.append(f"sub-agent #{child.number} {child.agent}: " + (
-                child.code or next(f"{s.name}{_step_note(s)}"
-                                   for s in child.steps if not s.ok)))
-    return "; ".join(why)
-
-
-def _step_note(step) -> str:
-    """A child step's suffix: nothing when it worked, the refusal code when
-    the gate turned it away, "failed" when it ran and errored."""
-    if step.ok:
-        return ""
-    return f" (refused: {step.refusal})" if step.refusal else " (failed)"
 
 
 def _select_cases(cases: list, patterns: list[str]) -> tuple[list, str | None]:

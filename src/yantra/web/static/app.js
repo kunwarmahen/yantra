@@ -98,7 +98,7 @@ function route(env) {
     case "turn_end":       onTurnEnd(env); break;
     case "turn_error":     addBanner(env.message, true); break;
     case "turn_cancelled": addBanner("turn cancelled", false, true); break;
-    case "recorded":       addMarkRow(env.id); break;
+    case "recorded":       addMarkRow(env.id); refreshTurnsPanel(); break;
     case "turn_done":      endTurn(); break;
 
     /* history replay shapes */
@@ -224,7 +224,8 @@ function renderRecording(s) {
       ? "FULL: tool arguments, results and answers -- whatever the agent read"
       : "shape: the task, which tools ran and the counts; no contents") + ")"
     + (rec.redacting ? `; ${rec.redacting} redaction pattern(s) scrubbed `
-      + "before anything is written" : "");
+      + "before anything is written" : "")
+    + " — click for the turns recorded so far";
 }
 
 /* Context-window pressure. The bar mirrors auto-compaction's thresholds
@@ -525,6 +526,14 @@ function refusalTally(refused) {
    only for turns recorded while this page watched -- a replayed
    transcript has no trace ids to write against. */
 function addMarkRow(id) {
+  transcript.append(markRow(id, {}));
+  scrollDown();
+}
+
+/* The good/bad/take-it-back row for one recorded turn, painted from the
+   mark it already has. Shared by the end-of-turn row and the turns panel,
+   so a button writes the same line from either. */
+function markRow(id, current, onMarked = null) {
   const row = document.createElement("div");
   row.className = "turn-mark";
   const paint = (mark) => {
@@ -555,11 +564,94 @@ function addMarkRow(id) {
       if (why === null) return;     // backed out: nothing is written
     }
     const mark = await post("/api/mark", { id, verdict, why });
-    if (mark) paint(mark);
+    if (mark) {
+      paint(mark);
+      if (onMarked) onMarked(mark);
+    }
   };
-  paint({});
-  transcript.append(row);
-  scrollDown();
+  paint(current);
+  return row;
+}
+
+/* ---------- recorded turns (notes/81) ---------- */
+
+/* --turns inside the page. The end-of-turn row only exists for turns this
+   page watched; a reload, another tab or yesterday's session leaves turns
+   it never saw. This lists the file itself, newest first, flagged by the
+   same rule the terminal uses (the server applies it), and each row can
+   be marked like the one under a turn. */
+$("#chip-rec").onclick = openTurnsPanel;
+$("#turns-close").onclick = closeTurnsPanel;
+$("#turns-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#turns-backdrop")) closeTurnsPanel();
+});
+$("#turns-flagged").onchange = () => renderTurns(ui.turnsData);
+
+async function openTurnsPanel() {
+  $("#turns-backdrop").classList.remove("hidden");
+  $("#turns-rows").innerHTML = '<div class="panel-loading">loading…</div>';
+  await loadTurns();
+}
+
+async function loadTurns() {
+  let data = null;
+  try {
+    const res = await fetch("/api/turns");
+    data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.detail || res.statusText); data = null; }
+  } catch { /* stays null */ }
+  ui.turnsData = data;
+  renderTurns(data);
+}
+
+function renderTurns(data) {
+  const rows = $("#turns-rows");
+  if (!data) {
+    rows.innerHTML = '<div class="panel-loading">could not read the recording</div>';
+    return;
+  }
+  const shown = data.turns.length < data.total
+    ? `the newest ${data.turns.length} of ${data.total}` : `${data.total}`;
+  $("#turns-note").textContent = `${shown} turn(s) in ${data.path}, `
+    + `${data.flagged} flagged` + (data.unreadable
+      ? `, ${data.unreadable} unreadable line(s) skipped` : "")
+    + " — an unflagged turn can still be wrong";
+  const onlyFlagged = $("#turns-flagged").checked;
+  const turns = data.turns.filter((t) => !onlyFlagged || t.flagged);
+  rows.innerHTML = "";
+  if (!turns.length) {
+    rows.innerHTML = `<div class="panel-loading">${data.total
+      ? "nothing flagged" : "nothing recorded yet"}</div>`;
+    return;
+  }
+  for (const t of turns) rows.append(turnRow(t));
+}
+
+function turnRow(t) {
+  const row = document.createElement("div");
+  const good = t.judged_by === "person" && t.passed === true;
+  row.className = "turn-row" + (t.flagged ? " is-flagged" : "")
+    + (good ? " is-good" : "");
+  row.innerHTML =
+    `<div class="turn-row-head"><span class="turn-row-flag">${
+      t.flagged ? "✗" : good ? "✓" : ""}</span>`
+    + `<span class="turn-row-id" title="the id --turns and --fossil know it by">${esc(t.id.slice(0, 8))}</span>`
+    + `<span>${esc(t.at)}</span><span>${t.tools} tool(s)</span>`
+    + (t.case ? `<span>case ${esc(t.case)}</span>` : "") + `</div>`
+    + `<div class="turn-row-task">${esc(t.task)}</div>`
+    + (t.flag_why ? `<div class="turn-row-why">${esc(t.flag_why)}</div>` : "");
+  // A mark changes whether the turn is flagged, and the server owns that
+  // rule, so the list is read again rather than guessed at here.
+  row.append(markRow(t.id, t, () => loadTurns()));
+  return row;
+}
+
+function refreshTurnsPanel() {
+  if (!$("#turns-backdrop").classList.contains("hidden")) loadTurns();
+}
+
+function closeTurnsPanel() {
+  $("#turns-backdrop").classList.add("hidden");
 }
 
 /* ---------- modals ---------- */

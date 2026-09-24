@@ -91,10 +91,10 @@
          ceiling at all. -->
     <!-- Shown only while --trace is writing this session's turns down,
          so anybody at the page can see it, not only whoever read the
-         terminal banner. -->
-    <span class="chip chip-static hidden" id="chip-rec">
+         terminal banner. A click opens the turns already recorded. -->
+    <button class="chip hidden" id="chip-rec">
       <span class="chip-key">rec</span><span class="chip-label" id="rec-label"></span>
-    </span>
+    </button>
 
     <span class="chip chip-static hidden" id="chip-budget">
       <span class="ctxbar"><span class="ctxbar-fill" id="budget-fill"></span></span>
@@ -301,6 +301,27 @@
         </div>
       </div>
       <div id="tools-rows"></div>
+    </div>
+  </div>
+</div>
+
+<!-- the recorded turns: --turns inside the page, so a turn from before a
+     reload can still be marked -->
+<div id="turns-backdrop" class="hidden">
+  <div id="turns-panel" role="dialog" aria-modal="true" aria-labelledby="turns-title">
+    <div class="tools-head">
+      <div>
+        <h3 id="turns-title">recorded turns</h3>
+        <span class="tools-note" id="turns-note">the file --turns reads — mark any turn, including ones from before this page loaded</span>
+      </div>
+      <button class="ghost icon-only" id="turns-close" title="close" aria-label="close">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div id="turns-body">
+      <label class="turns-filter"><input type="checkbox" id="turns-flagged"> flagged only</label>
+      <div id="turns-rows"></div>
     </div>
   </div>
 </div>

@@ -244,6 +244,54 @@ class Trajectory:
                 or any(c.failed for c in self.children))
 
 
+def flagged(turn) -> bool:
+    """The cheap filter (``Trajectory.failed``), or a grader that said no.
+
+    What ``--turns failed`` keeps and the page's turns panel marks with a
+    cross -- one definition, so the terminal and the browser cannot
+    disagree about which turns deserve a look (notes/81).
+
+    A grader's verdict is the one judgement a trace carries that Yantra
+    did not make: a person wrote the case (notes/70). A PERSON'S MARK
+    (notes/74) outranks both: they read the answer, and a turn they
+    called good is not flagged by a tool error it recovered from.
+    """
+    if turn.judged_by == "person":
+        return turn.passed is False
+    return turn.failed or turn.passed is False
+
+
+def why_flagged(turn) -> str:
+    """Every reason a turn is flagged, or "". All of them, because the
+    grader's no and a tool that failed are two different leads."""
+    why = []
+    if turn.judged_by == "person":
+        if turn.passed is False:
+            return ("marked bad by a person"
+                    + (f": {turn.why}" if turn.why else ""))
+        return ""
+    if turn.passed is False:
+        why.append("red in its case -- the grader said no")
+    if turn.outcome != "end_turn":
+        why.append(f"ended {turn.outcome}")
+    why += [f"{step.name}{step_note(step)}" for step in turn.steps
+            if not step.ok]
+    for child in turn.children:
+        if child.failed:
+            why.append(f"sub-agent #{child.number} {child.agent}: " + (
+                child.code or next(f"{s.name}{step_note(s)}"
+                                   for s in child.steps if not s.ok)))
+    return "; ".join(why)
+
+
+def step_note(step) -> str:
+    """A child step's suffix: nothing when it worked, the refusal code when
+    the gate turned it away, "failed" when it ran and errored."""
+    if step.ok:
+        return ""
+    return f" (refused: {step.refusal})" if step.refusal else " (failed)"
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 

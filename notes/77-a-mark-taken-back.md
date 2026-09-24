@@ -103,9 +103,10 @@ asking "are you sure?" first would be friction with nothing to protect.
 
 ## What is not here yet
 
-* **The page cannot show old marks.** Only turns recorded while the page
-  was open get the row. Showing `--turns` inside the page would need a
-  panel of its own.
+* ~~**The page cannot show old marks.**~~ The `rec` chip opens the
+  recorded turns, newest first, each markable
+  ([note 81](81-the-turns-the-page-never-saw.md)). Was: only turns
+  recorded while the page was open got the row.
 
 ## Receipt
 

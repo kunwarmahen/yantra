@@ -1093,7 +1093,7 @@ pre.output { color: var(--ink); }
    7. overlays — modal, dialog, tools panel
    ===================================================================== */
 
-#modal-backdrop, #tools-backdrop, #dialog-backdrop {
+#modal-backdrop, #tools-backdrop, #turns-backdrop, #dialog-backdrop {
   position: fixed;
   inset: 0;
   display: flex;
@@ -1105,7 +1105,7 @@ pre.output { color: var(--ink); }
   backdrop-filter: blur(4px);
   animation: fade-in var(--med) var(--ease);
 }
-#tools-backdrop  { z-index: 40; }  /* BELOW the approval modal on purpose */
+#tools-backdrop, #turns-backdrop { z-index: 40; }  /* BELOW the approval modal on purpose */
 #dialog-backdrop { z-index: 45; }
 #modal-backdrop  { z-index: 50; }  /* approvals pop over everything */
 
@@ -1115,7 +1115,7 @@ pre.output { color: var(--ink); }
   to   { opacity: 1; transform: none; }
 }
 
-.sheet, #modal, #tools-panel, #dialog {
+.sheet, #modal, #tools-panel, #turns-panel, #dialog {
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--r-5);
@@ -1392,7 +1392,7 @@ pre.output { color: var(--ink); }
    8. tools panel
    ===================================================================== */
 
-#tools-panel {
+#tools-panel, #turns-panel {
   width: 100%;
   max-width: 780px;
   max-height: min(86vh, 860px);
@@ -1423,13 +1423,13 @@ pre.output { color: var(--ink); }
   line-height: 1.55;
   color: var(--ink-3);
 }
-#tools-close {
+#tools-close, #turns-close {
   flex: none;
   width: 30px; height: 30px;
   padding: 0;
   border-radius: var(--r-2);
 }
-#tools-body {
+#tools-body, #turns-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -1812,11 +1812,11 @@ pre.output { color: var(--ink); }
 }
 
 @media (max-width: 620px) {
-  #modal-backdrop, #tools-backdrop, #dialog-backdrop {
+  #modal-backdrop, #tools-backdrop, #turns-backdrop, #dialog-backdrop {
     padding: 0;
     align-items: flex-end;
   }
-  #modal, #tools-panel, #dialog {
+  #modal, #tools-panel, #turns-panel, #dialog {
     max-width: none;
     max-height: 92vh;
     border-radius: var(--r-5) var(--r-5) 0 0;
@@ -1842,3 +1842,45 @@ pre.output { color: var(--ink); }
   .t-desc { flex: 1 0 100%; order: 9; }
   #toast { right: 12px; left: 12px; bottom: 90px; max-width: none; }
 }
+
+/* ---- recorded turns (notes/81) ---- */
+
+.turns-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.turn-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.turn-row:last-child { border-bottom: none; }
+.turn-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.turn-row-flag { width: 10px; flex: none; font-weight: 700; }
+.turn-row.is-flagged .turn-row-flag { color: var(--danger); }
+.turn-row.is-good .turn-row-flag { color: var(--ok); }
+.turn-row-id { font-family: var(--mono); font-size: 11px; }
+.turn-row-task {
+  margin: 4px 0 2px 18px;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.turn-row-why {
+  margin: 0 0 6px 18px;
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.turn-row .turn-mark { margin: 6px 0 0 18px; }
+.turn-row .turn-mark-id { display: none; }   /* the head already says it */
