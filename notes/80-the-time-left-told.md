@@ -147,4 +147,12 @@ After the second notice the model did not try the third write, which
 would have been refused without anybody being asked. It stopped and
 said which two writes it still needed.
 
+It does not always work. In another run with the same settings, qwen
+sent both writes at once; they were refused (`timeout`, then
+`out_of_time`), and although it had been told the time was gone, it
+tried the same write through `bash` next, and that was refused too.
+The notice changes what the model knows. It does not decide for the
+model, and the clock refuses exactly what it would have refused without
+the notice.
+
 `1891 passed, 1 skipped` (was 1877).

@@ -90,6 +90,20 @@ guessing at somebody's decision after the fact, and the page falls back
 to what actually happened: an error result, exactly as the model read
 it.
 
+**The turn footer carries the tally too.** Each `turn_end` envelope has a
+`refused` field, the refusals counted by cause, and the page prints the
+terminal's line under the turn's footer in the same warning colour:
+
+```
+── 3 call(s) refused: out_of_time 2 · timeout 1
+```
+
+The server counts from the agent's own record of the turn
+(`turn_refusals`), not from the cards the page has drawn. A tab that
+joined halfway through missed some of the cards, but its footer still
+adds up to what the gate did. A turn with nothing refused sends `{}` and
+the page prints nothing, as the terminal does.
+
 ## One thing that had never rendered
 
 Building this turned up a small, old bug in the same three lines. The
@@ -116,8 +130,13 @@ asserted on the *colour* would have passed forever.
   refused with `user` must never be re-asked without being told to. The
   codes make that distinction available — nothing acts on it yet, and
   acting on it means a queue rather than a renderer.
-* **The tally is not in the browser.** The page shows per-card pills and
-  no per-turn summary; the turn footer there is about tokens and money.
+* ~~**The tally is not in the browser.**~~ It is: `turn_end` carries
+  `refused`, and the page prints it under the footer (see
+  [The browser gets the token](#the-browser-gets-the-token-not-a-translation)
+  above). Was: the page showed per-card pills and no per-turn summary.
+  Live, on `qwen3.8:latest` with `--wait-budget 8` and nobody at the
+  page, two parallel writes and a fallback `bash` came back as
+  `'refused': {'out_of_time': 2, 'timeout': 1}`.
 * **History still forgets.** A code lives on the event and nowhere else,
   so `--resume` and a browser reconnect both come back with error
   results and no causes. Storing it means a column in the checkpoint

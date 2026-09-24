@@ -694,6 +694,13 @@ pre.md-code {
   font-variant-numeric: tabular-nums;
   color: var(--ink-3);
 }
+/* The refusal tally sits under the footer, in the refused cards' colour. */
+.turn-foot.turn-refused {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: none;
+  color: var(--warn);
+}
 
 /* A person's verdict on a recorded turn (notes/77). Quiet on purpose:
    it is an offer, not a question the page is waiting on. */

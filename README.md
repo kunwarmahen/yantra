@@ -716,7 +716,8 @@ crash. A refused call **never ran** — it is not an error, and `user` and
 Yellow rather than red (the colour the approval prompt uses — this is the
 same conversation), one tally per turn grouped by cause, and the browser
 gets the code itself in the `tool_result` envelope rather than a
-sentence. A *replayed* call carries no code: history holds the error
+sentence. The page prints the same tally line under each turn's footer,
+from a `refused` count the server sends on `turn_end`. A *replayed* call carries no code: history holds the error
 result the model saw and never held the gate's reason for it, and
 inventing one after the fact would be guessing at somebody's decision.
 See [notes/52](notes/52-the-word-for-what-happened.md).
@@ -1967,7 +1968,9 @@ src/yantra/
 │                   bar shares the context meter's widget and thresholds --
 │                   same kind of fact, so it reads as one instrument
 │                   ([notes/22](notes/22-web-ui.md),
-│                   [notes/43](notes/43-a-bar-and-a-deadline.md)). A
+│                   [notes/43](notes/43-a-bar-and-a-deadline.md)). The
+│                   turn footer prints the refusal tally by cause
+│                   ([notes/52](notes/52-the-word-for-what-happened.md)). A
 │                   recorded turn ends with good/bad buttons: the SAME
 │                   mark() --mark calls, idle only
 │                   ([notes/77](notes/77-a-mark-taken-back.md)).

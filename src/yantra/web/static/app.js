@@ -477,6 +477,8 @@ function onTurnEnd(env) {
     const why = env.detail ? ` — ${env.detail}` : "";
     addBanner(`── turn ended: ${env.reason}${why} ` +
               `(after ${env.iterations} iteration(s))`, false);
+    const tally = refusalTally(env.refused);
+    if (tally) transcript.append(tally);
     return;
   }
   if (env.text && env.text.trim()) {
@@ -496,8 +498,25 @@ function onTurnEnd(env) {
     `${cost} · ${env.iterations} iteration(s)`;
   const wrap = ensureAssistant().parentElement;
   wrap.append(foot);
+  const tally = refusalTally(env.refused);
+  if (tally) wrap.append(tally);
   ui.currentAssistant = null;
   scrollDown();
+}
+
+/* The terminal's per-turn tally (notes/52): refusals grouped by cause, or
+   nothing. The cards above say WHICH calls were refused; this answers the
+   end-of-turn question -- was anything refused for a reason that was not
+   me? Counted by the server, so a tab that joined late still adds up. */
+function refusalTally(refused) {
+  const codes = Object.entries(refused || {});
+  if (!codes.length) return null;
+  const total = codes.reduce((n, [, k]) => n + k, 0);
+  const el = document.createElement("div");
+  el.className = "turn-foot turn-refused";
+  el.textContent = `── ${total} call(s) refused: ` +
+    codes.map(([code, n]) => `${code} ${n}`).join(" · ");
+  return el;
 }
 
 /* A person's verdict on the turn just recorded (notes/77): the browser's

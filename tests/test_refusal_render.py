@@ -128,3 +128,39 @@ class TestTheBrowser:
         source = inspect.getsource(server.WebSession)
         replay = source.split('"type": "tool_result", "name": call.name')[1]
         assert "refusal" not in replay.split("return out")[0]
+
+    def test_the_turn_footer_gets_the_same_tally_the_terminal_prints(self):
+        """notes/52: the page had a pill per card and no per-turn answer
+        to "was anything refused for a reason that was not me?"."""
+        import pytest
+        pytest.importorskip("fastapi")
+        from test_web_wait_budget import run, two_writes_and_a_read
+        from test_web_server import make_session
+        session, _ = make_session(two_writes_and_a_read())
+        session.set_wait_budget(0.3, on_timeout="deny")
+        (end,) = [e for e in run(session) if e["type"] == "turn_end"]
+        assert end["refused"] == {"out_of_time": 1, "timeout": 1}
+
+    def test_a_turn_with_nothing_refused_sends_an_empty_tally(self):
+        import pytest
+        pytest.importorskip("fastapi")
+        from test_web_wait_budget import run
+        from test_web_server import make_session
+        from conftest import assistant_text
+        session, _ = make_session([assistant_text("hi")])
+        (end,) = [e for e in run(session) if e["type"] == "turn_end"]
+        assert end["refused"] == {}
+
+    def test_a_turn_that_ended_badly_still_sends_its_tally(self):
+        import pytest
+        pytest.importorskip("fastapi")
+        from test_web_wait_budget import run
+        from test_web_server import make_session
+        from conftest import assistant_tool_call
+        session, agent = make_session(
+            [assistant_tool_call("w1", "write_thing", {"text": "a"})])
+        agent.max_iterations = 1
+        session.set_wait_budget(0.2, on_timeout="deny")
+        (end,) = [e for e in run(session) if e["type"] == "turn_end"]
+        assert end["reason"] != "end_turn"
+        assert end["refused"] == {"timeout": 1}

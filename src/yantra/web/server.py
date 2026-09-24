@@ -128,6 +128,20 @@ def cost_line(agent: Agent) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _refusal_tally(agent) -> dict[str, int]:
+    """This turn's refusals counted by cause -- the terminal's per-turn
+    tally (notes/52), for the page's turn footer.
+
+    Counted from ``turn_refusals`` rather than from the envelopes the page
+    was sent: a tab that joined mid-turn missed some of the cards, and
+    the footer should still add up to what the gate did.
+    """
+    counts: dict[str, int] = {}
+    for code in getattr(agent, "turn_refusals", {}).values():
+        counts[code] = counts.get(code, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 @dataclass
 class _Client:
     """One connected browser tab: its inbound event queue plus the loop that
@@ -549,6 +563,7 @@ class WebSession:
                     "cost_line": cost_line(self.agent),
                     "iterations": n,
                     "budget_meter": _budget_meter(self.agent),
+                    "refused": _refusal_tally(self.agent),
                 })
             case TurnEnd(reason=reason, response=response, iterations=n,
                          detail=detail):
@@ -560,7 +575,8 @@ class WebSession:
                                 "detail": detail or "",
                                 "text": (response.message.text()
                                          if response is not None else ""),
-                                "iterations": n, "cost_line": ""})
+                                "iterations": n, "cost_line": "",
+                                "refused": _refusal_tally(self.agent)})
 
     # ---- snapshots -------------------------------------------------------------
 
