@@ -165,9 +165,11 @@ every model.
   not overlap. Was: the same measurement on a cloud model, or on a turn
   shaped differently, is one command, and it had not been run. A cloud
   model is still unmeasured.
-* **Nothing forecasts the reply.** Still true from notes 36 and 43, and
-  the measurement shows why it matters: the expensive part of these
-  turns was an answer nobody could price in advance.
+* ~~**Nothing forecasts the reply.**~~ Partly shipped in [note 69](69-a-reply-the-turn-has-seen-before.md): the
+  turn's own largest reply is forecast, and on this same setup the
+  turns never warned fell from eight in twenty to one. Was: the
+  expensive part of these turns was an answer nobody could price in
+  advance.
 * **A session total is still a service's job** ([notes/34](34-budgets.md)).
 
 ## Receipt

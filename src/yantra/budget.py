@@ -79,8 +79,22 @@ finished, and it is taken at the top of an iteration -- the moment the
 request is assembled and its size is known. The loop sizes it
 (``Agent._forecast_tokens``, which anchors on the tokens the last
 response reported and estimates only what has been appended since) and
-this module prices it. The REPLY is not forecast at all, because nobody
-can know its length in advance. That undercounts, which is why
+this module prices it.
+
+THE REPLY IS FORECAST FROM THE TURN'S OWN REPLIES (notes/69). Nobody can
+know a reply's length before it arrives, and for a long time that was
+the reason not to guess. But a turn is not a stranger to itself: a model
+that thinks for three thousand tokens before every tool call does it on
+the next call too. Measured on a thinking-heavy local model, eight of
+twenty turns jumped from comfortably under the ceiling to over it in one
+call, never warned, because the forecast priced the request and not the
+reply. So the forecast adds the LARGEST reply this turn has had so far --
+the largest, not the average, because an under-forecast is the direction
+that loses warnings, and a warning a call early costs a sentence. The
+first call of a turn has no replies to go on, and is still forecast on
+its input alone.
+
+That still undercounts a reply longer than any before it, which is why
 ``WARN_AT`` stays on as a floor: a turn whose cost is mostly output would
 otherwise creep to the ceiling with the forecast saying "fine" each
 time.
@@ -157,6 +171,11 @@ class Budget:
         #: The heads-up is a ONE-SHOT per turn, and the latch belongs to
         #: the meter so a parent and its sub-agents share it.
         self._warned = False
+        #: The largest reply (output tokens) the OWNER has had this turn:
+        #: the forecast of the next one (notes/69). A sub-agent's replies
+        #: are left out -- they are a different agent's habit, and the
+        #: call being forecast is the owner's.
+        self.largest_reply = 0
         #: Whether the MODEL is told, as well as the operator. Off by
         #: default and deliberately not a package key: see ``notice``.
         self.notify_agent = notify_agent
@@ -203,6 +222,7 @@ class Budget:
             self.delegated = 0.0
             self.unpriced_model = None
             self._warned = False
+            self.largest_reply = 0
 
     def charge(self, usage: Usage, model: str, *,
                spender: object | None = None) -> None:
@@ -224,6 +244,8 @@ class Budget:
         if spender is not None and self._owner is not None \
                 and spender is not self._owner:
             self.delegated += cost
+        else:
+            self.largest_reply = max(self.largest_reply, usage.output_tokens)
 
     def exceeded(self) -> bool:
         """Has this turn earned the right to another model call?"""
@@ -240,11 +262,12 @@ class Budget:
         producing a wall of identical advice, and a caller that got a
         string is the only one that will.
 
-        Two things earn it. The request about to go out is priced from
-        its context size, and if that would not fit under what is left,
+        Two things earn it. The call about to go out is priced -- its
+        context size, plus a reply as long as the longest this turn has
+        had (notes/69) -- and if that would not fit under what is left,
         this is the last moment anyone can be told. Failing that, the
         turn has simply spent ``WARN_AT`` of the ceiling -- the floor
-        under a forecast that cannot see the reply it will get.
+        under a forecast that cannot see a reply longer than any before.
 
         Says nothing to anyone but the agent whose turn this is -- a
         sub-agent's events end up inside a tool result, so warning there
@@ -258,15 +281,24 @@ class Budget:
             return None
         if not self.metered or self._warned or self.exceeded():
             return None
-        price = price_for(model) if next_input_tokens and model else None
+        reply = self.largest_reply
+        price = (price_for(model) if model and (next_input_tokens or reply)
+                 else None)
         forecast = (0.0 if price is None
-                    else cost_of(Usage(input_tokens=next_input_tokens), price))
+                    else cost_of(Usage(input_tokens=next_input_tokens,
+                                       output_tokens=reply), price))
         if (self.spent + forecast < self.max_usd
                 and self.spent < self.max_usd * WARN_AT):
             return None
         self._warned = True
         left = self.max_usd - self.spent
         if forecast and self.spent + forecast >= self.max_usd:
+            if reply:
+                return (f"the next call carries ~{next_input_tokens:,} tokens "
+                        f"of context, and replies this turn have run to "
+                        f"~{reply:,} tokens -- about ${forecast:.4f} for both, "
+                        f"and ~${left:.4f} is left of the "
+                        f"${self.max_usd:.2f} ceiling for this turn")
             return (f"the next call carries ~{next_input_tokens:,} tokens of "
                     f"context, about ${forecast:.4f} before the reply -- and "
                     f"~${left:.4f} is left of the ${self.max_usd:.2f} ceiling "

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1750 tests. The
+The harness underneath is complete and covered by 1757 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1418,6 +1418,12 @@ without ever being seen inside the band. The forecast is an estimate, on
 purpose — the *stop* is only ever made on money actually billed, and a
 warning that is wrong costs a line of text.
 
+From a turn's second call on, the forecast also counts **a reply as long
+as the longest this turn has had**, because a model that thinks at length
+before one call does it before the next. On `qwen3.8:latest` that cut
+the turns stopped without any warning from eight in twenty to one
+([notes/69](notes/69-a-reply-the-turn-has-seen-before.md)).
+
 The rules worth knowing before you rely on it:
 
 * **Per turn, not per session.** One turn is one thing the agent was asked
@@ -1753,7 +1759,9 @@ src/yantra/
 │                   ([notes/34](notes/34-budgets.md),
 │                   [notes/36](notes/36-a-warning-before-the-stop.md),
 │                   [notes/43](notes/43-a-bar-and-a-deadline.md),
-│                   [notes/64](notes/64-a-price-for-the-free-road.md))
+│                   [notes/64](notes/64-a-price-for-the-free-road.md)).
+│                   The estimate adds the turn's largest reply so far
+│                   ([notes/69](notes/69-a-reply-the-turn-has-seen-before.md))
 ├── providers/
 │   ├── base.py     Provider ABC + collect()/acollect(): stream events ->
 │   │               ModelResponse (protocol cores shared by both skins);

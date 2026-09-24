@@ -318,7 +318,10 @@ by then it is too late to have set a different ceiling.
 
 ## What is not here yet
 
-* **No forecast of the reply.** Output tokens are unknowable in advance,
+* ~~**No forecast of the reply.**~~ Partly shipped in [note 69](69-a-reply-the-turn-has-seen-before.md): the
+  forecast adds the largest reply the turn has had so far; the first
+  call of a turn is still forecast on its input alone. Was: output
+  tokens are unknowable in advance,
   so a turn whose cost is mostly output leans on the `WARN_AT` floor
   rather than on the number that would actually help. `max_tokens` is an
   upper bound and a useless one — priced in full it would warn on every

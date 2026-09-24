@@ -235,7 +235,9 @@ bar belongs and now has one.
 
 ## What is not here yet
 
-* **No forecast of the reply.** Unchanged from note 36: output tokens are
+* ~~**No forecast of the reply.**~~ Partly shipped in [note 69](69-a-reply-the-turn-has-seen-before.md): the
+  turn's own largest reply is forecast. Was: unchanged from note 36:
+  output tokens are
   unknowable in advance, so an output-heavy turn still leans on the
   `WARN_AT` floor rather than on the number that would help.
 * ~~**Nothing measures whether the notice works.**~~ Measured in

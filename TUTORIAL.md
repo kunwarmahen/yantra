@@ -1120,6 +1120,12 @@ without ever being seen inside the warning band.
 The forecast is an estimate on purpose. The **stop** is only ever made on
 money actually billed; a warning that is wrong costs a line of text.
 
+After the first call, the estimate also includes the reply. Nobody knows
+how long the next reply will be, but the turn has already seen some, so
+it assumes the next one could be as long as the longest so far. Models
+that "think" at length before every call are the ones this helps
+([notes/69](notes/69-a-reply-the-turn-has-seen-before.md)).
+
 Two readers of the same meter want opposite things
 ([notes/43](notes/43-a-bar-and-a-deadline.md)):
 
@@ -2294,7 +2300,7 @@ Most carry a live receipt from a real run.
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
 | [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) [68](notes/68-the-version-nobody-bumped.md) | the acceptance gate, and everything that grew on it |
-| [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
+| [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) [69](notes/69-a-reply-the-turn-has-seen-before.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
 | [45](notes/45-the-road-with-no-key.md) [54](notes/54-the-word-for-a-road.md) | the road with no key, how it says its name, and what to call it |
