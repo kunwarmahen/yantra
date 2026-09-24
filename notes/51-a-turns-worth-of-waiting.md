@@ -111,6 +111,11 @@ policy and belongs to whoever owns the conversation.
 
 ## What is not here yet
 
+* ~~**A spent allowance refuses reads too.**~~ Fixed in
+  [note 71](71-a-limit-on-waiting-not-on-work.md): the inner gate is
+  still consulted, and only an answer that would wait is refused. Was:
+  once spent, every call in the turn was refused without asking.
+
 * **No frontend passes one.** The terminal gate answers inline (nothing
   is ever waited for, so nothing can be timed), and the browser's gate
   has no flag for it yet — the same state `with_deadline` has been in
@@ -121,10 +126,10 @@ policy and belongs to whoever owns the conversation.
   and the identities this needed: `max_wait_per_day` on a person (its
   note 14). It is checked where a question is actually put, not by
   wrapping the gate like `with_wait_budget` does, because this wrapper
-  refuses every call once its allowance is gone, read-only ones
-  included. That is right for one turn and wrong for a whole day. Was:
-  "this person may be asked for two minutes a day" needs a store and an
-  identity, which is a service's problem.
+  used to refuse every call once its allowance was gone, read-only ones
+  included ([note 71](71-a-limit-on-waiting-not-on-work.md) fixed that).
+  Was: "this person may be asked for two minutes a day" needs a store
+  and an identity, which is a service's problem.
 * **Nothing tells the model how much patience is left.** The budget
   notice ([notes/43](43-a-bar-and-a-deadline.md)) does this for dollars —
   a deadline the model can plan around — and the same trick would work

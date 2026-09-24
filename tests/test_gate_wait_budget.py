@@ -10,9 +10,12 @@ the individual waits.
 Two failures specifically designed against:
 
 * **Asking a question nobody will wait for.** Once the allowance is
-  gone, ``inner`` must not be called at all -- a person answering a
+  gone, a question must never reach a person -- a person answering a
   prompt that was already decided against them is worse than a refusal.
-  The tests count invocations, not verdicts.
+  The tests count questions POSTED, not verdicts.
+* **Refusing what nobody would have asked about** (notes/71). A spent
+  allowance is a limit on waiting, so a call ``inner`` answers inline --
+  a read, a standing yes -- still gets that answer.
 * **A budget that leaks across turns.** The wrapper resets when the turn
   id changes, and an UNSTAMPED request is its own turn, so a host
   driving a gate directly can never eat a real turn's allowance.
@@ -209,5 +212,39 @@ class TestWhatItDoesNotBind:
                 await task
             req = request()
             assert await adecide(gate, req) is False
+
+        asyncio.run(scenario())
+
+
+class TestASpentAllowanceStopsOnlyQuestions:
+    """notes/71: the wrapper used to refuse every call once spent."""
+
+    def test_an_inline_answer_still_passes_once_spent(self):
+        async def scenario():
+            def reads_inline(request):
+                if request.tool_name == "read_file":
+                    return True                    # decided, nobody asked
+                return slow_gate(0.15)(request)
+            gate = with_wait_budget(reads_inline, 0.1, on_timeout="deny")
+            assert await adecide(gate, request()) is False   # spends it
+            assert await adecide(gate, request(tool_name="read_file")) is True
+
+        asyncio.run(scenario())
+
+    def test_a_task_an_eager_gate_started_is_cancelled_not_left_running(self):
+        async def scenario():
+            started: list[asyncio.Task] = []
+
+            def eager(request):
+                task = asyncio.ensure_future(asyncio.sleep(10, result=True))
+                started.append(task)
+                return task
+            gate = with_wait_budget(eager, 0.05, on_timeout="deny")
+            assert await adecide(gate, request()) is False   # spends it
+            late = request()
+            assert await adecide(gate, late) is False
+            assert denial_code(late) == REFUSED_OUT_OF_TIME
+            await asyncio.sleep(0)
+            assert started[-1].cancelled()
 
         asyncio.run(scenario())

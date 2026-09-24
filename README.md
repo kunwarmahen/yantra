@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 1770 tests. The
+The harness underneath is complete and covered by 1772 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -676,7 +676,10 @@ posting a question the wrapper will not wait for means somebody reads a
 prompt, decides, taps Approve, and learns the call was refused before
 they were asked. The two refusals carry different codes for that reason:
 `timeout` means somebody was asked and did not answer, `out_of_time`
-means nobody was asked. The gate learns where a turn begins because the
+means nobody was asked. What is refused is only the *question*: a call
+the gate answers on the spot (a read, a standing yes) still goes through
+once the allowance is spent
+([notes/71](notes/71-a-limit-on-waiting-not-on-work.md)). The gate learns where a turn begins because the
 request says so (`turn_id`, beside `call_id`) rather than by inferring it
 from timing or call counts, which would reset the budget at the wrong
 moment and never raise. See
@@ -1585,7 +1588,10 @@ src/yantra/
 │                   ([notes/39](notes/39-a-clock-and-a-word.md)).
 │                   with_wait_budget() is the same clock on the TURN: the
 │                   allowance is spent down across a batch, nothing is
-│                   asked once it is gone (out_of_time, not timeout), and
+│                   asked once it is gone (out_of_time, not timeout) --
+│                   though an inline answer still passes
+│                   ([notes/71](notes/71-a-limit-on-waiting-not-on-work.md)) --
+│                   and
 │                   the request carries turn_id so the wrapper is told
 │                   where a turn begins rather than inferring it
 │                   ([notes/51](notes/51-a-turns-worth-of-waiting.md))

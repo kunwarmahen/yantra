@@ -353,13 +353,23 @@ def with_wait_budget(inner: PermissionFn, seconds: float, *,
     the agent was asked to do -- the same unit the dollar ceiling uses
     (notes/34), for the same reason.
 
-    NOTHING IS ASKED ONCE THE ALLOWANCE IS GONE. The verdict is returned
-    without calling ``inner`` at all, and the refusal code says which
-    happened: ``timeout`` means somebody was asked and did not answer,
+    NOTHING IS ASKED ONCE THE ALLOWANCE IS GONE -- AND NOTHING ELSE IS
+    REFUSED (notes/71). ``inner`` is still consulted: an answer it gives
+    inline (a read-only call, a standing yes) was never going to wait,
+    costs no allowance, and passes straight through. Only an answer that
+    would SUSPEND is refused, and it is refused without being awaited: a
+    coroutine is closed before it starts, so no question is ever posted,
+    and a task an eager gate already started is cancelled, exactly as a
+    dropped turn would cancel it. The refusal code says which happened:
+    ``timeout`` means somebody was asked and did not answer,
     ``out_of_time`` means nobody was asked because this turn had no
     waiting left to do. Posting a question the wrapper will not wait for
     is how a person ends up answering a prompt that has already been
     decided against them.
+
+    This used to refuse without calling ``inner`` at all, which also
+    refused every read for the rest of the turn -- a limit on waiting
+    that stopped work nobody was waiting on.
 
     The tradeoff, stated: a question that would have been answered in one
     second can be refused because earlier questions in the same turn ate
@@ -425,14 +435,28 @@ def with_wait_budget(inner: PermissionFn, seconds: float, *,
         # An unstamped request is its own turn: see PermissionRequest.
         if request.turn_id != state["turn"] or not request.turn_id:
             state["turn"], state["left"] = request.turn_id, seconds
-        if state["left"] <= 0:
-            return spent_out(request, REFUSED_OUT_OF_TIME)
         answer = inner(request)
         if not inspect.isawaitable(answer):
             return answer  # answered inline; nothing was waited for
+        if state["left"] <= 0:
+            _never_awaited(answer)
+            return spent_out(request, REFUSED_OUT_OF_TIME)
         return wait(answer, request, state["left"])
 
     return gate
+
+
+def _never_awaited(answer: Awaitable[bool]) -> None:
+    """Drop a suspending answer the wrapper will not wait for.
+
+    A coroutine has not started, so closing it means nothing was posted.
+    A future or task may already be under way (a gate that posts eagerly);
+    cancelling it is what a dropped turn would do to it anyway.
+    """
+    if inspect.iscoroutine(answer):
+        answer.close()
+    elif hasattr(answer, "cancel"):
+        answer.cancel()
 
 
 def trust_sandbox(inner: PermissionFn, sandbox) -> PermissionFn:
