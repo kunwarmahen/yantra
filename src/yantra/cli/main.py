@@ -34,9 +34,9 @@ from yantra.config import (
     load_settings,
 )
 from yantra.errors import ConfigError, ImageError, ToolError, UserUnavailable
-from yantra.eval_report import (Matrix, Pool, PriceRecord, SuiteRun, compare,
-                                line_up, pool, read_report, record_run,
-                                write_pool, write_report)
+from yantra.eval_report import (SORTS, Matrix, Pool, PriceRecord, SuiteRun,
+                                compare, line_up, pool, read_report,
+                                record_run, write_pool, write_report)
 from yantra.eval_suite import (CASES, SUITE_DIR, find_suite, load_cases,
                                render_case)
 from yantra.evals import (AsyncEvalRunner, CaseOutcome, EvalRunner,
@@ -200,6 +200,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "wrote, WITHOUT running anything: two print what "
                              "moved, three or more print a table. Needs no "
                              "package, no provider and no key")
+    parser.add_argument("--sort", choices=SORTS, default=None,
+                        help="order the rows of a TABLE (--against twice or "
+                             "more, --reports with three or more): "
+                             "'disagree' puts the cases the runs split on "
+                             "first, 'red' the most red cells, 'id' "
+                             "alphabetical. Reorders, never hides a row")
     parser.add_argument("--pool", action="store_true",
                         help="with --reports: add the reports up case by "
                              "case instead, and print what the pooled counts "
@@ -1093,7 +1099,8 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
         _render_comparison(console, compare(baselines[0], run))
     elif baselines:
         _render_matrix(console, line_up([*baselines, run]),
-                       [Path(p).stem for p in args.against] + ["this run"])
+                       [Path(p).stem for p in args.against] + ["this run"],
+                       sort=args.sort)
     # The verdict is THIS run's, and the comparison did not touch it.
     return 0 if green else 1
 
@@ -1263,7 +1270,7 @@ def _reports_mode(args, console: Console) -> int:
     else:
         stems = [p.stem for p in paths]
         labels = stems if len(set(stems)) == len(stems) else [str(p) for p in paths]
-        _render_matrix(console, line_up(runs), labels)
+        _render_matrix(console, line_up(runs), labels, sort=args.sort)
     return 0
 
 
@@ -1508,7 +1515,8 @@ def _evidence_note(console: Console, outcomes) -> None:
                       f"settle it, all green[/dim]")
 
 
-def _render_matrix(console: Console, table: Matrix, labels: list[str]) -> None:
+def _render_matrix(console: Console, table: Matrix, labels: list[str],
+                   sort: str | None = None) -> None:
     """Three or more runs side by side, one column each.
 
     Not three comparisons stacked: the question a table answers has no
@@ -1516,19 +1524,35 @@ def _render_matrix(console: Console, table: Matrix, labels: list[str]) -> None:
     differences makes the reader do the join in their head. The verdict is
     still untouched -- this prints under a run whose exit code was decided
     before any of these files were opened (notes/49).
+
+    THE TOTALS LIVE UNDER THEIR COLUMNS (notes/83). Passed, tokens and
+    dollars are a footer, padded by the same arithmetic as the cells, so
+    reading down a column ends at that column's sum. A TABLE WIDER THAN
+    THE TERMINAL IS SPLIT, NEVER WRAPPED: the columns are cut into blocks
+    that fit, each with the case names repeated on its left, because a
+    terminal that wraps a row puts half of it under the wrong header.
     """
+    if sort is not None:
+        table = table.sorted_by(sort)
     console.print(f"\n[bold]across {len(table.runs)} runs[/bold] "
                   f"{escape(table.runs[-1].suite)}")
     for label, run in zip(labels, table.runs, strict=True):
-        cost = f" · ${run.usd:.4f}" if run.usd else ""
-        if run.usd and run.pricing is not None:
-            cost += f" at {run.pricing.describe}"
+        rates = (f" · at {run.pricing.describe}"
+                 if run.usd and run.pricing is not None else "")
         console.print(f"  [dim]{escape(label)}: {escape(run.where)} · "
-                      f"{run.at} · {run.passed}/{len(run.cases)} passed · "
-                      f"{run.tokens} tok{cost}[/dim]")
+                      f"{run.at}{rates}[/dim]")
     if not table.comparable:
         console.print("[yellow]not every run graded every case; a blank cell "
                       "is a case that run did not have[/yellow]")
+    if sort == "disagree":
+        split = sum(1 for i in table.ids if table.disagrees(i))
+        console.print(f"[dim]sorted: {split} case(s) the runs disagree on "
+                      f"first, then the rest in the last run's order[/dim]"
+                      if split else
+                      "[dim]sorted: every run that graded a case agreed on "
+                      "it, so the order is the last run's[/dim]")
+    elif sort == "red":
+        console.print("[dim]sorted: most red cells first[/dim]")
 
     def text_of(cell) -> str:
         if cell is None:
@@ -1536,27 +1560,72 @@ def _render_matrix(console: Console, table: Matrix, labels: list[str]) -> None:
         mark = "\u2713" if cell.passed else "\u2717"
         return f"{mark} {cell.tally}" if cell.attempts > 1 else mark
 
+    # The footer: one row per total, and dollars only when some run had
+    # any -- a table of local runs with "$0" under every column reads as
+    # a broken meter (notes/48). Beside a priced run, a free one says
+    # "free" and an unpriced one "--": zero and unknown stay apart.
+    footer = [("passed", [f"{run.passed}/{len(run.cases)}"
+                          for run in table.runs]),
+              ("tokens", [str(run.tokens) for run in table.runs])]
+    if any(run.usd for run in table.runs):
+        footer.append(("cost", ["--" if run.usd is None
+                                else f"${run.usd:.4f}" if run.usd
+                                else "free" for run in table.runs]))
+
     rows = table.rows
-    width = max([len(i) for i in table.ids] + [4])
-    columns = [max([len(label)] + [len(text_of(row[i])) for _, row in rows])
+    width = max([len(i) for i in table.ids]
+                + [len(name) for name, _ in footer] + [4])
+    columns = [max([len(label)] + [len(text_of(row[i])) for _, row in rows]
+                   + [len(values[i]) for _, values in footer])
                for i, label in enumerate(labels)]
-    header = "  ".join(label.rjust(w) for label, w in zip(labels, columns,
-                                                          strict=True))
-    console.print(f"  [dim]{'case'.ljust(width)}  {escape(header)}[/dim]")
-    for case_id, row in rows:
-        cells = []
-        for cell, w in zip(row, columns, strict=True):
-            body = text_of(cell)
-            # PAD THE PLAIN TEXT, then colour it. Markup inside a rjust
-            # counts the colour codes as characters and shifts every
-            # column after this one.
-            pad = " " * (w - len(body))
-            if cell is None:
-                cells.append(pad + "[dim]--[/dim]")
-            else:
-                colour = "green" if cell.passed else "red"
-                cells.append(f"{pad}[{colour}]{body}[/{colour}]")
-        console.print(f"  {escape(case_id).ljust(width)}  " + "  ".join(cells))
+    blocks = _column_blocks(columns, console.width - 4 - width)
+    if len(blocks) > 1:
+        console.print(f"[dim]{len(labels)} columns are wider than this "
+                      f"terminal ({console.width}); shown in {len(blocks)} "
+                      f"blocks, the case names repeated on each[/dim]")
+    for block in blocks:
+        if len(blocks) > 1:
+            console.print(f"  [dim]columns {block[0] + 1}-{block[-1] + 1} "
+                          f"of {len(labels)}[/dim]")
+        header = "  ".join(labels[i].rjust(columns[i]) for i in block)
+        console.print(f"  [dim]{'case'.ljust(width)}  {escape(header)}[/dim]")
+        for case_id, row in rows:
+            cells = []
+            for i in block:
+                cell, body = row[i], text_of(row[i])
+                # PAD THE PLAIN TEXT, then colour it. Markup inside a rjust
+                # counts the colour codes as characters and shifts every
+                # column after this one.
+                pad = " " * (columns[i] - len(body))
+                if cell is None:
+                    cells.append(pad + "[dim]--[/dim]")
+                else:
+                    colour = "green" if cell.passed else "red"
+                    cells.append(f"{pad}[{colour}]{body}[/{colour}]")
+            console.print(f"  {escape(case_id).ljust(width)}  "
+                          + "  ".join(cells))
+        for name, values in footer:
+            line = "  ".join(values[i].rjust(columns[i]) for i in block)
+            console.print(f"  [dim]{name.ljust(width)}  {line}[/dim]")
+
+
+def _column_blocks(columns: list[int], room: int) -> list[list[int]]:
+    """Column indices cut into runs that fit in ``room`` characters.
+
+    Every block holds at least one column, however narrow the terminal:
+    a column wider than the screen still has to be shown somewhere, and
+    one wrapped column is readable where ten wrapped ones are not.
+    """
+    blocks: list[list[int]] = [[]]
+    used = 0
+    for i, w in enumerate(columns):
+        need = w + (2 if blocks[-1] else 0)
+        if blocks[-1] and used + need > room:
+            blocks.append([])
+            used, need = 0, w
+        blocks[-1].append(i)
+        used += need
+    return blocks
 
 
 def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
@@ -1909,6 +1978,18 @@ def main(argv: list[str] | None = None) -> int:
               "--report and --against belong to --eval -- they say how an "
               "acceptance "
               "suite is driven, and a session has one trajectory",
+              file=sys.stderr)
+        return 2
+    if args.sort is not None and not (
+            (args.eval and len(args.against) >= 2)
+            or (args.reports is not None and len(args.reports) >= 3
+                and not (args.pool or args.pool_json))):
+        # Two runs are a difference and a pool is a list by case; neither
+        # has rows to order, and a flag that did nothing would read as one
+        # that had worked (notes/83).
+        print("error: --sort orders the rows of a table, which needs three "
+              "or more runs: --eval with --against twice or more, or "
+              "--reports with three or more files and no --pool",
               file=sys.stderr)
         return 2
     if (args.pool or args.pool_json) and args.reports is None:

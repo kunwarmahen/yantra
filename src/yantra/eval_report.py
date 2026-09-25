@@ -578,6 +578,48 @@ class Matrix:
     def models(self) -> list[str]:
         return [run.where for run in self.runs]
 
+    def disagrees(self, case_id: str) -> bool:
+        """Whether the runs that graded this case reached different verdicts.
+
+        A blank is not a verdict: a case one run never had is a hole in the
+        table (notes/49), not a vote against the runs that did.
+        """
+        verdicts = {cell.passed for cell in
+                    (self.cell(case_id, i) for i in range(len(self.runs)))
+                    if cell is not None}
+        return len(verdicts) > 1
+
+    def reds(self, case_id: str) -> int:
+        """How many runs graded this case red."""
+        return sum(1 for i in range(len(self.runs))
+                   if (cell := self.cell(case_id, i)) is not None
+                   and not cell.passed)
+
+    def sorted_by(self, key: str) -> Matrix:
+        """The same table, rows reordered (notes/83). Never filtered.
+
+        ``disagree`` puts the cases the runs split on first -- the rows a
+        table is for. ``red`` puts the most red cells first. ``id`` is
+        alphabetical, for finding one case in forty. Each sort is STABLE,
+        so rows that tie keep the last run's order rather than a new one
+        nobody asked for.
+        """
+        if key not in SORTS:
+            raise ValueError(f"unknown sort {key!r}; known: "
+                             f"{', '.join(SORTS)}")
+        if key == "id":
+            ids = sorted(self.ids)
+        elif key == "red":
+            ids = sorted(self.ids, key=lambda i: -self.reds(i))
+        else:
+            ids = sorted(self.ids, key=lambda i: not self.disagrees(i))
+        return Matrix(runs=self.runs, ids=ids)
+
+
+#: What ``--sort`` accepts (notes/83). The default is no key at all: the
+#: last run's order, which is the order the operator just watched.
+SORTS = ("disagree", "red", "id")
+
 
 def line_up(runs: Sequence[SuiteRun]) -> Matrix:
     """Several runs -> one table, keeping every case any of them graded.

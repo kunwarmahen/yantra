@@ -1111,18 +1111,23 @@ the point rather than an error. See
 
 **Three models side by side is a table, not three comparisons.**
 `--against` is repeatable, and two or more reports line up as columns
-with this run last:
+with this run last. Three reports already on disk do the same through
+`--reports`, here sorted so the case the models split on comes first:
 
 ```
-across 4 runs researcher 0.1.0
-  qwen: ollama/qwen3.8:27b · 6/6 passed · 42141 tok
-  gemma: ollama/gemma4:12b · 6/6 passed · 33762 tok
-  red: ollama/qwen3.8:27b · 4/6 passed · 47236 tok
-  this run: ollama/qwen3.8:latest · 6/6 passed · 28626 tok
-  case                                   qwen  gemma  red  this run
-  outlines-before-reading                   ✓      ✓    ✓         ✓
-  delegation-works-end-to-end               ✓      ✓    ✗         ✓
-  the-checker-is-actually-on-the-roster     ✓      ✓    ✗         ✓
+$ uv run yantra --reports priced.json gemma4-12b.json gemma4-e4b.json --sort disagree
+across 3 runs researcher 0.1.0
+  priced: ollama/qwen3.8:latest · 2026-09-25T00:57:41Z · at $0.30 in / $1.20 out per Mtok (YANTRA_PRICES)
+  gemma4-12b: ollama/gemma4:12b · 2026-09-25T01:01:54Z
+  gemma4-e4b: ollama/gemma4:e4b · 2026-09-25T01:02:27Z
+sorted: 1 case(s) the runs disagree on first, then the rest in the last run's order
+  case                                    priced  gemma4-12b  gemma4-e4b
+  cites-what-it-read                           ✓           ✓           ✗
+  outlines-before-reading                      ✓           ✓           ✓
+  delegation-works-end-to-end                  ✓           ✓           ✓
+  passed                                     6/6         6/6         5/6
+  tokens                                   33937       33902       15419
+  cost                                   $0.0127        free        free
 ```
 
 Columns are labelled with the file names you typed (two runs of one model
@@ -1130,7 +1135,12 @@ against different builds is a comparison somebody wants, and two columns
 reading `ollama/qwen3.8:27b` would be unreadable); a case a run did not
 grade is `--` rather than a dropped row; every file is read before a
 token is spent; and the verdict is still this run's alone. See
-[notes/49](notes/49-three-runs-side-by-side.md).
+[notes/49](notes/49-three-runs-side-by-side.md). Totals are footer rows
+under their own columns (`free` beside a priced run, `--` for no
+figure); `--sort disagree|red|id` reorders the rows and never hides one;
+a table wider than the terminal is split into blocks with the case names
+repeated, never wrapped
+([notes/83](notes/83-a-table-that-fits.md)).
 
 **Reports on disk can be read without running anything.** `--reports
 FILE ...` needs no package, provider or key. Two files print what moved,
@@ -1783,7 +1793,9 @@ src/yantra/
 │                   one back as the SELECTION for the next run: --failed).
 │                   line_up puts three or more runs in one TABLE -- a pair
 │                   is a difference, three is a different question
-│                   ([notes/49](notes/49-three-runs-side-by-side.md)).
+│                   ([notes/49](notes/49-three-runs-side-by-side.md));
+│                   Matrix.sorted_by reorders it, never filters
+│                   ([notes/83](notes/83-a-table-that-fits.md)).
 │                   A report records the RATES its figures were priced at,
 │                   and pool() adds reports up by case -- samples of one
 │                   suite version on one model, or separate pools
@@ -2001,7 +2013,10 @@ src/yantra/
                     ([notes/52](notes/52-the-word-for-what-happened.md))).
                     --eval prints each priced case's dollars on its own
                     line and names the dearest under the verdict
-                    ([notes/82](notes/82-what-each-line-cost.md))
+                    ([notes/82](notes/82-what-each-line-cost.md));
+                    the table puts totals under their columns and splits
+                    columns that do not fit the terminal into blocks
+                    ([notes/83](notes/83-a-table-that-fits.md))
 ```
 
 Design rules worth stealing:

@@ -104,15 +104,21 @@ nobody asked for, which is exactly the failure note 46 exists to avoid.
 
 ## What is not here yet
 
-* **No summary row.** Passed counts, tokens and cost per run are on the
+* ~~**No summary row.**~~ Shipped in [note 83](83-a-table-that-fits.md):
+  passed, tokens and (when any run cost money) dollars are footer rows,
+  padded by the cells' own arithmetic. Was: Passed counts, tokens and cost per run are on the
   header lines above the table rather than as a footer under the columns
   they belong to. A footer row would need the same padding arithmetic as
   the cells and is worth doing the day somebody has ten columns.
-* **No sort.** Rows come out in the last run's case order. "Show me the
+* ~~**No sort.**~~ Shipped in [note 83](83-a-table-that-fits.md) as
+  `--sort disagree|red|id` — a sort after all, not a filter, because a
+  filter would drop the rows this table exists to keep. Was: Rows come out in the last run's case order. "Show me the
   cases that disagree between runs" is the obvious next ask and is a
   filter, not a sort — and it is the one query where a table beats
   reading the file with `jq`.
-* **A wide table just wraps.** Six columns of nine characters fits; ten
+* ~~**A wide table just wraps.**~~ Shipped in
+  [note 83](83-a-table-that-fits.md): columns that do not fit the
+  terminal are cut into blocks, the case names repeated on each. Was: Six columns of nine characters fits; ten
   models do not, and the terminal wraps them into nonsense. A real fix
   means paging columns, which is a rendering project rather than a
   comparison one.

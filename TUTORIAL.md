@@ -896,7 +896,13 @@ the point rather than an error.
 Name `--against` more than once and the runs line up as a table instead
 — one column per report, this run last — which is the shape of "which of
 these three models should this package run on?"
-([notes/49](notes/49-three-runs-side-by-side.md)).
+([notes/49](notes/49-three-runs-side-by-side.md)). Each column's totals
+(passed, tokens, and dollars if any run cost money) sit under it as
+footer rows. `--sort disagree` moves the cases the runs split on to the
+top, `--sort red` the ones with the most failures, and `--sort id` sorts
+by name. No sort ever hides a row. A table too wide for your terminal is
+split into blocks with the case names repeated, instead of being wrapped
+into nonsense ([notes/83](notes/83-a-table-that-fits.md)).
 
 You do not need a new run to look at old ones. `--reports` reads report
 files and nothing else: no package, no model, no key.
@@ -2406,7 +2412,7 @@ Most carry a live receipt from a real run.
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
-| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) [68](notes/68-the-version-nobody-bumped.md) [70](notes/70-a-list-to-choose-from.md) [72](notes/72-what-changed-under-a-name.md) [74](notes/74-a-verdict-you-write-down.md) [75](notes/75-what-answered.md) [77](notes/77-a-mark-taken-back.md) [79](notes/79-scrubbed-before-it-is-written.md) [81](notes/81-the-turns-the-page-never-saw.md) | the acceptance gate, and everything that grew on it |
+| [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) [68](notes/68-the-version-nobody-bumped.md) [70](notes/70-a-list-to-choose-from.md) [72](notes/72-what-changed-under-a-name.md) [74](notes/74-a-verdict-you-write-down.md) [75](notes/75-what-answered.md) [77](notes/77-a-mark-taken-back.md) [79](notes/79-scrubbed-before-it-is-written.md) [81](notes/81-the-turns-the-page-never-saw.md) [83](notes/83-a-table-that-fits.md) | the acceptance gate, and everything that grew on it |
 | [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) [69](notes/69-a-reply-the-turn-has-seen-before.md) [73](notes/73-the-turn-before.md) [76](notes/76-remembered-and-capped.md) [71](notes/71-a-limit-on-waiting-not-on-work.md) [82](notes/82-what-each-line-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) [78](notes/78-a-clock-on-the-page.md) [80](notes/80-the-time-left-told.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |

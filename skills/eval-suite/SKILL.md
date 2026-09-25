@@ -224,6 +224,7 @@ To look at reports you already have, run nothing:
 
 ```bash
 uv run yantra --reports qwen.json gemma.json        # what moved, or a table for 3+
+uv run yantra --reports a.json b.json c.json --sort disagree   # split cases on top
 uv run yantra --reports runs/*.json --pool          # add runs up, case by case
 ```
 
@@ -324,6 +325,7 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--trace-redact PATTERN` | with `--trace`: scrub `email`, `token` or a regex from every line before it is written (`notes/79-scrubbed-before-it-is-written.md`) |
 | `--reports FILE ...` | read reports without running (not with `--eval`); `--pool` adds them up |
 | `--pool-json FILE` | with `--reports`: pool them and write the pool as JSON |
+| `--sort disagree\|red\|id` | order a table's rows (3+ runs): split verdicts first, most red first, or alphabetical; never hides a row (`notes/83-a-table-that-fits.md`) |
 
 **About `--yolo`.** By default the suite auto-approves read-only tools
 and REFUSES everything that writes or executes, because nobody is sitting
