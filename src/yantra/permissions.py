@@ -77,6 +77,14 @@ REFUSED_UNSPECIFIED = "unspecified"  # a gate said no and named no cause
 REFUSED_OUT_OF_TIME = "out_of_time"  # this turn's budget for waiting was gone
                                      # before the question could be asked
 
+#: Not a refusal: "not yet" (notes/88). A gate answers False with this
+#: code, and the loop keeps the call waiting instead of refusing it --
+#: see ``hold`` and yantra/hold.py.
+HELD = "held"
+#: A sub-agent's gate said "not yet", and a child cannot stop its
+#: parent's turn to wait, so its call is refused under this code instead.
+HELD_IN_CHILD = "held_in_child"
+
 #: What a code is allowed to look like. Lower-case identifier-ish, so it
 #: can be a dict key, a database column value and a metric label without
 #: anybody quoting it.
@@ -200,6 +208,22 @@ def refuse(request: PermissionRequest, reason: str, *,
     return False
 
 
+def hold(request: PermissionRequest, reason: str | None = None) -> bool:
+    """Answer NOT YET: keep this call waiting and end the turn once the
+    rest of its batch is done (notes/88). ALWAYS returns False, like
+    ``refuse``, so an older loop that knows nothing of holding reads it
+    as the refusal it would otherwise have been.
+
+    ``reason`` is for whoever shows the waiting call -- the model does
+    not read it unless the hold is later set aside or refused.
+    """
+    request.reason = reason or (
+        f"{request.tool_name} is waiting for approval: nobody answered in "
+        f"time, so the turn stopped here until somebody does.")
+    request.code = HELD
+    return False
+
+
 def allow_read_only(request: PermissionRequest) -> bool:
     """Auto-approve tools that declared read_only; deny everything else.
 
@@ -267,9 +291,10 @@ async def adecide(gate: PermissionFn, request: PermissionRequest) -> bool:
     return bool(answer)
 
 
-#: What a deadline may be told to do when it expires. Two words, and
-#: neither is a default: see ``with_deadline``.
-ON_TIMEOUT = ("deny", "allow")
+#: What a deadline may be told to do when it expires. Three words, and
+#: none is a default: see ``with_deadline``. "hold" stops the turn until
+#: somebody answers (notes/88) -- a third policy, not a longer clock.
+ON_TIMEOUT = ("deny", "allow", "hold")
 
 
 def with_deadline(inner: PermissionFn, seconds: float, *,
@@ -319,6 +344,8 @@ def with_deadline(inner: PermissionFn, seconds: float, *,
         except TimeoutError:
             if on_timeout == "allow":
                 return True
+            if on_timeout == "hold":
+                return hold(request)
             return refuse(
                 request,
                 f"{request.tool_name} was denied: the approval request "
@@ -487,6 +514,10 @@ def wait_spent(request: PermissionRequest, seconds: float, code: str, *,
     """
     if on_timeout == "allow":
         return True
+    if on_timeout == "hold":
+        # Asked or not, the answer is the same: the call waits, and the
+        # turn stops once its batch is done (notes/88).
+        return hold(request)
     asked = ("the approval request went unanswered"
              if code == REFUSED_TIMEOUT else
              "nobody was asked, because this turn had no waiting left")

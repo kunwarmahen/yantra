@@ -31,7 +31,10 @@ from yantra.context import (
     estimate_history,
 )
 from yantra.errors import ToolError
-from yantra.permissions import (PermissionFn, PermissionRequest,
+from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
+                         check_answers, refusal_text, still_current)
+from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
+                                PermissionFn, PermissionRequest,
                                 allow_read_only, decide, denial_code,
                                 denial_text)
 from yantra.providers.base import Provider, collect
@@ -103,14 +106,19 @@ class BudgetWarning:
 class TurnEnd:
     """Terminal event of one turn."""
 
-    response: ModelResponse | None  # None when capped/cancelled
-    reason: Literal["end_turn", "max_iterations", "over_budget", "cancelled"]
+    response: ModelResponse | None  # None when capped/cancelled/held
+    reason: Literal["end_turn", "max_iterations", "over_budget", "cancelled",
+                    "held"]
     iterations: int
     #: A sentence with the NUMBERS in it, for reasons a bare word cannot
     #: carry. "over_budget" alone tells an operator nothing they wanted to
     #: know -- over what, and by how much (see Budget.explain). None where
     #: the reason already says everything, as "max_iterations" does.
     detail: str | None = None
+    #: The requests still waiting, when ``reason == "held"`` (notes/88) --
+    #: on the event, so a consumer that only sees the stream (a recorder,
+    #: a page) knows what to show without reaching into the agent.
+    waiting: tuple[PermissionRequest, ...] = ()
 
 
 AgentEvent = StreamEvent | ToolExecuted | BudgetWarning | TurnEnd
@@ -298,6 +306,15 @@ class Agent:
         #: child the gate turned away is not recorded as a child whose
         #: read failed (notes/65). Reset when a turn begins.
         self.turn_refusals: dict[str, str] = {}
+        #: The turn stopped for approval, or None (notes/88, yantra/hold.py).
+        #: Answer it with ``resume``; a new message sets it aside.
+        self.held: Held | None = None
+        #: Whether a gate's "not yet" may stop this agent's turn. False on
+        #: a sub-agent: a child cannot end its parent's turn to wait, so a
+        #: hold inside one becomes a refusal coded ``held_in_child``.
+        self.can_hold = True
+        # call id -> request, for held calls in the batch now in flight.
+        self._held_now: dict[str, PermissionRequest] = {}
 
     def _interrupted(self) -> bool:
         """Poll the host's cancel flag, if one is wired."""
@@ -317,6 +334,8 @@ class Agent:
             if isinstance(event, TurnEnd):
                 if event.response is not None:
                     return event.response
+                if event.reason == "held" and self.held is not None:
+                    raise TurnHeld(self.held)
                 detail = f": {event.detail}" if event.detail else ""
                 raise RuntimeError(
                     f"turn ended without a response ({event.reason} after "
@@ -336,10 +355,88 @@ class Agent:
         while pulling) leaves history RESUMABLE -- outstanding tool calls
         get synthesized error results so the next request stays valid.
         """
+        # A turn held for approval that nobody answered is set aside by
+        # the next message: its waiting calls are answered as abandoned,
+        # so the history this message joins is valid again (notes/88).
+        self.abandon_held()
         blocks: list[Block] = [TextBlock(user_input)]
         if images:
             blocks.extend(images)
         self.history.append(Message("user", blocks))
+        self._begin_turn()
+        yield from self._turn()
+
+    def resume(self, answers: dict[str, Answer]) -> Iterator[AgentEvent]:
+        """Continue a turn that stopped for approval (notes/88).
+
+        ``answers`` maps each held call's id (``agent.held.ids``) to True
+        (run it), False (refuse it), a string (refuse it, and this is what
+        the person said), or a dict (run it with these edited arguments).
+        Every held call must be answered; a wrong answer raises before
+        anything changes.
+
+        A NEW TURN, for every budget: fresh turn id, fresh wait allowance,
+        fresh dollar meter -- see yantra/hold.py.
+        """
+        held = check_answers(self.held, answers, self.history)
+        self.held = None
+        self._begin_turn()
+        calls = {call.id: call for call in held.calls}
+        resolved: dict[str, ToolResult] = {}
+        refusals: dict[str, str] = {}
+        try:
+            for request in held.waiting:
+                call, answer = calls[request.call_id], answers[request.call_id]
+                if answer is False or isinstance(answer, str):
+                    refusals[call.id] = REFUSED_USER
+                    self.turn_refusals[call.id] = REFUSED_USER
+                    resolved[call.id] = ToolResult(
+                        call.id, refusal_text(request, answer), is_error=True)
+                    continue
+                if isinstance(answer, dict):
+                    call.arguments = answer   # what was approved is what runs
+                resolved[call.id] = self._run_held(call)
+        except BaseException:
+            # Interrupted while running what was approved: keep the real
+            # results, answer the rest, leave history valid.
+            self.history.append(_batch_message([
+                held.done.get(c.id) or resolved.get(c.id)
+                or ToolResult(c.id, INTERRUPTED_MESSAGE, is_error=True)
+                for c in held.calls]))
+            raise
+        self.history.append(_batch_message(
+            [held.done.get(c.id) or resolved[c.id] for c in held.calls]))
+        for request in held.waiting:
+            call = calls[request.call_id]
+            yield ToolExecuted(call=call, result=resolved[call.id],
+                               refusal=refusals.get(call.id))
+        yield from self._turn()
+
+    def abandon_held(self) -> bool:
+        """Set a held turn aside: its waiting calls are answered as never
+        run, so history is valid again. True when there was one.
+
+        Called by ``run_streaming`` before a new message; a host that
+        clears, compacts or saves history while a turn is held calls it
+        first, or keeps the hold (see session.py).
+        """
+        held, self.held = self.held, None
+        if held is None:
+            return False
+        if still_current(held, self.history):
+            self.history.append(_batch_message(abandoned_results(held)))
+        return True
+
+    def _run_held(self, call: ToolCall) -> ToolResult:
+        """Run an approved held call, an hour late: a tool disabled in the
+        meantime is an error result, not a KeyError out of resume()."""
+        try:
+            self._get_visible_tool(call.name)
+        except KeyError as exc:
+            return ToolResult(call.id, str(exc), is_error=True)
+        return self._run_one(call)
+
+    def _begin_turn(self) -> None:
         # One turn is one thing the agent was asked to do, so that is the
         # unit the ceiling covers -- and the meter only listens to the
         # agent it belongs to, which is what stops a sub-agent from
@@ -355,6 +452,10 @@ class Agent:
         self._turn_id = uuid.uuid4().hex
         self._approval_told = None
         self.turn_refusals = {}
+
+    def _turn(self) -> Iterator[AgentEvent]:
+        """The loop proper: model call, tools, repeat -- shared by a new
+        message and a resumed hold."""
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
             for iteration in range(1, self.max_iterations + 1):
@@ -450,6 +551,30 @@ class Agent:
 
                 executed.clear()
                 results = self._execute_batch(calls)
+                if any(result is HOLD for result in results):
+                    # Stop and wait (notes/88). Recorded before anything
+                    # is yielded, as below: a consumer that closes the
+                    # stream on the first panel must not lose the hold.
+                    self.held = Held(
+                        turn_id=self._turn_id, calls=list(calls),
+                        done={c.id: r for c, r in zip(calls, results,
+                                                      strict=True)
+                              if r is not HOLD},
+                        waiting=[self._held_now.pop(c.id)
+                                 for c, r in zip(calls, results, strict=True)
+                                 if r is HOLD])
+                    executed.update(self.held.done)
+                    for call, result in zip(calls, results, strict=True):
+                        if result is not HOLD:
+                            yield ToolExecuted(
+                                call=call, result=result,
+                                refusal=self._refusals.pop(call.id, None))
+                    names = ", ".join(r.tool_name for r in self.held.waiting)
+                    yield TurnEnd(response=None, reason="held",
+                                  iterations=iteration,
+                                  detail=f"waiting for approval: {names}",
+                                  waiting=tuple(self.held.waiting))
+                    return
                 batch: list[ToolResult] = []
                 # Record EVERYTHING before yielding anything: a consumer
                 # closing the generator after the first panel must not
@@ -468,6 +593,10 @@ class Agent:
                           iterations=self.max_iterations)
         except BaseException:
             # KeyboardInterrupt or generator.close(): leave history resumable.
+            # A hold recorded this turn is dropped with it -- its calls are
+            # answered as interrupted, which is what they now are.
+            if self.held is not None and self.held.turn_id == self._turn_id:
+                self.held = None
             self._answer_outstanding(executed)
             raise
 
@@ -589,6 +718,8 @@ class Agent:
 
     def compact(self) -> dict:
         """Force two-layer compaction now. Returns stats for the UI."""
+        # A summary cannot hold a question still waiting for its answer.
+        self.abandon_held()
         before = len(self.history)
         self.history[:], stats = compact_history(
             self.history,
@@ -651,6 +782,7 @@ class Agent:
         deterministic.
         """
         self._refusals.clear()  # this batch's refusals only
+        self._held_now.clear()
         results: list[ToolResult | None] = [self._gate(c) for c in calls]
         pending = [(i, c) for i, c in enumerate(calls) if results[i] is None]
 
@@ -692,9 +824,11 @@ class Agent:
                             f"lost during cancellation: {type(exc).__name__}: {exc}",
                             is_error=True,
                         )
-            self.history.append(
-                _batch_message([r for r in results if r is not None])
-            )
+            self.history.append(_batch_message([
+                r if r is not HOLD
+                else ToolResult(c.id, INTERRUPTED_MESSAGE, is_error=True)
+                for c, r in zip(calls, results, strict=True)
+                if r is not None]))
             raise cancelled
 
         return results  # type: ignore[return-value]
@@ -743,6 +877,15 @@ class Agent:
             allowed = decide(self.permissions, request)
         except Exception as exc:
             return ToolResult(call.id, f"permission gate failed: {exc}", is_error=True)
+        if not allowed and request.code == HELD:
+            if self.can_hold:
+                self._held_now[call.id] = request
+                return HOLD
+            # A child cannot stop its parent's turn to wait (notes/88).
+            request.code = HELD_IN_CHILD
+            request.reason = (f"{call.name} was not approved in time, and "
+                              f"a sub-agent cannot wait for an answer. Finish "
+                              f"without it and say what needed approval.")
         if not allowed:
             # The gate may have written why; the default blames a user,
             # which is only true when there was one. The token goes to the

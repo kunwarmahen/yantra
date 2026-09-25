@@ -73,6 +73,7 @@ from yantra.prompt import recompose
 from yantra.providers import get_provider
 from yantra.session import SessionStore, apply_payload
 from yantra.skills.loader import SkillError
+from yantra.hold import check_answers, held_task
 from yantra.trace import flagged, watch, why_flagged
 from yantra.types import (
     EndEvent,
@@ -130,6 +131,19 @@ def cost_line(agent: Agent) -> str:
 
 #: How many recorded turns the page's panel lists, newest first.
 TURNS_SHOWN = 100
+
+
+def _held_view(agent) -> dict[str, Any] | None:
+    """The held turn as the page shows it (notes/88), or None: what each
+    waiting call would do, and how long ago the turn stopped -- an
+    approval given an hour late runs against the world as it is now."""
+    held = getattr(agent, "held", None)
+    if held is None:
+        return None
+    return {"at": held.at, "age": round(time.time() - held.at),
+            "calls": [{"id": r.call_id, "tool_name": r.tool_name,
+                       "summary": r.summary, "arguments": r.arguments}
+                      for r in held.waiting]}
 
 
 def _refusal_tally(agent) -> dict[str, int]:
@@ -195,7 +209,8 @@ class WebSession:
         #: no budget: every question waits as long as the person takes.
         self.wait_budget: float | None = None
         #: What an unanswered question means once the allowance is gone:
-        #: "deny" or "allow". No default, for with_deadline's reason.
+        #: "deny", "allow" or "hold" (notes/88). No default, for
+        #: with_deadline's reason.
         self.on_timeout: str | None = None
         self._wait_left: float | None = None
 
@@ -435,25 +450,46 @@ class WebSession:
     def start_turn(self, text: str, images: list[ImageBlock]) -> None:
         """Spawn the worker thread. Caller has already refused concurrent
         turns; this is single-operator, one-turn-at-a-time by design."""
+        self._begin(lambda: self.agent.run_streaming(
+            text, images=images or None), text)
+
+    def start_resume(self, answers: dict[str, Any]) -> None:
+        """Answer a held turn from the page and carry it on (notes/88).
+
+        Checked HERE, before a thread starts, so a stale or partial answer
+        is a 400 the page can show rather than a turn_error after the fact.
+        """
+        held = check_answers(self.agent.held, answers, self.agent.history)
+        # Read off the hold and the history, not off this session: a hold
+        # loaded from a checkpoint was made by a process that is gone.
+        self._begin(lambda: self.agent.resume(answers),
+                    held_task(self.agent.history), resumes=held.recorded)
+
+    def _begin(self, stream_of, task: str, resumes: str | None = None
+               ) -> None:
         self._cancel.clear()
         self.turn_active = True
         # The allowance is per TURN, and this is the one place a turn
-        # starts -- no inferring it from gaps between questions.
+        # starts -- no inferring it from gaps between questions. A resume
+        # is a turn too: the person is here now.
         self._wait_left = self.wait_budget
         self.broadcast({"type": "turn_started"})
-        threading.Thread(target=self._run_turn, args=(text, images),
+        threading.Thread(target=self._run_turn,
+                         args=(stream_of, task, resumes),
                          daemon=True, name="yantra-turn").start()
 
-    def _run_turn(self, text: str, images: list[ImageBlock]) -> None:
+    def _run_turn(self, stream_of, task: str,
+                  resumes: str | None = None) -> None:
         """The REPL's run_turn, transplanted: pull the generator, forward
         envelopes, honor cancel at every yield boundary."""
         agent = self.agent
-        stream = agent.run_streaming(text, images=images or None)
+        stream = stream_of()
         if self.trace is not None:
-            stream = watch(text, stream, self._record,
+            stream = watch(task, stream, self._record,
                            provider=getattr(agent.provider, "name", ""),
                            model=agent.model, detail=self.trace.detail,
-                           spawner=getattr(agent, "subagents", None))
+                           spawner=getattr(agent, "subagents", None),
+                           resumes=resumes)
         ended = False  # a natural TurnEnd went out -- don't double-report
         cancelled = False
         try:
@@ -492,6 +528,9 @@ class WebSession:
         because ``watch`` hands the turn over as the stream closes.
         """
         self.trace.record(trajectory)
+        held = getattr(self.agent, "held", None)
+        if trajectory.outcome == "held" and held is not None:
+            held.recorded = trajectory.id
         self.broadcast({"type": "recorded", "id": trajectory.id})
 
     def mark(self, trace_id: str, verdict: str,
@@ -604,7 +643,8 @@ class WebSession:
                                 "text": (response.message.text()
                                          if response is not None else ""),
                                 "iterations": n, "cost_line": "",
-                                "refused": _refusal_tally(self.agent)})
+                                "refused": _refusal_tally(self.agent),
+                                "held": _held_view(self.agent)})
 
     # ---- snapshots -------------------------------------------------------------
 
@@ -612,6 +652,9 @@ class WebSession:
         agent = self.agent
         u = agent.total_usage
         return {
+            # The turn waiting for approval, if any (notes/88), so a page
+            # opened or reloaded after the hold still shows the questions.
+            "held": _held_view(agent),
             "provider": agent.provider.name,
             "model": agent.model,
             "cwd": str(agent.ctx.cwd),
@@ -713,7 +756,14 @@ class WebSession:
             if message.text().strip():
                 out.append({"type": "assistant_text",
                             "text": message.text()})
+            held = getattr(self.agent, "held", None)
+            waiting = set(held.ids) if held is not None else set()
             for call in message.tool_calls():
+                if call.id in waiting:
+                    # Still waiting (notes/88): the held panel shows it,
+                    # and a card here would draw a call that has not run
+                    # as one that ran and printed nothing.
+                    continue
                 result = results_by_id.get(call.id, {})
                 # No "refusal" key on a replayed call: the code lives on
                 # the EVENT, not in history, and a reconnect that invented
@@ -820,6 +870,39 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             except (KeyError, TypeError, ValueError) as exc:
                 raise HTTPException(400, f"bad image: {exc}") from exc
         session.start_turn(text, images)
+        return {"ok": True}
+
+    @app.post("/api/resume")
+    async def resume(req: Request) -> dict[str, Any]:
+        """Answers for a held turn (notes/88): one per waiting call, each
+        ``{"decision": "approve"|"deny"|"edit", "reason": ...,
+        "edited_args": {...}}`` -- the approval modal's own vocabulary."""
+        require_idle()
+        body = await req.json()
+        raw = body.get("answers")
+        if not isinstance(raw, dict):
+            raise HTTPException(400, "answers is required: {call_id: "
+                                     "{decision: approve|deny|edit}}")
+        answers: dict[str, Any] = {}
+        for call_id, answer in raw.items():
+            decision = answer.get("decision") if isinstance(answer, dict) else None
+            if decision == "approve":
+                answers[call_id] = True
+            elif decision == "deny":
+                said = answer.get("reason")
+                answers[call_id] = (said.strip() if isinstance(said, str)
+                                    and said.strip() else False)
+            elif decision == "edit" and isinstance(answer.get("edited_args"),
+                                                   dict):
+                answers[call_id] = answer["edited_args"]
+            else:
+                raise HTTPException(400, f"answer for {call_id}: decision "
+                                         f"must be approve, deny or edit "
+                                         f"(edit with edited_args)")
+        try:
+            session.start_resume(answers)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         return {"ok": True}
 
     @app.post("/api/model")
@@ -1303,6 +1386,8 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(500, "no session store configured")
         name = (await req.json()).get("name") or "default"
         payload = session.store.load_latest(name)
+        # A hold belongs to the conversation being replaced (notes/88).
+        session.agent.held = None
         if payload is None:
             raise HTTPException(404, f"no checkpoint named '{name}'")
         try:
@@ -1325,6 +1410,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     @app.post("/api/clear")
     def clear() -> dict[str, Any]:
         require_idle()
+        session.agent.held = None     # nothing left to resume it into
         session.agent.history.clear()
         return session.state()
 

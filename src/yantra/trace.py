@@ -133,6 +133,12 @@ PERSON = "person"
 #: What a redacted match becomes (notes/79).
 REDACTED = "[redacted]"
 
+#: A turn that stopped for approval (notes/88): its outcome, and the
+#: refusal code on each step still waiting. The same word as
+#: ``permissions.HELD`` and ``TurnEnd.reason``, spelled here so reading a
+#: trace does not import the permission layer.
+HELD_OUTCOME = "held"
+
 #: Longest entry a word list may hold (notes/86): names and phrases.
 MAX_WORD_CHARS = 200
 
@@ -240,6 +246,9 @@ class Trajectory:
     #: How many matches ``--trace-redact`` replaced in this line
     #: (notes/79); None when the line was written without any patterns.
     redacted: int | None = None
+    #: The id of the HELD turn this one continues (notes/88), when it was
+    #: a resume rather than a message somebody typed. None otherwise.
+    resumes: str | None = None
 
     @property
     def tools_used(self) -> list[str]:
@@ -258,9 +267,14 @@ class Trajectory:
 
         A child that failed counts: its trouble is this turn's trouble,
         even when the parent smoothed it over in its answer.
+
+        A HELD TURN HAS NOT FAILED (notes/88). It stopped to wait for an
+        answer, on purpose, and its waiting calls are steps coded
+        ``held`` -- not calls that went wrong.
         """
-        return (self.outcome != "end_turn"
-                or any(not s.ok for s in self.steps)
+        return (self.outcome not in ("end_turn", HELD_OUTCOME)
+                or any(not s.ok and s.refusal != HELD_OUTCOME
+                       for s in self.steps)
                 or any(c.failed for c in self.children))
 
 
@@ -292,10 +306,10 @@ def why_flagged(turn) -> str:
         return ""
     if turn.passed is False:
         why.append("red in its case -- the grader said no")
-    if turn.outcome != "end_turn":
+    if turn.outcome not in ("end_turn", HELD_OUTCOME):
         why.append(f"ended {turn.outcome}")
     why += [f"{step.name}{step_note(step)}" for step in turn.steps
-            if not step.ok]
+            if not step.ok and step.refusal != HELD_OUTCOME]
     for child in turn.children:
         if child.failed:
             why.append(f"sub-agent #{child.number} {child.agent}: " + (
@@ -770,6 +784,8 @@ def _as_json(trajectory: Trajectory) -> dict[str, Any]:
         # Only when there were any, so a turn without delegation reads
         # exactly as it always did.
         payload["children"] = [_child_json(c) for c in trajectory.children]
+    if trajectory.resumes is not None:
+        payload["resumes"] = trajectory.resumes
     return payload
 
 
@@ -834,6 +850,7 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         why=raw.get("why"),
         graded=raw.get("graded"),
         redacted=raw.get("redacted"),
+        resumes=raw.get("resumes"),
     )
 
 
@@ -860,8 +877,8 @@ def _child_run(result: Any, detail: str) -> ChildRun:
 
 def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
           *, provider: str = "", model: str = "", detail: str = SHAPE,
-          usd: float | None = None, spawner: Any | None = None
-          ) -> Iterator[Any]:
+          usd: float | None = None, spawner: Any | None = None,
+          resumes: str | None = None) -> Iterator[Any]:
     """Pass every event through, and hand the finished turn to ``sink``.
 
     A TEE rather than a consumer, the same shape the sub-agent stream
@@ -885,7 +902,8 @@ def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
         spawner = None           # a host with no spawner, or a stand-in
     already = len(spawner.results) if spawner is not None else 0
     trajectory = Trajectory(id=uuid.uuid4().hex, at=_now(), provider=provider,
-                            model=model, detail=detail, task=task)
+                            model=model, detail=detail, task=task,
+                            resumes=resumes)
     try:
         for event in events:
             kind = type(event).__name__
@@ -900,6 +918,15 @@ def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
             elif kind == "TurnEnd":
                 trajectory.outcome = event.reason
                 trajectory.iterations = event.iterations
+                # The calls a held turn stopped on (notes/88): steps, so
+                # the line says what it is waiting for, coded held so no
+                # reader counts them as calls that failed.
+                for request in getattr(event, "waiting", ()):
+                    step = ToolStep(name=request.tool_name, ok=False,
+                                    refusal=HELD_OUTCOME)
+                    if detail == FULL:
+                        step.arguments = dict(request.arguments)
+                    trajectory.steps.append(step)
                 if event.response is not None:
                     usage = event.response.usage
                     trajectory.tokens = (usage.input_tokens

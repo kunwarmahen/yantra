@@ -649,8 +649,19 @@ from yantra import with_deadline
 
 gate = with_deadline(ask_the_owner, 30, on_timeout="deny")   # a deploy
 gate = with_deadline(ask_the_owner, 30, on_timeout="allow")  # a nightly batch
+gate = with_deadline(ask_the_owner, 30, on_timeout="hold")   # wait for me
 gate = with_deadline(ask_the_owner, 30)                      # TypeError
 ```
+
+`"hold"` is a third answer, not a longer clock: the turn **stops** with
+the call waiting, calls approved beside it still run, and
+`agent.resume({call_id: True | False | "reason" | {edited args}})`
+carries it on when somebody answers. A new message sets the hold aside
+instead. A saved session keeps it, as the turn before it asked plus the
+question on the side, so an older reader still loads a valid
+conversation and this one can resume after a restart. A sub-agent never
+holds; its call is refused as `held_in_child`. See
+[notes/88](notes/88-not-yet.md).
 
 On expiry the pending question is **cancelled**, so a chat window can
 withdraw it instead of offering Approve for a call that can no longer
@@ -687,7 +698,10 @@ moment and never raise. See
 
 The browser has it as a flag: `yantra --web --wait-budget 60
 --on-timeout deny` gives each turn sixty seconds of waiting on approval
-prompts, and the prompt counts down. The terminal has no such flag,
+prompts, and the prompt counts down. `--on-timeout hold` leaves the
+questions in the transcript instead, with how long ago the turn stopped,
+until you answer or send something else
+([notes/88](notes/88-not-yet.md)). The terminal has no such flag,
 because it asks you directly and nothing is left waiting
 ([notes/78](notes/78-a-clock-on-the-page.md)).
 
@@ -1692,7 +1706,16 @@ src/yantra/
 │                   ([notes/78](notes/78-a-clock-on-the-page.md));
 │                   approval_notice() is what the MODEL is told of the
 │                   time left, in seconds, sent and never stored
-│                   ([notes/80](notes/80-the-time-left-told.md))
+│                   ([notes/80](notes/80-the-time-left-told.md)).
+│                   hold() is the third answer, NOT YET, and "hold" the
+│                   third on_timeout ([notes/88](notes/88-not-yet.md))
+├── hold.py         a turn that STOPS for an approval and carries on when
+│                   it comes: Held (the batch, what already ran, what
+│                   waits), resume()'s answer checks -- all before anything
+│                   runs -- and ABANDONED for a hold a new message sets
+│                   aside. The queue is a service's; the pause is the
+│                   loop's, because only the loop may leave a call
+│                   unanswered and mend it ([notes/88](notes/88-not-yet.md))
 ├── context.py      compaction: mask old tool results, then summarize (red
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes
@@ -1702,7 +1725,11 @@ src/yantra/
 │                   identity; apply_payload(history_only=True) restores only
 │                   the first, for a host that rebuilds its agent each turn
 │                   from a package on disk
-│                   ([notes/38](notes/38-giving-it-back.md))
+│                   ([notes/38](notes/38-giving-it-back.md)). A held turn is
+│                   saved as the turn BEFORE it asked, the question in a
+│                   separate held block -- an older reader loads a valid
+│                   conversation, this one resumes it
+│                   ([notes/88](notes/88-not-yet.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (base / env / skills):
 │                   each owner writes one named layer, attach_prompt captures
 │                   the operator's --system exactly once, recompose() rebuilds

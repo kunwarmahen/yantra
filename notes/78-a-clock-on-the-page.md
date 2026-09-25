@@ -109,7 +109,9 @@ allowance already covers.
   since [note 80](80-the-time-left-told.md): after a prompt uses some of
   the time, the next request says how many seconds remain. Was: still
   true from note 51.
-* **A refused turn cannot be resumed.** Still true from note 51.
+* ~~**A refused turn cannot be resumed.**~~ `--on-timeout hold` since
+  [note 88](88-not-yet.md): the turn waits in the page until you answer,
+  or until a new message sets it aside. Was: still true from note 51.
 
 ## Receipt
 

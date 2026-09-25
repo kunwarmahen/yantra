@@ -282,12 +282,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "is spent, nothing more is asked that turn. "
                              "Needs --on-timeout. The terminal asks you "
                              "directly, so nothing waits there")
-    parser.add_argument("--on-timeout", choices=["deny", "allow"],
+    parser.add_argument("--on-timeout", choices=["deny", "allow", "hold"],
                         default=None, dest="on_timeout",
                         help="with --wait-budget: what an unanswered "
                              "approval means. No default -- 'deny' is right "
                              "for a deploy and wrong for a job you left "
-                             "running so it would carry on")
+                             "running so it would carry on. 'hold' stops "
+                             "the turn until you answer on the page, then "
+                             "carries it on")
     parser.add_argument("--host", default="127.0.0.1", metavar="ADDR",
                         help="bind address for --web (default: localhost only)")
     parser.add_argument("--port", type=int, default=8321, metavar="PORT",
@@ -1929,7 +1931,7 @@ def main(argv: list[str] | None = None) -> int:
     if (args.wait_budget is None) != (args.on_timeout is None):
         print("error: --wait-budget and --on-timeout go together: one says "
               "how long a turn may wait, the other what silence means "
-              "(deny or allow), and neither has a default",
+              "(deny, allow or hold), and neither has a default",
               file=sys.stderr)
         return 2
     if args.wait_budget is not None and args.wait_budget <= 0:

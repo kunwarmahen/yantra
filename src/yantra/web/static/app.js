@@ -119,6 +119,66 @@ function onState(env) {
     fetchHistory();
   }
   applyHeader(env);
+  // A turn held before this page was opened (or reloaded) still waits.
+  // On a first connect the history is still being replayed, and the
+  // panel belongs AFTER it -- fetchHistory draws it once that is done.
+  if (ui.historyLoaded && env.held && !ui.turnActive && !$("#held-panel")) {
+    renderHeld(env.held);
+  }
+}
+
+/* A turn stopped for approval (--on-timeout hold, notes/88). Unlike the
+   modal, this stays in the transcript: nobody is waiting on a clock now,
+   so the questions sit where the turn stopped until the person answers
+   them all -- or sends a new message, which sets them aside. */
+function renderHeld(held) {
+  $("#held-panel")?.remove();
+  const ago = held.age < 90 ? `${held.age}s` : `${Math.round(held.age / 60)} min`;
+  const rows = held.calls.map((c) => `
+    <div class="held-call" data-id="${esc(c.id)}">
+      <div class="held-head"><b>${esc(c.tool_name)}()</b>
+        <label><input type="radio" name="h-${esc(c.id)}" value="approve" checked> approve</label>
+        <label><input type="radio" name="h-${esc(c.id)}" value="deny"> deny</label>
+      </div>
+      <div class="summary">${esc(c.summary)}</div>
+      <details><summary>raw arguments</summary>
+        <pre class="args">${esc(JSON.stringify(c.arguments ?? {}, null, 2))}</pre>
+      </details>
+      <input class="deny-reason" type="text"
+             placeholder="optional: say why not, or what to do instead">
+    </div>`).join("");
+  const el = document.createElement("div");
+  el.id = "held-panel";
+  el.className = "held-panel";
+  el.innerHTML = `
+    <div class="kind-tag">waiting for you</div>
+    <div class="held-age">This turn stopped ${ago} ago. What you approve runs
+      against things as they are now, not as they were then.</div>
+    ${rows}
+    <div class="held-actions">
+      <span class="held-note">or send a new message to set these aside</span>
+      <button class="m-btn primary" id="held-send">carry on</button>
+    </div>`;
+  // A reason typed under a call means no, whichever button is ticked.
+  el.querySelectorAll(".deny-reason").forEach((box) => {
+    box.oninput = () => {
+      const deny = box.closest(".held-call").querySelector('input[value="deny"]');
+      if (box.value.trim()) deny.checked = true;
+    };
+  });
+  el.querySelector("#held-send").onclick = async () => {
+    const answers = {};
+    el.querySelectorAll(".held-call").forEach((row) => {
+      const decision = row.querySelector("input[type=radio]:checked").value;
+      answers[row.dataset.id] = { decision,
+        reason: row.querySelector(".deny-reason").value };
+    });
+    el.querySelector("#held-send").disabled = true;
+    if (await post("/api/resume", { answers })) el.remove();
+    else el.querySelector("#held-send").disabled = false;
+  };
+  transcript.append(el);
+  scrollDown();
 }
 
 async function fetchHistory() {
@@ -126,6 +186,9 @@ async function fetchHistory() {
     const res = await fetch("/api/history");
     if (!res.ok) return;
     for (const env of await res.json()) route(env);
+    ui.historyLoaded = true;
+    const held = ui.lastState?.held;
+    if (held && !ui.turnActive) renderHeld(held);   // where the turn stopped
     scrollDown(true);
   } catch { /* offline; retry happens via reconnect */ }
 }
@@ -263,6 +326,8 @@ function fmtNum(n) {
 
 function beginTurn() {
   ui.turnActive = true;
+  // Answered, or set aside by a new message: either way, no longer waiting.
+  $("#held-panel")?.remove();
   forgetAssistant();
   ui.currentThinking = ui.openToolCard = null;
   setStatus("connecting…");
@@ -474,6 +539,11 @@ function onBudgetWarning(env) {
 
 function onTurnEnd(env) {
   mergeBudget(env);   // the last charge of the turn lands here
+  if (env.reason === "held" && env.held) {
+    // Not an ending: the turn is waiting for you (notes/88).
+    renderHeld(env.held);
+    return;
+  }
   if (env.reason !== "end_turn") {
     // A reply cut off by --budget-cap-reply carries its text: settle what
     // streamed before saying why it stops there (notes/76).
@@ -734,8 +804,8 @@ function startWaitClock(env) {
   // must not hand the person their seconds back.
   env.waitUntil ??= performance.now() + env.wait_left * 1000;
   const until = env.waitUntil;
-  const silence = ui.lastState?.wait_budget?.on_timeout === "allow"
-    ? "it goes ahead" : "it is refused";
+  const silence = {allow: "it goes ahead", hold: "the turn waits for you"}[
+    ui.lastState?.wait_budget?.on_timeout] ?? "it is refused";
   const tick = () => {
     const el = $("#wait-clock");
     if (!el) { clearInterval(ui.waitTimer); return; }

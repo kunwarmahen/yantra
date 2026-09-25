@@ -383,6 +383,9 @@ class SubagentSpawner:
             # the one limit that costs real money (budget.py).
             budget=self.parent.budget,
         )
+        # A child cannot stop its parent's turn to wait for an approval:
+        # a hold inside one is a refusal coded held_in_child (notes/88).
+        child.can_hold = False
         if self.on_child_event is not None:
             # Stream tee: the child's raw StreamEvents are PUSHED to the
             # observer tagged with this spawn's 1-based number, so a UI can

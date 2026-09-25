@@ -20,6 +20,17 @@ Payload shape (JSON inside checkpoints.payload):
      "history": [{"role": "user",
                   "content": [{"kind": "text", "text": ...}, ...]}, ...]}
 
+A TURN HELD FOR APPROVAL IS SAVED AS THE TURN BEFORE IT ASKED (notes/88).
+A held turn's history ends on a question nobody has answered, which is
+the one state the invariant above rules out. So ``history`` is written
+without that last assistant message, and the message, the results of its
+batch-mates and the waiting requests go in a separate ``held`` block. An
+older reader ignores the block and loads a valid conversation that ends
+on the person's message; this one puts the question back and
+``agent.held`` with it, so a service can resume tomorrow what a process
+held today. No format bump: nothing an old reader does with the file is
+wrong, only less.
+
 Blocks serialize with an explicit ``kind`` discriminator and restore
 via match/case dispatch -- never guesswork. ThinkingBlock signatures
 are opaque strings; they round-trip byte-exact or thinking-assisted
@@ -34,6 +45,8 @@ import threading
 from datetime import datetime, UTC
 from pathlib import Path
 
+from yantra.hold import Held, still_current
+from yantra.permissions import HELD, PermissionRequest
 from yantra.types import (
     ImageBlock,
     Message,
@@ -92,6 +105,10 @@ class SessionStore:
                 },
                 "history": [_dump_message(m) for m in agent.history],
             }
+            held = getattr(agent, "held", None)
+            if held is not None and still_current(held, agent.history):
+                payload["history"].pop()   # the question, kept below
+                payload["held"] = _dump_held(held, agent.history[-1])
             latest = self._latest_version(session_id)
             self._db.execute(
                 "INSERT INTO checkpoints (session_id, version, created_at, payload) "
@@ -236,7 +253,56 @@ def _restore_conversation(agent, payload: dict) -> int:
     )
     agent.history.clear()
     agent.history.extend(_load_message(m) for m in payload.get("history", []))
+    agent.held = None
+    if payload.get("held"):
+        message, agent.held = _load_held(payload["held"])
+        agent.history.append(message)
     return len(agent.history)
+
+
+def _dump_held(held: Held, message: Message) -> dict:
+    """A held turn -> the ``held`` block (see the module docstring)."""
+    return {
+        "message": _dump_message(message),
+        "turn_id": held.turn_id,
+        "at": held.at,
+        "recorded": held.recorded,
+        "done": [{"tool_call_id": r.tool_call_id, "content": r.content,
+                  "is_error": r.is_error,
+                  "images": [{"media_type": i.media_type, "data": i.data}
+                             for i in r.images]}
+                 for r in held.done.values()],
+        "waiting": [{"call_id": r.call_id, "tool_name": r.tool_name,
+                     "arguments": r.arguments, "summary": r.summary,
+                     "read_only": r.read_only}
+                    for r in held.waiting],
+    }
+
+
+def _load_held(raw: dict) -> tuple[Message, Held]:
+    """The ``held`` block -> the question to put back, and the hold.
+
+    ``Held.calls`` are the message's OWN ToolCall objects, so an approval
+    that edits arguments edits the call history records, exactly as a
+    live resume does. ``summarize`` cannot be rebuilt without the tool,
+    so an edit made after a reload is previewed as raw arguments.
+    """
+    message = _load_message(raw["message"])
+    done = {r["tool_call_id"]: ToolResult(
+        r["tool_call_id"], r.get("content", ""),
+        is_error=r.get("is_error", False),
+        images=[ImageBlock(i["media_type"], i["data"])
+                for i in r.get("images", [])])
+        for r in raw.get("done", [])}
+    waiting = [PermissionRequest(
+        tool_name=w["tool_name"], arguments=w.get("arguments") or {},
+        summary=w.get("summary", ""), read_only=w.get("read_only", False),
+        call_id=w["call_id"], turn_id=raw.get("turn_id", ""), code=HELD)
+        for w in raw.get("waiting", [])]
+    held = Held(turn_id=raw.get("turn_id", ""),
+                calls=list(message.tool_calls()), done=done, waiting=waiting,
+                at=raw.get("at", 0.0), recorded=raw.get("recorded"))
+    return message, held
 
 
 def _apply_history(agent, payload: dict, provider_name, model) -> str:

@@ -140,7 +140,11 @@ policy and belongs to whoever owns the conversation.
   a deadline the model can plan around — and the same trick would work
   here: *there are twelve seconds of approval left in this turn, so ask
   for the one thing you most need approved.*
-* **A refused turn cannot be resumed.** When the allowance runs out the
-  calls are refused and the turn carries on with error results; there is
-  no "hold this and let me answer in a minute". That is a queue, not a
-  budget, and it belongs to whatever owns the channel.
+* ~~**A refused turn cannot be resumed.**~~ Built in
+  [note 88](88-not-yet.md): `on_timeout="hold"` stops the turn with the
+  call waiting, and `agent.resume(answers)` carries it on, even after a
+  restart. The QUEUE still belongs to whatever owns the channel; the
+  pause did not, because only the loop can leave a call unanswered and
+  mend it. Was: when the allowance ran out the calls were refused and
+  the turn carried on with error results; there was no "hold this and
+  let me answer in a minute".

@@ -62,7 +62,10 @@ from yantra.agent import (
 from yantra.budget import Budget
 from yantra.context import RED, SUMMARY_PROMPT, acompact_history, estimate_history
 from yantra.errors import ToolError
-from yantra.permissions import (PermissionFn, PermissionRequest,
+from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
+                         check_answers, refusal_text, still_current)
+from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
+                                PermissionFn, PermissionRequest,
                                 adecide, allow_read_only, denial_code,
                                 denial_text)
 from yantra.providers.base import Provider, acollect
@@ -181,6 +184,11 @@ class AsyncAgent:
         #: child the gate turned away is not recorded as a child whose
         #: read failed (notes/65). Reset when a turn begins.
         self.turn_refusals: dict[str, str] = {}
+        #: The sync twin's hold, same contract (notes/88): the turn that
+        #: stopped for approval, answered with ``resume``.
+        self.held: Held | None = None
+        self.can_hold = True
+        self._held_now: dict[str, PermissionRequest] = {}
 
     # ---- public entry points ----------------------------------------------
 
@@ -195,6 +203,8 @@ class AsyncAgent:
             if isinstance(event, TurnEnd):
                 if event.response is not None:
                     return event.response
+                if event.reason == "held" and self.held is not None:
+                    raise TurnHeld(self.held)
                 detail = f": {event.detail}" if event.detail else ""
                 raise RuntimeError(
                     f"turn ended without a response ({event.reason} after "
@@ -214,10 +224,69 @@ class AsyncAgent:
         (or closing this async generator) leaves history RESUMABLE --
         outstanding tool calls get synthesized error results first.
         """
+        self.abandon_held()   # the sync twin's rule (notes/88)
         blocks: list[Block] = [TextBlock(user_input)]
         if images:
             blocks.extend(images)
         self.history.append(Message("user", blocks))
+        self._begin_turn()
+        async for event in self._turn():
+            yield event
+
+    async def resume(self, answers: dict[str, Answer]
+                     ) -> AsyncIterator[AgentEvent]:
+        """Continue a turn that stopped for approval -- the sync twin's
+        ``resume``, same answers, same contract (notes/88)."""
+        held = check_answers(self.held, answers, self.history)
+        self.held = None
+        self._begin_turn()
+        calls = {call.id: call for call in held.calls}
+        resolved: dict[str, ToolResult] = {}
+        refusals: dict[str, str] = {}
+        try:
+            for request in held.waiting:
+                call, answer = calls[request.call_id], answers[request.call_id]
+                if answer is False or isinstance(answer, str):
+                    refusals[call.id] = REFUSED_USER
+                    self.turn_refusals[call.id] = REFUSED_USER
+                    resolved[call.id] = ToolResult(
+                        call.id, refusal_text(request, answer), is_error=True)
+                    continue
+                if isinstance(answer, dict):
+                    call.arguments = answer
+                resolved[call.id] = await self._run_held(call)
+        except BaseException:
+            self.history.append(_batch_message([
+                held.done.get(c.id) or resolved.get(c.id)
+                or ToolResult(c.id, INTERRUPTED_MESSAGE, is_error=True)
+                for c in held.calls]))
+            raise
+        self.history.append(_batch_message(
+            [held.done.get(c.id) or resolved[c.id] for c in held.calls]))
+        for request in held.waiting:
+            call = calls[request.call_id]
+            yield ToolExecuted(call=call, result=resolved[call.id],
+                               refusal=refusals.get(call.id))
+        async for event in self._turn():
+            yield event
+
+    def abandon_held(self) -> bool:
+        """The sync twin's ``abandon_held``."""
+        held, self.held = self.held, None
+        if held is None:
+            return False
+        if still_current(held, self.history):
+            self.history.append(_batch_message(abandoned_results(held)))
+        return True
+
+    async def _run_held(self, call: ToolCall) -> ToolResult:
+        try:
+            self._get_visible_tool(call.name)
+        except KeyError as exc:
+            return ToolResult(call.id, str(exc), is_error=True)
+        return await self._run_one(call)
+
+    def _begin_turn(self) -> None:
         # One turn is one thing the agent was asked to do, so that is the
         # unit the ceiling covers -- and the meter only listens to the
         # agent it belongs to, which is what stops a sub-agent from
@@ -233,6 +302,9 @@ class AsyncAgent:
         self._turn_id = uuid.uuid4().hex
         self._approval_told = None
         self.turn_refusals = {}
+
+    async def _turn(self) -> AsyncIterator[AgentEvent]:
+        """The loop proper, shared by a new message and a resumed hold."""
         executed: dict[str, ToolResult] = {}  # current batch's completed results
         try:
             for iteration in range(1, self.max_iterations + 1):
@@ -327,6 +399,28 @@ class AsyncAgent:
 
                 executed.clear()
                 results = await self._execute_batch(calls)
+                if any(result is HOLD for result in results):
+                    # Stop and wait -- the sync twin's block, line for line.
+                    self.held = Held(
+                        turn_id=self._turn_id, calls=list(calls),
+                        done={c.id: r for c, r in zip(calls, results,
+                                                      strict=True)
+                              if r is not HOLD},
+                        waiting=[self._held_now.pop(c.id)
+                                 for c, r in zip(calls, results, strict=True)
+                                 if r is HOLD])
+                    executed.update(self.held.done)
+                    for call, result in zip(calls, results, strict=True):
+                        if result is not HOLD:
+                            yield ToolExecuted(
+                                call=call, result=result,
+                                refusal=self._refusals.pop(call.id, None))
+                    names = ", ".join(r.tool_name for r in self.held.waiting)
+                    yield TurnEnd(response=None, reason="held",
+                                  iterations=iteration,
+                                  detail=f"waiting for approval: {names}",
+                                  waiting=tuple(self.held.waiting))
+                    return
                 batch: list[ToolResult] = []
                 # Record EVERYTHING before yielding anything: a consumer
                 # abandoning the turn after the first panel must not lose
@@ -346,6 +440,8 @@ class AsyncAgent:
         except BaseException:
             # CancelledError lands here exactly where KeyboardInterrupt
             # does in the sync loop: leave history resumable, re-raise.
+            if self.held is not None and self.held.turn_id == self._turn_id:
+                self.held = None
             self._answer_outstanding(executed)
             raise
 
@@ -418,6 +514,7 @@ class AsyncAgent:
 
     async def compact(self) -> dict:
         """Force two-layer compaction now. Returns stats for the UI."""
+        self.abandon_held()
         before = len(self.history)
         self.history[:], stats = await acompact_history(
             self.history,
@@ -465,6 +562,7 @@ class AsyncAgent:
         a chat window is not a permission prompt, it is a pile.
         """
         self._refusals.clear()  # this batch's refusals only
+        self._held_now.clear()
         results: list[ToolResult | None] = [await self._gate(c) for c in calls]
         pending = [(i, c) for i, c in enumerate(calls) if results[i] is None]
 
@@ -517,8 +615,11 @@ class AsyncAgent:
                 )
             else:
                 results[i] = outcome
-        self.history.append(
-            _batch_message([r for r in results if r is not None]))
+        self.history.append(_batch_message([
+            r if r is not HOLD
+            else ToolResult(c.id, INTERRUPTED_MESSAGE, is_error=True)
+            for c, r in zip(calls, results, strict=True)
+            if r is not None]))
         raise cancelled
 
     async def _gate(self, call: ToolCall) -> ToolResult | None:
@@ -572,6 +673,15 @@ class AsyncAgent:
             raise  # a dropped connection is not a denial
         except Exception as exc:
             return ToolResult(call.id, f"permission gate failed: {exc}", is_error=True)
+        if not allowed and request.code == HELD:
+            if self.can_hold:
+                self._held_now[call.id] = request
+                return HOLD
+            # A child cannot stop its parent's turn to wait (notes/88).
+            request.code = HELD_IN_CHILD
+            request.reason = (f"{call.name} was not approved in time, and "
+                              f"a sub-agent cannot wait for an answer. Finish "
+                              f"without it and say what needed approval.")
         if not allowed:
             # Token to the consumer, sentence to the model -- the sync
             # twin's contract, and the twins must not drift here.

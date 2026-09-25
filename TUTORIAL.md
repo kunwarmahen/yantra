@@ -1335,6 +1335,20 @@ is required: only you know whether silence should mean no or go ahead.
 The terminal has no such flag, because there the agent simply waits
 until you type ([notes/78](notes/78-a-clock-on-the-page.md)).
 
+There is a third choice, for when you would rather come back to it:
+
+```bash
+uv run yantra --web --wait-budget 60 --on-timeout hold
+```
+
+When the time is up, the turn **stops** instead of carrying on without
+you. The questions stay in the conversation, with how long ago the turn
+stopped, and anything you already approved has run. Come back, approve
+or deny each one, click **carry on**, and the agent picks up where it
+left off. Or just type a new message, and the waiting questions are set
+aside. Saving the session keeps a held turn, so you can even answer it after
+restarting the server ([notes/88](notes/88-not-yet.md)).
+
 The agent is told how much time is left, too. After a prompt uses some
 of it, the agent sees a line like "3 of this turn's 8 seconds for
 waiting on approval are left", so it can ask for the one thing it most
