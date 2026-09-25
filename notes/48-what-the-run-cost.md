@@ -135,6 +135,9 @@ it; changing what a key means does.*
   ([notes/34](34-budgets.md)) stops a turn; the report records what turns
   cost. A suite could now say "these 6 cases cost $0.38, and your package
   ceiling is $0.50 per turn" — nothing does.
-* **No cost per case in the rendering.** The figure is stored per case
+* ~~**No cost per case in the rendering.**~~ Shipped in
+  [note 82](82-what-each-line-cost.md): every priced case line ends in
+  its own figure, and the dearest case is named under the verdict with
+  its share of the bill. Was: The figure is stored per case
   and only the total is printed. The expensive case is usually the
   interesting one, and a column would say which it was.

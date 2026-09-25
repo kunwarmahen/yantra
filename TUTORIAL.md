@@ -872,6 +872,19 @@ in dollars, priced the day it ran so that a vendor's new price page
 cannot rewrite it. A local run records a real `0.0` and prints no figure;
 an unpriced hosted model records nothing, because zero and unknown are
 different numbers ([notes/48](notes/48-what-the-run-cost.md)).
+When a run is priced, each case line ends in what that case cost, and
+the line under the verdict names the most expensive one and its share of
+the bill:
+
+```
+  PASS  cannot-write-even-when-asked  21.9s · 11810 tok · 4 it · glob, list_dir, outline, read_file · $0.0044
+SUITE GREEN · 6/6 passed · 33937 tokens · $0.0127 · 2 case(s) cost nothing
+dearest case: cannot-write-even-when-asked · $0.0044 · 35% of what the priced cases cost
+```
+
+That was a local model given a price in `$YANTRA_PRICES`. Without one,
+a local run shows no dollars at all
+([notes/82](notes/82-what-each-line-cost.md)).
 `--against FILE` says what moved,
 and changes **no verdict and no exit code**: a run that got worse and is
 still green is still green. Cases are compared as counts (`7/10 → 6/10`,
@@ -2394,7 +2407,7 @@ Most carry a live receipt from a real run.
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
 | [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) [68](notes/68-the-version-nobody-bumped.md) [70](notes/70-a-list-to-choose-from.md) [72](notes/72-what-changed-under-a-name.md) [74](notes/74-a-verdict-you-write-down.md) [75](notes/75-what-answered.md) [77](notes/77-a-mark-taken-back.md) [79](notes/79-scrubbed-before-it-is-written.md) [81](notes/81-the-turns-the-page-never-saw.md) | the acceptance gate, and everything that grew on it |
-| [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) [69](notes/69-a-reply-the-turn-has-seen-before.md) [73](notes/73-the-turn-before.md) [76](notes/76-remembered-and-capped.md) [71](notes/71-a-limit-on-waiting-not-on-work.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
+| [34](notes/34-budgets.md) [36](notes/36-a-warning-before-the-stop.md) [43](notes/43-a-bar-and-a-deadline.md) [48](notes/48-what-the-run-cost.md) [69](notes/69-a-reply-the-turn-has-seen-before.md) [73](notes/73-the-turn-before.md) [76](notes/76-remembered-and-capped.md) [71](notes/71-a-limit-on-waiting-not-on-work.md) [82](notes/82-what-each-line-cost.md) | the ceiling, the warning, the two readers of one meter, and what a run cost |
 | [37](notes/37-a-gate-that-can-wait.md) [39](notes/39-a-clock-and-a-word.md) [51](notes/51-a-turns-worth-of-waiting.md) [52](notes/52-the-word-for-what-happened.md) [78](notes/78-a-clock-on-the-page.md) [80](notes/80-the-time-left-told.md) | a gate that waits; a clock, a machine-readable word, and a turn's worth of patience |
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
 | [45](notes/45-the-road-with-no-key.md) [54](notes/54-the-word-for-a-road.md) | the road with no key, how it says its name, and what to call it |

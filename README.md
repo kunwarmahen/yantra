@@ -1094,7 +1094,12 @@ trajectory's cost (input, output, cache read, cache write) exist only
 while it is running. Zero and unknown stay different numbers: a local
 model records `0.0` and prints nothing, an unpriced hosted model records
 nothing at all, and neither is rendered as `$0.00`
-([notes/48](notes/48-what-the-run-cost.md)). `--against FILE` says what
+([notes/48](notes/48-what-the-run-cost.md)). The live run shows the same
+figure per case — each priced case line ends in what that case cost, and
+`dearest case: … · 35% of what the priced cases cost` sits under the
+verdict, because the total says what the suite cost and only a per-case
+line says which case spent it
+([notes/82](notes/82-what-each-line-cost.md)). `--against FILE` says what
 moved — `cost: $1.2500 → $0.0421 (-1.2079)`, which is the only line that
 means anything when the two runs used different models. It
 changes **no verdict and no exit code**: a run that got worse and is still
@@ -1993,7 +1998,10 @@ src/yantra/
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per
                     turn grouped by cause
-                    ([notes/52](notes/52-the-word-for-what-happened.md)))
+                    ([notes/52](notes/52-the-word-for-what-happened.md))).
+                    --eval prints each priced case's dollars on its own
+                    line and names the dearest under the verdict
+                    ([notes/82](notes/82-what-each-line-cost.md))
 ```
 
 Design rules worth stealing:

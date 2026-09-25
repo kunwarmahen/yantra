@@ -572,7 +572,7 @@ def _fossil_mode(args, console: Console) -> int:
           "the ceiling is what it cost x1.5.", file=sys.stderr)
     if REDACTED in trajectory.task:
         # The case would replay the placeholder, not what was typed
-        # (notes/79). Said rather than guessed back: the file never had it.
+        # (notes/82). Said rather than guessed back: the file never had it.
         print(f"note: the task was scrubbed when it was recorded; put the "
               f"real words back in user_message where it says {REDACTED}",
               file=sys.stderr)
@@ -1062,6 +1062,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     console.print(f"\n{verdict} · {tally} · {spent} tokens{cost}"
                   + (f" · {free_cases} case(s) cost nothing" if free_cases
                      else ""))
+    _dearest_note(console, outcomes)
     _evidence_note(console, outcomes)
 
     run = record_run(outcomes, suite=label or (spec.name or "agent"),
@@ -1464,6 +1465,25 @@ def _pooled_tokens(case, dollars_moved: bool) -> str:
             f"(x{growth:.1f})")
 
 
+def _dearest_note(console: Console, outcomes) -> None:
+    """The one case that spent the most, and its share of the bill.
+
+    Named, not judged (notes/82): the expensive case is usually the
+    interesting one -- a loop that re-reads a file, a sub-agent that never
+    needed spawning -- and in a list of twenty lines it is the one the eye
+    slides past. Said only when there are two or more priced cases to
+    choose between; one case is trivially the dearest.
+    """
+    priced = [o for o in outcomes if o.usd]
+    if len(priced) < 2:
+        return
+    dearest = max(priced, key=lambda o: o.usd)
+    total = sum(o.usd for o in priced)
+    console.print(f"[dim]dearest case: {escape(dearest.case_id)} · "
+                  f"${dearest.usd:.4f} · {dearest.usd / total:.0%} of what "
+                  f"the priced cases cost[/dim]")
+
+
 def _evidence_note(console: Console, outcomes) -> None:
     """Cases that PASSED on samples too few to hold the claim they made.
 
@@ -1569,6 +1589,11 @@ def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
         detail = (f"{run.duration_seconds:.1f}s · {run.tokens_used} tok · "
                   f"{run.iterations_used} it · "
                   f"{', '.join(run.tool_calls_seen) or 'no tools'}")
+    if outcome.usd:
+        # Beside the tokens, per case (notes/82): the total says what the
+        # suite cost, and only this says which case spent it. Left off at
+        # $0 and at unknown for the same reason the total is.
+        detail += f" · ${outcome.usd:.4f}"
     console.print(f"  {mark}  {escape(outcome.case_id)}  "
                   f"[dim]{escape(detail)}[/dim]")
     for failure in outcome.failures:
