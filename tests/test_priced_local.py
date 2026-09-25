@@ -147,7 +147,8 @@ class TestThePageSaysItIsRecording:
         session.trace = TrajectoryLog(tmp_path / "t.jsonl", detail="full")
         rec = session.state()["recording"]
         assert rec == {"path": str(tmp_path / "t.jsonl"), "detail": "full",
-                       "redacting": 0, "redacting_words": 0}
+                       "redacting": 0, "redacting_words": 0,
+                       "reading_names": None}
 
     def test_the_page_says_it_is_scrubbing(self, tmp_path):
         session, _ = make_session([])

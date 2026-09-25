@@ -62,6 +62,7 @@ from yantra.tools.discover import (ENTRY_POINT_GROUP, entry_point_packs,
                                    package_tool_names)
 from yantra.trace import (FULL, REDACTED, SHAPE, TrajectoryLog, flagged,
                           read_word_list, step_note, why_flagged)
+from yantra.name_reader import NameReader
 from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
     DEFAULT_TOOLS_PER_TURN,
@@ -344,6 +345,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "word, in any case -- what a pattern cannot "
                              "find, like a customer's name. Only the count "
                              "of entries is ever shown. Repeatable")
+    parser.add_argument("--trace-redact-reader", metavar="OLLAMA_MODEL",
+                        default=None, dest="trace_redact_reader",
+                        help="with --trace: also ask this LOCAL Ollama model "
+                             "(e.g. qwen3.8:latest) for the people's names in "
+                             "every recorded turn, and scrub those too -- "
+                             "each word of a name included. It only adds to "
+                             "--trace-redact-words, never replaces it; a turn "
+                             "it fails on is written with its contents "
+                             "withheld. One local model call per turn "
+                             "recorded (notes/89)")
     parser.add_argument("--fossil", metavar="TRACE_ID", default=None,
                         help="with --trace FILE: print the [[case]] block for "
                              "that recorded turn and exit -- 'every real "
@@ -560,9 +571,12 @@ def _trace_log(args):
         return None
     words = [entry for path in args.trace_redact_words
              for entry in read_word_list(path)]
+    reader = (NameReader(args.trace_redact_reader)
+              if args.trace_redact_reader else None)
     return TrajectoryLog(Path(args.trace),
                          detail=FULL if args.trace_full else SHAPE,
-                         redact=args.trace_redact, redact_words=words)
+                         redact=args.trace_redact, redact_words=words,
+                         reader=reader)
 
 
 def _fossil_mode(args, console: Console) -> int:
@@ -727,7 +741,13 @@ def _turns_mode(args, console: Console) -> int:
         console.print(f"{mark} {turn.id[:8]}  {turn.at}  "
                       f"{len(turn.steps):>2} tool(s)  {escape(task)}{case}"
                       + (f"\n             [dim]{escape(why)}[/dim]"
-                         if why else ""))
+                         if why else "")
+                      # Contents a failed name reader kept out of the
+                      # file (notes/89): the one line an operator must
+                      # not mistake for a turn that read nothing.
+                      + (f"\n             [dim]contents withheld: "
+                         f"{escape(turn.withheld)}[/dim]"
+                         if turn.withheld else ""))
     n_flagged = sum(1 for t in turns if flagged(t))
     console.print(f"\n[dim]{len(turns)} turn(s), {n_flagged} flagged"
                   + (f", {log.unreadable} unreadable line(s) skipped"
@@ -1945,9 +1965,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     # The word list is the same kind of flag as the patterns (notes/86),
     # so it keeps the same company and is refused in the same places.
-    scrubbing = args.trace_redact or args.trace_redact_words
+    scrubbing = (args.trace_redact or args.trace_redact_words
+                 or args.trace_redact_reader)
     flag = ("--trace-redact" if args.trace_redact
-            else "--trace-redact-words")
+            else "--trace-redact-words" if args.trace_redact_words
+            else "--trace-redact-reader")
     if scrubbing and args.trace is None:
         print(f"error: {flag} says what to scrub from a recording, "
               "and --trace says where it goes; pass --trace FILE",

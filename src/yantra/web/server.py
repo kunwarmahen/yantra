@@ -704,7 +704,12 @@ class WebSession:
                                                 "redact_count", 0),
                            # A count, never the entries (notes/86).
                            "redacting_words": getattr(self.trace,
-                                                      "redact_words", 0)}
+                                                      "redact_words", 0),
+                           # The local model reading for names (notes/89),
+                           # by tag; what it finds is never shown.
+                           "reading_names": getattr(
+                               getattr(self.trace, "reader", None),
+                               "model", None)}
                           if self.trace is not None else None),
             "utilization": agent.utilization(),
             # The honest numbers behind the pressure bar: what the last

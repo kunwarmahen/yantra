@@ -143,13 +143,15 @@ as a pattern.
 
 ## What is not here yet
 
-* **A model as a second reader.** Designed above, not built: local
-  only, adding to the list and never removing from it, and falling back
-  to writing no contents at all when the model fails. It needs a
-  measurement first: how many names does `qwen3.8:latest` miss on a
-  labelled set? If it misses more than a few in a hundred, the flag
-  would give false comfort, which is the reason note 79 refused a
-  "scrub everything that looks secret" preset.
+* ~~**A model as a second reader.**~~ Measured and built in
+  [note 89](89-names-nobody-listed.md): `--trace-redact-reader
+  qwen3.8:latest`. On a labelled set of 1,493 names it missed 5, all the
+  same way (a bare first name after the full one), and none once each
+  word of a returned name is scrubbed too. The set is synthetic, so the
+  trial ships with the flag. Was: designed above, not built: local only,
+  adding to the list and never removing from it, and falling back to
+  writing no contents at all when the model fails. It needed a
+  measurement first.
 
 ## Receipt
 

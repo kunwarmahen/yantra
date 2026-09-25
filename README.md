@@ -795,7 +795,10 @@ measured live — in billed tokens on a cloud model, in time to first token
 on a local Ollama),
 [`examples/budget_notice_trial.py`](examples/budget_notice_trial.py)
 (does `--budget-notice` change what the model does? The same turn with
-and without it, counted — free on a local model you price yourself), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+and without it, counted — free on a local model you price yourself),
+[`examples/name_recall_trial.py`](examples/name_recall_trial.py)
+(how many names does a local model miss? A labelled set of 1,493, scored
+the way the scrubber would use the answer — or bring your own), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation
@@ -1334,7 +1337,15 @@ and the line says how many it replaced
 pattern, so `--trace-redact-words FILE` takes a list of them, one a line,
 matched as whole words in any case with the longest entry first; only the
 count of entries is ever shown
-([notes/86](notes/86-names-on-a-list.md)). That is not a trade against usefulness:
+([notes/86](notes/86-names-on-a-list.md)). A name nobody listed is found by
+`--trace-redact-reader qwen3.8:latest`: a **local** model reads each line's
+contents after the list and patterns have run, and every name it returns,
+each word included, is scrubbed too. If it fails, the line is written with
+its contents withheld, never unscrubbed. It was measured before it was
+built — 0 of 1,493 labelled names missed, on a synthetic set — and
+[`examples/name_recall_trial.py`](examples/name_recall_trial.py) takes
+your own labelled records ([notes/89](notes/89-names-nobody-listed.md)).
+That is not a trade against usefulness:
 a case asserting on the contents of a file goes red the day somebody
 edits that file. The block is **printed rather than appended** — a
 suite is its author's file. See
@@ -1907,9 +1918,19 @@ src/yantra/
 │                   compiled as a prefix tree so a 20k-name list costs
 │                   milliseconds a turn; only their count is ever shown
 │                   ([notes/86](notes/86-names-on-a-list.md)).
+│                   reader= is a local model asked for the names nobody
+│                   listed, scrubbed AFTER the list; if it fails the
+│                   line's contents are WITHHELD, never written raw
+│                   ([notes/89](notes/89-names-nobody-listed.md)).
 │                   flagged()/why_flagged() are the one rule --turns and
 │                   the page's turns panel both use
 │                   ([notes/81](notes/81-the-turns-the-page-never-saw.md))
+├── name_reader.py  a LOCAL model asked for the names nobody listed, before a
+│                   line is written: each word of a name scrubbed too, text
+│                   asked in pieces no bigger than was measured, and any
+│                   failure (an error, a cut-off list, prose) raised so the
+│                   recorder withholds rather than writes raw
+│                   ([notes/89](notes/89-names-nobody-listed.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,

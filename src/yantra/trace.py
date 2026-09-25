@@ -91,6 +91,14 @@ another at every character is a recorder that takes a second a turn.
 Only the COUNT of entries is ever shown; the list itself is the most
 private file in the room.
 
+A LOCAL MODEL MAY READ IT FIRST (notes/89). ``reader`` is a
+``NameReader``: an Ollama model asked for the names in the turn's
+contents, whose answer -- each word of a name included -- is scrubbed
+after the list and the patterns have run. It only ever adds. When it fails,
+the turn's contents are WITHHELD rather than written unscrubbed, and the
+line says so; the recorder is the one place a failure can be allowed to
+cost evidence instead of privacy.
+
 AGE IS THE ONLY THING THAT PRUNES, AND ONLY WHEN ASKED (notes/67). A suite
 run with ``--repeat 10 --trace`` writes ten lines a case, so the file
 grows as fast as anybody evaluates. ``prune`` removes turns older than a
@@ -249,6 +257,9 @@ class Trajectory:
     #: The id of the HELD turn this one continues (notes/88), when it was
     #: a resume rather than a message somebody typed. None otherwise.
     resumes: str | None = None
+    #: Why this line's contents were withheld, when a name reader failed
+    #: on it (notes/89). None for every line written in full.
+    withheld: str | None = None
 
     @property
     def tools_used(self) -> list[str]:
@@ -347,7 +358,8 @@ class TrajectoryLog:
 
     def __init__(self, path: Path | str, *, detail: str = SHAPE,
                  redact: Iterable[str] = (),
-                 redact_words: Iterable[str] = ()) -> None:
+                 redact_words: Iterable[str] = (),
+                 reader: Any = None) -> None:
         if detail not in LEVELS:
             raise ConfigError(
                 f"trace detail must be one of {'|'.join(LEVELS)}, got "
@@ -366,6 +378,9 @@ class TrajectoryLog:
         #: the page shows. The entries live only inside the compiled
         #: pattern; nothing that is displayed is built from them.
         self.redact_words = len(words)
+        #: A local model asked for the names in each turn (notes/89), or
+        #: None. Its answer is scrubbed first and never displayed.
+        self.reader = reader
 
     @property
     def label(self) -> str:
@@ -375,6 +390,8 @@ class TrajectoryLog:
             scrubbing.append(f"{self.redact_count} pattern(s)")
         if self.redact_words:
             scrubbing.append(f"{self.redact_words} word(s)")
+        if self.reader is not None:
+            scrubbing.append(f"names read by {self.reader.model}")
         if not scrubbing:
             return self.detail
         return f"{self.detail}, redacting {' and '.join(scrubbing)}"
@@ -384,6 +401,15 @@ class TrajectoryLog:
         payload = _as_json(trajectory)
         if self.redact is not None:
             payload = _redacted(payload, self.redact)
+        if self.reader is not None:
+            # AFTER the operator's patterns and list, never before: a
+            # name the reader found inside an address would otherwise
+            # break the address up, and the `email` pattern would no
+            # longer see one. The reader is also shown less that way.
+            before = payload.get("redacted")
+            payload, read = self._read_names(payload)
+            if before is not None or read:
+                payload["redacted"] = (before or 0) + read
         line = json.dumps(payload, ensure_ascii=False)
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -392,6 +418,28 @@ class TrajectoryLog:
         except OSError as exc:
             raise ConfigError(f"cannot write trace {self.path}: {exc}") from None
         return trajectory.id
+
+    def _read_names(self, payload: dict[str, Any]
+                    ) -> tuple[dict[str, Any], int]:
+        """Scrub what the reader finds; withhold everything if it fails.
+
+        Returns the line and how many replacements the reader's names
+        made, so the line's ``redacted`` count covers every scrub.
+        """
+        from yantra.name_reader import ReaderFailed
+        try:
+            names = self.reader.names(_contents(payload))
+        except ReaderFailed as exc:
+            return _withheld(payload, f"the name reader failed: {exc}"), 0
+        if not names:
+            return payload, 0
+        try:
+            found = _compile_redactions([], _normalized_words(names))
+        except ConfigError:
+            return _withheld(payload, "the name reader's answer could not "
+                                      "be used as a list of names"), 0
+        scrubbed = _redacted(payload, found)
+        return scrubbed, scrubbed.pop("redacted")
 
     def read(self) -> list[Trajectory]:
         """Every readable turn, oldest first.
@@ -737,6 +785,60 @@ def _redacted(payload: dict[str, Any], pattern: re.Pattern[str]
     return out
 
 
+#: What a withheld turn's contents become (notes/89): the name reader
+#: failed, so nothing it was meant to check is written.
+WITHHELD = "[withheld]"
+
+
+def _content_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = [payload, *payload.get("steps", [])]
+    for child in payload.get("children", []):
+        rows.extend([child, *child.get("steps", [])])
+    return rows
+
+
+def _contents(payload: dict[str, Any]) -> list[str]:
+    """Every string a line would write that somebody typed or an agent
+    read -- what the name reader is shown."""
+    found: list[str] = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            if value.strip():
+                found.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    for row in _content_rows(payload):
+        for key in _CONTENT_KEYS:
+            walk(row.get(key))
+    return found
+
+
+def _withheld(payload: dict[str, Any], why: str) -> dict[str, Any]:
+    """A line with every content field replaced, and the reason.
+
+    The shape stays -- tool names, counts, outcome, cost -- so the turn is
+    still a turn ``--turns`` can list and a person can see went wrong.
+    """
+    def blank(row: dict[str, Any]) -> dict[str, Any]:
+        return {k: (WITHHELD if k in _CONTENT_KEYS and row.get(k) not in
+                    (None, "", {}, []) else v) for k, v in row.items()}
+
+    out = blank(payload)
+    out["steps"] = [blank(step) for step in payload.get("steps", [])]
+    if "children" in payload:
+        out["children"] = [{**blank(child), "steps": [
+            blank(step) for step in child.get("steps", [])]}
+            for child in payload["children"]]
+    out["withheld"] = why
+    return out
+
+
 def _recorded_at(line: bytes) -> str | None:
     """A trace line's ``at``, or None when the line cannot say.
 
@@ -851,6 +953,7 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         graded=raw.get("graded"),
         redacted=raw.get("redacted"),
         resumes=raw.get("resumes"),
+        withheld=raw.get("withheld"),
     )
 
 

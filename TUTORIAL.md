@@ -1067,6 +1067,23 @@ is only as good as you keep it. The banner and the page show how many
 names are on it, never the names themselves
 ([notes/86](notes/86-names-on-a-list.md)).
 
+For the names nobody put on a list, a model on your own machine can read
+each turn before it is saved:
+
+```bash
+uv run yantra --trace runs/today.jsonl --trace-full --trace-redact-reader qwen3.8:latest
+```
+
+Every name it finds is hidden too, and each word of a name, so "Dmitri"
+goes along with "Dmitri Nkosi". It only ever adds to your list. If the
+model fails, that turn is saved with its contents left out rather than
+saved unscrubbed. It must be a local Ollama model: the point is that the
+text never leaves your machine. Each saved turn costs one extra model
+call, a few seconds on `qwen3.8:latest`. Before trusting it with your
+data, measure it on your data: label a few dozen of your own records and
+run `examples/name_recall_trial.py --cases yours.jsonl`
+([notes/89](notes/89-names-nobody-listed.md)).
+
 `--trace` works with `--web` too, so turns you run in the browser are
 recorded the same way. When the agent hands work to a sub-agent, the
 sub-agent's steps are saved inside the same line: which tools it used,

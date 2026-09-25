@@ -286,9 +286,10 @@ function renderRecording(s) {
     (rec.detail === "full"
       ? "FULL: tool arguments, results and answers -- whatever the agent read"
       : "shape: the task, which tools ran and the counts; no contents") + ")"
-    + (rec.redacting || rec.redacting_words
+    + (rec.redacting || rec.redacting_words || rec.reading_names
       ? "; " + [rec.redacting ? `${rec.redacting} redaction pattern(s)` : "",
-                rec.redacting_words ? `${rec.redacting_words} listed word(s)` : ""]
+                rec.redacting_words ? `${rec.redacting_words} listed word(s)` : "",
+                rec.reading_names ? `names found by ${rec.reading_names}` : ""]
           .filter(Boolean).join(" and ") + " scrubbed before anything is written"
       : "")
     + " — click for the turns recorded so far";
