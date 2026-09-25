@@ -146,7 +146,8 @@ is the honest signal, and against a local Ollama that key is a
 placeholder somebody still has to type.
 
 **Fixing `examples/run_evals.py`.** That demo script keeps its own
-two-rung ladder and its own `--ollama` flag, on purpose: it is a hundred
+two-rung ladder (falling back to Ollama when neither key is set) and its
+own `--ollama` flag, on purpose: it is a hundred
 lines of "here is what an eval harness looks like", and it teaches better
 with the flag visible than with a resolution ladder imported from the
 library it is demonstrating.

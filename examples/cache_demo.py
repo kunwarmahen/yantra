@@ -2,8 +2,9 @@
 
 Run (real model calls -- needs a key in .env):
 
-    uv run python examples/cache_demo.py
-    uv run python examples/cache_demo.py --provider openai   # automatic upstream
+    uv run python examples/cache_demo.py                       # local Ollama
+    uv run python examples/cache_demo.py --provider anthropic  # billed cache
+    uv run python examples/cache_demo.py --provider openai     # automatic upstream
 
 The economics of agent loops: every bounce re-mails the whole transcript,
 and [tools] + [system] never change between calls. Anthropic-dialect
@@ -22,6 +23,13 @@ Two phases, because gateways differ in what they REPORT:
            system prompt, printing per-call token accounting. This is
            the receipt: expect call 1 to ingest the whole prefix and
            call 2 to read most of it back as cached tokens.
+
+Ollama is the odd one out: a local model bills nothing, so there is no
+cached-token counter to report and ``cache_control`` has no meaning on
+its wire. It still caches -- the server keeps the last request's
+processed prompt and skips re-reading any prefix the next request
+shares. The receipt there is TIME, not tokens: phase 2 streams both
+calls and times the first token, which is almost all prompt reading.
 """
 
 from __future__ import annotations
@@ -34,7 +42,7 @@ from rich.console import Console
 from yantra import Agent, default_registry
 from yantra.config import default_model, load_settings
 from yantra.providers import get_provider
-from yantra.types import Message, TextBlock
+from yantra.types import Message, TextBlock, TextDelta, ThinkingDelta
 
 # A long, boring reference document: long enough to clear the minimum
 # cacheable-prefix threshold (~1k tokens), stable enough to be worth
@@ -61,20 +69,59 @@ def _usage_line(label: str, u) -> str:
             f"cache-write={u.cache_write_tokens:>6}  out={u.output_tokens}")
 
 
+def _measure_local(console: Console, provider, model: str,
+                   system: str) -> None:
+    """Phase 2 for Ollama: the same shared-prefix pair, timed instead."""
+    console.print("[bold]phase 2 · the measurement (streamed, timed to the "
+                  "first token, shared prefix)[/bold]")
+    messages = [Message("user",
+                        [TextBlock("What is rule 3 about? One short "
+                                   "sentence.")])]
+    firsts = []
+    for i in range(2):
+        start = time.perf_counter()
+        first = None
+        for event in provider.stream(messages=messages, system=system,
+                                     tools=[], model=model, max_tokens=100):
+            if first is None and isinstance(event, (TextDelta, ThinkingDelta)):
+                first = time.perf_counter() - start
+        total = time.perf_counter() - start
+        first = total if first is None else first
+        firsts.append(first)
+        console.print(f"  call {i + 1}  first token after {first:6.2f}s  "
+                      f"(whole reply {total:.2f}s)")
+
+    cold, warm = firsts
+    console.print("\n[bold]verdict[/bold]")
+    if warm < cold / 3:
+        console.print(f"[green]PREFIX REUSED:[/green] call 1 read the whole "
+                      f"prompt in {cold:.2f}s; call 2 started answering after "
+                      f"{warm:.2f}s because the server kept the prompt it had "
+                      "already read. Nothing is billed locally -- the saving "
+                      "is your wait.")
+    else:
+        console.print(f"[yellow]no clear reuse:[/yellow] {cold:.2f}s then "
+                      f"{warm:.2f}s. Another request may have run in between "
+                      "(the server keeps one prompt per slot), or the prompt "
+                      "overflowed the model's context and was cut.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--provider", default="anthropic",
-                        choices=["anthropic", "openai"])
+    parser.add_argument("--provider", default="ollama",
+                        choices=["anthropic", "openai", "ollama"])
     args = parser.parse_args()
 
     console = Console()
     settings = load_settings(args.provider)
     provider = get_provider(args.provider, settings, cache_control=True)
-    # A unique suffix per phase busts any cache entry left by earlier runs
+    # A unique tag per phase busts any cache entry left by earlier runs
     # (entries live ~5 min and refresh on hit) so call 1 is genuinely COLD.
+    # It goes FIRST: Ollama reuses any shared leading run of tokens, so a
+    # tag at the end would let phase 2 ride on phase 1's warm prompt.
     model = default_model(args.provider)
-    ref_phase1 = _REFERENCE + f"\n(session {time.time_ns()}-a)"
-    ref_phase2 = _REFERENCE + f"\n(session {time.time_ns()}-b)"
+    ref_phase1 = f"(session {time.time_ns()}-a)\n" + _REFERENCE
+    ref_phase2 = f"(session {time.time_ns()}-b)\n" + _REFERENCE
     console.print(f"[bold]{args.provider}[/bold] · cache_control=True · "
                   f"system ≈ {len(ref_phase2) // 4} tokens\n")
 
@@ -99,6 +146,10 @@ def main() -> None:
         console.print("OpenAI dialect: caching is automatic upstream -- there "
                       "is nothing to send. Hits appear only when the gateway "
                       "reports prompt_tokens_details.cached_tokens.")
+        return
+
+    if args.provider == "ollama":
+        _measure_local(console, provider, model, ref_phase2)
         return
 
     # ---- phase 2: the measurement (non-streaming) ---------------------------

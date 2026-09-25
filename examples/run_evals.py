@@ -186,7 +186,7 @@ def _guess_provider() -> str:
         return "anthropic"
     if os.environ.get("OPENAI_API_KEY"):
         return "openai"
-    raise ConfigError("no API key found -- see .env.example")
+    return "ollama"  # no key anywhere: the local road needs none
 
 
 if __name__ == "__main__":

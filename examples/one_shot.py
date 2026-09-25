@@ -2,7 +2,8 @@
 either provider, so you can diff the two wire formats on the same prompt.
 
 Run:
-    uv run python examples/one_shot.py "Why is the sky blue?"
+    uv run python examples/one_shot.py "Why is the sky blue?"        # local Ollama
+    uv run python examples/one_shot.py --provider anthropic "Why is the sky blue?"
     uv run python examples/one_shot.py --provider openai "Why is the sky blue?"
 
 Prints, in order:
@@ -27,8 +28,8 @@ from yantra.types import Message, TextBlock
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--provider", default="anthropic",
-                        choices=["anthropic", "openai"])
+    parser.add_argument("--provider", default="ollama",
+                        choices=["anthropic", "openai", "ollama"])
     parser.add_argument("prompt", nargs="*", default=["Why is the sky blue?"])
     args = parser.parse_args()
     prompt = " ".join(args.prompt)

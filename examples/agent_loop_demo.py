@@ -104,8 +104,8 @@ def show_history_shape(agent: Agent, console: Console) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--provider", default="anthropic",
-                        choices=["anthropic", "openai"])
+    parser.add_argument("--provider", default="ollama",
+                        choices=["anthropic", "openai", "ollama"])
     parser.add_argument("--deny-all", action="store_true",
                         help="deny every gated call; watch the model adapt")
     parser.add_argument("prompt", nargs="*",

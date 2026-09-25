@@ -777,7 +777,8 @@ test: the agent builds a project from a spec — or repairs a seeded
 broken one without touching its checksummed tests — and the demo
 independently re-verifies; exit code doubles as a CI gate),
 [`examples/cache_demo.py`](examples/cache_demo.py) (prompt-cache hit,
-measured live),
+measured live — in billed tokens on a cloud model, in time to first token
+on a local Ollama),
 [`examples/budget_notice_trial.py`](examples/budget_notice_trial.py)
 (does `--budget-notice` change what the model does? The same turn with
 and without it, counted — free on a local model you price yourself), [`examples/hooks_demo.py`](examples/hooks_demo.py)
@@ -2149,9 +2150,10 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 uv run pytest -q                 # full offline suite: 1589 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
-# everything below makes REAL model calls -- it needs a key in .env (auto-loaded):
+# everything below makes REAL model calls. The examples default to a local
+# Ollama (no key); add --provider anthropic|openai to use a key from .env:
 uv run python examples/one_shot.py "Why is the sky blue?"
-uv run python examples/one_shot.py --provider openai "Why is the sky blue?"
+uv run python examples/one_shot.py --provider anthropic "Why is the sky blue?"
 uv run python examples/stream_demo.py "Count to five"
 uv run python examples/tool_round_trip.py "What's in README.md?"
 uv run python examples/agent_loop_demo.py            # the loop, event by event
@@ -2163,7 +2165,7 @@ uv run yantra                                       # REPL
 uv run yantra --provider ollama --web               # REPL in your browser (free, local)
 uv run yantra --yolo "run: echo hi"                 # one-shot, no prompts
 uv run yantra --cache                               # prompt caching on
-uv run python examples/cache_demo.py                 # cache hit, measured live
+uv run python examples/cache_demo.py                 # cache hit, measured live (tokens, or time on Ollama)
 uv run python examples/hooks_demo.py                 # watch tool executions live
 ```
 

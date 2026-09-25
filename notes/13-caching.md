@@ -75,6 +75,38 @@ collapsed by ~99.7% on the replay. Two honest wrinkles:
   fold write cost into plain input tokens rather than reporting
   `cache_creation_input_tokens`. Reads are what we can prove.
 
+### On a local model the receipt is time, not tokens
+
+Ollama bills nothing, so it has no cached-token counter to report, and
+`cache_control` means nothing on its OpenAI-shaped wire — the flag is
+dropped like it is for any OpenAI dialect. Run the token measurement
+against it and you get two identical rows of `cached-read=0`, which
+reads like failure and is not.
+
+The server caches anyway, without being asked: it keeps the prompt it
+just processed and skips re-reading whatever leading run of tokens the
+next request shares with it. So on `--provider ollama` phase 2 streams
+both calls and times the first token — almost all of that wait is the
+model reading the prompt. Against `qwen3.8:latest`, with an ~8.6k-token
+system prompt:
+
+```
+phase 2 · the measurement (streamed, timed to the first token, shared prefix)
+  call 1  first token after   8.22s  (whole reply 9.83s)
+  call 2  first token after   0.20s  (whole reply 1.60s)
+
+verdict
+PREFIX REUSED: call 1 read the whole prompt in 8.22s; call 2 started answering
+after 0.20s because the server kept the prompt it had already read.
+```
+
+One consequence for the demo itself: the per-run cache-busting tag sits
+at the **start** of the system prompt, not the end. Anthropic's cache is
+keyed on the exact prefix up to a breakpoint, so either position busts
+it; Ollama reuses any shared leading run, so a tag at the end would have
+let phase 2 ride on phase 1's already-read prompt and "prove" a cold
+call that was warm.
+
 ## Testing shape
 
 Eleven offline tests pin the contract: default-off invisibility, exact

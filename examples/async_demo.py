@@ -1,9 +1,10 @@
 """The async payoff, measured live: ONE event loop, MANY conversations.
 
-Run (needs a real provider key in .env / environment):
+Run (local Ollama by default -- no key; cloud providers need one in .env):
 
     uv run python examples/async_demo.py
     uv run python examples/async_demo.py --conversations 6
+    uv run python examples/async_demo.py --provider anthropic
     uv run python examples/async_demo.py --provider openai
 
 Runs the SAME N independent Q&A conversations twice through AsyncAgent:
@@ -21,6 +22,11 @@ Honest caveat printed with the results: this measures wall-clock, not
 token throughput. The provider serves roughly the same total tokens
 either way; concurrency hides per-request latency behind other
 sessions' waits instead of making any single request faster.
+
+On a local Ollama expect a speedup near 1x: the server answers one
+request per model at a time unless started with OLLAMA_NUM_PARALLEL=4
+(or more). The event loop still overlaps the waits -- there is simply
+one worker on the far end. That is the same lesson from the other side.
 """
 
 from __future__ import annotations
@@ -126,8 +132,8 @@ async def main_async(conversations: int, provider_name: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--provider", default="anthropic",
-                        choices=["anthropic", "openai"])
+    parser.add_argument("--provider", default="ollama",
+                        choices=["anthropic", "openai", "ollama"])
     parser.add_argument("--conversations", type=int, default=4)
     args = parser.parse_args()
     asyncio.run(main_async(args.conversations, args.provider))

@@ -509,7 +509,7 @@ uv run yantra --provider ollama --web    # the same session in your browser
 uv run yantra --yolo "summarize README.md"
 uv run python examples/agent_loop_demo.py # watch the loop, event by event
 uv run python examples/builder_demo.py    # watch it BUILD a project
-uv run python examples/cache_demo.py      # watch caching cut the bill
+uv run python examples/cache_demo.py      # watch caching cut the wait (or the bill)
 ```
 
 The best demonstration: start the REPL, give it a task that takes a

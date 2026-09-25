@@ -2,7 +2,8 @@
 the model answers -- rendered with the SAME renderer the CLI uses.
 
 Run:
-    uv run python examples/tool_round_trip.py "what's in README.md?"
+    uv run python examples/tool_round_trip.py "what's in README.md?"   # local Ollama
+    uv run python examples/tool_round_trip.py --provider anthropic "..."
     uv run python examples/tool_round_trip.py --provider openai "..."
 
 What to watch for:
@@ -32,8 +33,8 @@ from yantra.tools import default_registry
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--provider", default="anthropic",
-                        choices=["anthropic", "openai"])
+    parser.add_argument("--provider", default="ollama",
+                        choices=["anthropic", "openai", "ollama"])
     parser.add_argument("prompt", nargs="*", default=["what's in README.md?"])
     args = parser.parse_args()
 

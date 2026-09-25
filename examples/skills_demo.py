@@ -13,9 +13,9 @@ Add ``--delegated`` to run a third skill that declares ``mode:
 subagent``: its ``allowed-tools`` stop being advice and become a fence,
 enforced by building the child's registry from exactly that list.
 
-    uv run --env-file .env python examples/skills_demo.py
-    uv run --env-file .env python examples/skills_demo.py --ollama
-    uv run --env-file .env python examples/skills_demo.py --ollama --delegated
+    uv run --env-file .env python examples/skills_demo.py              # local Ollama
+    uv run --env-file .env python examples/skills_demo.py --delegated
+    uv run --env-file .env python examples/skills_demo.py --anthropic
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ def write_skills(root: Path, *, delegated: bool) -> None:
 
 def main() -> None:
     delegated = "--delegated" in sys.argv
-    provider_name = "ollama" if "--ollama" in sys.argv else "anthropic"
+    provider_name = "anthropic" if "--anthropic" in sys.argv else "ollama"
     provider = get_provider(provider_name, load_settings(provider_name))
 
     with tempfile.TemporaryDirectory() as tmp:
