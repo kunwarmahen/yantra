@@ -59,6 +59,7 @@ from yantra.errors import ConfigError
 from yantra.mcp import MCPServerConfig
 from yantra.spec import AgentSpec
 from yantra.subagent import SPAWN_TOOL_NAME, SubagentSpec
+from yantra.tools.discover import PACK_PREFIX, parse_pack
 
 #: The file that makes a directory an agent package.
 MANIFEST = "agent.toml"
@@ -82,7 +83,8 @@ SCHEMA: dict[str, frozenset[str]] = {
     "agent": frozenset({"name", "description", "version", "prompt"}),
     "model": frozenset({"provider", "model", "max_tokens", "max_iterations",
                         "context_window", "cache"}),
-    "tools": frozenset({"allow", "deny", "per_turn", "dirs", "packs"}),
+    "tools": frozenset({"allow", "deny", "per_turn", "dirs", "packs",
+                        "prefix"}),
     "skills": frozenset({"dirs", "disabled", "enabled"}),
     "mcp": frozenset({"name", "command", "args", "env", "url", "headers"}),
     "subagent": frozenset({"name", "description", "prompt", "instructions",
@@ -194,6 +196,40 @@ def _str_list(table: dict[str, Any], key: str, path: Path,
     if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
         _fail(path, f"{where}.{key} must be a list of strings")
     return tuple(value)
+
+
+def _pack_prefixes(tools: dict[str, Any], packs: tuple[str, ...],
+                   path: Path) -> tuple[tuple[str, str], ...]:
+    """``[tools.prefix]`` -> (pack, prefix) pairs, checked against
+    ``packs`` without importing anything (notes/87).
+
+    Every ``packs`` line is parsed here too, so ``tide-pack>=0.2`` is
+    reported against this file at load rather than when an agent is
+    built. A prefix for a pack the manifest does not name is an error:
+    it is a typo, and the collision it was meant to settle is still
+    there.
+    """
+    try:
+        names = {parse_pack(text)[0] for text in packs}
+    except ConfigError as exc:
+        _fail(path, str(exc))
+    table = tools.get("prefix")
+    if table is None:
+        return ()
+    if not isinstance(table, dict):
+        _fail(path, "[tools.prefix] must be a table of pack = \"prefix\"")
+    pairs = []
+    for pack, prefix in table.items():
+        if pack not in names:
+            _fail(path, f"[tools.prefix] names {pack!r}, which tools.packs "
+                        f"does not load (packs: "
+                        f"{', '.join(sorted(names)) or 'none'})")
+        if not isinstance(prefix, str) or not PACK_PREFIX.match(prefix):
+            _fail(path, f"[tools.prefix] {pack} = {prefix!r}: a prefix is "
+                        f"lower-case letters and digits, starting with a "
+                        f"letter")
+        pairs.append((pack, prefix))
+    return tuple(pairs)
 
 
 def _mcp_servers(data: dict[str, Any], path: Path) -> tuple[MCPServerConfig, ...]:
@@ -460,6 +496,7 @@ def load_package(where: Path) -> AgentSpec:
     # whatever happens to be in the virtualenv is the wrong default. Not
     # imported here either, for tools.dirs' reason.
     tool_packs = tuple(_str_list(tools, "packs", manifest, "tools") or ())
+    tool_prefixes = _pack_prefixes(tools, tool_packs, manifest)
 
     declared_dirs = _str_list(skills, "dirs", manifest, "skills")
     if declared_dirs is None:
@@ -491,6 +528,7 @@ def load_package(where: Path) -> AgentSpec:
         tools_per_turn=_int(tools, "per_turn", manifest, "tools"),
         tool_dirs=tool_dirs,
         tool_packs=tool_packs,
+        tool_prefixes=tool_prefixes,
         skills=skills_on,
         skill_dirs=skill_dirs,
         skills_disabled=_str_list(skills, "disabled", manifest, "skills") or (),

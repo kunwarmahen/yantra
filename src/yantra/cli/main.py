@@ -58,6 +58,7 @@ from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools import default_registry
 from yantra.tools.ask_user import AskUser, TerminalChannel
 from yantra.tools.discover import (ENTRY_POINT_GROUP, entry_point_packs,
+                                   installed_pack_versions,
                                    package_tool_names)
 from yantra.trace import (FULL, REDACTED, SHAPE, TrajectoryLog, flagged,
                           read_word_list, step_note, why_flagged)
@@ -384,7 +385,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "discovered: an agent whose tool list depended "
                              "on what happens to be in the virtualenv would "
                              "be a different agent on every machine. A name "
-                             "nothing publishes is an error")
+                             "nothing publishes is an error. NAME==1.2.3 "
+                             "also refuses to start unless that exact "
+                             "release is installed")
     parser.add_argument("--packs", action="store_true",
                         help="list the tool packs installed in this "
                              "environment -- what --tool-pack could name -- "
@@ -687,7 +690,8 @@ def _packs_mode(console: Console) -> int:
         for entry in entries:
             console.print(f"  {escape(entry.name)} = {escape(entry.value)}")
     console.print(f"\n[dim]{len(packs)} pack(s) installed, none loaded. "
-                  "An agent gets one only by naming it: --tool-pack NAME, or "
+                  "An agent gets one only by naming it (NAME, or "
+                  "NAME==VERSION to insist on a release): --tool-pack NAME, or "
                   "packs = [\"NAME\"] in agent.toml[/dim]")
     return 0
 
@@ -1107,6 +1111,8 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                      pricing=(PriceRecord.for_model(provider_name, model)
                               if needs_model else None),
                      package=fingerprint(spec),
+                     packs=(installed_pack_versions(spec.tool_packs)
+                            if spec.tool_packs else None),
                      # The weights behind a local tag, and each case as it
                      # was loaded (notes/72): both can change a rate while
                      # every name stays the same.
@@ -1164,6 +1170,12 @@ def _render_comparison(console: Console, cmp) -> None:
                     f"{escape(before.weights)} → {escape(after.weights)}")
         console.print(f"[yellow]{said}, so what moved below may be the "
                       f"model[/yellow]")
+    for pack, was, now in cmp.packs_moved:
+        # Which pack, and to what (notes/87): the fingerprint line below
+        # can only say that the package differs.
+        console.print(f"[yellow]tool pack {escape(pack)}: {was or 'absent'} → "
+                      f"{now or 'absent'}, so what moved below may be the "
+                      f"pack[/yellow]")
     if cmp.package_changed:
         # The version says nothing moved, and the files say otherwise
         # (notes/68). Everything below may be the edit, not the model.

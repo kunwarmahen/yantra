@@ -942,7 +942,7 @@ armed would be the worst bug this format could have:
 ```
 $ uv run yantra --agent ./broken
 error: ./broken/agent.toml: unknown key(s) in [tools]: alow
-       (known: allow, deny, dirs, per_turn)
+       (known: allow, deny, dirs, packs, per_turn, prefix)
 ```
 
 ### The package's own acceptance gate
@@ -1999,7 +1999,12 @@ src/yantra/
 │   │               different agent on every machine.
 │   │               entry_point_packs() lists them without importing any
 │   │               -- `yantra --packs` prints it
-│   │               ([notes/53](notes/53-a-tool-that-arrives-by-pip.md))
+│   │               ([notes/53](notes/53-a-tool-that-arrives-by-pip.md)).
+│   │               "name==1.2.3" is CHECKED, never resolved; a pack's own
+│   │               Requires-Dist on yantra is read at load; both refuse
+│   │               before the import. [tools.prefix] renames a pack's
+│   │               tools, the way out of a collision
+│   │               ([notes/87](notes/87-which-release-and-what-its-called.md))
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
 │   │               description, transcript-derived query, core pins +
 │   │               list_available_tools discovery hatch ([notes/17](notes/17-tool-selection.md)).

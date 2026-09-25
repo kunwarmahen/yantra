@@ -120,6 +120,10 @@ class AgentSpec:
     #: happened to be installed would be a different agent on every
     #: machine (tools/discover.py).
     tool_packs: tuple[str, ...] = ()
+    #: ``(pack, prefix)`` pairs: a pack whose tools are renamed
+    #: ``prefix_name`` on the way in, the way out of a collision between
+    #: two packs (notes/87). Pairs, not a dict, so the spec stays hashable.
+    tool_prefixes: tuple[tuple[str, str], ...] = ()
 
     # ---- skills ------------------------------------------------------------
     skills: bool | None = None
@@ -308,7 +312,8 @@ class AgentSpec:
         # being in the directory. Same admission policy, same loudness
         # about collisions; the only difference is where it came from.
         if self.tool_packs:
-            register_tool_packs(tools, self.tool_packs)
+            register_tool_packs(tools, self.tool_packs,
+                                prefixes=dict(self.tool_prefixes))
 
         # The ceiling is resolved HERE, before an agent exists, because the
         # one failure worth catching early is a ceiling that can never fire:

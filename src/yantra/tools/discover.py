@@ -61,6 +61,20 @@ from anywhere but a human's hands:
 Which is also why ``load_package`` does not call any of this: parsing a
 manifest stays a pure read, and code runs only when something actually
 builds an agent from it.
+
+A PACK IS NAMED WITH THE RELEASE IT WAS WRITTEN AGAINST, IF ITS AUTHOR
+WANTS (notes/87). ``packs = ["tide-pack==0.2.1"]`` is CHECKED, never
+resolved: the environment's lockfile still chooses what is installed,
+and a manifest that disagrees with it refuses to start rather than
+grading an agent against a release nobody meant. Exact versions only --
+a range is a resolver's question, and answering it here would mean a
+PEP 440 parser or a dependency the core does not have. The same load
+reads what the pack says it needs from Yantra (``Requires-Dist:
+yantra>=X``) and refuses a pack built for a newer base class at the
+door, with the pack's own requirement in the message, instead of at
+registration with a TypeError. And a pack's tools may be RENAMED by a
+prefix the manifest chooses, the one way out of a collision between two
+packs that both ship ``search`` short of forking one.
 """
 
 from __future__ import annotations
@@ -69,9 +83,10 @@ import hashlib
 import importlib.metadata as metadata
 import importlib.util
 import inspect
+import re
 import sys
 import types
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -305,8 +320,122 @@ def entry_point_packs() -> dict[str, list[Any]]:
     return packs
 
 
-def register_tool_packs(registry: ToolRegistry,
-                        names: Iterable[str]) -> list[str]:
+#: What a manifest's prefix may look like (notes/87): the tool-name rule
+#: without its underscore tail, since the prefix is joined with one.
+PACK_PREFIX = re.compile(r"[a-z][a-z0-9]*\Z")
+
+#: One clause of a requirement, as a pack author realistically writes it.
+_CLAUSE = re.compile(r"\s*(>=|<=|==|!=|~=|>|<)\s*([^\s,]+)\s*\Z")
+_RELEASE = re.compile(r"\d+(?:\.\d+)*\Z")
+_REQUIREMENT = re.compile(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?"
+                          r"\s*\(?([^()]*)\)?\s*\Z")
+
+
+def parse_pack(text: str) -> tuple[str, str | None]:
+    """``"tide-pack"`` or ``"tide-pack==0.2.1"`` -> (name, pinned version).
+
+    A pure read: a manifest is checked with this before anything is
+    imported. ANY OTHER OPERATOR IS AN ERROR that says why -- a range
+    would be quietly accepted by a reader who expected it to mean
+    something and checked by nothing.
+    """
+    name, sep, version = text.strip().partition("==")
+    name, version = name.strip(), version.strip()
+    if not name or any(ch in name for ch in "<>=!~,; "):
+        raise ConfigError(
+            f"tool pack {text!r}: a pack is a name, or a name and the "
+            f"exact release it was written against (tide-pack==0.2.1); "
+            f"ranges belong in the environment's lockfile, which is what "
+            f"chooses the version installed")
+    if sep and (not version or any(ch in version for ch in "<>=!~,; *")):
+        raise ConfigError(
+            f"tool pack {text!r}: == takes one exact release, like 0.2.1")
+    return name, (version if sep else None)
+
+
+def _installed_version(name: str, entries: list[Any]) -> str | None:
+    dist = getattr(entries[0], "dist", None)
+    version = getattr(dist, "version", None)
+    if version:
+        return str(version)
+    try:
+        return metadata.version(name)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def installed_pack_versions(packs: Iterable[str]) -> dict[str, str | None]:
+    """What each named pack IS in this environment, for a report
+    (notes/87): the fingerprint says that something moved, and this says
+    which pack and to what. None when it is not installed."""
+    versions: dict[str, str | None] = {}
+    for text in packs:
+        name, _ = parse_pack(text)
+        try:
+            versions[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            versions[name] = None
+    return versions
+
+
+def _release(version: str) -> tuple[int, ...] | None:
+    """``"0.4.1"`` -> (0, 4, 1); None for anything with a suffix, which is
+    not compared rather than compared wrongly."""
+    if not _RELEASE.match(version):
+        return None
+    parts = [int(p) for p in version.split(".")]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
+def _satisfies(have: tuple[int, ...], op: str, want: tuple[int, ...]
+               ) -> bool | None:
+    return {">=": have >= want, ">": have > want, "<=": have <= want,
+            "<": have < want, "==": have == want,
+            "!=": have != want}.get(op)
+
+
+def _check_base(name: str, entries: list[Any]) -> None:
+    """Refuse a pack built for a Yantra this is not (notes/87).
+
+    Reads the pack's own ``Requires-Dist`` for ``yantra``. A line with an
+    environment marker is conditional and is left alone; ``~=``, a
+    wildcard or a pre-release is not compared, because a check that
+    guessed would be worse than the TypeError it replaces. A pack that
+    declares nothing loads as it always did.
+    """
+    dist = getattr(entries[0], "dist", None)
+    requires = getattr(dist, "requires", None) or []
+    try:
+        have = _release(metadata.version("yantra"))
+    except metadata.PackageNotFoundError:
+        return
+    if have is None:
+        return
+    for line in requires:
+        requirement, _, marker = str(line).partition(";")
+        match = _REQUIREMENT.match(requirement)
+        if marker.strip() or match is None:
+            continue
+        if re.sub(r"[-_.]+", "-", match.group(1)).lower() != "yantra":
+            continue
+        for clause in filter(str.strip, match.group(2).split(",")):
+            parsed = _CLAUSE.match(clause)
+            want = _release(parsed.group(2)) if parsed else None
+            if want is None:
+                continue
+            if _satisfies(have, parsed.group(1), want) is False:
+                raise ConfigError(
+                    f"tool pack {name} requires "
+                    f"yantra{match.group(2).strip()}, and this is yantra "
+                    f"{metadata.version('yantra')}; upgrade yantra, or "
+                    f"install a release of {name} built for this one")
+
+
+def register_tool_packs(registry: ToolRegistry, names: Iterable[str], *,
+                        prefixes: Mapping[str, str] | None = None
+                        ) -> list[str]:
     """Load the named installed packs into ``registry``; return what was
     admitted.
 
@@ -321,15 +450,29 @@ def register_tool_packs(registry: ToolRegistry,
     A NAME THAT IS NOT INSTALLED IS AN ERROR, for tools/ directories'
     reason: an author who wrote the line believes they shipped the tool,
     and an agent quietly missing it is the failure this whole area
-    exists to prevent.
+    exists to prevent. So is a pinned release that is not the one
+    installed, and a pack whose stated Yantra requirement this build
+    does not meet -- both checked BEFORE the pack is imported, so a pack
+    that would not work never gets to run its import-time code.
+
+    ``prefixes`` renames a pack's tools (``{"tide-pack": "tide"}`` makes
+    ``search`` into ``tide_search``) on the instance, the way the eval
+    recorder wraps a tool without touching its class. The DESCRIPTION IS
+    NOT REWRITTEN: prose that says "use search" now names a tool the
+    model cannot see, and fixing somebody else's prose by pattern would be
+    worse than the stale word.
 
     Admission still applies afterwards -- these go through ``register``
     like everything else, so a pack a package's own ``tools.allow`` does
-    not name is turned away and listed in ``refused_names()``.
+    not name is turned away and listed in ``refused_names()``. Allow,
+    deny and every eval assertion name the PREFIXED tool: the name the
+    model sees is the only name there is.
     """
+    prefixes = dict(prefixes or {})
     available = entry_point_packs()
     admitted: list[str] = []
-    for name in names:
+    for text in names:
+        name, pinned = parse_pack(text)
         entries = available.get(name)
         if entries is None:
             installed = ", ".join(sorted(available)) or "none"
@@ -338,15 +481,34 @@ def register_tool_packs(registry: ToolRegistry,
                 f"{ENTRY_POINT_GROUP!r} is called that (installed: "
                 f"{installed}). Install it into the same environment as "
                 f"the agent, or drop the line that asks for it")
+        if pinned is not None:
+            have = _installed_version(name, entries)
+            if have != pinned:
+                raise ConfigError(
+                    f"tool pack {name}: this agent names release {pinned} "
+                    f"and {'release ' + have if have else 'an unknown release'}"
+                    f" is installed. Install the one it was written against "
+                    f"(pip install {name}=={pinned}), or change the line if "
+                    f"the agent has been checked against {have or 'it'}")
+        _check_base(name, entries)
+        prefix = prefixes.get(name)
+        if prefix is not None and not PACK_PREFIX.match(prefix):
+            raise ConfigError(
+                f"tool pack {name}: prefix {prefix!r} must be lower-case "
+                f"letters and digits, starting with a letter (joined to "
+                f"each tool's name with '_')")
         for entry in entries:
             for tool in _tools_from_entry_point(entry):
+                if prefix is not None:
+                    tool.name = f"{prefix}_{tool.name}"
                 try:
                     registry.register(tool)
                 except ValueError:
                     raise ConfigError(
                         f"tool pack {name}: tool {tool.name!r} is already "
                         f"registered -- a pack may not shadow another tool "
-                        f"(exclude the original with tools.deny)") from None
+                        f"(exclude the original with tools.deny, or give "
+                        f"one pack a prefix in [tools.prefix])") from None
                 if tool.name in registry:
                     admitted.append(tool.name)
     return admitted

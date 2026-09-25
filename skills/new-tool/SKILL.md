@@ -20,6 +20,15 @@ same hand-written schema, but no registration and no selector step: it
 is discovered by being there. See `notes/32-package-tools.md` and
 `examples/agents/researcher/tools/outline.py`.
 
+A tool several agents share can ship as a pip-installable **pack** instead
+(`notes/53-a-tool-that-arrives-by-pip.md`). If you publish one, declare
+the Yantra it was built for in the pack's own dependencies
+(`dependencies = ["yantra>=0.1"]`): Yantra reads that line at load and
+refuses a mismatch before importing your code
+(`notes/87-which-release-and-what-its-called.md`). Write the description
+about what the tool does, not what it is called -- a manifest may rename
+it with a prefix, and the description is not rewritten.
+
 ## Steps
 
 1. **Read the neighbours first.** `src/yantra/tools/glob.py` is the

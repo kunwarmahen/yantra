@@ -221,6 +221,10 @@ class SuiteRun:
     #: re-pulled ``qwen3.8:latest`` is not pooled as the same model. None
     #: on a cloud provider, which does not say, and on older reports.
     weights: str | None = None
+    #: The installed release of every named tool pack (notes/87). The
+    #: fingerprint already moves when one does; this says WHICH pack and
+    #: to what. None on older reports and for an agent with no packs.
+    packs: dict[str, str | None] | None = None
 
     @property
     def passed(self) -> int:
@@ -262,7 +266,8 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
                pricing: PriceRecord | None = None,
                package: str | None = None,
                weights: str | None = None,
-               definitions: dict[str, str | None] | None = None
+               definitions: dict[str, str | None] | None = None,
+               packs: dict[str, str | None] | None = None
                ) -> SuiteRun:
     """``CaseOutcome``s -> the record. Reads only the public properties, so
     an outcome type that grows a field does not have to grow one here."""
@@ -272,6 +277,7 @@ def record_run(outcomes: Sequence[Any], *, suite: str, provider: str,
         repeat=repeat, cases_in_suite=cases_in_suite,
         filtered=list(filtered) if filtered else None,
         pricing=pricing, package=package, weights=weights,
+        packs=dict(packs) if packs else None,
         cases=[CaseRecord(
             id=o.case_id, passed=o.passed, attempts=o.attempts,
             passes=o.passes, min_pass_rate=o.min_pass_rate,
@@ -302,6 +308,7 @@ def write_report(path: Path, run: SuiteRun) -> None:
         "pricing": run.pricing.to_json() if run.pricing else None,
         "package": run.package,
         "weights": run.weights,
+        "packs": run.packs,
         "passed": run.passed,
         "tokens": run.tokens,
         "cases": [_case_json(c) for c in run.cases],
@@ -366,6 +373,7 @@ def read_report(path: Path) -> SuiteRun:
             pricing=PriceRecord.from_json(raw.get("pricing")),
             package=raw.get("package"),
             weights=raw.get("weights"),
+            packs=raw.get("packs"),
             cases=[CaseRecord(
                 id=c["id"], passed=c["passed"], attempts=c["attempts"],
                 passes=c["passes"], min_pass_rate=c["min_pass_rate"],
@@ -526,6 +534,18 @@ class Comparison:
                 and self.before.weights is not None
                 and self.after.weights is not None
                 and self.before.weights != self.after.weights)
+
+    @property
+    def packs_moved(self) -> list[tuple[str, str | None, str | None]]:
+        """``(pack, before, after)`` for every tool pack whose installed
+        release differs between the runs (notes/87), a pack named on only
+        one side included. Empty when either side did not record packs --
+        unknown, not unchanged, and not a line worth printing."""
+        if self.before.packs is None or self.after.packs is None:
+            return []
+        return [(name, self.before.packs.get(name), self.after.packs.get(name))
+                for name in sorted(set(self.before.packs) | set(self.after.packs))
+                if self.before.packs.get(name) != self.after.packs.get(name)]
 
     @property
     def package_changed(self) -> bool:

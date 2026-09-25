@@ -130,7 +130,7 @@ them.
 ```
 $ yantra --agent ./broken
 error: ./broken/agent.toml: unknown key(s) in [tools]: alow
-       (known: allow, deny, dirs, per_turn)
+       (known: allow, deny, dirs, packs, per_turn, prefix)
 ```
 
 A typo'd key that is quietly ignored is how a package comes to
@@ -318,7 +318,7 @@ the only thing this invocation got wrong.
 ```
 $ yantra --agent ./broken
 error: ./broken/agent.toml: unknown key(s) in [tools]: alow
-       (known: allow, deny, dirs, per_turn)
+       (known: allow, deny, dirs, packs, per_turn, prefix)
 ```
 
 ## What is not here yet

@@ -650,6 +650,23 @@ To see which names you could use, `uv run yantra --packs` lists every
 installed pack and where its tools live, without importing any of them.
 ([notes/53](notes/53-a-tool-that-arrives-by-pip.md))
 
+Two more things a manifest can say about a pack:
+
+```toml
+[tools]
+packs = ["tide-pack==0.2.1", "sea-pack"]   # this exact release, or refuse to start
+
+[tools.prefix]
+"sea-pack" = "sea"                          # its search becomes sea_search
+```
+
+The `==` line does not install anything. Your lockfile still decides
+what is installed; the line just refuses to run the agent against a
+release it was not written for. The prefix is for when two packs both
+ship a tool with the same name. After it, `sea_search` is the only name:
+use it in `tools.allow` and in your eval cases
+([notes/87](notes/87-which-release-and-what-its-called.md)).
+
 ## 12 · A package that delegates
 
 ```toml

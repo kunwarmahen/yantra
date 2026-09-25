@@ -159,19 +159,24 @@ tool packs: tide-pack
 
 ## What is not here yet
 
-* **Nothing pins a version.** `packs = ["tide-pack"]` names a
-  distribution, not a release, and which version answers depends on the
-  environment. Pinning belongs in the environment's own lockfile, which
-  is where every other dependency's version lives — but it does mean a
-  manifest cannot say "this agent was graded against tide-pack 0.2".
-* **No namespacing.** A pack's tools land in the registry under their own
-  names, so two packs that both ship `search` collide loudly and neither
-  can be renamed from the manifest. A `mcp__server__tool`-style prefix
-  ([notes/09](09-mcp.md)) would fix it and would make every eval case
-  naming the tool longer.
-* **The group is not versioned.** `yantra.tools` will mean whatever
-  `Tool` means in whatever version is installed; a pack built against an
-  older base class fails at registration rather than at install.
+* ~~**Nothing pins a version.**~~ Checked since
+  [note 87](87-which-release-and-what-its-called.md):
+  `packs = ["tide-pack==0.2.1"]` refuses to start against any other
+  release, before the pack is imported, and a report records every
+  pack's release by name. The lockfile still chooses what is installed.
+  Was: a manifest could not say "this agent was graded against
+  tide-pack 0.2".
+* ~~**No namespacing.**~~ Opt-in since
+  [note 87](87-which-release-and-what-its-called.md): `[tools.prefix]`
+  renames a pack's tools (`search` → `tide_search`), and the collision
+  error points at it. No prefix by default, so eval cases stay short.
+  Was: two packs that both ship `search` collided and neither could be
+  renamed from the manifest.
+* ~~**The group is not versioned.**~~ Answered without versioning the
+  group, in [note 87](87-which-release-and-what-its-called.md): a pack's
+  own `Requires-Dist: yantra>=X` is read at load, and a pack built for a
+  Yantra this is not is refused at the door. Was: it failed at
+  registration rather than at install.
 * ~~**Nothing lists packs from the command line.**~~ `yantra --packs`
   prints them; see [Asking what is installed](#asking-what-is-installed)
   above. Was: `entry_point_packs()` existed and no flag printed it, so

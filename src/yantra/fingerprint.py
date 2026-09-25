@@ -51,6 +51,8 @@ from typing import Any
 
 import httpx
 
+from yantra.tools.discover import parse_pack
+
 #: Directories under the package root that are not the agent.
 NOT_THE_AGENT = frozenset({"evals"})
 
@@ -78,7 +80,10 @@ def fingerprint(spec: Any) -> str | None:
     # The prompt as loaded, because agent.prompt may point outside the
     # directory; inside it, this repeats a file already hashed, harmlessly.
     digest.update(b"prompt:" + (spec.prompt or "").encode() + b"\0")
-    for pack in sorted(spec.tool_packs):
+    for text in sorted(spec.tool_packs):
+        # By NAME: "tide-pack==0.2.1" is the line, "tide-pack" the
+        # distribution, and the installed release is what gets hashed.
+        pack = parse_pack(text)[0]
         try:
             version = metadata.version(pack)
         except metadata.PackageNotFoundError:
