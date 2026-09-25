@@ -116,9 +116,13 @@ else.
 
 ## What is not here yet
 
-* **Names, addresses and other free text.** A regular expression cannot
-  find "the customer's name". That needs a model or a list, and either
-  one is a different kind of feature.
+* ~~**Names, addresses and other free text.**~~ Names, from a list:
+  [note 86](86-names-on-a-list.md), `--trace-redact-words FILE`, whole
+  words in any case, longest entry first. A model as a second reader is
+  argued there and not built. Free text nobody listed is still not
+  found. Was: a regular expression cannot find "the customer's name".
+  That needs a model or a list, and either one is a different kind of
+  feature.
 
 ## Receipt
 

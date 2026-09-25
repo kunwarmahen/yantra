@@ -80,6 +80,17 @@ from one nobody scrubbed without reading either. Scrubbing a file that
 was already written is not offered: a pattern added afterwards is a
 pattern the file was shared without.
 
+A LIST IS THE OPERATOR'S KNOWLEDGE (notes/86). A regular expression
+cannot find "the customer's name"; the operator usually has the names,
+in a customer table or a staff directory. ``redact_words`` takes them as
+literal entries, matched case-insensitively as whole words, the longest
+first -- so "Ana Lima" is one match, not two with a telling space
+between. They are compiled into one prefix tree rather than one long
+alternation, because a list of twenty thousand names tried one after
+another at every character is a recorder that takes a second a turn.
+Only the COUNT of entries is ever shown; the list itself is the most
+private file in the room.
+
 AGE IS THE ONLY THING THAT PRUNES, AND ONLY WHEN ASKED (notes/67). A suite
 run with ``--repeat 10 --trace`` writes ten lines a case, so the file
 grows as fast as anybody evaluates. ``prune`` removes turns older than a
@@ -121,6 +132,9 @@ PERSON = "person"
 
 #: What a redacted match becomes (notes/79).
 REDACTED = "[redacted]"
+
+#: Longest entry a word list may hold (notes/86): names and phrases.
+MAX_WORD_CHARS = 200
 
 #: Patterns common enough to have a name, for ``--trace-redact``. Anything
 #: else passed there is a regular expression. Deliberately conservative:
@@ -318,7 +332,8 @@ class TrajectoryLog:
     """
 
     def __init__(self, path: Path | str, *, detail: str = SHAPE,
-                 redact: Iterable[str] = ()) -> None:
+                 redact: Iterable[str] = (),
+                 redact_words: Iterable[str] = ()) -> None:
         if detail not in LEVELS:
             raise ConfigError(
                 f"trace detail must be one of {'|'.join(LEVELS)}, got "
@@ -330,15 +345,25 @@ class TrajectoryLog:
         #: What is scrubbed before a line is written (notes/79); None is
         #: nothing, and a line written without it carries no count.
         patterns = list(redact)
-        self.redact = _compile_redactions(patterns)
+        words = _normalized_words(redact_words)
+        self.redact = _compile_redactions(patterns, words)
         self.redact_count = len(patterns)
+        #: How many literal entries (notes/86) -- the number a banner or
+        #: the page shows. The entries live only inside the compiled
+        #: pattern; nothing that is displayed is built from them.
+        self.redact_words = len(words)
 
     @property
     def label(self) -> str:
         """The level, and whether anything is scrubbed -- for a banner."""
-        if not self.redact_count:
+        scrubbing = []
+        if self.redact_count:
+            scrubbing.append(f"{self.redact_count} pattern(s)")
+        if self.redact_words:
+            scrubbing.append(f"{self.redact_words} word(s)")
+        if not scrubbing:
             return self.detail
-        return f"{self.detail}, redacting {self.redact_count} pattern(s)"
+        return f"{self.detail}, redacting {' and '.join(scrubbing)}"
 
     def record(self, trajectory: Trajectory) -> str:
         """Append one turn; return its id."""
@@ -538,16 +563,108 @@ def _apply_mark(raw: dict[str, Any], passed: bool | None,
         raw.pop("why", None)
 
 
-def _compile_redactions(patterns: list[str]) -> re.Pattern[str] | None:
-    """Names and regular expressions -> one pattern, or None for none.
+def read_word_list(path: Path | str) -> list[str]:
+    """A word-list file -> its entries (notes/86).
+
+    One entry per line; blank lines and lines starting with ``#`` are
+    skipped, so a list can say where it came from. AN EMPTY LIST IS AN
+    ERROR: the operator who passed it believes they are protected, and a
+    file that scrubs nothing must not let them go on believing it. So is
+    a one-character entry -- "a" as a whole word is every other sentence.
+    """
+    path = Path(path)
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ConfigError(f"--trace-redact-words {path}: cannot read it "
+                          f"({exc})") from None
+    entries = []
+    for number, line in enumerate(lines, 1):
+        entry = " ".join(line.split())
+        if not entry or entry.startswith("#"):
+            continue
+        if len(entry) < 2:
+            raise ConfigError(
+                f"--trace-redact-words {path}:{number}: {entry!r} is one "
+                f"character, and as a whole word it would scrub ordinary "
+                f"prose; entries are names and phrases")
+        entries.append(entry)
+    if not entries:
+        raise ConfigError(
+            f"--trace-redact-words {path} has no entries (blank lines and "
+            f"# comments do not count), so it would scrub nothing")
+    return entries
+
+
+def _normalized_words(words: Iterable[str]) -> list[str]:
+    """Whitespace collapsed, case folded for de-duplication, blanks gone.
+
+    An entry is a name or a phrase, so one longer than ``MAX_WORD_CHARS``
+    is refused: it is a paragraph pasted into the wrong file, and the
+    tree that holds it is built one character deep per character.
+    """
+    seen: dict[str, str] = {}
+    for word in words:
+        entry = " ".join(word.split())
+        if len(entry) > MAX_WORD_CHARS:
+            raise ConfigError(
+                f"--trace-redact-words: an entry of {len(entry)} characters "
+                f"(starting {entry[:20]!r}) is longer than "
+                f"{MAX_WORD_CHARS}; entries are names and phrases, one a "
+                f"line")
+        if entry:
+            seen.setdefault(entry.lower(), entry)
+    return list(seen.values())
+
+
+def _word_pattern(words: list[str]) -> str:
+    """Literal entries -> one regular expression, built as a PREFIX TREE.
+
+    "Ana", "Ana Lima" and "Anand" share a path, so a character is tried
+    once per branch rather than once per entry: twenty thousand names
+    scan an 18KB result in milliseconds where the flat alternation took
+    half a second. Each entry's end is optional where a longer one
+    continues, and the tree is greedy, so the longest entry at a position
+    wins. A space in an entry matches any run of whitespace, so a name
+    broken across a line in a file is still one match.
+
+    Whole words by lookaround rather than ``\\b``: an entry that ends in
+    punctuation ("Acme Inc.") has no word boundary after its last
+    character. The price: in a script written without spaces, a name
+    inside running text has a letter on each side and is not matched --
+    ``--trace-redact`` with the name as a pattern is the way there.
+    """
+    trie: dict[str, Any] = {}
+    for word in words:
+        node = trie
+        for char in word.lower():
+            node = node.setdefault(char, {})
+        node[""] = {}
+
+    def emit(node: dict[str, Any]) -> str:
+        branches = [(r"\s+" if char == " " else re.escape(char)) + emit(child)
+                    for char, child in sorted(node.items()) if char]
+        if not branches:
+            return ""
+        body = (branches[0] if len(branches) == 1
+                else "(?:" + "|".join(branches) + ")")
+        return f"(?:{body})?" if "" in node else body
+
+    return r"(?i:(?<!\w)" + emit(trie) + r"(?!\w))"
+
+
+def _compile_redactions(patterns: list[str], words: Iterable[str] = ()
+                        ) -> re.Pattern[str] | None:
+    """Names and regular expressions, and literal words -> one pattern,
+    or None for none.
 
     A pattern that does not compile, or one that matches the empty
     string, is an error at startup rather than a surprise in the file:
     ``a*`` would "redact" between every character and scrub nothing.
     """
-    if not patterns:
+    if not patterns and not words:
         return None
-    parts = []
+    parts = [f"(?:{_word_pattern(list(words))})"] if words else []
     for pattern in patterns:
         source = REDACT_PRESETS.get(pattern, pattern)
         try:

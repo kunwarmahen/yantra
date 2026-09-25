@@ -658,7 +658,10 @@ class WebSession:
             "recording": ({"path": str(self.trace.path),
                            "detail": self.trace.detail,
                            "redacting": getattr(self.trace,
-                                                "redact_count", 0)}
+                                                "redact_count", 0),
+                           # A count, never the entries (notes/86).
+                           "redacting_words": getattr(self.trace,
+                                                      "redact_words", 0)}
                           if self.trace is not None else None),
             "utilization": agent.utilization(),
             # The honest numbers behind the pressure bar: what the last

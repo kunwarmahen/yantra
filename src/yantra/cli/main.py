@@ -60,7 +60,7 @@ from yantra.tools.ask_user import AskUser, TerminalChannel
 from yantra.tools.discover import (ENTRY_POINT_GROUP, entry_point_packs,
                                    package_tool_names)
 from yantra.trace import (FULL, REDACTED, SHAPE, TrajectoryLog, flagged,
-                          step_note, why_flagged)
+                          read_word_list, step_note, why_flagged)
 from yantra.tools.selector import (
     AUTO_SELECTION_THRESHOLD,
     DEFAULT_TOOLS_PER_TURN,
@@ -333,6 +333,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "expression, or 'email' or 'token' (API keys, "
                              "GitHub/Slack/AWS tokens, JWTs, bearer "
                              "headers). Repeatable")
+    parser.add_argument("--trace-redact-words", action="append", default=[],
+                        metavar="FILE", dest="trace_redact_words",
+                        help="with --trace: a file of names and phrases, one "
+                             "a line (# comments allowed), each replaced "
+                             "with [redacted] wherever it appears as a whole "
+                             "word, in any case -- what a pattern cannot "
+                             "find, like a customer's name. Only the count "
+                             "of entries is ever shown. Repeatable")
     parser.add_argument("--fossil", metavar="TRACE_ID", default=None,
                         help="with --trace FILE: print the [[case]] block for "
                              "that recorded turn and exit -- 'every real "
@@ -545,9 +553,11 @@ def _trace_log(args):
     """
     if args.trace is None:
         return None
+    words = [entry for path in args.trace_redact_words
+             for entry in read_word_list(path)]
     return TrajectoryLog(Path(args.trace),
                          detail=FULL if args.trace_full else SHAPE,
-                         redact=args.trace_redact)
+                         redact=args.trace_redact, redact_words=words)
 
 
 def _fossil_mode(args, console: Console) -> int:
@@ -1919,19 +1929,24 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --trace-full says what to keep, and --trace says "
               "where; pass --trace FILE", file=sys.stderr)
         return 2
-    if args.trace_redact and args.trace is None:
-        print("error: --trace-redact says what to scrub from a recording, "
+    # The word list is the same kind of flag as the patterns (notes/86),
+    # so it keeps the same company and is refused in the same places.
+    scrubbing = args.trace_redact or args.trace_redact_words
+    flag = ("--trace-redact" if args.trace_redact
+            else "--trace-redact-words")
+    if scrubbing and args.trace is None:
+        print(f"error: {flag} says what to scrub from a recording, "
               "and --trace says where it goes; pass --trace FILE",
               file=sys.stderr)
         return 2
-    if args.trace_redact and (
+    if scrubbing and (
             args.fossil is not None or args.mark is not None
             or args.turns is not None or args.trace_prune is not None):
-        print("error: --trace-redact scrubs turns as they are recorded; a "
+        print(f"error: {flag} scrubs turns as they are recorded; a "
               "file already written is not re-scrubbed, so drop it from "
               "--fossil/--mark/--turns/--trace-prune", file=sys.stderr)
         return 2
-    if args.trace_redact:
+    if scrubbing:
         try:
             _trace_log(args)          # a bad pattern fails here, not mid-run
         except ConfigError as exc:

@@ -1036,6 +1036,20 @@ reaches the disk. You can also pass your own pattern, for example
 counts are never touched, so `--turns` and `--fossil` still work on the
 file ([notes/79](notes/79-scrubbed-before-it-is-written.md)).
 
+A pattern cannot find a person's name: "Ana Lima" looks like any other
+two words. If you know whose names might turn up (your customers, your
+staff), put them in a file, one per line, and pass it along:
+
+```bash
+uv run yantra --trace runs/today.jsonl --trace-full --trace-redact-words customers.txt
+```
+
+Each name is replaced wherever it appears as a whole word, in any
+capitalisation. A name that is not on the list gets through, so the list
+is only as good as you keep it. The banner and the page show how many
+names are on it, never the names themselves
+([notes/86](notes/86-names-on-a-list.md)).
+
 `--trace` works with `--web` too, so turns you run in the browser are
 recorded the same way. When the agent hands work to a sub-agent, the
 sub-agent's steps are saved inside the same line: which tools it used,

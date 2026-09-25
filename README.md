@@ -1316,7 +1316,11 @@ to hand over without reading it. `--trace-redact email --trace-redact
 token` (or any regular expression) replaces matches with `[redacted]` in
 the task, arguments, results and answers **before the line is written**,
 and the line says how many it replaced
-([notes/79](notes/79-scrubbed-before-it-is-written.md)). That is not a trade against usefulness:
+([notes/79](notes/79-scrubbed-before-it-is-written.md)). Names have no
+pattern, so `--trace-redact-words FILE` takes a list of them, one a line,
+matched as whole words in any case with the longest entry first; only the
+count of entries is ever shown
+([notes/86](notes/86-names-on-a-list.md)). That is not a trade against usefulness:
 a case asserting on the contents of a file goes red the day somebody
 edits that file. The block is **printed rather than appended** — a
 suite is its author's file. See
@@ -1871,6 +1875,11 @@ src/yantra/
 │                   answers), never shape, at the one place a line is
 │                   written, and counts what it replaced
 │                   ([notes/79](notes/79-scrubbed-before-it-is-written.md)).
+│                   redact_words= takes NAMES, which have no pattern:
+│                   literal entries, whole words, any case, longest first,
+│                   compiled as a prefix tree so a 20k-name list costs
+│                   milliseconds a turn; only their count is ever shown
+│                   ([notes/86](notes/86-names-on-a-list.md)).
 │                   flagged()/why_flagged() are the one rule --turns and
 │                   the page's turns panel both use
 │                   ([notes/81](notes/81-the-turns-the-page-never-saw.md))
