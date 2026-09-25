@@ -198,10 +198,15 @@ the rest of the batch is held without anyone being asked.
 
 ## What is not here yet
 
-* **A service that holds.** This is the primitive. dvara storing held
-  turns per person and letting them answer later, from whichever channel
-  they are on, is the consumer it was built for. That work belongs in
-  dvara.
+* ~~**A service that holds.**~~ Built in dvara, the always-on service
+  that runs Yantra agents for people (its note 16): `--on-timeout hold`
+  keeps a held turn per conversation, lists it for the person it ran as,
+  and carries it on with `resume` from the terminal, over HTTP, or from
+  two buttons in their chat. It needed nothing from this note beyond
+  what is described above: the saved `held` block is what lets its queue
+  survive a restart, and `resumes` on its runs is `Held.recorded`. Was:
+  this is the primitive, and dvara storing held turns per person is the
+  consumer it was built for.
 
 ## Receipt
 

@@ -1989,6 +1989,29 @@ question is a promise that a turn is still standing there waiting, and no
 turn survives a restart. A persisted question would outlive the only thing
 that could act on it.
 
+**Unless you tell silence to wait.** Start the service with
+`--ask --on-timeout hold` and an unanswered question stops the turn
+instead of refusing the call. Nothing after it runs, and the turn waits,
+for up to a day, for you to come back. This is the same hold the browser
+has above, and it *can* survive a restart, because Yantra saves it
+inside the conversation. A service keeps a list of them:
+
+```
+$ dvara held
+VamBTs5Z_X3GzDPNY6UYeQ  owner/scribe  thread cli  run efa292db101a
+    call_fq5canuu  write_file: NEW FILE a.txt (1 lines)
+    call_b6dmlw42  write_file: NEW FILE b.txt (1 lines)
+    held 30s ago. What you approve runs against things as they are now, not as they were then.
+
+$ dvara resume VamBTs5Z_X3GzDPNY6UYeQ --actor owner \
+      --call call_fq5canuu=yes --call "call_b6dmlw42=leave b.txt alone"
+```
+
+In a chat, the reply that says the turn is waiting has two buttons under
+it, **approve all** and **refuse all**, and pressing one carries the turn
+on. Only the person the turn ran as can answer it. Sending a new message
+instead means "never mind", and the waiting calls are set aside.
+
 ## 28 · What a service does that a session never had to
 
 * **A fresh agent per turn**, not a pool of warm ones. Warm agents buy
@@ -2318,11 +2341,12 @@ print(reply.text, reply.cost_usd)
 | `money.py` | package ∧ actor ∧ what is left of today |
 | `gate.py` | three rungs, and the tightest wins |
 | `asks.py` | questions waiting for a person, and the deadline on them |
+| `holds.py` | turns that stopped because nobody answered, kept until somebody does |
 | `runs.py` | every turn that happened, what it cost, and which tools it called |
 | `http.py` | the endpoints and a bearer token (`[http]` extra) |
 | `telegram.py` | the long poll, the 4096-character cap and the button |
 | `claim.py` | one dvara per state directory, and why |
-| `cli.py` | `agents`, `say`, `runs`, `rules`, `case`, `telegram`, `serve` |
+| `cli.py` | `agents`, `say`, `runs`, `held`, `resume`, `rules`, `case`, `telegram`, `serve` |
 | `errors.py` | `Refused` (answer the person) vs `ConfigProblem` (tell the owner) |
 
 ---
