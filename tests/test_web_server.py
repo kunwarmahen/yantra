@@ -6,7 +6,8 @@ installed -- the core suite must stay runnable with zero extras.
 The scripts are deterministic (ScriptedProvider), so receives need no
 timeouts: every envelope the worker emits is already decided by the
 script. The pattern throughout: connect /ws (state arrives first),
-POST /api/message, then drain envelopes until turn_done.
+POST /api/message, then drain envelopes until turn_done. The transcript
+of earlier turns is NOT on the socket; the page fetches /api/history.
 """
 
 from __future__ import annotations
@@ -101,7 +102,7 @@ def send_and_finish(client, ws, text: str) -> list[dict]:
 # ---- connection & replay -----------------------------------------------------
 
 
-def test_connect_sends_state_then_history_replay():
+def test_connect_sends_state_and_the_page_fetches_the_replay():
     script = [assistant_text("hello there")]
     session, agent = make_session(script)
     list(agent.run_streaming("hi"))  # seed history before serving
@@ -111,10 +112,25 @@ def test_connect_sends_state_then_history_replay():
         state = ws.receive_json()
         assert state["type"] == "state"
         assert state["model"] == "m"
-        replay = [ws.receive_json(), ws.receive_json()]
-        assert replay[0]["type"] == "user_message"
-        assert replay[0]["text"] == "hi"
-        assert replay[1] == {"type": "assistant_text", "text": "hello there"}
+    replay = client.get("/api/history").json()
+    assert replay[0]["type"] == "user_message"
+    assert replay[0]["text"] == "hi"
+    assert replay[1] == {"type": "assistant_text", "text": "hello there"}
+
+
+def test_the_socket_does_not_replay_what_the_page_fetches():
+    # The page draws /api/history on its first state envelope. A transcript
+    # sent down the socket as well was drawn a second time, every turn.
+    script = [assistant_text("hello there"), assistant_text("again")]
+    session, agent = make_session(script)
+    list(agent.run_streaming("hi"))
+    client = TestClient(make_app(session))
+
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "state"
+        live = send_and_finish(client, ws, "once more")
+    assert not [e for e in live if e["type"] == "user_message"]
+    assert "hello there" not in str(live)
 
 
 # ---- plain streaming turn ------------------------------------------------------
@@ -195,17 +211,15 @@ def test_history_replay_carries_tool_cards():
     seed_history(agent)
     client = TestClient(make_app(session))
 
-    with client.websocket_connect("/ws") as ws:
-        assert ws.receive_json()["type"] == "state"
-        replay = drain_until(ws, {"tool_result"})
-        kinds = [e["type"] for e in replay]
-        assert "user_message" in kinds
-        assert "assistant_text" in kinds
-        card = next(e for e in replay if e["type"] == "tool_result")
-        assert card["name"] == "write_thing"
-        assert card["arguments"] == {"text": "x"}
-        assert card["output"] == "wrote:x"
-        assert card["is_error"] is False
+    replay = client.get("/api/history").json()
+    kinds = [e["type"] for e in replay]
+    assert "user_message" in kinds
+    assert "assistant_text" in kinds
+    card = next(e for e in replay if e["type"] == "tool_result")
+    assert card["name"] == "write_thing"
+    assert card["arguments"] == {"text": "x"}
+    assert card["output"] == "wrote:x"
+    assert card["is_error"] is False
 
 
 # ---- permission gate over the wire ----------------------------------------------

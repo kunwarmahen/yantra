@@ -20,8 +20,9 @@ Architecture in three moves:
 * EVERYTHING IS ENVELOPES. One websocket (/ws) carries tagged JSON both
   ways -- stream deltas, tool cards, permission requests, asks, state --
   so the frontend is a dumb renderer and the session survives reconnects
-  (a fresh tab receives ``state``, any still-pending interaction, then a
-  transcript replay). REST endpoints cover plain request/response controls.
+  (a fresh tab receives ``state`` and any still-pending interaction, then
+  fetches the transcript replay from /api/history -- ONE road, so nothing
+  is drawn twice). REST endpoints cover plain request/response controls.
 
 Cancellation mirrors Ctrl-C exactly: the cancel flag is honored while
 streaming (between events), between tool executions, and while blocked on
@@ -815,8 +816,8 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             pending = session._pending
             if pending is not None:  # a question was already on screen
                 await sock.send_json(pending.envelope)
-            for envelope in session.history_envelopes():
-                await sock.send_json(envelope)
+            # No transcript here: the page fetches /api/history on its first
+            # state envelope. Sending it on both roads drew every turn twice.
             done, _ = await asyncio.wait({reader, writer},
                                          return_when=asyncio.FIRST_COMPLETED)
             for task in done:  # surface a read/write failure, if any

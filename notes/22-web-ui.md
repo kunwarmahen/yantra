@@ -78,9 +78,11 @@ renderer over it.
 Browser → server is tiny: `answer {id, decision \| text}` and `cancel`.
 
 Because the transcript is rebuilt from `history_envelopes()` on every
-connect, a refresh or a second tab rejoins mid-conversation: state,
-any still-pending question, then a replay rendered in the same shapes
-as the live feed. Plain request/response controls stay REST
+connect, a refresh or a second tab rejoins mid-conversation: state and
+any still-pending question over the socket, then a replay fetched from
+`/api/history` and rendered in the same shapes as the live feed. The
+replay comes by that one road only — sent down the socket as well, every
+earlier turn was drawn twice. Plain request/response controls stay REST
 (`/api/message`, `/api/model`, `/api/provider`, `/api/permissions`,
 `/api/env-context`, `/api/tools`, `/api/save`, `/api/load`,
 `/api/compact`, `/api/clear`),

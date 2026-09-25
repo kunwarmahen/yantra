@@ -120,7 +120,10 @@ for fewer and better approvals is what the person who set it wanted.
 * **A sub-agent is not told.** A child agent's approvals spend its
   parent's time in the browser, but only the parent is given the notice.
   The parent hears about it on its next step, after the child returns.
-* **A refused turn still cannot be resumed.** Still true from note 51.
+* ~~**A refused turn still cannot be resumed.**~~ Built in
+  [note 88](88-not-yet.md): with `--on-timeout hold` the turn stops
+  instead of refusing, and approving later carries it on. Was: still
+  true from note 51.
 
 ## Receipt
 
