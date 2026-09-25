@@ -22,3 +22,7 @@ build/
 # Working design docs -- arguments in progress, never part of the repo
 PLAN.md
 PLAN-*.md
+.cache/**/*
+.config/**/*
+.local/share/**/*
+.npm/**/*
