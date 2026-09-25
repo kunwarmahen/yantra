@@ -121,7 +121,10 @@ the model to ask for help.
 
 So a budget is **a meter, not a counter**. One object, shared: the child
 charges the same meter its parent does, and five children spend one
-ceiling between them.
+ceiling between them. The approval clock follows the same rule: a
+child's prompts spend its parent's turn, so a spawn cannot refill the
+time a person may be kept waiting
+([notes/91](91-one-clock-for-the-child.md)).
 
 Sharing creates exactly one new problem, which is that the child starts a
 turn too — and a turn zeroes the meter. So the meter remembers who it

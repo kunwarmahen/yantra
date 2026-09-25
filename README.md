@@ -712,7 +712,10 @@ that matters most instead of learning the rule from a refusal. It gets
 a number, which the dollar notice never does, because the person spends
 these seconds, not the model. The browser wires this up itself; with the
 library wrapper, pass `agent.approval_notice = gate.approval_notice`
-([notes/80](notes/80-the-time-left-told.md)).
+([notes/80](notes/80-the-time-left-told.md)). A sub-agent is told the
+same thing from the same clock, and its prompts spend its parent's turn:
+the same person is waiting, so starting a child does not refill the
+allowance ([notes/91](notes/91-one-clock-for-the-child.md)).
 
 Both frontends read that token rather than drawing every refusal as a
 crash. A refused call **never ran** — it is not an error, and `user` and
@@ -1683,7 +1686,10 @@ src/yantra/
 │                   check plus an increment on a thread pool is a race),
 │                   and a child's failure carries a CODE beside the prose:
 │                   provider_error retries, iteration_cap must not
-│                   ([notes/55](notes/55-two-at-a-time.md))
+│                   ([notes/55](notes/55-two-at-a-time.md)). A child's
+│                   approval prompts spend its parent's clock (clock_turn)
+│                   and it reads the parent's approval notice
+│                   ([notes/91](notes/91-one-clock-for-the-child.md))
 ├── permissions.py  PermissionRequest + gates: allow_read_only / yolo /
 │                   deny_all / trust_sandbox (auto-approves bash ONLY while
 │                   confined); SwitchableGate flips ask ⇄ yolo mid-session;
@@ -1720,7 +1726,10 @@ src/yantra/
 │                   ([notes/78](notes/78-a-clock-on-the-page.md));
 │                   approval_notice() is what the MODEL is told of the
 │                   time left, in seconds, sent and never stored
-│                   ([notes/80](notes/80-the-time-left-told.md)).
+│                   ([notes/80](notes/80-the-time-left-told.md)); a
+│                   child's request carries its PARENT's turn_id, so a
+│                   spawn cannot refill the clock
+│                   ([notes/91](notes/91-one-clock-for-the-child.md)).
 │                   hold() is the third answer, NOT YET, and "hold" the
 │                   third on_timeout ([notes/88](notes/88-not-yet.md))
 ├── hold.py         a turn that STOPS for an approval and carries on when

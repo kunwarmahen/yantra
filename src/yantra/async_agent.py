@@ -55,6 +55,7 @@ from yantra.agent import (
     ToolExecuted,
     TurnEnd,
     _batch_message,
+    _approval_turn,
     _truncate_middle,
     _with_approval_notice,
     _with_notice,
@@ -166,6 +167,7 @@ class AsyncAgent:
         #: The sync twin's approval clock, same contract (notes/80).
         self.approval_notice: Callable[[str], str | None] | None = None
         self._approval_told: str | None = None
+        self.clock_turn = ""
         self.last_compaction: dict | None = None
         # Per-turn dollar ceiling -- identical contract to the sync
         # twin's, including that sub-agents share this meter rather than
@@ -659,8 +661,9 @@ class AsyncAgent:
             # somebody else's loop (see PermissionRequest.call_id).
             call_id=call.id,
             # Which turn is asking, so a gate can budget a turn's worth of
-            # waiting rather than a question's (permissions.py).
-            turn_id=self._turn_id,
+            # waiting rather than a question's (permissions.py). A child
+            # asks as its parent's turn: same person, same clock.
+            turn_id=_approval_turn(self),
             # Closed over so an edit-and-reapprove UI can re-render the
             # preview for amended args (approve-with-edits).
             summarize=lambda args: tool.summary(args, self.ctx),

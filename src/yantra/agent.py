@@ -148,6 +148,19 @@ def _batch_message(batch: list[ToolResult]) -> Message:
     return Message("user", blocks)
 
 
+def _approval_turn(agent) -> str:
+    """The turn whose approval clock this agent's prompts spend (notes/91).
+
+    Its own, unless it is a sub-agent: then the turn the person is
+    waiting on, which is the top parent's. A child's own turn id would
+    look to ``with_wait_budget`` like a new turn, refill the allowance,
+    and let the parent's next prompt refill it again -- delegating would
+    become the way around the clock, as it would around the dollar meter
+    without a shared ``Budget``.
+    """
+    return agent.clock_turn or agent._turn_id
+
+
 def _with_approval_notice(agent, messages: list[Message]) -> list[Message]:
     """The approval clock's sentence, when it has changed (notes/80).
 
@@ -158,7 +171,7 @@ def _with_approval_notice(agent, messages: list[Message]) -> list[Message]:
     """
     if agent.approval_notice is None:
         return messages
-    said = agent.approval_notice(agent._turn_id)
+    said = agent.approval_notice(_approval_turn(agent))
     if said is None or said == agent._approval_told:
         return messages
     agent._approval_told = said
@@ -280,6 +293,10 @@ class Agent:
         #: means no clock, and nothing is said.
         self.approval_notice: Callable[[str], str | None] | None = None
         self._approval_told: str | None = None
+        #: The parent's turn, on a sub-agent (notes/91): the clock its
+        #: prompts spend and the one it is told about. "" on an agent
+        #: nobody spawned, which spends its own turn's clock.
+        self.clock_turn = ""
         self.last_compaction: dict | None = None
         # Cooperative cancellation for hosts where the loop runs on a worker
         # thread that no signal can reach (the web UI's cancel button). When
@@ -448,7 +465,9 @@ class Agent:
         # long it may keep somebody waiting cannot infer that from a
         # stream of questions (permissions.with_wait_budget). Fresh and
         # opaque: an agent and its sub-agents are different turns, and a
-        # counter could repeat across two agents where a uuid cannot.
+        # counter could repeat across two agents where a uuid cannot. (The
+        # approval clock is the exception: a child spends its parent's,
+        # through ``clock_turn``.)
         self._turn_id = uuid.uuid4().hex
         self._approval_told = None
         self.turn_refusals = {}
@@ -864,8 +883,9 @@ class Agent:
             # somebody else's loop (see PermissionRequest.call_id).
             call_id=call.id,
             # Which turn is asking, so a gate can budget a turn's worth of
-            # waiting rather than a question's (permissions.py).
-            turn_id=self._turn_id,
+            # waiting rather than a question's (permissions.py). A child
+            # asks as its parent's turn: same person, same clock.
+            turn_id=_approval_turn(self),
             # Closed over so an edit-and-reapprove UI can re-render the
             # preview for amended args (approve-with-edits).
             summarize=lambda args: tool.summary(args, self.ctx),

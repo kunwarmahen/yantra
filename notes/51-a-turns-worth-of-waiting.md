@@ -57,7 +57,9 @@ It produces a budget that resets at the wrong moment, which looks like
 a gate being strangely impatient on a Tuesday. A uuid stamped at the top
 of `run_streaming` cannot drift — and it is a uuid rather than a counter
 because an agent and its sub-agent are different turns, and two agents
-that both counted from one would collide.
+that both counted from one would collide. A sub-agent's approval prompts
+carry its parent's turn id, though: the same person is waiting, so it is
+the same clock ([note 91](91-one-clock-for-the-child.md)).
 
 ## Spending it down
 

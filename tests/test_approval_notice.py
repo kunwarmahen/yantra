@@ -13,6 +13,12 @@ repeated while the number has not moved, nothing without a clock.
 Like the budget notice, it is sent and never stored -- history is
 replayed, and a clock from last week read back as something the user
 said is worse than no clock.
+
+And a sub-agent (notes/91). Its prompts keep the same person waiting as
+its parent's, so the bias there is two clocks: a child told nothing
+because the notice was wired to the parent only, or a child whose own
+turn id looks to the wrapper like a fresh turn and refills the
+allowance its parent had spent.
 """
 
 from __future__ import annotations
@@ -175,3 +181,92 @@ class TestTheBrowser:
         run(session)
         assert not any(_told(r) for r in agent.provider.requests)
         assert session.approval_notice("anything") is None
+
+
+class Poke(Tool):
+    """A tool that needs approval, so asking for it spends the clock."""
+    name = "poke"
+    description = "poke"
+    parameters = {"type": "object", "properties": {}}
+    read_only = False
+
+    def summary(self, args, ctx):
+        return "poke()"
+
+    def run(self, args, ctx):
+        return "poked"
+
+
+def _parent_with_a_child(script, *, seconds=10, answer_after=0.05):
+    """An async parent that can spawn, under a wrapper clock of
+    ``seconds`` whose every prompt takes ``answer_after`` to answer."""
+    from yantra.subagent import SpawnSubagent, SubagentSpawner
+    asked: list[PermissionRequest] = []
+
+    async def slow(request):
+        asked.append(request)
+        await asyncio.sleep(answer_after)
+        return True
+    gate = with_wait_budget(slow, seconds, on_timeout="deny")
+    provider = ScriptedProvider(script)
+    parent = AsyncAgent(provider, model="m", permissions=gate)
+    parent.approval_notice = gate.approval_notice
+    parent.registry.register(Poke())
+    parent.registry.register(SpawnSubagent(SubagentSpawner(parent)))
+    return parent, provider, asked
+
+
+def _spawn_a_poker():
+    from yantra.subagent import SPAWN_TOOL_NAME
+    return assistant_tool_call("s", SPAWN_TOOL_NAME, {
+        "objective": "poke once", "output_format": "one word",
+        "tools_allowed": ["poke"], "justification": "isolated"})
+
+
+class TestASubAgent:
+    def test_its_prompts_spend_the_parents_turn(self):
+        parent, _, asked = _parent_with_a_child([
+            _spawn_a_poker(),
+            assistant_tool_call("c", "poke", {}),   # the child asks
+            assistant_text("poked"),                # the child finishes
+            assistant_text("done")])
+        asyncio.run(parent.run("go"))
+        assert [r.tool_name for r in asked] == ["spawn_subagent", "poke"]
+        assert {r.turn_id for r in asked} == {parent._turn_id}
+
+    def test_it_is_told_what_its_parent_already_spent(self):
+        parent, provider, _ = _parent_with_a_child([
+            _spawn_a_poker(),
+            assistant_tool_call("c", "poke", {}),
+            assistant_text("poked"),
+            assistant_text("done")])
+        asyncio.run(parent.run("go"))
+        # requests: parent, child, child, parent. The spawn prompt spent
+        # time before the child's first request, so the child hears it
+        # at once -- from the same clock, in the same words.
+        child_first = _told(provider.requests[1])
+        assert child_first and "of this turn's 10 seconds" in child_first[0]
+
+    def test_a_child_does_not_refill_the_allowance(self):
+        parent, _, _ = _parent_with_a_child([
+            _spawn_a_poker(),
+            assistant_tool_call("c", "poke", {}),
+            assistant_text("poked"),
+            assistant_tool_call("p", "poke", {}),   # the parent asks again
+            assistant_text("done")], seconds=0.25, answer_after=0.1)
+        asyncio.run(parent.run("go"))
+        # 0.1s for the spawn, 0.1s for the child's poke: 0.05s is left
+        # when the parent asks again, and it runs out. Had the child's
+        # own turn id reset the clock, the parent's prompt would have
+        # found a full 0.25s and been approved.
+        assert parent.turn_refusals == {"p": "timeout"}
+
+    def test_the_spawner_hands_the_child_the_parents_clock(self):
+        from yantra.subagent import SubagentSpawner
+        parent = Agent(ScriptedProvider([]), model="m")
+        parent.approval_notice = lambda turn: None
+        parent._turn_id = "parent-turn"
+        child = SubagentSpawner(parent)._build(
+            system="s", allowed=[], max_iterations=2, number=1)
+        assert child.clock_turn == "parent-turn"
+        assert child.approval_notice is parent.approval_notice

@@ -63,7 +63,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from yantra.agent import Agent
+from yantra.agent import Agent, _approval_turn
 from yantra.async_agent import AsyncAgent
 from yantra.errors import ProviderError, ToolError
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
@@ -386,6 +386,13 @@ class SubagentSpawner:
         # A child cannot stop its parent's turn to wait for an approval:
         # a hold inside one is a refusal coded held_in_child (notes/88).
         child.can_hold = False
+        # ONE CLOCK, AND THE CHILD HEARS IT (notes/91). Its prompts keep the
+        # same person waiting as its parent's do, so they are stamped with
+        # the parent's turn, and it reads the same notice. Without the stamp a wrapper clock sees a
+        # fresh turn and refills; without the notice the child learns the
+        # time is gone only from a refusal.
+        child.clock_turn = _approval_turn(self.parent)
+        child.approval_notice = self.parent.approval_notice
         if self.on_child_event is not None:
             # Stream tee: the child's raw StreamEvents are PUSHED to the
             # observer tagged with this spawn's 1-based number, so a UI can
