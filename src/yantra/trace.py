@@ -50,6 +50,12 @@ whatever it had read, so it is content, not shape. A child's step keeps
 the gate's refusal code too (notes/65), so a child turned away by a rule
 does not read as a child whose call failed.
 
+A CHILD AT FULL IS KEPT EXACTLY AS A PARENT AT FULL (notes/85): each of
+its steps carries the arguments it was called with and the clipped
+result it got back, in the same row shape as the parent's. A code says
+what went wrong in a child; only its steps say where. Its prose between
+tool calls is not kept, because the parent's is not either.
+
 A SUITE RECORDS WHAT IT GRADED (notes/65). ``--eval --trace`` writes
 every run of every case, tagged with the case's id and whether its grader
 passed it (notes/70), and the report names those turns back. The eval
@@ -591,7 +597,11 @@ def _redacted(payload: dict[str, Any], pattern: re.Pattern[str]
     out = content(payload)
     out["steps"] = [content(step) for step in payload.get("steps", [])]
     if "children" in payload:
-        out["children"] = [content(child) for child in payload["children"]]
+        # A child's steps hold what IT read (notes/85), so they are
+        # scrubbed exactly as the parent's are.
+        out["children"] = [{**content(child), "steps": [
+            content(step) for step in child.get("steps", [])]}
+            for child in payload["children"]]
     out["redacted"] = count
     return out
 
@@ -626,15 +636,7 @@ def _as_json(trajectory: Trajectory) -> dict[str, Any]:
         "outcome": trajectory.outcome,
         "steps": [],
     }
-    for step in trajectory.steps:
-        row: dict[str, Any] = {"name": step.name, "ok": step.ok}
-        if step.refusal is not None:
-            row["refusal"] = step.refusal
-        if step.arguments is not None:
-            row["arguments"] = step.arguments
-        if step.result is not None:
-            row["result"] = step.result
-        payload["steps"].append(row)
+    payload["steps"] = [_step_json(s) for s in trajectory.steps]
     if trajectory.answer is not None:
         payload["answer"] = trajectory.answer
     if trajectory.case is not None:
@@ -659,7 +661,7 @@ def _child_json(child: ChildRun) -> dict[str, Any]:
         "number": child.number, "agent": child.agent, "model": child.model,
         "iterations": child.iterations, "tokens": child.tokens,
         "code": child.code,
-        "steps": [_child_step_json(s) for s in child.steps],
+        "steps": [_step_json(s) for s in child.steps],
     }
     if child.task is not None:
         row["task"] = child.task
@@ -668,12 +670,21 @@ def _child_json(child: ChildRun) -> dict[str, Any]:
     return row
 
 
-def _child_step_json(step: ToolStep) -> dict[str, Any]:
-    # Refusal only when there was one, as in the parent's steps: a child
-    # step recorded before notes/65 and one that simply ran read the same.
+def _step_json(step: ToolStep) -> dict[str, Any]:
+    """One step, the parent's or a child's -- ONE row shape for both, so a
+    FULL child reads exactly as a FULL parent does (notes/85).
+
+    Each optional key only when it is there: a SHAPE step, and a child
+    step recorded before notes/65 or notes/85, read the same as they
+    always did.
+    """
     row: dict[str, Any] = {"name": step.name, "ok": step.ok}
     if step.refusal is not None:
         row["refusal"] = step.refusal
+    if step.arguments is not None:
+        row["arguments"] = step.arguments
+    if step.result is not None:
+        row["result"] = step.result
     return row
 
 
@@ -693,6 +704,8 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
         children=[ChildRun(
             number=c["number"], agent=c["agent"], model=c.get("model", ""),
             steps=[ToolStep(name=s["name"], ok=s["ok"],
+                            arguments=s.get("arguments"),
+                            result=s.get("result"),
                             refusal=s.get("refusal"))
                    for s in c.get("steps", [])],
             iterations=c.get("iterations", 0), tokens=c.get("tokens", 0),
@@ -709,14 +722,20 @@ def _from_json(raw: dict[str, Any]) -> Trajectory:
 
 def _child_run(result: Any, detail: str) -> ChildRun:
     """A spawner's ``SubagentResult`` -> the shape a recording keeps."""
+    full = detail == FULL
     child = ChildRun(
         number=result.number, agent=result.agent, model=result.model,
-        steps=[ToolStep(name=name, ok=ok, refusal=refusal)
-               for name, ok, refusal in result.steps],
+        # A copy per step, never the spawner's own: SHAPE drops the
+        # contents, and must not drop them from ``results`` for whoever
+        # else reads it (notes/85).
+        steps=[ToolStep(name=s.name, ok=s.ok, refusal=s.refusal,
+                        arguments=s.arguments if full else None,
+                        result=s.result if full else None)
+               for s in result.steps],
         iterations=result.iterations_used,
         tokens=result.input_tokens + result.output_tokens, code=result.code,
     )
-    if detail == FULL:
+    if full:
         child.task = _clip(result.objective)
         child.answer = _clip(result.summary)
     return child

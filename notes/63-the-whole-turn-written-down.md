@@ -181,6 +181,10 @@ later.
 * ~~**Nothing cross-references a trace with an eval report.**~~ Shipped
   in [note 65](65-the-turn-behind-the-red-line.md). Was: Still true
   from note 57.
+* ~~**A child's steps are names only, even at FULL.**~~ Shipped in
+  [note 85](85-what-the-child-read.md): at FULL a child's step keeps its
+  arguments and clipped result, in the parent's row shape. Was: the
+  parent's steps at FULL had both and the child's had neither.
 
 ## Receipt
 

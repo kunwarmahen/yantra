@@ -1327,8 +1327,10 @@ line: each child's tool calls in order, whether each worked, its tokens
 and how it stopped. A failure inside a child marks the whole turn as
 failed, even when the parent covered for it in its answer. The task the
 parent wrote for the child counts as content and is kept only with
-`--trace-full`. `--fossil` names what the children did on stderr and
-does not assert it. See
+`--trace-full`, and so is each child step's arguments and result, in the
+same shape as the parent's steps
+([notes/85](notes/85-what-the-child-read.md)). `--fossil` names what the
+children did on stderr and does not assert it. See
 [notes/63](notes/63-the-whole-turn-written-down.md).
 
 **A red case names the turn behind it.** `--eval --trace FILE` records
@@ -1637,7 +1639,8 @@ src/yantra/
 │                   a disabled tool is unreachable, not present -- shared by
 │                   the spawn, the refusal, read_only and the eval assertion.
 │                   Each result keeps the child's number, name, model and
-│                   tool steps (with the gate's refusal code, notes/65)
+│                   tool steps (with the gate's refusal code, notes/65,
+│                   and each call's arguments and clipped result, notes/85)
 │                   for a recorder, never for the model
 │                   ([notes/08](notes/08-sub-agents.md),
 │                   [notes/34](notes/34-budgets.md),
@@ -1849,6 +1852,9 @@ src/yantra/
 │                   turn's CHILDREN ride in its line, steps read off the
 │                   spawner; the web UI's loop is teed the same way
 │                   ([notes/63](notes/63-the-whole-turn-written-down.md)).
+│                   At FULL a child step keeps its arguments and result,
+│                   one row shape for parent and child
+│                   ([notes/85](notes/85-what-the-child-read.md)).
 │                   from_history writes a turn that was RUN, not streamed
 │                   -- how a suite records its cases, each line tagged with
 │                   its case id ([notes/65](notes/65-the-turn-behind-the-red-line.md)).

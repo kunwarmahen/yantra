@@ -67,6 +67,7 @@ from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
 from yantra.errors import ProviderError, ToolError
 from yantra.tools.base import Tool, ToolContext, ToolRegistry
+from yantra.trace import ToolStep, _clip
 from yantra.types import ToolResult
 
 SPAWN_TOOL_NAME = "spawn_subagent"
@@ -198,13 +199,16 @@ class SubagentResult:
     #: was given, and every tool call it made with whether that call
     #: succeeded, in order. The parent model never sees any of these --
     #: the tool returns ``summary`` -- which is the point of a child.
-    #: A step is ``(tool, worked, refusal)``: the gate's refusal code when
-    #: the call never ran (notes/65), None when it ran, well or badly.
+    #: A step is the recorder's own ``ToolStep``: the gate's refusal code
+    #: when the call never ran (notes/65), and the call's arguments and
+    #: clipped result ALWAYS (notes/85). The spawner does not know what a
+    #: recorder will keep; trace.py drops them below FULL, which is where
+    #: that decision is argued.
     number: int = 0
     agent: str = ""
     model: str = ""
     objective: str = ""
-    steps: list[tuple[str, bool, str | None]] = field(default_factory=list)
+    steps: list[ToolStep] = field(default_factory=list)
 
 
 #: Why a child did not finish. Two, because two things go wrong -- and
@@ -576,10 +580,10 @@ class SubagentSpawner:
         return ""
 
     @staticmethod
-    def _steps(child: Agent | AsyncAgent
-               ) -> list[tuple[str, bool, str | None]]:
-        """Every tool call the child made, in order, whether it worked, and
-        the gate's refusal code if it never ran.
+    def _steps(child: Agent | AsyncAgent) -> list[ToolStep]:
+        """Every tool call the child made, in order, whether it worked, the
+        gate's refusal code if it never ran, and what it was called with
+        and returned.
 
         Read from the child's HISTORY after it stops, not from its event
         stream: the stream tee carries only raw model output (notes/08),
@@ -590,15 +594,31 @@ class SubagentSpawner:
         History alone cannot tell a refused call from a failed one: both
         are an error result. The child's ``turn_refusals`` can, and it
         covers exactly this run, because a child runs one turn.
+
+        The result is clipped HERE, not left for the recorder: the child's
+        history is gone once this returns, and a 200KB read kept whole in
+        ``results`` for the rest of the session would be the store's own
+        size problem moved into memory.
         """
         history = getattr(child, "history", [])
         refused = getattr(child, "turn_refusals", {})
-        worked = {block.tool_call_id: not block.is_error
-                  for message in history for block in message.content
-                  if isinstance(block, ToolResult)}
-        return [(call.name, worked.get(call.id, False), refused.get(call.id))
-                for message in history if message.role == "assistant"
-                for call in message.tool_calls()]
+        results = {block.tool_call_id: block
+                   for message in history for block in message.content
+                   if isinstance(block, ToolResult)}
+        steps = []
+        for message in history:
+            if message.role != "assistant":
+                continue
+            for call in message.tool_calls():
+                result = results.get(call.id)
+                steps.append(ToolStep(
+                    name=call.name,
+                    ok=result is not None and not result.is_error,
+                    arguments=dict(call.arguments),
+                    result=None if result is None
+                    else _clip(str(result.content)),
+                    refusal=refused.get(call.id)))
+        return steps
 
     def _record(self, result: SubagentResult, child=None, objective: str = "",
                 number: int = 0, agent: str = "") -> SubagentResult:

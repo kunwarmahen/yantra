@@ -69,15 +69,18 @@ class TestARefusedChildSaysSo:
     def test_the_spawner_keeps_the_code(self, tmp_path):
         agent, spawner = refused_child(tmp_path)
         agent.run("go")
-        assert spawner.results[0].steps == [("read_file", False,
-                                             REFUSED_POLICY)]
+        (step,) = spawner.results[0].steps
+        assert (step.name, step.ok, step.refusal) == (
+            "read_file", False, REFUSED_POLICY)
 
     def test_a_failed_read_still_has_no_code(self, tmp_path):
         """The two cases the code exists to tell apart."""
         from test_trace_children import delegating_agent
         agent, spawner = delegating_agent(tmp_path, ["gone.txt"])
         agent.run("go")
-        assert spawner.results[0].steps == [("read_file", False, None)]
+        (step,) = spawner.results[0].steps
+        assert (step.name, step.ok, step.refusal) == ("read_file", False,
+                                                      None)
 
     def test_the_parents_line_carries_it_to_disk_and_back(self, tmp_path):
         agent, spawner = refused_child(tmp_path)

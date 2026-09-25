@@ -132,6 +132,7 @@ is the observability surface), and it costs one word.
   delegations, run at 1, 2, 4 and 8 against both a local server and a
   metered API, and it needs a package that genuinely wants parallel
   children — the example package's one fact-checker does not.
-* **A child's transcript is still gone** once the turn is over
-  ([notes/40](40-a-package-that-delegates.md)), so a code says what went
-  wrong and nothing says where.
+* ~~**A child's transcript is still gone**~~ once the turn is over.
+  Kept at `--trace-full` since [note 85](85-what-the-child-read.md). Was:
+  a code said what went wrong and nothing said where
+  ([notes/40](40-a-package-that-delegates.md)).
