@@ -557,6 +557,10 @@ class WebSession:
         terminal. This reads the same file ``--turns`` reads and flags
         with the same rule (``trace.flagged``), so the two lists agree.
 
+        Each row carries the turn's answer when the line was written with
+        ``--trace-full``: a verdict given without reading what the agent
+        said is a guess about the task, not a judgement of the turn.
+
         Newest first and capped, because the turn a person wants to judge
         is almost always a recent one, and a year of recording should not
         become one very long page. ``total`` says how many there are.
@@ -567,6 +571,11 @@ class WebSession:
             "tools": len(t.steps), "case": t.case,
             "flagged": flagged(t), "flag_why": why_flagged(t),
             "passed": t.passed, "judged_by": t.judged_by, "why": t.why,
+            # What is being judged. Only a --trace-full line keeps it, and
+            # it was clipped and redacted when it was written, so it goes
+            # out as the file has it. A withheld line says why instead.
+            "answer": None if t.withheld else t.answer,
+            "withheld": t.withheld, "outcome": t.outcome,
         } for t in reversed(turns[-limit:])]
         return {"path": str(self.trace.path), "total": len(turns),
                 "flagged": sum(1 for t in turns if flagged(t)),

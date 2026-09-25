@@ -1928,6 +1928,22 @@ pre.output { color: var(--ink); }
   color: var(--ink);
   overflow-wrap: anywhere;
 }
+.turn-row-answer {
+  margin: 4px 0 4px 18px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--line);
+  font-size: 13px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.turn-row-answer.is-folded {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .turn-row-why {
   margin: 0 0 6px 18px;
   font-size: 12px;

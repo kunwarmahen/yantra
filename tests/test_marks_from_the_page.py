@@ -14,7 +14,8 @@ And the turns the page never saw (notes/81). The mark row under a turn
 only exists while the page watched it, so the panel reads the file: the
 bias there is a page that knows only its own session. The tests write
 turns BEFORE any page exists and expect them listed, flagged by the
-terminal's rule, and markable.
+terminal's rule, and markable -- and, for a turn recorded in full,
+showing the answer being judged rather than only the task.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from conftest import assistant_text  # noqa: E402
 from test_web_server import drain_until, make_session  # noqa: E402
-from yantra.trace import ToolStep, Trajectory, TrajectoryLog  # noqa: E402
+from yantra.trace import FORMAT, ToolStep, Trajectory, TrajectoryLog  # noqa: E402
 from yantra.web.server import make_app  # noqa: E402
 
 
@@ -159,6 +160,31 @@ class TestTurnsFromBeforeThePage:
                                                         "00000003"]
         assert data["total"] == 5
         assert server.TURNS_SHOWN >= 50
+
+    def test_a_full_turn_shows_what_it_answered(self, tmp_path):
+        full = old_turn("aaaaaaaa", answer="notes.txt says: buy milk")
+        full.detail = "full"
+        _, client = page_over(tmp_path, full, old_turn("bbbbbbbb"))
+        rows = {t["id"][:8]: t["answer"]
+                for t in client.get("/api/turns").json()["turns"]}
+        assert rows == {"aaaaaaaa": "notes.txt says: buy milk",
+                        "bbbbbbbb": None}
+
+    def test_a_withheld_turn_says_why_and_shows_no_answer(self, tmp_path):
+        import json
+        session, client = page_over(tmp_path)
+        # Written as the recorder writes one when its name reader fails:
+        # the answer replaced, and the reason beside it.
+        with session.trace.path.open("a") as f:
+            f.write(json.dumps({
+                "format": FORMAT, "id": "a" * 32, "at": "2026-09-23T09:00:00Z",
+                "provider": "ollama", "model": "qwen3.8:latest",
+                "detail": "full", "task": "[withheld]", "steps": [],
+                "answer": "[withheld]",
+                "withheld": "the name reader could not be reached"}) + "\n")
+        (row,) = client.get("/api/turns").json()["turns"]
+        assert row["answer"] is None
+        assert row["withheld"] == "the name reader could not be reached"
 
     def test_before_the_first_turn_there_is_nothing_yet(self, tmp_path):
         session, _ = make_session([])

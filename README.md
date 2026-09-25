@@ -1268,7 +1268,10 @@ the page ends with **good** / **bad** buttons that write the same line
 ([notes/77](notes/77-a-mark-taken-back.md)), and the `rec` chip opens
 every turn in the file, newest first and flagged by the same rule
 `--turns` uses, so a turn from before a reload can still be marked
-([notes/81](notes/81-the-turns-the-page-never-saw.md)).
+([notes/81](notes/81-the-turns-the-page-never-saw.md)). A turn recorded
+with `--trace-full` shows its answer there too, so you judge what the
+agent said and not only what it was asked
+([notes/90](notes/90-what-it-said.md)).
 
 ```
 $ uv run yantra --turns failed --trace runs/turns.jsonl
@@ -2089,7 +2092,9 @@ src/yantra/
 │                   ([notes/77](notes/77-a-mark-taken-back.md)); the rec
 │                   chip lists the whole file (GET /api/turns), flagged
 │                   by trace.flagged() -- --turns's own rule
-│                   ([notes/81](notes/81-the-turns-the-page-never-saw.md)).
+│                   ([notes/81](notes/81-the-turns-the-page-never-saw.md)),
+│                   with each --trace-full turn's answer as the file holds
+│                   it ([notes/90](notes/90-what-it-said.md)).
 │                   --wait-budget keeps with_wait_budget's rule inside
 │                   the session, where the blocking gate already polls:
 │                   reset at start_turn, prompt withdrawn on expiry

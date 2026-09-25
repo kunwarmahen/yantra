@@ -689,7 +689,9 @@ function renderTurns(data) {
   $("#turns-note").textContent = `${shown} turn(s) in ${data.path}, `
     + `${data.flagged} flagged` + (data.unreadable
       ? `, ${data.unreadable} unreadable line(s) skipped` : "")
-    + " — an unflagged turn can still be wrong";
+    + " — an unflagged turn can still be wrong"
+    + (data.turns.some((t) => t.answer == null && !t.withheld)
+      ? ". Answers are kept only by --trace-full" : "");
   const onlyFlagged = $("#turns-flagged").checked;
   const turns = data.turns.filter((t) => !onlyFlagged || t.flagged);
   rows.innerHTML = "";
@@ -713,11 +715,30 @@ function turnRow(t) {
     + `<span>${esc(t.at)}</span><span>${t.tools} tool(s)</span>`
     + (t.case ? `<span>case ${esc(t.case)}</span>` : "") + `</div>`
     + `<div class="turn-row-task">${esc(t.task)}</div>`
+    + turnAnswer(t)
     + (t.flag_why ? `<div class="turn-row-why">${esc(t.flag_why)}</div>` : "");
+  const answer = row.querySelector(".turn-row-answer");
+  if (answer) answer.onclick = () => answer.classList.toggle("is-folded");
   // A mark changes whether the turn is flagged, and the server owns that
   // rule, so the list is read again rather than guessed at here.
   row.append(markRow(t.id, t, () => loadTurns()));
   return row;
+}
+
+/* What the agent said, so a mark is a judgement of the answer and not a
+   guess from the task. Only a --trace-full line kept it; the header note
+   says so once rather than every shape-level row saying "not kept". Long
+   answers start folded to a few lines and open on a click. */
+function turnAnswer(t) {
+  if (t.withheld) {
+    return `<div class="turn-row-why">contents withheld: ${esc(t.withheld)}</div>`;
+  }
+  if (t.answer == null) {
+    return t.outcome && t.outcome !== "end_turn"
+      ? `<div class="turn-row-why">stopped: ${esc(t.outcome)}</div>` : "";
+  }
+  return `<div class="turn-row-answer is-folded" title="click to unfold">${
+    esc(t.answer)}</div>`;
 }
 
 function refreshTurnsPanel() {

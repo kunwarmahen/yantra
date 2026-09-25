@@ -100,8 +100,10 @@ a year of turns would add a lot of page for a rare need.
 
 ## What is not here yet
 
-* **A turn shows its task, not its answer.** A recording made at shape
-  level (the default) does not keep the answer
+* ~~**A turn shows its task, not its answer.**~~ Built in
+  [note 90](90-what-it-said.md): a turn recorded with `--trace-full`
+  shows its answer under the task, folded to four lines. Was: a
+  recording made at shape level (the default) does not keep the answer
   ([note 57](57-a-turn-written-down.md)), so the panel cannot show you
   what you are judging for a turn you did not watch. With `--trace-full`
   the answer is in the file, and the panel could show it. It does not
