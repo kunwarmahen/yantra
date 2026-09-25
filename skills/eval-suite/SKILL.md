@@ -315,7 +315,8 @@ uv run yantra --agent ./my-agent --eval || exit 1
 | `--provider ollama` | local model instead of a cloud key; `--model TAG` picks one |
 | `--yolo` | let the suite write files and run commands |
 | `--cwd DIR` | run the cases somewhere other than the package folder |
-| `--repeat N` | run every case N times, judge it on the pass rate |
+| `--repeat N` | run every case N times, judge it on the pass rate; a case stops once it can no longer pass (`notes/84-a-verdict-already-reached.md`) |
+| `--all-runs` | with `--repeat`: buy every run even after the verdict is settled |
 | `--case PATTERN` | run only matching case ids (fnmatch, repeatable); reports as a SUBSET |
 | `--async N` | N trajectories at once (default 4); identical grading |
 | `--no-mcp` | do not start the package's declared servers (their tools are then absent) |

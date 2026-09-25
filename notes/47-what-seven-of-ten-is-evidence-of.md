@@ -186,7 +186,10 @@ think*.
   the genuinely interesting number. That needs a store keyed by case
   rather than by run ([notes/42](42-two-runs-of-the-same-suite.md)'s
   reports are keyed by run), and a decision about how far back to look.
-* **`--repeat` still cannot stop early.** A case that has already failed
+* ~~**`--repeat` still cannot stop early.**~~ Shipped in
+  [note 84](84-a-verdict-already-reached.md): a case stops once it can
+  no longer pass, never once it already has, and says so; `--all-runs`
+  buys every run. Was: A case that has already failed
   four of its first five runs cannot clear 0.7 at n=9, and the suite runs
   the other four anyway. Sequential stopping is a real technique and a
   real way to bias a result if done carelessly.

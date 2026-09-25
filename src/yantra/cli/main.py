@@ -166,6 +166,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "to hold at, and this buys the evidence. "
                              "Roster-only cases still run once -- they reach "
                              "no model")
+    parser.add_argument("--all-runs", action="store_true", dest="all_runs",
+                        help="with --eval --repeat N: buy all N runs even "
+                             "after a case can no longer reach its "
+                             "min_pass_rate. By default it stops there -- "
+                             "the verdict is already red -- and says so; "
+                             "never on the green side")
     parser.add_argument("--case", action="append", default=[],
                         metavar="PATTERN", dest="case",
                         help="with --eval: run only the cases whose id "
@@ -959,8 +965,14 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                       f"once -- lines land as cases finish, not in file "
                       f"order[/dim]")
     if args.repeat > 1:
+        # Said up front, both ways (notes/84): a count that stops short is
+        # a different kind of sample from one that ran out, and the reader
+        # of the lines below should know which they are looking at.
+        stop = ("every run is bought (--all-runs)" if args.all_runs else
+                "a case stops once it can no longer reach its rate "
+                "(--all-runs buys every run)")
         console.print(f"[dim]runs: {args.repeat} per case; a case reports "
-                      f"once all of its runs are in[/dim]")
+                      f"once its runs are in; {stop}[/dim]")
     else:
         # A declared rate that cannot be honoured is worth saying out loud:
         # at one run, 0.7 and 1.0 grade identically, and an author who wrote
@@ -1017,7 +1029,8 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                 concurrency=args.eval_async, trace=trace,
             )
             outcomes = asyncio.run(runner.run_suite(
-                cases, repeat=args.repeat, on_outcome=report))
+                cases, repeat=args.repeat, on_outcome=report,
+                stop_early=not args.all_runs))
         else:
             runner = EvalRunner(
                 provider, model, tools=tools, permissions=gate,
@@ -1028,7 +1041,8 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
             # end: a live suite is minutes of silence otherwise, and the
             # first red is the one you want to see soonest.
             outcomes = runner.run_suite(cases, repeat=args.repeat,
-                                        on_outcome=report)
+                                        on_outcome=report,
+                                        stop_early=not args.all_runs)
     except KeyboardInterrupt:
         console.print("\n[yellow](cancelled -- no verdict)[/yellow]")
         return 130
@@ -1054,6 +1068,11 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     tally = f"{passed}/{len(outcomes)} passed"
     if runs != len(outcomes):
         tally += f" · {runs} runs"
+    stopped = [o for o in outcomes if getattr(o, "stopped_early", False)]
+    if stopped:
+        unbought = sum(o.planned - o.attempts for o in stopped)
+        tally += (f" · {len(stopped)} case(s) stopped early, {unbought} "
+                  f"run(s) not bought")
     if filtered is not None:
         tally += f" · {len(every_case) - len(cases)} case(s) not run"
     cost = ""
@@ -1374,6 +1393,14 @@ def _render_pools(console: Console, pools: list[Pool]) -> None:
             cost = _pooled_cost(case)
             if cost:
                 console.print(f"    [dim]{cost}[/dim]")
+            if case.stopped:
+                # Honest counts that lean low (notes/84): a run stops on
+                # failures, never on passes, so the reader is told before
+                # they read "below" as the whole story.
+                console.print(f"    [dim]stopped early in {case.stopped} "
+                              f"report(s): a count that stops on failures "
+                              f"leans low when pooled (--all-runs buys full "
+                              f"samples)[/dim]")
             if case.disagree:
                 console.print("    [yellow]two of these runs do not overlap "
                               "at all -- something changed between them, and "
@@ -1644,14 +1671,19 @@ def _eval_outcome_line(console: Console, outcome: CaseOutcome) -> None:
         # task was paid for.
         detail = ("roster only · no model call · 0 tok" if outcome.passed
                   else "roster failed · no model call · 0 tok")
-    elif outcome.attempts > 1:
+    elif outcome.attempts > 1 or outcome.stopped_early:
         needed = ("" if outcome.min_pass_rate >= 1
                   else f" (needs {outcome.required_passes})")
+        # A stopped case shows the runs it was SET, so "1/4" is never read
+        # as a four-run sample that happened to be short (notes/84).
+        of = (f" of {outcome.planned} · stopped, out of reach"
+              if outcome.stopped_early else "")
         # The interval beside the fraction, because the fraction alone has
         # been read as a rate since the day it was printed (notes/47).
         band = describe(outcome.passes, outcome.attempts)
         detail = (f"{outcome.marks} {outcome.passes}/{outcome.attempts} "
-                  f"runs{needed} · {band} · {outcome.duration_seconds:.1f}s · "
+                  f"runs{needed}{of} · {band} · "
+                  f"{outcome.duration_seconds:.1f}s · "
                   f"{outcome.tokens_used} tok")
     else:
         run = outcome.runs[-1]
@@ -1972,10 +2004,11 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
     if ((args.eval_async is not None or args.repeat != 1 or args.case
-         or args.no_mcp or args.report or args.against
+         or args.no_mcp or args.report or args.against or args.all_runs
          or args.failed is not None) and not args.eval):
-        print("error: --async, --repeat, --case, --failed, --no-mcp, "
-              "--report and --against belong to --eval -- they say how an "
+        print("error: --async, --repeat, --all-runs, --case, --failed, "
+              "--no-mcp, --report and --against belong to --eval -- they say "
+              "how an "
               "acceptance "
               "suite is driven, and a session has one trajectory",
               file=sys.stderr)

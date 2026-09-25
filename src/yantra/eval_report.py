@@ -63,6 +63,11 @@ Tokens per run are pooled the same way (notes/67): dollars move with
 prices and tokens do not, so the pair says whether it was the agent that
 changed or the vendor -- and on a free road they are the only figure.
 
+A CASE THAT STOPPED EARLY IS VISIBLE IN ANY REPORT (notes/84): it
+reached a model and made fewer runs than the report's ``repeat``. No key
+was added for it, and a pool that includes one says so, because counts
+that stop on failures lean low when added up.
+
 A REPORT NAMES THE TURNS BEHIND IT when the suite ran with ``--trace``
 (notes/65): each case row lists the trace ids of its runs, so a red line
 leads to what the agent actually did.
@@ -696,6 +701,11 @@ class PooledCase:
     #: -- an edited case is pooled apart, one row per definition.
     definition: str | None = None
     definitions: int = 0
+    #: How many of the pooled reports stopped this case early (notes/84).
+    #: Their counts are honest counts, and they lean low: a run stops on
+    #: failures and never on passes, so a pool of them is a little more
+    #: pessimistic than the same number of full runs would be.
+    stopped: int = 0
 
     @property
     def tally(self) -> str:
@@ -903,7 +913,18 @@ def _pooled_case(case_id: str, pairs: list[tuple[SuiteRun, CaseRecord]], *,
         tokens_last=(counted[-1].tokens / counted[-1].attempts
                      if counted else None),
         definition=definition, definitions=definitions,
+        stopped=sum(1 for run, c in pairs if stopped_early(run, c)),
     )
+
+
+def stopped_early(run: SuiteRun, case: CaseRecord) -> bool:
+    """Whether this case made fewer runs than its report was asked for.
+
+    Derived, not stored (notes/84): a case that reached a model runs
+    ``repeat`` times unless it stopped, so every report ever written
+    already answers this, and an older one correctly answers no.
+    """
+    return case.ran_model and case.attempts < run.repeat
 
 
 def _by_label(runs: Sequence[SuiteRun]) -> dict[tuple[str, str],
@@ -952,6 +973,7 @@ def write_pool(path: Path, pools: Sequence[Pool]) -> None:
                 "definition": c.definition, "definitions": c.definitions,
                 "tokens_first": _rounded(c.tokens_first),
                 "tokens_last": _rounded(c.tokens_last),
+                "stopped": c.stopped,
             } for c in group.cases],
         } for group in pools],
     }

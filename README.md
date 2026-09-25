@@ -1387,6 +1387,24 @@ Two of four, on a case that passes if you run it once and are lucky. The
 glyphs are there because `2/4` hides which runs failed, and the count on
 the failure line separates a flaky prompt from a broken one.
 
+**A case stops once it can no longer pass.** A case claiming 0.7 of 10
+stops at its fourth failure, since six runs cannot lift it to seven; one
+that must pass every run stops at its first. The second kind, on
+`gemma4:e4b`:
+
+```
+  FAIL  cites-what-it-read  ✓✗ 1/2 runs of 6 · stopped, out of reach · 0.09-0.91 at 95% · 18.9s · 12485 tok
+SUBSET RED · 0/1 passed · 2 runs · 1 case(s) stopped early, 4 run(s) not bought · …
+```
+
+Only on that side: a case on a winning streak always runs to the end,
+because stopping at seven greens would keep the lucky runs and cut off
+the ones that would expose them. The verdict is judged against the runs
+the case was SET, so stopping can never change it. `--all-runs` buys
+every run anyway (a 4-of-10 failure and a 10-of-10 failure are different
+problems), and `--pool` notes when stopped counts, which lean low, went
+into a total ([notes/84](notes/84-a-verdict-already-reached.md)).
+
 **And the count says what it is evidence of.** A fraction is a threshold;
 the question a person actually asks of it is *would it come out that way
 again*, and three green runs answer that much less firmly than they look:
@@ -1758,7 +1776,10 @@ src/yantra/
 │                   ([notes/41](notes/41-a-gate-you-can-point.md)).
 │                   trace= writes every model run into a trace file AFTER
 │                   grading, under its case id, and puts the turn's id on
-│                   the result ([notes/65](notes/65-the-turn-behind-the-red-line.md))
+│                   the result ([notes/65](notes/65-the-turn-behind-the-red-line.md)).
+│                   out_of_reach stops a repeated case once it cannot pass
+│                   -- never once it has -- judged against the runs PLANNED
+│                   ([notes/84](notes/84-a-verdict-already-reached.md))
 ├── eval_suite.py   a package's acceptance gate: evals/cases.toml ->
 │                   EvalCase, check = "graders:fn" resolved by path at LOAD
 │                   time, unknown keys refused ([notes/33](notes/33-evals-as-a-gate.md));

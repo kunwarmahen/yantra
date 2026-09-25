@@ -55,6 +55,15 @@ And because a trajectory is a DIE ROLL, one run is one sample.
 into. Default 1.0 over one run is exactly the old behaviour, which is why
 nothing had to change to keep it.
 
+A CASE STOPS WHEN IT CAN NO LONGER PASS, AND NEVER WHEN IT ALREADY HAS
+(notes/84). One that failed four of its first five runs cannot clear 0.7
+at n=9, so the other four are money spent on a verdict already decided.
+Stopping on the other side -- at seven greens -- would be the careless
+kind of sequential test: it keeps the lucky streaks and cuts off the runs
+that would have shown them for what they were. So the rule is futility
+only, the verdict is counted against the runs PLANNED rather than the
+runs made, and a stopped case says it stopped.
+
 Pass ``spec=`` and the cases run against a whole agent PACKAGE instead
 of a bare agent -- its prompt, its skills, its own tools, its admission
 policy -- which is what lets a package ship the evidence that it works
@@ -269,9 +278,13 @@ class CaseOutcome:
     case_id: str
     runs: list[EvalResult]
     min_pass_rate: float = 1.0
+    #: How many runs were asked for. More than ``attempts`` when the case
+    #: stopped early (notes/84); 0 means "as many as ran", the old shape.
+    planned: int = 0
 
     @classmethod
-    def of(cls, case: EvalCase, runs: Sequence[EvalResult]) -> CaseOutcome:
+    def of(cls, case: EvalCase, runs: Sequence[EvalResult], *,
+           planned: int = 0) -> CaseOutcome:
         """The outcome of running ``case``, collapsing what should not repeat.
 
         A run that never reached a model is DETERMINISTIC -- the same
@@ -280,13 +293,18 @@ class CaseOutcome:
         """
         kept = list(runs)
         if kept and not kept[0].ran_model:
-            kept = kept[:1]
+            kept, planned = kept[:1], 1
         return cls(case_id=case.id, runs=kept,
-                   min_pass_rate=case.min_pass_rate)
+                   min_pass_rate=case.min_pass_rate, planned=planned)
 
     @property
     def attempts(self) -> int:
         return len(self.runs)
+
+    @property
+    def stopped_early(self) -> bool:
+        """Whether runs were left unmade because the verdict was settled."""
+        return self.planned > self.attempts
 
     @property
     def passes(self) -> int:
@@ -294,9 +312,14 @@ class CaseOutcome:
 
     @property
     def required_passes(self) -> int:
-        """How many of ``attempts`` must pass. Rounded UP: a threshold that
-        rounded down would pass a suite the author said should fail."""
-        return max(1, math.ceil(round(self.min_pass_rate * self.attempts, 6)))
+        """How many runs must pass. Rounded UP: a threshold that rounded
+        down would pass a suite the author said should fail.
+
+        Counted against the runs PLANNED, so a case that stopped at 1 of 4
+        still needed 7 of 10 -- the bar it was set, not a smaller one
+        worked out from however far it got."""
+        return required_passes(self.min_pass_rate,
+                               max(self.attempts, self.planned))
 
     @property
     def pass_rate(self) -> float:
@@ -396,6 +419,22 @@ class CaseOutcome:
     @property
     def last_answer(self) -> str:
         return self.runs[-1].final_answer if self.runs else ""
+
+
+def required_passes(min_pass_rate: float, runs: int) -> int:
+    """Passes a case needs out of ``runs``, rounded up (never below 1)."""
+    return max(1, math.ceil(round(min_pass_rate * runs, 6)))
+
+
+def out_of_reach(min_pass_rate: float, passes: int, done: int,
+                 planned: int) -> bool:
+    """True once the runs left cannot lift ``passes`` to the bar (notes/84).
+
+    Futility only. There is deliberately no twin that says "already
+    passed": stopping on a streak of greens keeps the lucky runs and cuts
+    off the ones that would have shown them for luck.
+    """
+    return passes + (planned - done) < required_passes(min_pass_rate, planned)
 
 
 def roster_of(agent: Agent | AsyncAgent) -> list[str]:
@@ -929,32 +968,39 @@ class EvalRunner:
         return [self.run_case(case) for case in cases]
 
     def evaluate(self, case: EvalCase, *, repeat: int = 1,
-                 on_result: Callable[[EvalResult], None] | None = None
-                 ) -> CaseOutcome:
+                 on_result: Callable[[EvalResult], None] | None = None,
+                 stop_early: bool = True) -> CaseOutcome:
         """Run one case ``repeat`` times and apply its threshold.
 
         ``on_result`` fires as each run lands, because n runs of a live case
         is minutes of silence otherwise and the operator who paid for the
-        evidence should watch it arrive.
+        evidence should watch it arrive. ``stop_early`` stops once the case
+        can no longer pass (notes/84); False buys every run regardless.
         """
+        planned = max(1, repeat)
         runs: list[EvalResult] = []
-        for _ in range(max(1, repeat)):
+        for _ in range(planned):
             result = self.run_case(case)
             runs.append(result)
             if on_result is not None:
                 on_result(result)
             if not result.ran_model:
                 break  # nothing was rolled; rolling it again changes nothing
-        return CaseOutcome.of(case, runs)
+            if stop_early and out_of_reach(
+                    case.min_pass_rate, sum(1 for r in runs if r.passed),
+                    len(runs), planned):
+                break
+        return CaseOutcome.of(case, runs, planned=planned)
 
     def run_suite(self, cases: list[EvalCase], *, repeat: int = 1,
                   on_result: Callable[[EvalResult], None] | None = None,
-                  on_outcome: Callable[[CaseOutcome], None] | None = None
-                  ) -> list[CaseOutcome]:
+                  on_outcome: Callable[[CaseOutcome], None] | None = None,
+                  stop_early: bool = True) -> list[CaseOutcome]:
         """The gate: every case, ``repeat`` runs each, thresholds applied."""
         outcomes: list[CaseOutcome] = []
         for case in cases:
-            outcome = self.evaluate(case, repeat=repeat, on_result=on_result)
+            outcome = self.evaluate(case, repeat=repeat, on_result=on_result,
+                                    stop_early=stop_early)
             outcomes.append(outcome)
             if on_outcome is not None:
                 on_outcome(outcome)
@@ -1085,13 +1131,15 @@ class AsyncEvalRunner:
         # no matter who finishes first (same contract as tool batches).
         return await asyncio.gather(*(_bounded(c) for c in cases))
 
-    async def evaluate(self, case: EvalCase, *, repeat: int = 1) -> CaseOutcome:
-        outcome, = await self.run_suite([case], repeat=repeat)
+    async def evaluate(self, case: EvalCase, *, repeat: int = 1,
+                       stop_early: bool = True) -> CaseOutcome:
+        outcome, = await self.run_suite([case], repeat=repeat,
+                                        stop_early=stop_early)
         return outcome
 
     async def run_suite(self, cases: list[EvalCase], *, repeat: int = 1,
-                        on_outcome: Callable[[CaseOutcome], None] | None = None
-                        ) -> list[CaseOutcome]:
+                        on_outcome: Callable[[CaseOutcome], None] | None = None,
+                        stop_early: bool = True) -> list[CaseOutcome]:
         """The gate, concurrently: every case, ``repeat`` runs each.
 
         THE UNIT OF CONCURRENCY IS A RUN, not a case. Five repeats of three
@@ -1103,20 +1151,35 @@ class AsyncEvalRunner:
         land, so a long suite reads as it arrives; the returned list is in
         submission order regardless, because a report you diff between
         models must not reorder itself when the network is slow.
+
+        STOPPING EARLY HERE IS "START NO MORE" (notes/84). A run still
+        waiting for the semaphore when its case became hopeless is never
+        started; one already in flight finishes and counts, because its
+        tokens are spent either way and a result thrown away is a result
+        the report cannot show.
         """
         gate = asyncio.Semaphore(self.concurrency)
-
-        async def _attempt(case: EvalCase) -> EvalResult:
-            async with gate:
-                return await self.run_case(case)
 
         async def _one(case: EvalCase) -> CaseOutcome:
             # A roster-only case is never launched n times: it reaches no
             # model, so the repeats would be n copies of one fact.
-            attempts = max(1, repeat) if case.needs_a_model else 1
-            runs = await asyncio.gather(*(_attempt(case)
-                                          for _ in range(attempts)))
-            outcome = CaseOutcome.of(case, runs)
+            planned = max(1, repeat) if case.needs_a_model else 1
+            landed: list[EvalResult] = []
+
+            async def _attempt() -> EvalResult | None:
+                async with gate:
+                    if stop_early and out_of_reach(
+                            case.min_pass_rate,
+                            sum(1 for r in landed if r.passed),
+                            len(landed), planned):
+                        return None
+                    result = await self.run_case(case)
+                    landed.append(result)
+                    return result
+
+            runs = [r for r in await asyncio.gather(
+                *(_attempt() for _ in range(planned))) if r is not None]
+            outcome = CaseOutcome.of(case, runs, planned=planned)
             if on_outcome is not None:
                 on_outcome(outcome)
             return outcome

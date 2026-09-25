@@ -817,7 +817,7 @@ class TestTheCliGate:
                                 'min_pass_rate = 0.9\n')
         rc = self._run(tmp_path, monkeypatch,
                        ["--agent", str(root), "--eval", "--provider",
-                        "anthropic", "--repeat", "3"],
+                        "anthropic", "--repeat", "3", "--all-runs"],
                        script=[assistant_tool_call("1", "read_file",
                                                    {"path": "agent.toml"}),
                                assistant_text("read it"),

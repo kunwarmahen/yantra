@@ -473,7 +473,8 @@ class TestTheSuiteOverRepeatedRuns:
 
     def test_a_case_that_fails_every_run_reports_the_count(self):
         runner, _ = make_runner([assistant_text("nope")] * 3)
-        outcome = runner.evaluate(case(required_tools=["echo"]), repeat=3)
+        outcome = runner.evaluate(case(required_tools=["echo"]), repeat=3,
+                                  stop_early=False)
         assert not outcome.passed
         assert outcome.failures == ["required tool not used: echo "
                                      "(3 of 3 runs)"]
