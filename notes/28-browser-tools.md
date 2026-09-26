@@ -191,4 +191,7 @@ a model with its answer does not tidy up
 ([notes/92](92-the-window-that-stayed-open.md)). A fifth verb,
 `browser_handoff`, gives the page to a person — for a sign-in the agent
 cannot do, or a purchase it should not
-([notes/93](93-a-page-for-a-person.md)).
+([notes/93](93-a-page-for-a-person.md)). A search form a person fills
+without thinking (autocomplete suggestions, a date picker, a result row
+covered by its own contents) needed five fixes to the snapshot and the
+click ([notes/94](94-a-form-the-way-a-person-fills-it.md)).

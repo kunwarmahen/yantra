@@ -99,11 +99,19 @@ from yantra.tools.web_fetch import MAX_RESULT_CHARS, _clip
 GOTO_TIMEOUT_MS = 15_000
 #: Per-action cap (click/fill) -- enough for slow frameworks, bounded.
 ACTION_TIMEOUT_MS = 10_000
+#: A click's first try. Short, because the usual reason it fails is not
+#: slowness but a covering element, and waiting the full cap for one
+#: that will never move costs ten seconds a row on a results page.
+CLICK_TRY_MS = 3_000
 #: A short settle beat after navigation/actions: domcontentloaded fires
 #: before SPA frameworks paint their content into the DOM.
 SETTLE_MS = 400
 #: Element refs listed per snapshot; beyond this the model gets a count.
 MAX_ELEMENTS = 60
+#: Of those, how many go to the END of an open dialog too big to list
+#: whole. A date picker is hundreds of days and then the one button that
+#: closes it; listing only the first sixty days hides the way out.
+DIALOG_TAIL = 6
 #: The invisible screen headed mode gets when no display is attached.
 XVFB_SCREEN = "1920x1080x24"
 #: How long Xvfb has to create its socket before we call the try lost.
@@ -156,19 +164,30 @@ _BROWSER_EXTRA_HINT = (
 
 #: One evaluate() per snapshot: tag every visible interactive element
 #: with a ref attribute AND collect the page text in the same pass, so
-#: the model's view and the click targets can never disagree.
+#: the model's view and the click targets can never disagree. The ARIA
+#: roles matter as much as the tags: an autocomplete's suggestions are
+#: <li role="option">, and a snapshot without them left a model typing
+#: "Detroit" into an airport box with nothing to pick (notes/94).
 _SNAPSHOT_JS = """
 () => {
   const sel = [
     'a[href]', 'button', 'input', 'textarea', 'select', 'summary',
     '[role="button"]', '[role="link"]', '[role="textbox"]',
     '[role="checkbox"]', '[role="combobox"]',
+    '[role="option"]', '[role="menuitem"]', '[role="tab"]',
+    '[role="radio"]', '[role="switch"]',
   ].join(', ');
+  const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim();
   const labelOf = (el) => {
     const attr = el.getAttribute('aria-label') || el.getAttribute('placeholder')
       || el.value || el.getAttribute('name');
-    return ((attr || el.innerText || '').replace(/\\s+/g, ' ').trim()
-      ).slice(0, 80);
+    let label = clean(attr || el.innerText);
+    if (!attr && label.length <= 3) {
+      // a calendar day reads "5"; the date it IS sits on a labelled child
+      const inner = el.querySelector('[aria-label]');
+      if (inner) label = clean(inner.getAttribute('aria-label')) || label;
+    }
+    return label.slice(0, 80);
   };
   const kindOf = (el) => {
     const tag = el.tagName.toLowerCase();
@@ -182,23 +201,46 @@ _SNAPSHOT_JS = """
             && ['text', 'search', 'email', 'password', 'tel', 'url',
                 'number'].includes(type))) return 'textbox';
     if (tag === 'select' || role === 'combobox') return 'select';
-    if (type === 'checkbox' || role === 'checkbox') return 'checkbox';
+    if (type === 'checkbox' || role === 'checkbox'
+        || role === 'switch') return 'checkbox';
+    if (role === 'option' || role === 'menuitem') return 'option';
+    if (role === 'tab' || role === 'radio' || type === 'radio') return 'choice';
     return 'other';
   };
-  const elements = [];
-  let n = 0;
-  for (const el of document.querySelectorAll(sel)) {
+  const shown = (el) => {
     const box = el.getBoundingClientRect();
     const style = getComputedStyle(el);
-    if ((box.width === 0 && box.height === 0)
-        || style.visibility === 'hidden' || style.display === 'none') continue;
+    return !((box.width === 0 && box.height === 0)
+             || style.visibility === 'hidden' || style.display === 'none');
+  };
+  // Refs are per snapshot. A tag left from the last one would give two
+  // elements the same ref -- a hidden one keeps "e18" while a new one
+  // is handed it -- and a click on e18 would match both.
+  for (const old of document.querySelectorAll('[data-yantra-ref]'))
+    old.removeAttribute('data-yantra-ref');
+  // An open dialog is where the person's attention is: a date picker, a
+  // cookie banner. Its elements go first, so the listing cap spends
+  // itself on the calendar rather than on the page header behind it.
+  const dialogs = [...document.querySelectorAll(
+    'dialog[open], [role="dialog"], [aria-modal="true"]')].filter(shown);
+  const dialog = dialogs.length ? dialogs[dialogs.length - 1] : null;
+  const found = [...document.querySelectorAll(sel)].filter(shown);
+  const ordered = dialog
+    ? [...found.filter((el) => dialog.contains(el)),
+       ...found.filter((el) => !dialog.contains(el))]
+    : found;
+  const elements = [];
+  let n = 0;
+  for (const el of ordered) {
     const ref = 'e' + (++n);
     el.setAttribute('data-yantra-ref', ref);
-    elements.push({ref, kind: kindOf(el), label: labelOf(el)});
+    elements.push({ref, kind: kindOf(el), label: labelOf(el),
+                   in_dialog: dialog !== null && dialog.contains(el)});
   }
   return {
     text: document.body ? document.body.innerText : '',
     elements,
+    dialog: dialog !== null,
   };
 }
 """
@@ -550,8 +592,8 @@ class BrowserSession:
     def click(self, ref: str) -> str:
         return self._call(lambda: self._click(ref))
 
-    def fill(self, ref: str, text: str) -> str:
-        return self._call(lambda: self._fill(ref, text))
+    def fill(self, ref: str, text: str, enter: bool = False) -> str:
+        return self._call(lambda: self._fill(ref, text, enter))
 
     def close(self) -> bool:
         return self._call(self._shutdown)
@@ -619,11 +661,15 @@ class BrowserSession:
 
         elements = data.get("elements") or []
         self._elements = {e["ref"]: e for e in elements}
-        shown = elements[:MAX_ELEMENTS]
+        shown = _cap_elements(elements)
         lines = [f'[{e["ref"]}] {e["kind"]} {e["label"]}'.rstrip()
+                 if e else "[... more in the dialog ...]"
                  for e in shown]
         blocks = [header, _clip(text, MAX_RESULT_CHARS)]
         if lines:
+            if data.get("dialog"):
+                blocks.append("(a dialog is open -- its elements are "
+                              "listed first)")
             blocks.append(
                 "interactive elements (pass a ref to browser_click/"
                 "browser_fill):\n" + "\n".join(lines)
@@ -674,26 +720,44 @@ class BrowserSession:
             self._settle()
         return self._snapshot()
 
-    def _act(self, ref: str, verb: str) -> str:
+    def _click(self, ref: str) -> str:
+        """Click like a person -- and when something is drawn on top of the
+        element, click it the way its own page would.
+
+        Playwright refuses to click an element another one covers, which
+        is the right check for a stray overlay and the wrong one for how
+        rich pages are built: a Google Flights result row is a link whose
+        own contents sit on top of it, so every result "intercepts
+        pointer events" while a person's click lands fine. el.click()
+        fires the same click event on the element itself. Used only for
+        that one failure, and said in the result (notes/94).
+        """
         page = self._require_page()
         self._resolve(ref)
+        locator = self._locator(page, ref)
+        via_script = False
         try:
-            getattr(self._locator(page, ref), verb)(
-                timeout=ACTION_TIMEOUT_MS)
-        except ToolError:
-            raise
+            locator.click(timeout=CLICK_TRY_MS)
         except Exception as exc:
-            raise ToolError(
-                f"{verb} on {ref} failed: {type(exc).__name__}: {exc} -- "
-                "the page may have changed since your last snapshot; "
-                "browser_open(url) reloads it") from exc
+            try:
+                if "intercepts pointer events" in str(exc):
+                    locator.evaluate("el => el.click()")
+                    via_script = True
+                else:
+                    locator.click(timeout=ACTION_TIMEOUT_MS - CLICK_TRY_MS)
+            except Exception as again:
+                raise ToolError(
+                    f"click on {ref} failed: {type(again).__name__}: "
+                    f"{again} -- the page may have changed since your last "
+                    "snapshot; browser_open(url) reloads it") from again
         self._settle()
-        return self._snapshot()
+        snapshot = self._snapshot()
+        if via_script:
+            return (f"(another element covers {ref}, so it was clicked "
+                    f"through the page's script)\n{snapshot}")
+        return snapshot
 
-    def _click(self, ref: str) -> str:
-        return self._act(ref, "click")
-
-    def _fill(self, ref: str, text: str) -> str:
+    def _fill(self, ref: str, text: str, enter: bool = False) -> str:
         page = self._require_page()
         element = self._resolve(ref)
         try:
@@ -702,6 +766,11 @@ class BrowserSession:
                 locator.select_option(label=text, timeout=ACTION_TIMEOUT_MS)
             elif element["kind"] in ("textbox",):
                 locator.fill(text, timeout=ACTION_TIMEOUT_MS)
+                if enter:
+                    # the key a person presses; many search boxes have no
+                    # button to click, and an autocomplete takes its top
+                    # suggestion on Enter
+                    locator.press("Enter", timeout=ACTION_TIMEOUT_MS)
             else:
                 raise ToolError(
                     f'{ref} is a {element["kind"]}; text goes into textboxes '
@@ -709,6 +778,13 @@ class BrowserSession:
         except ToolError:
             raise
         except Exception as exc:
+            if "not a <select>" in str(exc):
+                # role="combobox" on a <div>: a dropdown the page draws
+                # itself, which only opens the way a person opens it
+                raise ToolError(
+                    f"{ref} is a dropdown the page draws itself, not a "
+                    f"real <select> -- browser_click {ref} to open it, "
+                    f"then browser_click the option {text!r}") from exc
             raise ToolError(
                 f"fill on {ref} failed: {type(exc).__name__}: {exc} -- "
                 "the page may have changed; browser_open(url) reloads it"
@@ -776,6 +852,23 @@ class BrowserSession:
             self._exec.shutdown(wait=False)  # we ARE the worker; safe
             self._exec = None  # next verb builds a fresh one
         return was_open
+
+
+def _cap_elements(elements: list[dict]) -> list[dict | None]:
+    """At most MAX_ELEMENTS, keeping an open dialog's head AND its tail.
+
+    Dialog elements arrive first (the snapshot orders them so). When the
+    dialog alone overflows the cap, its last DIALOG_TAIL -- the Done,
+    Close, Apply that end most dialogs -- replace the page elements that
+    would have followed, and None marks the gap for the listing.
+    """
+    if len(elements) <= MAX_ELEMENTS:
+        return list(elements)
+    in_dialog = [e for e in elements if e.get("in_dialog")]
+    if len(in_dialog) <= MAX_ELEMENTS:
+        return elements[:MAX_ELEMENTS]
+    head = MAX_ELEMENTS - DIALOG_TAIL
+    return [*in_dialog[:head], None, *in_dialog[-DIALOG_TAIL:]]
 
 
 def _profile_has_state(profile: Path) -> bool:
@@ -1060,8 +1153,11 @@ class BrowserFill(_BrowserTool):
     description = (
         "Type text into a textbox/textarea on the open browser page, or "
         "pick an option in a dropdown, by its [eN] ref; returns the "
-        "refreshed page. Combine with browser_click on a submit button "
-        "to run searches and forms."
+        "refreshed page. Set enter=true to press Enter after typing -- it "
+        "submits a search box with no button. Typing into an autocomplete "
+        "field (airports, cities, addresses) makes its suggestions appear "
+        "in the refreshed page as 'option' refs: browser_click the right "
+        "one rather than guessing."
     )
     parameters: ClassVar[dict] = {
         "type": "object",
@@ -1072,6 +1168,9 @@ class BrowserFill(_BrowserTool):
             "text": {"type": "string",
                      "description": "Text to type, or the dropdown option "
                                     "to select."},
+            "enter": {"type": "boolean",
+                      "description": "Press Enter after typing (default "
+                                     "false)."},
         },
         "required": ["ref", "text"],
         "additionalProperties": False,
@@ -1079,11 +1178,13 @@ class BrowserFill(_BrowserTool):
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         text = require_str(args, "text")
-        return f'fill {require_str(args, "ref")} "{text[:40]}{"…" if len(text) > 40 else ""}"'
+        then = " + Enter" if args.get("enter") is True else ""
+        return f'fill {require_str(args, "ref")} "{text[:40]}{"…" if len(text) > 40 else ""}"{then}'
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
         return self.browser.fill(require_str(args, "ref"),
-                                 require_str(args, "text"))
+                                 require_str(args, "text"),
+                                 enter=args.get("enter") is True)
 
 
 class BrowserClose(_BrowserTool):

@@ -78,6 +78,8 @@ class FakeLocator:
         self.selector = selector
 
     def click(self, timeout=None) -> None:
+        if self.page.click_error is not None:
+            raise self.page.click_error
         self.page.clicks.append(self.selector)
         self.page.threads.add(threading.get_ident())
         if self.page.on_click:
@@ -86,7 +88,15 @@ class FakeLocator:
     def fill(self, text, timeout=None) -> None:
         self.page.fills.append((self.selector, text))
 
+    def evaluate(self, script) -> None:
+        self.page.scripted.append((self.selector, script))
+
+    def press(self, key, timeout=None) -> None:
+        self.page.presses.append((self.selector, key))
+
     def select_option(self, label=None, timeout=None) -> None:
+        if self.page.drawn_dropdown:
+            raise Exception("Error: Element is not a <select> element")
         self.page.selects.append((self.selector, label))
 
 
@@ -105,6 +115,11 @@ class FakePage:
         self.clicks: list[str] = []
         self.fills: list = []
         self.selects: list = []
+        self.presses: list = []
+        self.scripted: list = []   # element scripts: the covered-click road
+        self.click_error: Exception | None = None
+        self.dialog = False
+        self.drawn_dropdown = False   # role=combobox on a <div>
         self.closed = False
         self.threads: set[int] = set()  # worker threads seen at the page
 
@@ -118,7 +133,8 @@ class FakePage:
     def evaluate(self, script):
         assert "data-yantra-ref" in script  # snapshots must tag targets
         self.threads.add(threading.get_ident())
-        return {"text": self.text, "elements": self.elements}
+        return {"text": self.text, "elements": self.elements,
+                "dialog": self.dialog}
 
     def locator(self, selector):
         return FakeLocator(self, selector)
@@ -214,6 +230,113 @@ class TestRefs:
         assert page.fills == [('[data-yantra-ref="e2"]', "wire adapters")]
         assert ELEMENTS_LINE in out  # refreshed page returned
 
+    def test_a_covered_element_is_clicked_through_the_page(self):
+        # a Google Flights result row: its own contents are drawn on top
+        # of it, so Playwright's click refuses -- a person's would land
+        page = FakePage()
+        page.click_error = TimeoutError(
+            "<div>1 hr 42 min</div> subtree intercepts pointer events")
+        session = make_session(page)
+        session.open(URL)
+        out = session.click("e1")
+        assert page.scripted == [('[data-yantra-ref="e1"]',
+                                  "el => el.click()")]
+        assert out.startswith("(another element covers e1")
+        assert ELEMENTS_LINE in out       # and the refreshed page follows
+
+    def test_any_other_failure_is_still_the_models_to_see(self):
+        page = FakePage()
+        page.click_error = TimeoutError("element is not attached to the DOM")
+        session = make_session(page)
+        session.open(URL)
+        with pytest.raises(ToolError, match="click on e1 failed"):
+            session.click("e1")
+        assert page.scripted == []        # no script click on a guess
+
+    def test_refs_from_the_last_snapshot_are_wiped_first(self):
+        # a hidden element kept "e18" while a new one was handed it, and
+        # fill on e18 hit a strict-mode violation: 3 elements (notes/94)
+        from yantra.tools.browser import _SNAPSHOT_JS
+        wipe = _SNAPSHOT_JS.index("removeAttribute('data-yantra-ref')")
+        tag = _SNAPSHOT_JS.index("setAttribute('data-yantra-ref'")
+        assert wipe < tag
+
+    def test_a_short_label_borrows_its_childs_aria_label(self):
+        # a calendar day reads "5"; "Monday, October 5, 2026" is a child's
+        from yantra.tools.browser import _SNAPSHOT_JS
+        assert "label.length <= 3" in _SNAPSHOT_JS
+        assert "querySelector('[aria-label]')" in _SNAPSHOT_JS
+
+    def test_an_open_dialog_is_listed_and_said_first(self):
+        page = FakePage(elements=[
+            {"ref": "e1", "kind": "button", "label": "Monday, October 5, 2026",
+             "in_dialog": True},
+            {"ref": "e2", "kind": "link", "label": "Google"}])
+        page.dialog = True
+        out = make_session(page).open(URL)
+        assert "(a dialog is open -- its elements are listed first)" in out
+
+    def test_a_dialog_too_big_to_list_keeps_its_way_out(self):
+        from yantra.tools.browser import DIALOG_TAIL, _cap_elements
+        days = [{"ref": f"e{i}", "kind": "button", "label": f"day {i}",
+                 "in_dialog": True} for i in range(1, 340)]
+        done = {"ref": "e340", "kind": "button", "label": "Done",
+                "in_dialog": True}
+        page_els = [{"ref": f"e{i}", "kind": "link", "label": "x"}
+                    for i in range(341, 420)]
+        shown = _cap_elements([*days, done, *page_els])
+        assert len([e for e in shown if e]) == MAX_ELEMENTS
+        assert shown[0]["label"] == "day 1"          # the head
+        assert shown[-1] is done                      # and the way out
+        assert shown[-DIALOG_TAIL - 1] is None        # the gap, marked
+
+    def test_a_dialog_that_fits_is_simply_first(self):
+        from yantra.tools.browser import _cap_elements
+        els = ([{"ref": f"e{i}", "in_dialog": True} for i in range(10)]
+               + [{"ref": f"p{i}"} for i in range(100)])
+        assert _cap_elements(els) == els[:MAX_ELEMENTS]
+
+    def test_fill_can_press_enter_after_typing(self):
+        # a search box with no button, and an autocomplete that takes its
+        # top suggestion on Enter, both need the key a person presses
+        page = FakePage()
+        session = make_session(page)
+        session.open(URL)
+        session.fill("e2", "Detroit", enter=True)
+        assert page.fills == [('[data-yantra-ref="e2"]', "Detroit")]
+        assert page.presses == [('[data-yantra-ref="e2"]', "Enter")]
+
+    def test_fill_presses_nothing_unless_asked(self):
+        page = FakePage()
+        session = make_session(page)
+        session.open(URL)
+        session.fill("e2", "Detroit")
+        assert page.presses == []
+
+    def test_the_tool_passes_enter_through_and_the_prompt_says_so(self, ctx):
+        page = FakePage()
+        session = make_session(page)
+        session.open(URL)
+        tool = BrowserFill(session)
+        args = {"ref": "e2", "text": "Detroit", "enter": True}
+        assert tool.summary(args, ctx).endswith("+ Enter")
+        tool.run(args, ctx)
+        assert page.presses == [('[data-yantra-ref="e2"]', "Enter")]
+
+    def test_an_autocomplete_suggestion_is_a_clickable_option(self):
+        # suggestions are <li role="option">; a snapshot that skipped the
+        # role left the model nothing to pick (notes/94)
+        from yantra.tools.browser import _SNAPSHOT_JS
+        for role in ("option", "menuitem", "tab", "radio", "switch"):
+            assert f'[role="{role}"]' in _SNAPSHOT_JS
+        page = FakePage(elements=[{"ref": "e7", "kind": "option",
+                                   "label": "Detroit, Michigan"}])
+        session = make_session(page)
+        out = session.open(URL)
+        assert "[e7] option Detroit, Michigan" in out
+        session.click("e7")
+        assert page.clicks == ['[data-yantra-ref="e7"]']
+
     def test_fill_on_a_dropdown_selects_the_option_by_label(self):
         page = FakePage(elements=[{"ref": "e5", "kind": "select",
                                    "label": "Category"}])
@@ -221,6 +344,18 @@ class TestRefs:
         session.open(URL)
         session.fill("e5", "books")
         assert page.selects == [('[data-yantra-ref="e5"]', "books")]
+
+    def test_a_dropdown_the_page_draws_says_how_to_open_it(self):
+        # Google Flights' "Round trip" is a div with role=combobox:
+        # select_option refuses it, and the model needs the other road
+        page = FakePage(elements=[{"ref": "e12", "kind": "select",
+                                   "label": "Round trip"}])
+        page.drawn_dropdown = True
+        session = make_session(page)
+        session.open(URL)
+        with pytest.raises(ToolError,
+                           match=r"browser_click e12 to open it.*'One way'"):
+            session.fill("e12", "One way")
 
     def test_fill_on_a_button_is_refused_with_guidance(self):
         page = FakePage(elements=[{"ref": "e4", "kind": "button",

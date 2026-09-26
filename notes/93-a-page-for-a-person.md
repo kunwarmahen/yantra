@@ -161,10 +161,10 @@ below.
 
 ## What is not here yet
 
-* **Autocomplete dropdowns.** The snapshot collects links, buttons,
+* ~~**Autocomplete dropdowns.** The snapshot collects links, buttons,
   inputs and a few ARIA roles, but not `role="option"`, and there is no
-  verb for pressing Enter. Sites whose search box needs a suggestion
-  picked are harder than they should be.
+  verb for pressing Enter.~~ Suggestions are clickable options and
+  `browser_fill` can press Enter ([note 94](94-a-form-the-way-a-person-fills-it.md)).
 * **Stop from the web UI** reaching a `return` window, as above.
 
 `2159 passed, 1 skipped` (was 2139). The tests in

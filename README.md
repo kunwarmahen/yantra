@@ -516,7 +516,12 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   JavaScript runs, so JS-rendered apps work where web_fetch sees an
   empty shell; every action returns readable prose plus numbered
   element refs (`[e1]`, `[e2]`, …) harvested from the live DOM, and
-  clicks/fills take a ref and return the refreshed page. Same egress
+  clicks/fills take a ref and return the refreshed page. Autocomplete
+  suggestions show up as `option` refs to click, `browser_fill` can
+  press Enter, an open dialog (a date picker) is listed first with its
+  Done button kept, and a result row covered by its own contents is
+  clicked through the page's script
+  ([notes/94](notes/94-a-form-the-way-a-person-fills-it.md)). Same egress
   rule as web_fetch — all of them gate. Installing the extra IS the
   opt-in: they register only when playwright is present
   ([notes/28](notes/28-browser-tools.md)). Logins persist too: set
@@ -2073,7 +2078,13 @@ src/yantra/
 │   │               own browser, or a link) or return (a window on the agent's
 │   │               profile, --browse-login's two doors via _person_window,
 │   │               ten minutes at most); no url argument, on purpose
-│   │               ([notes/93](notes/93-a-page-for-a-person.md))
+│   │               ([notes/93](notes/93-a-page-for-a-person.md)).
+│   │               Snapshots wipe old refs first, list an open dialog first
+│   │               (head + DIALOG_TAIL when it overflows), collect ARIA
+│   │               option/menuitem/tab/radio/switch, and label a "5" by its
+│   │               child's aria-label; a click on a covered element falls
+│   │               back to el.click() and says so
+│   │               ([notes/94](notes/94-a-form-the-way-a-person-fills-it.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,

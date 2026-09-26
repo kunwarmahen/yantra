@@ -488,6 +488,13 @@ exact page that will open. When Yantra runs somewhere without a screen
 (the container, or a server), you get the page as a link in the answer
 instead ([notes/93](notes/93-a-page-for-a-person.md)).
 
+Ordinary search forms work the way you would fill them: the agent types
+"Detroit", sees the suggestions underneath as things it can click, picks
+the right airport, opens the date picker and chooses the day
+([notes/94](notes/94-a-form-the-way-a-person-fills-it.md)). A small
+model will often skip the form and search by address instead, which
+gets to the same results faster.
+
 Past about twenty tools, model selection accuracy hits a cliff, so only
 the top-K best-matching tools are **sent** each turn (BM25 over name and
 description). The autonomy floor always loads regardless, and calling any
@@ -2532,7 +2539,7 @@ Most carry a live receipt from a real run.
 | [16](notes/16-sandboxing.md) [17](notes/17-tool-selection.md) | containment; the tool cliff and BM25 |
 | [19](notes/19-responses-api.md) | the third dialect |
 | [22](notes/22-web-ui.md) | the browser UI |
-| [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) [92](notes/92-the-window-that-stayed-open.md) [93](notes/93-a-page-for-a-person.md) | the self-reliance tools, one note each; a browser that closes when the turn does, and hands you the page when a step is yours |
+| [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) [92](notes/92-the-window-that-stayed-open.md) [93](notes/93-a-page-for-a-person.md) [94](notes/94-a-form-the-way-a-person-fills-it.md) | the self-reliance tools, one note each; a browser that closes when the turn does, hands you the page when a step is yours, and fills a form the way you would |
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
