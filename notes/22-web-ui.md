@@ -175,11 +175,20 @@ covers what models actually emit — headings mapped two levels down (a
 chat message isn't a document outline), nested lists by indentation,
 pipe tables, fenced code, blockquotes — and deliberately not images.
 
+A table does not wait for a blank line. Models write "Nonstop flights:"
+and put the header row on the very next line, and GitHub-flavoured
+markdown lets a table interrupt a paragraph, so the renderer does too:
+the paragraph collector stops at any line with pipes whose next line is
+a `---|---` separator. Without that rule the whole table was swallowed
+into the sentence above it and arrived as rows of literal pipes. A
+lone `|` in prose still stays prose, because it has no separator under
+it.
+
 Streaming shapes the integration more than parsing does: deltas
 re-render the whole message but throttled to one pass per animation
 frame, and a partial document (half a table, an open fence) simply
 renders as far as it got; `turn_end` carries the complete text and its
-final render settles any artifact. Ten offline tests execute md.js
+final render settles any artifact. Twelve offline tests execute md.js
 under node (`test_md_renderer.py`, skipped when node is absent) — the
 escaping rules are pinned hardest, because they're the part that must
 never regress.
@@ -417,10 +426,12 @@ off.
   an `ok:false` row rather than a 500, mixed good+bad JSON-mode results,
   field-shape validations, and the remember flag persisting only what
   was kept.
-* `test_md_renderer.py` (10): the page's markdown renderer executed by
+* `test_md_renderer.py` (12): the page's markdown renderer executed by
   node — escaping above all (model HTML stays text), emphasis/code/
-  strike, heading mapping, fenced code, tables, nested and ordered
-  lists, scheme-checked links, `<br>` paragraphs, blockquotes/rules.
+  strike, heading mapping, fenced code, tables (including one glued to
+  the sentence above it, and a lone pipe that must stay prose), nested
+  and ordered lists, scheme-checked links, `<br>` paragraphs,
+  blockquotes/rules.
 
 ## Live receipt
 

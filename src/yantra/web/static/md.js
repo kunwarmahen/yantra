@@ -69,6 +69,17 @@ function isTableSeparator(cells) {
     cells.every((c) => /^:?-{3,}:?$/.test(c));
 }
 
+/* a table opens at lines[i] when that row has pipes and the next line is
+   its ---|--- separator. Needs two lines, so BLOCK_START_RE can't see it;
+   the paragraph collector asks this too, because models glue a table to
+   the sentence above it ("Nonstop flights:\n| Time | ...") and GFM lets a
+   table interrupt a paragraph. */
+function isTableStart(lines, i) {
+  if (!lines[i].includes("|") || i + 1 >= lines.length) return false;
+  return splitTableRow(lines[i]).length > 1 &&
+    isTableSeparator(splitTableRow(lines[i + 1]));
+}
+
 /* Lists recurse by indentation. Each item owns every following line
    indented at least to its content column; uniform slicing there keeps
    RELATIVE indentation intact, so deeper bullets recurse naturally. */
@@ -163,7 +174,8 @@ function renderMarkdown(src) {
       while (i < lines.length) {
         const qm = QUOTE_RE.exec(lines[i]);
         if (qm) { body.push(qm[1]); i += 1; continue; }
-        if (lines[i].trim() && !BLOCK_START_RE.test(lines[i])) {
+        if (lines[i].trim() && !BLOCK_START_RE.test(lines[i])
+            && !isTableStart(lines, i)) {
           body.push(lines[i].trim()); i += 1; continue; // lazy continuation
         }
         break;
@@ -173,26 +185,23 @@ function renderMarkdown(src) {
     }
 
     // pipe table: header row, then a ---|--- separator, then rows
-    if (line.includes("|") && i + 1 < lines.length) {
+    if (isTableStart(lines, i)) {
       const head = splitTableRow(line);
-      const sep = splitTableRow(lines[i + 1]);
-      if (head.length > 1 && isTableSeparator(sep)) {
-        const cols = head.length;
-        const rows = [];
-        i += 2;
-        while (i < lines.length && lines[i].includes("|") && lines[i].trim()) {
-          const cells = splitTableRow(lines[i]);
-          while (cells.length < cols) cells.push("");
-          rows.push(cells.slice(0, cols));
-          i += 1;
-        }
-        const th = head.map((c) => `<th>${inlineMd(c)}</th>`).join("");
-        const tb = rows.map((r) =>
-          `<tr>${r.map((c) => `<td>${inlineMd(c)}</td>`).join("")}</tr>`).join("");
-        out.push(`<div class="table-wrap"><table><thead><tr>${th}</tr></thead>` +
-                 `<tbody>${tb}</tbody></table></div>`);
-        continue;
+      const cols = head.length;
+      const rows = [];
+      i += 2;
+      while (i < lines.length && lines[i].includes("|") && lines[i].trim()) {
+        const cells = splitTableRow(lines[i]);
+        while (cells.length < cols) cells.push("");
+        rows.push(cells.slice(0, cols));
+        i += 1;
       }
+      const th = head.map((c) => `<th>${inlineMd(c)}</th>`).join("");
+      const tb = rows.map((r) =>
+        `<tr>${r.map((c) => `<td>${inlineMd(c)}</td>`).join("")}</tr>`).join("");
+      out.push(`<div class="table-wrap"><table><thead><tr>${th}</tr></thead>` +
+               `<tbody>${tb}</tbody></table></div>`);
+      continue;
     }
 
     if (BULLET_RE.test(line)) {
@@ -207,7 +216,7 @@ function renderMarkdown(src) {
     const para = [line];
     i += 1;
     while (i < lines.length && lines[i].trim()
-           && !BLOCK_START_RE.test(lines[i])) {
+           && !BLOCK_START_RE.test(lines[i]) && !isTableStart(lines, i)) {
       para.push(lines[i]); i += 1;
     }
     out.push(`<p>${inlineMd(para.join("\n")).replace(/\n/g, "<br>")}</p>`);

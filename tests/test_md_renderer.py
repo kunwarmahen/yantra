@@ -106,3 +106,18 @@ def test_blockquote_and_rule():
     (out,) = render(x="> quoted words\n\n---\n\nafter")
     assert "<blockquote><p>quoted words</p></blockquote>" in out
     assert "<hr>" in out
+
+
+def test_table_glued_to_the_line_above_still_renders():
+    # models write "Nonstop flights:" then the table with no blank line
+    (out,) = render(x="Nonstop flights:\n| Time | Airline |\n|---|---|\n"
+                      "| 10:13 AM | Frontier |\n\nafter")
+    assert "<p>Nonstop flights:</p><div class=\"table-wrap\"><table>" in out
+    assert "<tr><td>10:13 AM</td><td>Frontier</td></tr>" in out
+    assert "<p>after</p>" in out
+
+
+def test_a_pipe_in_prose_does_not_open_a_table():
+    (out,) = render(x="use a | b\nfor the pipe")
+    assert "<table" not in out
+    assert "<p>use a | b<br>for the pipe</p>" in out
