@@ -16,11 +16,14 @@ pinned here is WHEN:
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
 from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 from yantra.agent import Agent, TurnEnd
+from yantra.config import browser_close_policy
+from yantra.errors import ConfigError
 from yantra.async_agent import AsyncAgent
 from yantra.permissions import PermissionRequest, hold, yolo
 from yantra.tools.base import Tool
@@ -167,13 +170,96 @@ class TestTheBrowserLetsGo:
 
             def close(self):
                 self.closed = True
-        session = BrowserSession(profile=None, executable=None, headed=False)
+        session = BrowserSession(profile=None, executable=None, headed=False,
+                                 close_after=0.0)
         session._pw, session._browser = object(), object()
         session._page = page = Page()
         session.release()
         assert page.closed and session._page is None
 
     def test_release_with_nothing_open_starts_no_thread(self):
-        session = BrowserSession(profile=None, executable=None, headed=False)
+        session = BrowserSession(profile=None, executable=None, headed=False,
+                                 close_after=0.0)
         session.release()
         assert session._exec is None
+
+
+class _Page:
+    closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def _open_session(close_after):
+    """A session that believes it launched, around a page that records
+    whether it was closed -- and a worker, as a real open leaves one."""
+    session = BrowserSession(profile=None, executable=None, headed=False,
+                             close_after=close_after)
+    session._pw, session._browser = object(), object()
+    session._page = page = _Page()
+    session._call(lambda: None)        # starts the worker, as open() does
+    return session, page
+
+
+def _wait_for(check, seconds=2.0):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if check():
+            return True
+        time.sleep(0.01)
+    return check()
+
+
+class TestThePolicyIsYours:
+    """YANTRA_BROWSER_CLOSE: closing at the turn's end leaves no window,
+    and costs a follow-up its page. Neither is right for everyone."""
+
+    @pytest.mark.parametrize("raw, expected", [
+        ("", 0.0), ("turn", 0.0), ("model", None), ("never", None),
+        ("300", 300.0), ("2.5", 2.5)])
+    def test_the_setting_reads(self, monkeypatch, raw, expected):
+        monkeypatch.setenv("YANTRA_BROWSER_CLOSE", raw)
+        assert browser_close_policy() == expected
+
+    @pytest.mark.parametrize("raw", ["0", "-5", "soon"])
+    def test_a_setting_that_means_nothing_is_refused(self, monkeypatch, raw):
+        monkeypatch.setenv("YANTRA_BROWSER_CLOSE", raw)
+        with pytest.raises(ConfigError, match="YANTRA_BROWSER_CLOSE"):
+            browser_close_policy()
+
+    def test_model_leaves_it_open(self):
+        session, page = _open_session(None)
+        session.release()
+        assert not page.closed and session._page is page
+
+    def test_idle_keeps_the_page_for_the_next_turn(self):
+        session, page = _open_session(60.0)
+        session.release()
+        assert not page.closed and session._page is page
+        session._idle.cancel()
+
+    def test_idle_closes_once_nobody_used_it(self):
+        session, page = _open_session(0.05)
+        session.release()
+        assert _wait_for(lambda: page.closed)
+        assert session._page is None
+
+    def test_a_turn_that_uses_it_stops_the_idle_close(self):
+        session, page = _open_session(0.05)
+        session.release()
+        session._call(lambda: None)    # the next turn's first verb
+        time.sleep(0.2)
+        assert not page.closed
+
+    def test_an_idle_close_overtaken_on_the_worker_stands_down(self):
+        # the timer checked, then a verb got in before its close ran:
+        # the close must see it was overtaken rather than pull the page
+        session, page = _open_session(60.0)
+        session.release()
+        armed = session._uses
+        session._idle.cancel()
+        session._call(lambda: None)
+        session._idle_close(armed)
+        session._call(lambda: None)    # drain the worker
+        assert not page.closed

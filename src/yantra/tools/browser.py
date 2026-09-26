@@ -79,6 +79,7 @@ import shutil
 import signal
 import sqlite3
 import subprocess
+import threading
 import time
 from importlib.util import find_spec
 from pathlib import Path
@@ -86,9 +87,9 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, ClassVar
 
-from yantra.config import BROWSER_CHANNELS, browser_executable, \
-    browser_headed, browser_login_command, browser_profile, \
-    shadowed_by_shell
+from yantra.config import BROWSER_CHANNELS, browser_close_policy, \
+    browser_executable, browser_headed, browser_login_command, \
+    browser_profile, shadowed_by_shell
 from yantra.errors import ToolError
 from yantra.tools.base import Tool, ToolContext, require_str
 from yantra.tools.web_fetch import MAX_RESULT_CHARS, _clip
@@ -402,7 +403,8 @@ class BrowserSession:
 
     def __init__(self, profile: Path | None | str = "default",
                  executable: str | None = "default",
-                 headed: bool | None = None) -> None:
+                 headed: bool | None = None,
+                 close_after: float | None | str = "default") -> None:
         #: ``"default"``/None sentinels: read the environment once, at
         #: construction -- tests (and embedders) pass values instead.
         self._profile: Path | None = (
@@ -411,6 +413,16 @@ class BrowserSession:
             browser_executable() if executable == "default" else executable)
         self._headed: bool = (
             browser_headed() if headed is None else headed)
+        #: 0 = close as a turn ends, N = after N idle seconds, None = only
+        #: when asked (config.browser_close_policy, notes/92).
+        self._close_after: float | None = (
+            browser_close_policy() if close_after == "default"
+            else close_after)
+        #: Bumped by every verb, so an idle close armed before it can
+        #: tell it has been overtaken and stand down.
+        self._uses = 0
+        self._idle: threading.Timer | None = None
+        self._idle_lock = threading.Lock()
         self._pw = None
         self._browser = None   # ephemeral mode
         self._context = None   # persistent mode (launch_persistent_context)
@@ -423,6 +435,11 @@ class BrowserSession:
 
     def _call(self, fn):
         """Run fn on the session's single worker thread, await the result."""
+        with self._idle_lock:
+            self._uses += 1           # any idle close armed earlier is stale
+            if self._idle is not None:
+                self._idle.cancel()
+                self._idle = None
         if self._exec is None:
             self._exec = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="yantra-browser")
@@ -508,9 +525,9 @@ class BrowserSession:
 
     def _require_page(self):
         if self._page is None:
-            raise ToolError("no page open -- the browser closes when a turn "
-                            "ends, and refs from an earlier turn are gone; "
-                            "browser_open(url) first")
+            raise ToolError("no page open -- the browser was closed after "
+                            "an earlier turn (or never opened), and its refs "
+                            "went with it; browser_open(url) first")
         return self._page
 
     # -- the four verbs ----------------------------------------------------
@@ -529,15 +546,46 @@ class BrowserSession:
         return self._call(self._shutdown)
 
     def release(self) -> None:
-        """End of turn: close whatever is open, cheaply when nothing is.
+        """End of turn: close now, close later, or leave it -- by policy.
 
         No page and no worker means there is nothing to close, and
         spinning a thread up just to find that out would be paid on every
         turn by every session that never browsed.
         """
+        if self._close_after is None:
+            return                     # the model (or exit) closes it
         if self._pw is None and self._exec is None:
             return
-        self.close()
+        if not self._close_after:
+            self.close()
+            return
+        with self._idle_lock:
+            if self._idle is not None:
+                self._idle.cancel()
+            timer = threading.Timer(self._close_after, self._idle_close,
+                                    args=(self._uses,))
+            timer.daemon = True        # never keeps a finished process up
+            self._idle = timer
+        timer.start()
+
+    def _idle_close(self, armed_at: int) -> None:
+        """The idle timer fired. Checked twice: once here, and again ON
+        the worker, because a verb may have been queued in between -- and
+        a close that ran after it would pull the page from a live turn."""
+        with self._idle_lock:
+            if armed_at != self._uses or self._exec is None:
+                return
+            self._idle = None
+            worker = self._exec
+
+        def close_if_still_idle() -> bool:
+            if armed_at != self._uses:
+                return False
+            return self._shutdown()
+        try:
+            worker.submit(close_if_still_idle)
+        except RuntimeError:
+            pass  # the worker shut down meanwhile: already closed
 
     # -- bodies (all on the worker thread) ---------------------------------
 
@@ -936,8 +984,9 @@ class BrowserFill(_BrowserTool):
 class BrowserClose(_BrowserTool):
     name = "browser_close"
     description = (
-        "Shut the headless browser down and free it. Harmless if none is "
-        "open; a later browser_open starts a fresh one."
+        "Shut the browser down and free it -- call this once you have "
+        "what you needed from the web. Harmless if none is open; a later "
+        "browser_open starts a fresh one."
     )
     parameters: ClassVar[dict] = {
         "type": "object",

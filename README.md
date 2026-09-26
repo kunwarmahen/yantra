@@ -540,8 +540,10 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   without navigating ([notes/28](notes/28-browser-tools.md)).
   The browser closes by itself when a turn ends, so a question asked
   in the web UI does not leave a window open until the server stops;
-  a follow-up turn opens the page again, and a turn paused for
-  approval keeps it ([notes/92](notes/92-the-window-that-stayed-open.md)).
+  a turn paused for approval keeps it. `YANTRA_BROWSER_CLOSE=300`
+  keeps the page for follow-up turns and closes it after 300 idle
+  seconds instead; `YANTRA_BROWSER_CLOSE=model` leaves closing to
+  `browser_close` ([notes/92](notes/92-the-window-that-stayed-open.md)).
 - **The browser can be one you already have.**
   `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
   — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
@@ -2054,6 +2056,8 @@ src/yantra/
 │   │               The session closes itself when a turn ends (turn_ended ->
 │   │               release), not only on browser_close -- a window left open
 │   │               in the long-running web UI also held the profile lock;
+│   │               $YANTRA_BROWSER_CLOSE = turn | idle seconds | model, and
+│   │               an idle close re-checks on the worker that no verb got in;
 │   │               click/fill declare requires=("browser_open",)
 │   │               ([notes/92](notes/92-the-window-that-stayed-open.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool

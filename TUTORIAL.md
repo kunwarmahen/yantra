@@ -465,9 +465,17 @@ telling it saves an iteration.
 
 When the agent finishes answering, the browser closes by itself — you
 will not find a leftover window after asking something in the browser
-UI. If you follow up with "now click the cheapest one", it simply opens
-the page again. Your logins are safe: they live in the profile folder,
-not in the window ([notes/92](notes/92-the-window-that-stayed-open.md)).
+UI. If you follow up with "now click the cheapest one", it has to open
+the page again. If you usually keep going on the same site, put this in
+your `.env` instead:
+
+```bash
+YANTRA_BROWSER_CLOSE=300     # keep the page between turns; close after 5 idle minutes
+# YANTRA_BROWSER_CLOSE=model # never close on its own — only when the agent says so
+```
+
+Your logins are safe whichever you pick: they live in the profile
+folder, not in the window ([notes/92](notes/92-the-window-that-stayed-open.md)).
 
 Past about twenty tools, model selection accuracy hits a cliff, so only
 the top-K best-matching tools are **sent** each turn (BM25 over name and

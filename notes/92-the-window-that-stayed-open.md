@@ -129,28 +129,54 @@ Three rules decide when "ends" applies:
 A tool whose `turn_ended` raises is ignored: tidying up must never cost
 the answer it follows.
 
-## The tradeoff
+## The tradeoff, and who gets to make it
 
-A follow-up turn now starts with no page. "Click the cheapest one"
-after the answer means opening the results again. The model still has
-the URL in its history, and the error it gets without a page says why:
+Closing at the end of every turn costs the follow-up. "Click the
+cheapest one" after the answer finds no page, and a model that reaches
+for a ref from the last turn gets an error before it thinks to open
+the results again:
 
 ```
-no page open -- the browser closes when a turn ends, and refs from an
-earlier turn are gone; browser_open(url) first
+no page open -- the browser was closed after an earlier turn (or never
+opened), and its refs went with it; browser_open(url) first
 ```
 
-That costs a page load per follow-up. The alternative, a window that
-stays until an idle timer fires, leaves the exact thing the person
-complained about on screen for minutes after every answer, and still
-holds the profile lock the whole time. Logins are not affected: they
-live in the profile on disk ([note 28](28-browser-tools.md)), not in
-the open window.
+Which cost is worse depends on how the browser is used. For one
+question at a time, a window left on screen is the bug. For a
+conversation that works through a site over several turns, losing the
+page each time is the bug. So it is a setting, `YANTRA_BROWSER_CLOSE`:
+
+| value | what happens when a turn ends |
+|---|---|
+| `turn` (the default) | the browser closes |
+| a number, e.g. `300` | the page stays for the next turn; if nothing uses it for that many seconds, it closes |
+| `model` | nothing: only `browser_close`, or Yantra exiting, closes it |
+
+**AN IDLE CLOSE CHECKS TWICE.** The timer is armed as the turn ends and
+cancelled by the next browser call. The dangerous case is the moment
+between the timer firing and its close running: a new turn's
+`browser_open` can be queued in between, and a close that ran after it
+would pull the page out from under a live turn. Every browser call
+bumps a use counter, and the close compares it once when the timer
+fires and again on the browser's own thread just before it acts. If
+either check sees a newer call, it does nothing.
+
+`model` is for a person who wants the old behaviour. `browser_close`'s
+description now asks the model to call it once it has what it needed,
+but a model that has its answer mostly still does not, which is why
+`turn` is the default.
+
+An invalid value is refused at startup (`YANTRA_BROWSER_CLOSE must be
+turn, model, or a number of idle seconds`), not at the first page
+load. Logins are unaffected by all three: they live in the profile on
+disk ([note 28](28-browser-tools.md)), not in the open window.
 
 ## What was deliberately not built
 
-* **No idle timer.** It adds a thread, a clock and a race with the next
-  turn, all to keep open a window people want closed.
+* **No per-site or per-conversation policy.** One setting per process
+  covers the two real uses, one question and a working session. A
+  policy the model could change mid-turn would put the choice back
+  with the party that forgot to close the window.
 * **No generic "session" object for tools.** One hook on `Tool` covers
   the browser, and a background job or an open connection could use it
   later. A lifecycle framework with one user is a framework waiting for
@@ -193,7 +219,20 @@ no `load_skill`. Before the change, the same question spent its first
 iteration on `list_available_tools`, and in the reproduction that met a
 leftover lock, five more on `bash` clearing the profile.
 
-`2125 passed, 1 skipped` (was 2106). The new tests are in
+The idle setting on a real `/usr/bin/google-chrome`, with a 3-second
+window and each turn on its own thread, as the web UI runs them:
+
+```
+turn1: title: Example Domain
+after turn1, chrome procs: 9
+turn2 re-read same page (no url): title: Example Domain
+5s idle, chrome procs: 0 page: None
+```
+
+The second turn re-read the page the first one opened. Nothing used it
+for 3 seconds after that, and Chrome was gone.
+
+`2139 passed, 1 skipped` (was 2106). The new tests are in
 `tests/test_turn_release.py`: every way a turn ends releases, and a
 held turn and a child do not. There is also a test that the release
 has already happened when `TurnEnd` is seen. `tests/test_selector.py`

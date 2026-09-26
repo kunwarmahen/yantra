@@ -362,6 +362,36 @@ def browser_headed() -> bool:
         f"YANTRA_BROWSER_HEADED must be 1|0 (or true/false), got {raw!r}")
 
 
+def browser_close_policy() -> float | None:
+    """When the browser_* tools close on their own ($YANTRA_BROWSER_CLOSE).
+
+    Returns 0.0 for ``turn`` (the default: close as every turn ends), a
+    number of seconds for an idle close (the page survives into the next
+    turn, and goes once nobody has used it for that long), or None for
+    ``model`` (never on its own: browser_close, or the process exiting).
+
+    Three answers because the one default is right for one person and
+    wrong for another. Closing at the end of the turn is what makes a
+    question asked in the web UI leave no window behind; it is also what
+    turns "now click the cheapest one" into a fresh page load, and a
+    model that reaches for a ref from the last turn into an error.
+    """
+    raw = os.environ.get("YANTRA_BROWSER_CLOSE", "").strip().lower()
+    if raw in ("", "turn"):
+        return 0.0
+    if raw in ("model", "never", "off"):
+        return None
+    try:
+        seconds = float(raw)
+    except ValueError:
+        seconds = -1.0
+    if seconds <= 0:
+        raise ConfigError(
+            "YANTRA_BROWSER_CLOSE must be turn, model, or a number of idle "
+            f"seconds (e.g. 300), got {raw!r}")
+    return seconds
+
+
 def default_env_context() -> str:
     """Session awareness level from $YANTRA_ENV_CONTEXT.
 
