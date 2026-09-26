@@ -356,10 +356,18 @@ function setStatus(text) {
 }
 function hideStatus() { $("#statusline").classList.add("hidden"); }
 
+// Following the bottom is decided by where YOU last left the scrollbar,
+// never measured after an append: one tall tool panel lands far more
+// than any threshold below the fold and would read as "scrolled up".
+let followBottom = true;
+transcript.addEventListener("scroll", () => {
+  followBottom =
+    transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
+}, { passive: true });
+
 function scrollDown(force) {
-  const nearBottom =
-    transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 160;
-  if (force || nearBottom) transcript.scrollTop = transcript.scrollHeight;
+  if (force) followBottom = true;
+  if (followBottom) transcript.scrollTop = transcript.scrollHeight;
 }
 
 /* ---------- message rendering ---------- */
@@ -382,7 +390,7 @@ function addUserMessage(text, images = 0, replay = false) {
     wrap.append(note);
   }
   transcript.append(wrap);
-  if (!replay) scrollDown();
+  if (!replay) scrollDown(true);   // you just spoke: follow the reply
   return bubble;
 }
 
@@ -563,7 +571,13 @@ function onTurnEnd(env) {
     // leaving the operator staring at silence (mirrors render.py)
     const el = ensureAssistant();
     el.classList.remove("empty");
-    if (!ui.assistantText.trim()) el.textContent = "(no text in reply)";
+    if (!ui.assistantText.trim()) el.textContent = env.stop_reason === "max_tokens"
+      // Mirrors render.empty_reply_reason: silence after max_tokens is a
+      // full context window, not a long answer cut short.
+      ? "(no text in reply: the model ran out of room — the prompt likely " +
+        "filled its context window; check <PROVIDER>_CONTEXT_WINDOW " +
+        "matches the server's)"
+      : "(no text in reply)";
   }
   const foot = document.createElement("div");
   foot.className = "turn-foot";

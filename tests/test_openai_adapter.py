@@ -332,6 +332,25 @@ def test_reasoning_field_becomes_thinking_block(openai_settings):
     assert out["messages"] == [{"role": "assistant", "content": "the answer"}]
 
 
+def test_an_empty_reply_encodes_as_empty_string_never_null(openai_settings):
+    """A reply cut off before it said anything (max_tokens on a full
+    window, thinking only) has no text AND no tool calls. null content is
+    legal only beside tool_calls: Ollama 400s on a bare one ("invalid
+    message content type: <nil>"), and it stays in history -- so every
+    later turn of the session would fail the same way."""
+    provider = OpenAIProvider(openai_settings)
+    cut_off = Message("assistant", [ThinkingBlock(thinking="Found the")])
+    out = provider.build_request_body(messages=[cut_off], system=None,
+                                      tools=[], model="m", max_tokens=10)
+    assert out["messages"] == [{"role": "assistant", "content": ""}]
+
+    # beside tool calls, null stays: that is the dialect's own shape
+    calling = Message("assistant", [ToolCall(id="c1", name="t", arguments={})])
+    out = provider.build_request_body(messages=[calling], system=None,
+                                      tools=[], model="m", max_tokens=10)
+    assert out["messages"][0]["content"] is None
+
+
 class TestWhatAnswered:
     """notes/75: the build fingerprint rides out of both paths, because a
     hosted model has no weights digest and this is the nearest thing."""

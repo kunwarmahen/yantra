@@ -89,6 +89,14 @@ one-shot exits 130 (128+SIGINT convention).
   entry point, so CLI fixes land in both modes by construction.
 * **Empty end_turn gets a visible "(no text in reply)"** instead of
   silence + footer (happens when the model burns the turn on thinking).
+  When the stop was `max_tokens` it says so and names the likely cause:
+  the prompt filled the window, usually because the server runs a
+  smaller one than `<PROVIDER>_CONTEXT_WINDOW` claims, so compaction
+  never fired. Seen with `qwen3.8:latest` on a 32K Ollama window
+  configured as 64000: 32756 in / 12 out, all of it thinking. The empty
+  reply also goes back on the wire as `"content": ""`, never `null` --
+  Ollama rejects a bare null with a 400, and it would sit in history
+  failing every later turn.
 * `/usage` shows cache-write alongside cache-read; banner shows the
   sandbox cwd.
 

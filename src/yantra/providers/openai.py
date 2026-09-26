@@ -397,7 +397,12 @@ def _encode_message(message: Message) -> list[dict[str, Any]]:
             }
             for call in message.tool_calls()
         ]
-        entry: dict[str, Any] = {"role": "assistant", "content": text or None}
+        # null content is legal ONLY beside tool_calls. A reply cut off
+        # before it said anything (max_tokens on a full window) has
+        # neither, and Ollama answers a bare null with a 400 on every
+        # later turn -- one empty reply would poison the session.
+        entry: dict[str, Any] = {"role": "assistant",
+                                 "content": text or (None if calls else "")}
         if calls:
             entry["tool_calls"] = calls
         out.append(entry)

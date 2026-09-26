@@ -25,6 +25,22 @@ from yantra.types import (
 RESULT_PREVIEW_CHARS = 400
 
 
+def empty_reply_reason(stop_reason: str | None) -> str:
+    """Why a finished reply carries no text, in the words to show.
+
+    Silence after max_tokens is almost never a long answer cut short:
+    it is a prompt that filled the model's window and left the reply a
+    handful of tokens. The usual cause is a local server running a
+    smaller window than yantra was told, so compaction never fired.
+    The web client mirrors this sentence (static/app.js).
+    """
+    if stop_reason == "max_tokens":
+        return ("no text in reply: the model ran out of room -- the "
+                "prompt likely filled its context window; check "
+                "<PROVIDER>_CONTEXT_WINDOW matches the server's")
+    return "no text in reply"
+
+
 class Renderer:
     """Consumes one AgentEvent stream and paints the terminal."""
 
@@ -108,7 +124,7 @@ class Renderer:
                     if not response.message.text().strip():
                         # end_turn with only thinking/tool noise -- say so
                         # rather than leaving the user staring at silence
-                        self.console.print("[dim](no text in reply)[/dim]")
+                        self.console.print(f"[dim]({empty_reply_reason(response.stop_reason)})[/dim]")
                     # $ only when the slug has a known list price; an
                     # unknown model shows no figure at all, never a guess.
                     price = price_for(response.model)
