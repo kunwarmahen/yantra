@@ -185,4 +185,7 @@ model opened the page, typed `turbo` into the `[e1] textbox`, clicked
 `3419 in / 97 out · 4 iteration(s)`
 
 Continued by [notes/58](58-the-browser-you-already-have.md), which
-answers the walls this note admits to.
+answers the walls this note admits to. `browser_close` is no longer the
+only way the browser shuts: every turn closes it on the way out, because
+a model with its answer does not tidy up
+([notes/92](92-the-window-that-stayed-open.md)).

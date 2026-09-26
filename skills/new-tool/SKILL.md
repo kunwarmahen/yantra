@@ -71,6 +71,14 @@ it with a prefix, and the description is not rewritten.
      A one-line test that asserts it lands in `select(query, k)` for a
      plausible query is cheap, and its absence is invisible: the model
      just reports it has no such tool.
+   - **If the tool is useless without another one**, declare it:
+     `requires = ("browser_open",)`. Selection then sends the
+     prerequisite whenever it sends this tool
+     ([notes/92](../../notes/92-the-window-that-stayed-open.md)).
+   - **If the tool keeps something alive between calls** (a browser, a
+     connection), override `turn_ended()` to let it go. The loop calls
+     it when a turn ends; relying on the model to clean up leaves the
+     thing open.
 
 5. **Test it** in `tests/test_tools.py` (or its own module if the surface
    is large). Cover: the happy path, a bad argument raising `ToolError`,

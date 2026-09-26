@@ -463,6 +463,12 @@ navigating, and that second look has the content. Worth putting in any
 prompt that drives a big web app; the model can work it out alone, but
 telling it saves an iteration.
 
+When the agent finishes answering, the browser closes by itself — you
+will not find a leftover window after asking something in the browser
+UI. If you follow up with "now click the cheapest one", it simply opens
+the page again. Your logins are safe: they live in the profile folder,
+not in the window ([notes/92](notes/92-the-window-that-stayed-open.md)).
+
 Past about twenty tools, model selection accuracy hits a cliff, so only
 the top-K best-matching tools are **sent** each turn (BM25 over name and
 description). The autonomy floor always loads regardless, and calling any
@@ -2507,7 +2513,7 @@ Most carry a live receipt from a real run.
 | [16](notes/16-sandboxing.md) [17](notes/17-tool-selection.md) | containment; the tool cliff and BM25 |
 | [19](notes/19-responses-api.md) | the third dialect |
 | [22](notes/22-web-ui.md) | the browser UI |
-| [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) | the self-reliance tools, one note each |
+| [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) [92](notes/92-the-window-that-stayed-open.md) | the self-reliance tools, one note each; a browser that closes when the turn does |
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |

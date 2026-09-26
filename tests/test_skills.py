@@ -242,6 +242,14 @@ class TestRoster:
         assert ROSTER_HEADER in agent.prompt.get("skills")
         assert "- pr-review: Review a git diff" in agent.system
 
+    def test_roster_says_it_is_the_whole_list(self, tmp_path):
+        # a small model asked about flights once went looking for a
+        # flight skill: the roster must say an unlisted name does not exist
+        agent, _ = _wire(tmp_path, "pr-review")
+        layer = agent.prompt.get("skills")
+        assert "ONLY skills" in layer
+        assert "do not call load_skill at all" in layer
+
     def test_no_skills_means_no_layer_and_no_tool(self, tmp_path):
         agent = _agent()
         enable_skills(agent, tmp_path, home=tmp_path / "home")

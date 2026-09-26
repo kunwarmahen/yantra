@@ -69,6 +69,10 @@ class Tool(ABC):
     description: ClassVar[str]
     parameters: ClassVar[dict[str, Any]]
     read_only: ClassVar[bool] = False  # drives permission auto-approval
+    #: Tools this one is useless without -- selection offers them alongside
+    #: it (tools/selector.py). browser_fill with no browser_open in reach
+    #: is a tool the model can see and never successfully call.
+    requires: ClassVar[tuple[str, ...]] = ()
 
     def spec(self) -> ToolSpec:
         return ToolSpec(name=self.name, description=self.description,
@@ -97,6 +101,17 @@ class Tool(ABC):
         backend may override this.
         """
         return await asyncio.to_thread(self.run, args, ctx)
+
+    def turn_ended(self) -> None:
+        """The top-level turn is over: let go of whatever outlives a call.
+
+        Default: nothing -- most tools hold nothing between calls. A tool
+        that keeps something alive (a browser window) releases it here, so
+        a finished answer does not leave it open until the process exits.
+        Not called for a turn held for approval (its resume still needs
+        the state) nor from a sub-agent (it shares its parent's tools).
+        """
+        return None
 
 
 class ToolRegistry:

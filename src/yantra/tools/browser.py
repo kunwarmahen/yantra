@@ -508,7 +508,9 @@ class BrowserSession:
 
     def _require_page(self):
         if self._page is None:
-            raise ToolError("no page open -- browser_open(url) first")
+            raise ToolError("no page open -- the browser closes when a turn "
+                            "ends, and refs from an earlier turn are gone; "
+                            "browser_open(url) first")
         return self._page
 
     # -- the four verbs ----------------------------------------------------
@@ -525,6 +527,17 @@ class BrowserSession:
 
     def close(self) -> bool:
         return self._call(self._shutdown)
+
+    def release(self) -> None:
+        """End of turn: close whatever is open, cheaply when nothing is.
+
+        No page and no worker means there is nothing to close, and
+        spinning a thread up just to find that out would be paid on every
+        turn by every session that never browsed.
+        """
+        if self._pw is None and self._exec is None:
+            return
+        self.close()
 
     # -- bodies (all on the worker thread) ---------------------------------
 
@@ -823,6 +836,11 @@ class _BrowserTool(Tool):
     def __init__(self, browser: BrowserSession) -> None:
         self.browser = browser
 
+    def turn_ended(self) -> None:
+        # All four verbs share one session; release() is idempotent, so the
+        # three that find it already closed pay nothing (notes/92).
+        self.browser.release()
+
 
 class BrowserOpen(_BrowserTool):
     name = "browser_open"
@@ -834,7 +852,10 @@ class BrowserOpen(_BrowserTool):
         "browser_fill. Call again with NO url to re-read the current "
         "page. If a persistent profile is configured, logins survive "
         "restarts -- filling a login form once is enough. Bot checks and "
-        "captchas may still refuse; one page at a time."
+        "captchas may still refuse; one page at a time. This is the tool "
+        "for LIVE information a site shows or searches for you -- flights, "
+        "prices, schedules, availability, bookings, anything behind a "
+        "search form."
     )
     parameters: ClassVar[dict] = {
         "type": "object",
@@ -856,6 +877,7 @@ class BrowserOpen(_BrowserTool):
 
 class BrowserClick(_BrowserTool):
     name = "browser_click"
+    requires = ("browser_open",)  # no page without it
     description = (
         "Click an element on the open browser page by its ref ([eN] from "
         "your latest browser output) and get the refreshed page back -- "
@@ -881,6 +903,7 @@ class BrowserClick(_BrowserTool):
 
 class BrowserFill(_BrowserTool):
     name = "browser_fill"
+    requires = ("browser_open",)  # no page without it
     description = (
         "Type text into a textbox/textarea on the open browser page, or "
         "pick an option in a dropdown, by its [eN] ref; returns the "

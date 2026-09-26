@@ -538,6 +538,10 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   first snapshot of a heavy JavaScript app can arrive before the app
   has drawn, and `browser_open` with no url takes a second look
   without navigating ([notes/28](notes/28-browser-tools.md)).
+  The browser closes by itself when a turn ends, so a question asked
+  in the web UI does not leave a window open until the server stops;
+  a follow-up turn opens the page again, and a turn paused for
+  approval keeps it ([notes/92](notes/92-the-window-that-stayed-open.md)).
 - **The browser can be one you already have.**
   `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
   — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
@@ -1650,7 +1654,10 @@ src/yantra/
 │                   ([notes/36](notes/36-a-warning-before-the-stop.md));
 │                   turn_refusals keeps the turn's refusal codes after the
 │                   stream is gone, for a caller that never read it
-│                   ([notes/65](notes/65-the-turn-behind-the-red-line.md))
+│                   ([notes/65](notes/65-the-turn-behind-the-red-line.md));
+│                   every tool's turn_ended() as a turn ends -- before TurnEnd
+│                   is yielded, never for a held turn or a sub-agent
+│                   ([notes/92](notes/92-the-window-that-stayed-open.md))
 ├── async_agent.py  the loop's async twin: same rules, awaited -- one event
 │                   loop drives K independent conversations ([notes/11](notes/11-async.md));
 │                   batch width capped by max_parallel_tools (semaphore inside
@@ -2003,7 +2010,10 @@ src/yantra/
 ├── tools/
 │   ├── base.py     Tool ABC (schema + summary + run -> str | ToolOutput),
 │   │               ToolRegistry (runtime disable/enable — live-checked,
-│   │               reversible; unregister stays the permanent kill-switch), arg validators
+│   │               reversible; unregister stays the permanent kill-switch), arg validators;
+│   │               two optional seams: requires (tools selection brings along)
+│   │               and turn_ended() (let go of what outlives a call)
+│   │               ([notes/92](notes/92-the-window-that-stayed-open.md))
 │   ├── fs.py       read_file / list_dir / write_file / edit_file (+ path sandbox)
 │   ├── glob.py     glob — find files by NAME ('**' recursion, newest-first,
 │   │               grep's skip rules); read-only so it never gates ([notes/23](notes/23-glob.md))
@@ -2040,7 +2050,12 @@ src/yantra/
 │   │               The login window runs in its own process group and a
 │   │               Ctrl-C sends it ONE SIGINT -- measured, the only signal
 │   │               after which Chrome writes its cookies (SIGTERM saves
-│   │               none) ([notes/61](notes/61-the-signal-that-saves.md))
+│   │               none) ([notes/61](notes/61-the-signal-that-saves.md)).
+│   │               The session closes itself when a turn ends (turn_ended ->
+│   │               release), not only on browser_close -- a window left open
+│   │               in the long-running web UI also held the profile lock;
+│   │               click/fill declare requires=("browser_open",)
+│   │               ([notes/92](notes/92-the-window-that-stayed-open.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,
@@ -2073,7 +2088,9 @@ src/yantra/
 │   │               because nobody types browser_open -- and b=0.30 damps the
 │   │               length penalty that ranked a family's entry point below
 │   │               the terse siblings that only work once it has run
-│   │               ([notes/60](notes/60-the-tool-that-explained-itself.md))
+│   │               ([notes/60](notes/60-the-tool-that-explained-itself.md));
+│   │               a picked tool brings its requires along, in the same k,
+│   │               never displacing a pin ([notes/92](notes/92-the-window-that-stayed-open.md))
 │   ├── search.py   grep — ripgrep subprocess when available, pure-python
 │   │               walker fallback (identical output contract)
 │   ├── memory.py   scratchpad: write_note / recall_notes — JSON store under

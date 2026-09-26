@@ -161,6 +161,24 @@ def _approval_turn(agent) -> str:
     return agent.clock_turn or agent._turn_id
 
 
+def _release_turn_tools(agent) -> None:
+    """The turn is over: every tool lets go of what it kept alive.
+
+    A browser opened for one question used to stay open until the process
+    exited -- in the web UI, until the server stopped -- because only the
+    model could close it, and a model that has its answer does not tidy
+    up. Skipped on a sub-agent: its tools are its parent's objects, and a
+    child finishing is the middle of its parent's turn, not the end.
+    """
+    if agent.clock_turn:
+        return
+    for tool in agent.registry:
+        try:
+            tool.turn_ended()
+        except Exception:
+            pass  # tidying up must never cost the answer it follows
+
+
 def _with_approval_notice(agent, messages: list[Message]) -> list[Message]:
     """The approval clock's sentence, when it has changed (notes/80).
 
@@ -381,7 +399,7 @@ class Agent:
             blocks.extend(images)
         self.history.append(Message("user", blocks))
         self._begin_turn()
-        yield from self._turn()
+        yield from self._turn_then_release()
 
     def resume(self, answers: dict[str, Answer]) -> Iterator[AgentEvent]:
         """Continue a turn that stopped for approval (notes/88).
@@ -427,7 +445,7 @@ class Agent:
             call = calls[request.call_id]
             yield ToolExecuted(call=call, result=resolved[call.id],
                                refusal=refusals.get(call.id))
-        yield from self._turn()
+        yield from self._turn_then_release()
 
     def abandon_held(self) -> bool:
         """Set a held turn aside: its waiting calls are answered as never
@@ -471,6 +489,30 @@ class Agent:
         self._turn_id = uuid.uuid4().hex
         self._approval_told = None
         self.turn_refusals = {}
+
+    def _turn_then_release(self) -> Iterator[AgentEvent]:
+        """``_turn``, with the tools released as it ends (notes/92).
+
+        Released BEFORE the TurnEnd is yielded, not in a ``finally``: a
+        consumer that returns on TurnEnd (``run`` does) never resumes the
+        generator, and a window left open until garbage collection is the
+        bug this fixes. A held turn keeps everything -- its resume still
+        needs the page it was about to act on.
+        """
+        ended = False
+        try:
+            for event in self._turn():
+                if isinstance(event, TurnEnd):
+                    ended = True
+                    if event.reason != "held":
+                        _release_turn_tools(self)
+                yield event
+        except BaseException:
+            # interrupted or failed: over too -- but a consumer dropping
+            # the stream AFTER the TurnEnd (run() does) is not a new end
+            if not ended:
+                _release_turn_tools(self)
+            raise
 
     def _turn(self) -> Iterator[AgentEvent]:
         """The loop proper: model call, tools, repeat -- shared by a new

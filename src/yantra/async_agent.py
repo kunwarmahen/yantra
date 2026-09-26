@@ -55,6 +55,7 @@ from yantra.agent import (
     ToolExecuted,
     TurnEnd,
     _batch_message,
+    _release_turn_tools,
     _approval_turn,
     _truncate_middle,
     _with_approval_notice,
@@ -232,7 +233,7 @@ class AsyncAgent:
             blocks.extend(images)
         self.history.append(Message("user", blocks))
         self._begin_turn()
-        async for event in self._turn():
+        async for event in self._turn_then_release():
             yield event
 
     async def resume(self, answers: dict[str, Answer]
@@ -269,7 +270,7 @@ class AsyncAgent:
             call = calls[request.call_id]
             yield ToolExecuted(call=call, result=resolved[call.id],
                                refusal=refusals.get(call.id))
-        async for event in self._turn():
+        async for event in self._turn_then_release():
             yield event
 
     def abandon_held(self) -> bool:
@@ -304,6 +305,22 @@ class AsyncAgent:
         self._turn_id = uuid.uuid4().hex
         self._approval_told = None
         self.turn_refusals = {}
+
+    async def _turn_then_release(self) -> AsyncIterator[AgentEvent]:
+        """The sync twin's ``_turn_then_release``; the release runs on a
+        worker thread, because closing a browser blocks."""
+        ended = False
+        try:
+            async for event in self._turn():
+                if isinstance(event, TurnEnd):
+                    ended = True
+                    if event.reason != "held":
+                        await asyncio.to_thread(_release_turn_tools, self)
+                yield event
+        except BaseException:
+            if not ended:   # cancelled: no awaiting from here
+                _release_turn_tools(self)
+            raise
 
     async def _turn(self) -> AsyncIterator[AgentEvent]:
         """The loop proper, shared by a new message and a resumed hold."""

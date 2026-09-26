@@ -61,7 +61,10 @@ ROSTER_HEADER = (
     "Skills available to you -- procedural knowledge written for THIS "
     "project. When a task matches one, call load_skill with its name and "
     "follow the instructions it returns BEFORE doing the work; they are "
-    "more specific than your defaults and were written by the operator."
+    "more specific than your defaults and were written by the operator. "
+    "These are the ONLY skills: when none of them fits the task, do not "
+    "call load_skill at all -- use your tools directly. A skill name that "
+    "is not listed here does not exist."
 )
 
 #: Appended only when some skill is delegated -- an unmarked roster would

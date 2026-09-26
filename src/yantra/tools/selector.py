@@ -217,7 +217,38 @@ class ToolCatalog:
             if score <= 0:     # floor: no vocabulary overlap -> exclude
                 break
             chosen.setdefault(tool.name, tool)
-        return list(chosen.values())
+        return _with_prerequisites(chosen, by_name, pins, k)
+
+
+def _with_prerequisites(chosen: dict[str, Tool], by_name: dict[str, Tool],
+                        pins: Iterable[str], k: int) -> list[Tool]:
+    """Bring each chosen tool's ``requires`` along, within the same k.
+
+    Retrieval scores tools one at a time, so it can pick browser_fill
+    ("find me a flight" shares a word with it) and miss browser_open,
+    the only one that can start a session -- which leaves the model a
+    tool it can see and never use, and sends a small one hunting for a
+    skill that does not exist. A prerequisite takes the slot of the
+    lowest-ranked retrieved tool; pins are never displaced.
+    """
+    pinned = set(pins)
+    order = list(chosen)
+    for name in list(order):
+        if name not in chosen:
+            continue            # traded away for an earlier prerequisite
+        for need in getattr(chosen[name], "requires", ()):
+            if need in chosen or need not in by_name:
+                continue
+            if len(chosen) >= k:
+                spare = [n for n in reversed(order)
+                         if n not in pinned and n != name]
+                if not spare:
+                    continue    # nothing retrieved to trade: pins win
+                del chosen[spare[0]]
+                order.remove(spare[0])
+            chosen[need] = by_name[need]
+            order.append(need)
+    return [chosen[n] for n in order]
 
 
 def query_from_transcript(history: list, max_recent: int = 6) -> str:

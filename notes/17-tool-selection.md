@@ -190,6 +190,12 @@ descriptions; (2) this exact failure is why the discovery hatch is PINNED —
 the live model noticed the mismatch and called `list_available_tools`
 on its own.
 
+Retrieval scores tools one at a time, so it can also pick a verb and
+miss the tool that verb needs first: "find me fligth to Detroit"
+retrieved browser_fill and not browser_open. A tool can now declare
+`requires`, and selection brings the prerequisite along within the same
+k ([notes/92](92-the-window-that-stayed-open.md)).
+
 Which is also why discovery must be FRICTIONLESS: `confirm_gate` never
 prompts for read-only tools, because a permission wall in front of the
 hatch turns every discovery question into a dead end.

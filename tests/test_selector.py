@@ -515,3 +515,53 @@ class TestLoopDisabledTool:
                   if hasattr(e, "result") and e.result.is_error]
         assert errors, "disabled call must fail as data"
         assert "disabled by the operator" in errors[0].content
+
+
+class TestPrerequisites:
+    """A verb retrieved without the tool that makes it usable is worse
+    than no verb: "find me a flight" once reached browser_fill and not
+    browser_open, and a small model went hunting for a flight skill."""
+
+    def _with_requires(self, name, description, requires):
+        tool = _mk(name, description)
+        type(tool).requires = requires
+        return tool
+
+    def _family(self, *extra):
+        return ToolCatalog([
+            _mk("browser_open", "open a url in a browser"),
+            self._with_requires("browser_fill", "fill text into a form "
+                                "field to find results", ("browser_open",)),
+            *extra,
+        ])
+
+    def test_the_prerequisite_comes_along(self):
+        names = [t.name for t in self._family().select("find a flight", k=5,
+                                                       must_include=())]
+        assert names == ["browser_fill", "browser_open"]
+
+    def test_it_takes_the_last_retrieved_slot_not_a_pin(self):
+        catalog = self._family(_mk("pinned", "always here"),
+                               _mk("finder", "find find files"))
+        names = [t.name for t in catalog.select(
+            "find", k=3, must_include=("pinned",))]
+        assert names[0] == "pinned"
+        assert "browser_open" in names and len(names) == 3
+        assert "browser_fill" in names          # the tool that asked for it
+
+    def test_pins_are_never_traded_away(self):
+        catalog = self._family(_mk("pinned", "always here"))
+        names = [t.name for t in catalog.select(
+            "find", k=1, must_include=("pinned",))]
+        assert names == ["pinned"]
+
+    def test_a_prerequisite_nobody_registered_is_skipped(self):
+        catalog = ToolCatalog([self._with_requires(
+            "lonely", "find things", ("not_here",))])
+        assert [t.name for t in catalog.select("find", k=3,
+                                               must_include=())] == ["lonely"]
+
+    def test_the_real_browser_verbs_declare_it(self):
+        from yantra.tools.browser import BrowserClick, BrowserFill
+        assert BrowserClick.requires == ("browser_open",)
+        assert BrowserFill.requires == ("browser_open",)

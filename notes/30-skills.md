@@ -340,6 +340,12 @@ changed. If your edit is half-saved and the file is broken, you get the
 copy from startup rather than nothing — a syntax error should not take a
 working skill away in the middle of a task.
 
+The roster also says it is the whole list. A small model asked
+about flights, with `load_skill` in front of it and no obvious web tool,
+went looking for a flight skill; the header now says that when none
+fits, `load_skill` is not called at all, and that an unlisted name does
+not exist ([notes/92](92-the-window-that-stayed-open.md)).
+
 ## Using them
 
 ```bash
