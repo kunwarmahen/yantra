@@ -188,4 +188,7 @@ Continued by [notes/58](58-the-browser-you-already-have.md), which
 answers the walls this note admits to. `browser_close` is no longer the
 only way the browser shuts: every turn closes it on the way out, because
 a model with its answer does not tidy up
-([notes/92](92-the-window-that-stayed-open.md)).
+([notes/92](92-the-window-that-stayed-open.md)). A fifth verb,
+`browser_handoff`, gives the page to a person — for a sign-in the agent
+cannot do, or a purchase it should not
+([notes/93](93-a-page-for-a-person.md)).

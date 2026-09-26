@@ -8,9 +8,11 @@ todo_write/todo_read for live plan state). Anything beyond these is
 MCP's job -- that's what the mcp__server__tool namespace is for.
 
 One family self-selects: OPERATE (browser_open/click/fill/close on a
-headless Chromium) registers ONLY when playwright is importable -- the
-optional ``[browse]`` extra is its own opt-in. Users who never asked
-for a browser keep sixteen tools; installing it brings twenty.
+headless Chromium, and browser_handoff to give the page to a person)
+registers ONLY when playwright is importable -- the optional
+``[browse]`` extra is its own opt-in. Users who never asked for a
+browser keep sixteen tools; installing it brings twenty-one (twenty
+with $YANTRA_BROWSER_HANDOFF=off).
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from yantra.tools.discover import discover_tools, register_tool_dirs
 from yantra.tools.browser import (
     BrowserClick,
     BrowserClose,
+    BrowserHandoff,
     BrowserFill,
     BrowserOpen,
     BrowserSession,
@@ -49,6 +52,7 @@ __all__ = [
     "BashStart",
     "BrowserClick",
     "BrowserClose",
+    "BrowserHandoff",
     "BrowserFill",
     "BrowserOpen",
     "BrowserSession",

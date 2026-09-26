@@ -81,6 +81,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+import webbrowser
 from importlib.util import find_spec
 from pathlib import Path
 from urllib.parse import urlparse
@@ -88,8 +89,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, ClassVar
 
 from yantra.config import BROWSER_CHANNELS, browser_close_policy, \
-    browser_executable, browser_headed, browser_login_command, \
-    browser_profile, shadowed_by_shell
+    browser_executable, browser_handoff, browser_headed, \
+    browser_login_command, browser_profile, has_screen, shadowed_by_shell
 from yantra.errors import ToolError
 from yantra.tools.base import Tool, ToolContext, require_str
 from yantra.tools.web_fetch import MAX_RESULT_CHARS, _clip
@@ -140,6 +141,11 @@ _COOKIE_KEY_ARG = "--password-store=basic"
 #: is for a slow disk and a big profile, and a person who wants it gone
 #: sooner presses Ctrl-C again.
 LOGIN_CLOSE_SECONDS = 15.0
+
+#: How long a handed-back window waits for the person before it is closed
+#: for them. Long enough to find a phone for 2FA; short enough that a
+#: window nobody noticed does not hold the turn for the afternoon.
+HANDOFF_WAIT_SECONDS = 600.0
 
 _BROWSER_EXTRA_HINT = (
     "playwright is not installed -- the browser_* tools are the optional "
@@ -427,6 +433,10 @@ class BrowserSession:
         self._browser = None   # ephemeral mode
         self._context = None   # persistent mode (launch_persistent_context)
         self._page = None
+        #: The open page's address, kept by the worker after every
+        #: snapshot -- so an approval prompt, on another thread, can name
+        #: the page a handoff would show without touching Playwright.
+        self._url = ""
         self._elements: dict[str, dict] = {}
         self._exec: ThreadPoolExecutor | None = None
         self._display: _VirtualDisplay | None = None
@@ -518,6 +528,7 @@ class BrowserSession:
                 except Exception:
                     pass  # tearing down a corpse; never mask the real error
         self._pw = self._browser = self._context = self._page = None
+        self._url = ""
         self._elements = {}
         if self._display is not None:
             self._display.stop()  # outlives the browser otherwise
@@ -544,6 +555,15 @@ class BrowserSession:
 
     def close(self) -> bool:
         return self._call(self._shutdown)
+
+    @property
+    def url(self) -> str:
+        """The page a handoff would show; "" when none is open."""
+        return self._url
+
+    def handoff(self, mode: str, reach: str) -> str:
+        """Give the open page to the person (browser_handoff)."""
+        return self._call(lambda: self._handoff(mode, reach))
 
     def release(self) -> None:
         """End of turn: close now, close later, or leave it -- by policy.
@@ -590,6 +610,7 @@ class BrowserSession:
     # -- bodies (all on the worker thread) ---------------------------------
 
     def _snapshot(self) -> str:
+        self._url = self._page.url
         data = self._page.evaluate(_SNAPSHOT_JS)
         title = (self._page.title() or "").strip()
         header = (f"title: {title}\nsource: {self._page.url}\n\n" if title
@@ -695,6 +716,59 @@ class BrowserSession:
         self._settle()
         return self._snapshot()
 
+    def _handoff(self, mode: str, reach: str) -> str:
+        """The page goes to a person. ``finish``: theirs from here on --
+        the agent's browser closes, and the page opens in THEIR browser
+        (or is a link, when this machine has no screen for one).
+        ``return``: a window on the agent's own profile, and the agent
+        carries on once the person closes it."""
+        url = self._require_page().url
+        if mode == "finish":
+            self._teardown()   # done here; nothing left to hold the profile
+            if reach == "window" and webbrowser.open(url):
+                return (f"Opened {url} in the person's own browser. Your "
+                        "part is done: say in your answer what is on that "
+                        "page and what is left for them to do there, and "
+                        "do not continue on this site.")
+            return (f"Nothing can open a window from here, so the page "
+                    f"goes to the person as a link. Put this address in "
+                    f"your answer, say what they will find there and what "
+                    f"is left for them to do, and do not continue on this "
+                    f"site:\n{url}")
+
+        if reach != "window" or not has_screen():
+            raise ToolError(
+                "no screen here for a window the person could use -- hand "
+                "the page over with mode='finish' (they get a link), or "
+                "ask them to sign in themselves with: "
+                f"uv run yantra --browse-login {url}")
+        if self._profile is None:
+            raise ToolError(
+                "mode='return' needs a browser profile, or whatever the "
+                "person does in the window is gone when it closes -- "
+                "YANTRA_BROWSER_PROFILE is not set. Use mode='finish'.")
+        self._teardown()   # one browser per profile: ours steps aside
+        person_closed = _person_window(self._profile, url, self._executable,
+                                       HANDOFF_WAIT_SECONDS)
+        self._launch()
+        try:
+            self._page.goto(url, wait_until="domcontentloaded",
+                            timeout=GOTO_TIMEOUT_MS)
+        except Exception as exc:
+            raise ToolError(
+                f"the person is done, but {url} would not load again: "
+                f"{type(exc).__name__}: {exc}") from exc
+        self._settle()
+        said = ("The person closed the window; whatever they did there "
+                "(a sign-in, a captcha) is in the profile now."
+                if person_closed else
+                f"The person had not closed the window after "
+                f"{HANDOFF_WAIT_SECONDS / 60:.0f} minutes, so it was closed "
+                "for them; what they did may be unfinished -- check the "
+                "page before relying on it.")
+        return (f"{said} Reopened the page you handed over; it shows now:"
+                f"\n\n{self._snapshot()}")
+
     def _shutdown(self) -> bool:
         was_open = self._page is not None
         self._teardown()
@@ -742,7 +816,8 @@ def _cookie_count(profile: Path) -> int:
 
 
 def _run_unautomated_login(command: str, profile: Path,
-                           url: str | None) -> None:
+                           url: str | None,
+                           timeout: float | None = None) -> bool:
     """Run a real browser as a PLAIN SUBPROCESS, wait for it to close.
 
     NO PLAYWRIGHT, deliberately -- this is the whole reason the function
@@ -761,6 +836,10 @@ def _run_unautomated_login(command: str, profile: Path,
     written by the SAME browser: Chromium refuses a profile stamped by
     a newer version of itself. That is why this path opens only when
     YANTRA_BROWSER_EXECUTABLE names the browser both halves will use.
+
+    With ``timeout``, a window still open after that long is asked to
+    close the way Ctrl-C asks it (_close_login_browser). Returns True
+    when the person closed it, False when time ran out.
     """
     argv = [command, f"--user-data-dir={profile}", "--no-first-run",
             "--no-default-browser-check", _COOKIE_KEY_ARG]
@@ -774,8 +853,13 @@ def _run_unautomated_login(command: str, profile: Path,
     except OSError as exc:
         raise ToolError(
             f"could not run {command}: {type(exc).__name__}: {exc}") from exc
+    person_closed = True
     try:
-        proc.wait()  # the window IS the progress bar
+        # the window IS the progress bar; --browse-login waits forever
+        proc.wait(**({} if timeout is None else {"timeout": timeout}))
+    except subprocess.TimeoutExpired:
+        _close_login_browser(proc)
+        person_closed = False
     except KeyboardInterrupt:
         closed = _close_login_browser(proc)
         raise LoginInterrupted(closed=closed,
@@ -794,6 +878,7 @@ def _run_unautomated_login(command: str, profile: Path,
             "  * the profile sits in a directory the browser is not allowed "
             "to write (snap confinement cannot see hidden dirs) -- put "
             "YANTRA_BROWSER_PROFILE somewhere visible in your home")
+    return person_closed
 
 
 def run_login_session(profile: Path, url: str | None = None,
@@ -832,11 +917,25 @@ def run_login_session(profile: Path, url: str | None = None,
         executable = browser_executable()
     check_profile_reachable(profile, executable)
     profile.mkdir(parents=True, exist_ok=True)
+    _person_window(profile, url, executable)
+    # Counted after the window is gone: Chromium writes its cookie store
+    # on the way out, so asking any earlier reads a file the browser has
+    # not finished with.
+    return _cookie_count(profile)
 
+
+def _person_window(profile: Path, url: str | None, executable: str | None,
+                   timeout: float | None = None) -> bool:
+    """A window for a PERSON on ``profile``, open until they close it.
+
+    Both doors of run_login_session, shared with browser_handoff: the
+    plain subprocess when a browser of this machine's is named, else
+    Playwright's headed Chromium. True when the person closed it, False
+    when ``timeout`` ran out first and the window was closed for them.
+    """
     command = browser_login_command(executable)
     if command is not None:
-        _run_unautomated_login(command, profile, url)
-        return _cookie_count(profile)
+        return _run_unautomated_login(command, profile, url, timeout)
 
     try:
         from playwright.sync_api import sync_playwright
@@ -857,7 +956,17 @@ def run_login_session(profile: Path, url: str | None = None,
         if url:
             page.goto(url, wait_until="domcontentloaded",
                       timeout=GOTO_TIMEOUT_MS)
-        context.wait_for_event("close")  # the window IS the progress bar
+        if timeout is None:
+            context.wait_for_event("close")  # the window IS the progress bar
+            return True
+        try:
+            context.wait_for_event("close", timeout=timeout * 1000)
+            return True
+        except Exception as exc:
+            if "Timeout" not in type(exc).__name__:
+                raise
+            context.close()
+            return False
     except Exception as exc:
         raise ToolError(
             f"could not open the login window: {type(exc).__name__}: {exc}\n"
@@ -870,10 +979,6 @@ def run_login_session(profile: Path, url: str | None = None,
             pw.stop()
         except Exception:
             pass  # the corpse's problems are not the caller's
-    # Counted after pw.stop(): Chromium writes its cookie store on the
-    # way out, so asking any earlier reads a file the browser has not
-    # finished with.
-    return _cookie_count(profile)
 
 
 class _BrowserTool(Tool):
@@ -1003,15 +1108,74 @@ class BrowserClose(_BrowserTool):
         return "no browser was open"
 
 
+class BrowserHandoff(_BrowserTool):
+    name = "browser_handoff"
+    description = (
+        "Give the page you have open to the PERSON. mode='finish' when the "
+        "rest is theirs to do: anything that spends money (a purchase, a "
+        "booking), needs payment or personal details, or that they should "
+        "decide themselves -- it opens the page in their own browser (or "
+        "gives them a link) and your browsing ends. Never type payment "
+        "details yourself; hand off instead. mode='return' when you need "
+        "them for a moment: a sign-in, 2FA, a captcha -- a window opens "
+        "for them on your browser profile, and once they close it you get "
+        "the page back, signed in, and carry on."
+    )
+    parameters: ClassVar[dict] = {
+        "type": "object",
+        "properties": {
+            "mode": {"type": "string", "enum": ["finish", "return"],
+                     "description": "'finish': theirs from here on. "
+                                    "'return': they help, then you "
+                                    "continue."},
+            "reason": {"type": "string",
+                       "description": "One sentence for the person: what "
+                                      "they are being handed and what to "
+                                      "do with it."},
+        },
+        "required": ["mode", "reason"],
+        "additionalProperties": False,
+    }
+    #: Hands over the page the agent is ON, never an address it was told.
+    #: A page that talks the model into "sending the user to" a lookalike
+    #: sign-in would need a url argument; there is none, so the address
+    #: in the approval prompt is the one that opens.
+    requires = ("browser_open",)
+
+    def __init__(self, browser: BrowserSession, reach: str) -> None:
+        super().__init__(browser)
+        self.reach = reach
+
+    def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
+        how = ("the rest is yours" if args.get("mode") == "finish"
+               else "help, then close the window")
+        return (f"hand the browser to you ({how}): "
+                f"{self.browser.url or '(no page open)'} -- "
+                f"{args.get('reason', '')}")
+
+    def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
+        mode = require_str(args, "mode").strip()
+        if mode not in ("finish", "return"):
+            raise ToolError("mode must be 'finish' or 'return'")
+        require_str(args, "reason")
+        return self.browser.handoff(mode, self.reach)
+
+
 def browser_available() -> bool:
     """True when playwright is importable -- default_registry's gate."""
     return find_spec("playwright") is not None
 
 
 def browser_tools() -> tuple[Tool, ...]:
-    """The four browser verbs sharing one session, or () without the extra."""
+    """The browser verbs sharing one session, or () without the extra:
+    the four that drive it, and browser_handoff unless it is switched
+    off ($YANTRA_BROWSER_HANDOFF=off)."""
     if not browser_available():
         return ()
     browser = BrowserSession()  # reads $YANTRA_BROWSER_PROFILE itself
-    return (BrowserOpen(browser), BrowserClick(browser),
-            BrowserFill(browser), BrowserClose(browser))
+    tools: tuple[Tool, ...] = (BrowserOpen(browser), BrowserClick(browser),
+                               BrowserFill(browser), BrowserClose(browser))
+    reach = browser_handoff()   # None: the operator switched it off
+    if reach is not None:
+        tools += (BrowserHandoff(browser, reach),)
+    return tools

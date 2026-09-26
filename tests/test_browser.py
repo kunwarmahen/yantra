@@ -45,6 +45,8 @@ def _no_inherited_browser_env(monkeypatch):
     """The suite must say what browser it means -- never the dev's .env."""
     monkeypatch.delenv("YANTRA_BROWSER_EXECUTABLE", raising=False)
     monkeypatch.delenv("YANTRA_BROWSER_HEADED", raising=False)
+    monkeypatch.delenv("YANTRA_BROWSER_CLOSE", raising=False)
+    monkeypatch.delenv("YANTRA_BROWSER_HANDOFF", raising=False)
 
 
 #: What every launch carries now: headless unless asked otherwise, the
@@ -996,14 +998,23 @@ class TestRegistration:
         assert len(registry) == 16
         assert "browser_open" not in registry
 
-    def test_with_extra_four_tools_share_one_session(self, monkeypatch):
+    def test_with_extra_five_tools_share_one_session(self, monkeypatch):
         monkeypatch.setattr("yantra.tools.browser.find_spec",
                             lambda name: True)
+        monkeypatch.delenv("YANTRA_BROWSER_HANDOFF", raising=False)
         registry = default_registry()
         names = ("browser_open", "browser_click", "browser_fill",
-                 "browser_close")
-        assert len(registry) == 20
+                 "browser_close", "browser_handoff")
+        assert len(registry) == 21
         for name in names:
             assert name in registry
         sessions = {registry.get(n).browser for n in names}
-        assert len(sessions) == 1  # one browser behind all four verbs
+        assert len(sessions) == 1  # one browser behind every verb
+
+    def test_handoff_off_is_not_offered(self, monkeypatch):
+        monkeypatch.setattr("yantra.tools.browser.find_spec",
+                            lambda name: True)
+        monkeypatch.setenv("YANTRA_BROWSER_HANDOFF", "off")
+        registry = default_registry()
+        assert len(registry) == 20
+        assert "browser_handoff" not in registry

@@ -392,6 +392,37 @@ def browser_close_policy() -> float | None:
     return seconds
 
 
+def has_screen() -> bool:
+    """A display a person could be looking at (X11 or Wayland)."""
+    return bool(os.environ.get("DISPLAY")
+                or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def browser_handoff() -> str | None:
+    """How browser_handoff reaches a person ($YANTRA_BROWSER_HANDOFF).
+
+    ``window``: a real window on this machine -- the page in the
+    person's own browser to finish, or a visible one on the agent's
+    profile to help and hand back. ``link``: nothing opens; the model
+    gives the address in its answer, which is the only road that works
+    when Yantra runs in a container or on a server the person reaches
+    from elsewhere. ``off`` (None): the tool is not offered at all.
+
+    Unset, it follows the machine: ``window`` when a screen is attached,
+    ``link`` when not. A window on a display nobody is watching is a
+    turn that waits ten minutes for no one.
+    """
+    raw = os.environ.get("YANTRA_BROWSER_HANDOFF", "").strip().lower()
+    if not raw:
+        return "window" if has_screen() else "link"
+    if raw in ("window", "link"):
+        return raw
+    if raw in ("off", "0", "false", "no"):
+        return None
+    raise ConfigError(
+        f"YANTRA_BROWSER_HANDOFF must be window, link or off, got {raw!r}")
+
+
 def default_env_context() -> str:
     """Session awareness level from $YANTRA_ENV_CONTEXT.
 

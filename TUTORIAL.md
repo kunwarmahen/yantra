@@ -366,7 +366,7 @@ you install the browser extra.
 | RUN LONG | `bash_start` `bash_poll` `bash_kill` |
 | LOOK OUT | `web_fetch` |
 | REMEMBER | `write_note` `recall_notes` (durable) · `todo_write` `todo_read` (live plan) |
-| OPERATE | `browser_open` `browser_click` `browser_fill` `browser_close` — only with `[browse]` |
+| OPERATE | `browser_open` `browser_click` `browser_fill` `browser_close` `browser_handoff` — only with `[browse]` |
 
 A few deserve a sentence each:
 
@@ -476,6 +476,17 @@ YANTRA_BROWSER_CLOSE=300     # keep the page between turns; close after 5 idle m
 
 Your logins are safe whichever you pick: they live in the profile
 folder, not in the window ([notes/92](notes/92-the-window-that-stayed-open.md)).
+
+Some steps are yours, not the agent's. Ask it to "find the best flight
+and hand it over so I can book it", and when it has found one it opens
+the booking page **in your own browser**, where your saved cards are,
+and stops. It never types payment details. If it hits a sign-in it
+cannot get past (a code sent to your phone, a captcha), it opens a
+window for you instead; sign in, close the window, and it carries on
+from there. You approve each handoff first, and the prompt shows the
+exact page that will open. When Yantra runs somewhere without a screen
+(the container, or a server), you get the page as a link in the answer
+instead ([notes/93](notes/93-a-page-for-a-person.md)).
 
 Past about twenty tools, model selection accuracy hits a cliff, so only
 the top-K best-matching tools are **sent** each turn (BM25 over name and
@@ -2521,7 +2532,7 @@ Most carry a live receipt from a real run.
 | [16](notes/16-sandboxing.md) [17](notes/17-tool-selection.md) | containment; the tool cliff and BM25 |
 | [19](notes/19-responses-api.md) | the third dialect |
 | [22](notes/22-web-ui.md) | the browser UI |
-| [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) [92](notes/92-the-window-that-stayed-open.md) | the self-reliance tools, one note each; a browser that closes when the turn does |
+| [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) [92](notes/92-the-window-that-stayed-open.md) [93](notes/93-a-page-for-a-person.md) | the self-reliance tools, one note each; a browser that closes when the turn does, and hands you the page when a step is yours |
 | [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |

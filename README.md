@@ -517,8 +517,8 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   empty shell; every action returns readable prose plus numbered
   element refs (`[e1]`, `[e2]`, …) harvested from the live DOM, and
   clicks/fills take a ref and return the refreshed page. Same egress
-  rule as web_fetch — all four gate. Installing the extra IS the
-  opt-in: the four register only when playwright is present
+  rule as web_fetch — all of them gate. Installing the extra IS the
+  opt-in: they register only when playwright is present
   ([notes/28](notes/28-browser-tools.md)). Logins persist too: set
   `YANTRA_BROWSER_PROFILE=~/yantra-browser-profile`
   and run `uv run yantra --browse-login <url>` once — a visible
@@ -544,6 +544,15 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   keeps the page for follow-up turns and closes it after 300 idle
   seconds instead; `YANTRA_BROWSER_CLOSE=model` leaves closing to
   `browser_close` ([notes/92](notes/92-the-window-that-stayed-open.md)).
+- **browser_handoff** gives the open page to you. `mode="finish"`
+  opens it in YOUR browser for the part that is yours — paying,
+  booking, personal details — and the agent stops there.
+  `mode="return"` opens a visible window on the agent's profile for a
+  sign-in or captcha, and the agent carries on once you close it (ten
+  minutes at most). It takes no address: what the approval prompt names
+  is what opens. `YANTRA_BROWSER_HANDOFF=window|link|off`; unset, a
+  machine with a screen opens windows and one without gives you a link
+  ([notes/93](notes/93-a-page-for-a-person.md)).
 - **The browser can be one you already have.**
   `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
   — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
@@ -2059,7 +2068,12 @@ src/yantra/
 │   │               $YANTRA_BROWSER_CLOSE = turn | idle seconds | model, and
 │   │               an idle close re-checks on the worker that no verb got in;
 │   │               click/fill declare requires=("browser_open",)
-│   │               ([notes/92](notes/92-the-window-that-stayed-open.md))
+│   │               ([notes/92](notes/92-the-window-that-stayed-open.md)).
+│   │               browser_handoff gives the page to a person: finish (their
+│   │               own browser, or a link) or return (a window on the agent's
+│   │               profile, --browse-login's two doors via _person_window,
+│   │               ten minutes at most); no url argument, on purpose
+│   │               ([notes/93](notes/93-a-page-for-a-person.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,
