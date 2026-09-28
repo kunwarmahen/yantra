@@ -1030,13 +1030,21 @@ def watch(task: str, events: Iterable[Any], sink: Callable[[Trajectory], Any],
                     if detail == FULL:
                         step.arguments = dict(request.arguments)
                     trajectory.steps.append(step)
-                if event.response is not None:
-                    usage = event.response.usage
+                # The TURN's calls, summed by the agent. Not the final
+                # response's usage: that is one call of several, and a
+                # case built from this line takes its token ceiling from
+                # it (evals.case_from_trace) while the grader counts the
+                # whole turn -- so a last-call figure could fail a
+                # multi-call fossil on the very budget it came from.
+                usage = getattr(event, "usage", None)
+                if usage is None and event.response is not None:
+                    usage = event.response.usage   # a hand-built event
+                if usage is not None:
                     trajectory.tokens = (usage.input_tokens
                                          + usage.output_tokens)
-                    if detail == FULL:
-                        trajectory.answer = _clip(
-                            event.response.message.text().strip())
+                if event.response is not None and detail == FULL:
+                    trajectory.answer = _clip(
+                        event.response.message.text().strip())
             yield event
     except BaseException:
         trajectory.outcome = "crashed"

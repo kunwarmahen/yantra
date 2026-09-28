@@ -118,9 +118,14 @@ class Renderer:
                 # up, not as an ending (budget.py).
                 self.console.print(f"\n[yellow]· budget: {detail}[/yellow]")
 
-            case TurnEnd(reason="end_turn", response=response, iterations=n):
+            case TurnEnd(reason="end_turn", response=response, iterations=n,
+                         usage=turn_usage):
                 self.console.print()  # close the streamed line
                 if response is not None:
+                    # The whole turn, not its last call: "8 iteration(s)"
+                    # beside one call's tokens read as the turn's bill and
+                    # was a fraction of it.
+                    usage = turn_usage or response.usage
                     if not response.message.text().strip():
                         # end_turn with only thinking/tool noise -- say so
                         # rather than leaving the user staring at silence
@@ -128,12 +133,12 @@ class Renderer:
                     # $ only when the slug has a known list price; an
                     # unknown model shows no figure at all, never a guess.
                     price = price_for(response.model)
-                    cost = (f" · ~${cost_of(response.usage, price):.4f}"
+                    cost = (f" · ~${cost_of(usage, price):.4f}"
                             if price is not None else "")
                     self.console.print(
                         f"[dim]── {response.stop_reason} · "
-                        f"{response.usage.input_tokens} in / "
-                        f"{response.usage.output_tokens} out"
+                        f"{usage.input_tokens} in / "
+                        f"{usage.output_tokens} out"
                         f"{cost} · {n} iteration(s)[/dim]"
                     )
                 self._render_refusals()

@@ -45,7 +45,10 @@ footprint. The fix fell out of the accounting work for free.
 ## What `$` shows up where
 
 * **Turn footer**: `── end_turn · 942 in / 187 out · ~$0.0033 · 3 iteration(s)`
-  whenever the model slug has a known list price.
+  whenever the model slug has a known list price. The counts are every
+  call the turn made, summed (`TurnEnd.usage`), and so is the figure:
+  a tool-using turn re-sends the conversation on each call, and its
+  last response alone is a fraction of the bill.
 * **`/usage`**: a session line — summed over **per-model buckets**
   (`agent.usage_by_model`), because a mid-session `/model` switch means
   one session spans two price sheets and a single blended multiplier

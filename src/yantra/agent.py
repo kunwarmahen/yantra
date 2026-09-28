@@ -119,6 +119,12 @@ class TurnEnd:
     #: on the event, so a consumer that only sees the stream (a recorder,
     #: a page) knows what to show without reaching into the agent.
     waiting: tuple[PermissionRequest, ...] = ()
+    #: Every model call THIS turn made, summed. ``response.usage`` is the
+    #: last call only, and each call re-sends the whole conversation, so
+    #: an eight-call turn billed several times what its final response
+    #: reports. None only on an event built by hand; the agents always
+    #: set it, including on a turn that ended with no response at all.
+    usage: Usage | None = None
 
 
 AgentEvent = StreamEvent | ToolExecuted | BudgetWarning | TurnEnd
@@ -518,6 +524,7 @@ class Agent:
         """The loop proper: model call, tools, repeat -- shared by a new
         message and a resumed hold."""
         executed: dict[str, ToolResult] = {}  # current batch's completed results
+        spent = Usage()  # this turn's calls, for TurnEnd.usage
         try:
             for iteration in range(1, self.max_iterations + 1):
                 self._begin_iteration()
@@ -565,6 +572,7 @@ class Agent:
                 )
                 self.history.append(response.message)
                 self.total_usage.add(response.usage)
+                spent.add(response.usage)
                 bucket = self.usage_by_model.setdefault(
                     response.model or self.model, Usage())
                 bucket.add(response.usage)
@@ -586,13 +594,15 @@ class Agent:
                     self._answer_outstanding({})
                     yield TurnEnd(response=response, reason="over_budget",
                                   iterations=iteration,
-                                  detail=self.budget.capped(limit))
+                                  detail=self.budget.capped(limit),
+                                  usage=spent)
                     return
 
                 calls = response.message.tool_calls()
                 if response.stop_reason != "tool_use" or not calls:
                     yield TurnEnd(response=response, reason="end_turn",
-                                  iterations=iteration)
+                                  iterations=iteration,
+                                  usage=spent)
                     return
 
                 # The budget gate, and it sits HERE for two reasons. After
@@ -607,7 +617,8 @@ class Agent:
                     self._answer_outstanding({})
                     yield TurnEnd(response=None, reason="over_budget",
                                   iterations=iteration,
-                                  detail=self.budget.explain())
+                                  detail=self.budget.explain(),
+                                  usage=spent)
                     return
 
                 executed.clear()
@@ -634,7 +645,8 @@ class Agent:
                     yield TurnEnd(response=None, reason="held",
                                   iterations=iteration,
                                   detail=f"waiting for approval: {names}",
-                                  waiting=tuple(self.held.waiting))
+                                  waiting=tuple(self.held.waiting),
+                                  usage=spent)
                     return
                 batch: list[ToolResult] = []
                 # Record EVERYTHING before yielding anything: a consumer
@@ -651,7 +663,8 @@ class Agent:
             # Ran out of iterations while the model still wanted tools.
             self._answer_outstanding({})
             yield TurnEnd(response=None, reason="max_iterations",
-                          iterations=self.max_iterations)
+                          iterations=self.max_iterations,
+                          usage=spent)
         except BaseException:
             # KeyboardInterrupt or generator.close(): leave history resumable.
             # A hold recorded this turn is dropped with it -- its calls are

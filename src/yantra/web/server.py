@@ -621,15 +621,19 @@ class WebSession:
                     "budget_meter": _budget_meter(self.agent),
                 })
             case EndEvent(stop_reason=_, usage=_):
-                pass  # per-call usage; the TurnEnd footer carries totals
+                pass  # per-call usage; TurnEnd.usage carries the turn's total
             case BudgetWarning(detail=detail, spent=spent, max_usd=max_usd):
                 # The numbers ride along as numbers, not only inside the
                 # sentence: a browser can draw a bar, a terminal cannot.
                 self.broadcast({"type": "budget_warning", "detail": detail,
                                 "spent": spent, "max_usd": max_usd,
                                 "budget_meter": _budget_meter(self.agent)})
-            case TurnEnd(reason="end_turn", response=response, iterations=n):
-                usage = response.usage if response is not None else None
+            case TurnEnd(reason="end_turn", response=response, iterations=n,
+                         usage=turn_usage):
+                # The turn's calls summed, as the REPL footer shows them --
+                # not the last call's, which the page used to print.
+                usage = turn_usage or (response.usage
+                                       if response is not None else None)
                 self.broadcast({
                     "type": "turn_end",
                     "reason": "end_turn",

@@ -66,6 +66,12 @@ required_tools = ["read_file"]
 max_tokens = 13140
 ```
 
+`tokens` is every model call the turn made, summed (`TurnEnd.usage`)
+-- the same figure a replay of the case is graded against
+(`total_usage`). It is not the final response's usage: that is one
+call of several, and a ceiling taken from it would fail a multi-call
+case on its own replay.
+
 A case asserting on the *contents* of a file would go red the day
 somebody edits that file, which is the opposite of a regression test.
 The one thing a full recording adds to a case is a way to make it wrong.

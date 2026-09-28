@@ -163,6 +163,25 @@ def test_message_streams_deltas_tool_results_and_footer():
         assert footer["turn_active"] is False
 
 
+def test_the_tally_under_a_turn_counts_every_call_it_made():
+    """Not the last call's usage, which the page printed beside "2
+    iteration(s)" as if it were the turn's (tests/test_turn_usage.py)."""
+    script = [
+        assistant_tool_call("e1", "echo", {"text": "x"},
+                            usage=Usage(input_tokens=400, output_tokens=40)),
+        assistant_text("done", usage=Usage(input_tokens=500, output_tokens=50)),
+    ]
+    session, _ = make_session(script)
+    client = TestClient(make_app(session))
+
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "state"
+        envelopes = send_and_finish(client, ws, "echo x")
+
+    end = next(e for e in envelopes if e["type"] == "turn_end")
+    assert (end["input_tokens"], end["output_tokens"]) == (900, 90)
+
+
 def test_a_budget_heads_up_reaches_the_browser_with_its_numbers():
     """A warning the terminal shows and the tab does not is half a feature."""
     from yantra.budget import Budget

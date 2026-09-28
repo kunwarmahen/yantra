@@ -9,12 +9,18 @@
 append user Message
 for iteration in 1..max_iterations:
     response = collect(provider.stream(history, system, tools, model, max_tokens))
-    history.append(response.message); total_usage += response.usage
-    if stop_reason != "tool_use": yield TurnEnd(response, "end_turn"); return
+    history.append(response.message); total_usage += response.usage; spent += response.usage
+    if stop_reason != "tool_use": yield TurnEnd(response, "end_turn", usage=spent); return
     for call in calls: result = _execute(call); yield ToolExecuted(call, result)
     history.append(Message("user", [results...]))       # results as BLOCKS
-yield TurnEnd(None, "max_iterations")
+yield TurnEnd(None, "max_iterations", usage=spent)
 ```
+
+`TurnEnd.usage` is the turn's own bill: every call above, summed.
+`response.usage` is only the last of them, and each call re-sends the
+whole conversation, so an eight-call turn costs several times what its
+final response reports. Anything that says what a turn cost reads
+`usage`; `total_usage` is the session's.
 
 Everything the model ever sees comes back through this shape — which is
 why `/provider` switching mid-session is free: history is stored in

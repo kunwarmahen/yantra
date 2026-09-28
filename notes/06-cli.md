@@ -97,6 +97,15 @@ one-shot exits 130 (128+SIGINT convention).
   reply also goes back on the wire as `"content": ""`, never `null` --
   Ollama rejects a bare null with a 400, and it would sit in history
   failing every later turn.
+* **The footer is the turn's bill.** `── end_turn · N in / M out · k
+  iteration(s)` sums every model call the turn made (`TurnEnd.usage`),
+  and the `~$` beside it prices that sum. The final call alone is a
+  fraction of it: an eight-call task against a stub Home Assistant API
+  on `qwen3.8:latest` ended on a call of 4483 in / 86 out, and the turn
+  billed 25757 in / 1628 out.
+  How full the WINDOW is -- the last request's footprint, the number
+  that diagnoses a server running a smaller window than configured --
+  is `/usage`'s `context:` line and the page's meter, not the footer.
 * `/usage` shows cache-write alongside cache-read; banner shows the
   sandbox cwd.
 

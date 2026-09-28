@@ -593,7 +593,7 @@ itself at 80% of the window (`--context-window` to set it; the web UI's
 meter shows the same number live).
 
 Cost accounting ([notes/21](notes/21-cost-accounting.md)): the turn
-footer and `/usage` show approximate dollars from a built-in list-price
+footer (every model call the turn made, summed) and `/usage` show approximate dollars from a built-in list-price
 table (current Claude + GPT slugs, snapshot-dated), summed over
 per-model buckets so mid-session model switches price correctly. An
 unknown slug shows NO figure — never `$0`. Prices drift; point

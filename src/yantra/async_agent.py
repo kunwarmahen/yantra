@@ -325,6 +325,7 @@ class AsyncAgent:
     async def _turn(self) -> AsyncIterator[AgentEvent]:
         """The loop proper, shared by a new message and a resumed hold."""
         executed: dict[str, ToolResult] = {}  # current batch's completed results
+        spent = Usage()  # this turn's calls, for TurnEnd.usage
         try:
             for iteration in range(1, self.max_iterations + 1):
                 self._begin_iteration()
@@ -371,6 +372,7 @@ class AsyncAgent:
                 )
                 self.history.append(response.message)
                 self.total_usage.add(response.usage)
+                spent.add(response.usage)
                 bucket = self.usage_by_model.setdefault(
                     response.model or self.model, Usage())
                 bucket.add(response.usage)
@@ -392,13 +394,15 @@ class AsyncAgent:
                     self._answer_outstanding({})
                     yield TurnEnd(response=response, reason="over_budget",
                                   iterations=iteration,
-                                  detail=self.budget.capped(limit))
+                                  detail=self.budget.capped(limit),
+                                  usage=spent)
                     return
 
                 calls = response.message.tool_calls()
                 if response.stop_reason != "tool_use" or not calls:
                     yield TurnEnd(response=response, reason="end_turn",
-                                  iterations=iteration)
+                                  iterations=iteration,
+                                  usage=spent)
                     return
 
                 # The budget gate, and it sits HERE for two reasons. After
@@ -413,7 +417,8 @@ class AsyncAgent:
                     self._answer_outstanding({})
                     yield TurnEnd(response=None, reason="over_budget",
                                   iterations=iteration,
-                                  detail=self.budget.explain())
+                                  detail=self.budget.explain(),
+                                  usage=spent)
                     return
 
                 executed.clear()
@@ -438,7 +443,8 @@ class AsyncAgent:
                     yield TurnEnd(response=None, reason="held",
                                   iterations=iteration,
                                   detail=f"waiting for approval: {names}",
-                                  waiting=tuple(self.held.waiting))
+                                  waiting=tuple(self.held.waiting),
+                                  usage=spent)
                     return
                 batch: list[ToolResult] = []
                 # Record EVERYTHING before yielding anything: a consumer
@@ -455,7 +461,8 @@ class AsyncAgent:
             # Ran out of iterations while the model still wanted tools.
             self._answer_outstanding({})
             yield TurnEnd(response=None, reason="max_iterations",
-                          iterations=self.max_iterations)
+                          iterations=self.max_iterations,
+                          usage=spent)
         except BaseException:
             # CancelledError lands here exactly where KeyboardInterrupt
             # does in the sync loop: leave history resumable, re-raise.
