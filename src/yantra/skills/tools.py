@@ -23,6 +23,7 @@ roster already says everything it would.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, ClassVar
 
 from yantra.errors import ToolError
@@ -35,6 +36,26 @@ DELIVERY_HEADER = (
     "They were written for this project and override your general habits "
     "where the two disagree."
 )
+
+
+#: How many bundled files load_skill names. A skill with more is a
+#: project, not a procedure; the folder line still covers the rest.
+MAX_LISTED_FILES = 20
+
+
+def bundled_files(directory: Path) -> list[Path]:
+    """A skill's files other than SKILL.md, shallowest first, capped.
+    Hidden files and caches are left out -- nothing the steps would name."""
+    try:
+        found = sorted(
+            (p for p in directory.rglob("*")
+             if p.is_file() and p.name != "SKILL.md"
+             and not any(part.startswith(".") or part == "__pycache__"
+                         for part in p.relative_to(directory).parts)),
+            key=lambda p: (len(p.relative_to(directory).parts), str(p)))
+    except OSError:
+        return []
+    return found[:MAX_LISTED_FILES]
 
 
 class LoadSkill(Tool):
@@ -103,9 +124,15 @@ class LoadSkill(Tool):
 
         lines = [DELIVERY_HEADER.format(name=skill.name)]
         # Tier 3's anchor: bundled files are addressed from the skill's own
-        # directory, and the model cannot guess an absolute path.
+        # directory, and the model cannot guess an absolute path. Nor can a
+        # small one reliably BUILD one: handed a folder, qwen3.8 retyped a
+        # long home path four ways before one worked. So each file is named
+        # in full, ready to copy (notes/96).
         lines.append(f"Files bundled with this skill live in: {skill.directory} "
                      f"(read them with read_file when the steps below say so).")
+        if files := bundled_files(skill.directory):
+            lines.append("Its files, by full path:")
+            lines.extend(f"  {path}" for path in files)
         if skill.allowed_tools:
             lines.append("Tools this skill expects: "
                          + ", ".join(skill.allowed_tools) + ".")

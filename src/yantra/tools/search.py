@@ -181,7 +181,8 @@ class Grep(Tool):
             except re.error as exc:
                 raise ToolError(f"invalid include pattern: {exc}") from exc
 
-        root = resolve_in_sandbox(ctx, require_str(args, "path", optional=True, default="."))
+        root = resolve_in_sandbox(ctx, require_str(args, "path", optional=True, default="."),
+                                  reading=True)
         if root.is_file():
             # single-file search: the walker adds nothing over a direct scan
             results = _search_file(root, pattern)

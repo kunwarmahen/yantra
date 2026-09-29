@@ -39,10 +39,18 @@ class ToolContext:
 
     ``leases`` is shared by every call running against this context --
     which is how parallel batch workers serialize conflicting writes.
+
+    ``read_roots`` are folders outside ``cwd`` that READ-ONLY tools may
+    also look in -- the folders of skills that live elsewhere (in
+    ``~/.yantra/skills/``, say), whose bundled files the skill's own
+    instructions send the model to read. Each is one skill's folder, never
+    its parent: a home-folder root also holds things no skill should
+    expose. Writes stay inside ``cwd`` (fs.resolve_in_sandbox).
     """
 
     cwd: Path
     leases: LeaseManager = field(default_factory=LeaseManager)
+    read_roots: tuple[Path, ...] = ()
 
 
 @dataclass(slots=True)

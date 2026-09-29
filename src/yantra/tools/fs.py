@@ -4,6 +4,12 @@ All four resolve paths through the same sandbox helper. The sandbox is
 cwd-relative CONVENIENCE (it stops the model from wandering off by
 accident), not a security boundary -- bash isn't bound by it, which is
 precisely why bash requires human approval.
+
+READS MAY ALSO REACH A SKILL'S OWN FOLDER. A skill in ~/.yantra/skills/
+sends the model to its bundled files with read_file; refusing them made
+that advice false. So read-only callers pass ``reading=True`` and may
+resolve inside ``ctx.read_roots`` -- one folder per active skill, set by
+the skill registry (notes/97). Writes never do.
 """
 
 from __future__ import annotations
@@ -20,14 +26,23 @@ MAX_READ_LINES = 2000
 MAX_LIST_ENTRIES = 500
 
 
-def resolve_in_sandbox(ctx: ToolContext, raw: str) -> Path:
-    """Resolve ``raw`` against the sandbox root, refusing escapes."""
+def resolve_in_sandbox(ctx: ToolContext, raw: str,
+                       *, reading: bool = False) -> Path:
+    """Resolve ``raw`` against the sandbox root, refusing escapes.
+
+    ``reading=True`` (read-only tools only) also admits a path inside one
+    of ``ctx.read_roots`` -- a skill's own folder. Nothing is ever written
+    there through this: write_file and edit_file never pass it.
+    """
     if not raw:
         raise ToolError("empty path")
     path = (ctx.cwd / raw).resolve()  # resolves .., ~, symlinks
-    if not path.is_relative_to(ctx.cwd.resolve()):
-        raise ToolError(f"path escapes sandbox: {raw!r}")
-    return path
+    if path.is_relative_to(ctx.cwd.resolve()):
+        return path
+    if reading and any(path.is_relative_to(root.resolve())
+                       for root in ctx.read_roots):
+        return path
+    raise ToolError(f"path escapes sandbox: {raw!r}")
 
 
 def unified_diff(old: str, new: str, path: str) -> str:
@@ -73,7 +88,7 @@ class ReadFile(Tool):
         return f"read {require_str(args, 'path')}"
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
-        path = resolve_in_sandbox(ctx, require_str(args, "path"))
+        path = resolve_in_sandbox(ctx, require_str(args, "path"), reading=True)
         offset = require_int(args, "offset", default=1)
         limit = require_int(args, "limit", default=MAX_READ_LINES)
         if offset < 1:
@@ -126,7 +141,8 @@ class ListDir(Tool):
         return f"list {args.get('path', '.')}/"
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
-        path = resolve_in_sandbox(ctx, require_str(args, "path", optional=True, default="."))
+        path = resolve_in_sandbox(ctx, require_str(args, "path", optional=True, default="."),
+                                  reading=True)
         if not path.is_dir():
             raise ToolError(f"not a directory: {path}")
 

@@ -129,8 +129,25 @@ outside the working folder, and `read_file` only reads inside it. The
 model fell back to `bash`, which cost a wasted call. But `load_skill`'s
 own delivery text says to read bundled files with `read_file`, and for
 a skill in the person's home folder that advice is wrong. This
-predates learned skills: every skill in `~/.yantra/skills/` has the
-same problem. It is a separate fix.
+predates learned skills: every skill in `~/.yantra/skills/` had the
+same problem.
+
+~~It is a separate fix.~~ Fixed, in two parts. First, **read-only tools
+may read inside a skill's own folder.** `read_file`, `list_dir`, `glob`,
+`grep` and `read_image` can now read the folder of each skill that is
+switched on, even when it is outside the working folder. The folder
+opens only for reading, never for `write_file` or `edit_file`. It is
+one folder per skill, never `~/.yantra` as a whole, which holds other
+things. A skill that is off or set aside shares nothing, and a symlink
+inside the folder that points out of it is still refused. Sub-agents
+get the same folders as their parent.
+
+Second, **`load_skill` names each bundled file by its full path**, so
+the model copies one exact string instead of building it. With only the
+first part, `qwen3.8:latest` still retyped a long home path four ways
+before one worked: 6 calls, 21,350 tokens, 44 s to read one script.
+With both, the same question took `load_skill` and one `read_file`: 2
+calls, 10,990 tokens, 18 s.
 
 ## What was deliberately not built
 

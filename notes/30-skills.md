@@ -56,6 +56,13 @@ Ten skills cost you about 250 tokens a turn — a rounding error — and the
 one that matters today arrives in full, on demand, exactly when the task
 turns out to be about releases after all.
 
+Tier 3 works wherever the skill lives. `load_skill` names each
+bundled file by its full path, and read-only tools may read inside the
+folder of any skill that is switched on, even one in
+`~/.yantra/skills/`, outside the working folder. They can only read it:
+nothing writes there, and nothing else in the home folder opens
+([notes/97](97-when-the-recipe-breaks.md)).
+
 This is the same bet the tool-selection chapter makes
 ([notes/17](17-tool-selection.md)), one layer up: *the model does not
 need to be holding a thing to know the thing exists.*

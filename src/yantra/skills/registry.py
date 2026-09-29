@@ -330,9 +330,25 @@ class SkillRegistry:
         the operator's --system, env awareness -- are untouched."""
         if self._agent is None:
             return
+        self._share_folders()
         prompt = attach_prompt(self._agent)
         prompt.set("skills", self.render_roster())
         prompt.apply()
+
+    def _share_folders(self) -> None:
+        """Let read-only tools into the folders of skills outside the
+        working folder -- the files ``load_skill`` tells the model to read
+        with read_file (tools/base.ToolContext.read_roots). One folder per
+        ACTIVE skill: a skill that is off or set aside shares nothing, and
+        the roots holding them (~/.yantra/skills/ and its neighbours) are
+        never opened as a whole."""
+        ctx = getattr(self._agent, "ctx", None)
+        if ctx is None:
+            return
+        inside = ctx.cwd.resolve()
+        ctx.read_roots = tuple(
+            s.directory.resolve() for s in self.active()
+            if not s.directory.resolve().is_relative_to(inside))
 
     def _register_tools(self, agent: Any) -> None:
         """load_skill when there are skills at all; list_skills only when

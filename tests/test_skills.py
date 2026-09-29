@@ -797,3 +797,107 @@ class TestWriting:
                      "# v2")
         folder = tmp_path / "skills" / "pr-review"
         assert [p.name for p in folder.iterdir()] == [SKILL_FILE]
+
+
+# ---- a skill's files, when the skill lives outside the workspace -------------
+
+
+class TestSkillFoldersOutsideTheWorkspace:
+    """load_skill tells the model to read bundled files with read_file.
+    For a skill in ~/.yantra/skills/ that used to be false advice: the file
+    tools refused every path outside the working folder. The BIAS here is
+    the other direction -- opening that door must not open anything else:
+    not the rest of ~/.yantra, not a write, not a skill that was pulled."""
+
+    def wire(self, tmp_path):
+        from yantra.tools.base import ToolContext
+
+        home = tmp_path / "home"
+        folder = home / ".yantra" / "skills" / "pr-review"
+        write_skill(home / ".yantra" / "skills", "pr-review")
+        (folder / "checklist.md").write_text("1. read the diff\n")
+        (home / ".yantra" / "tokens.json").write_text('{"secret": "x"}')
+        work = tmp_path / "work"
+        work.mkdir()
+        agent = _agent(ctx=ToolContext(cwd=work))
+        skills = enable_skills(agent, work, home=home)
+        return agent, skills, folder
+
+    def test_read_only_tools_can_read_the_skills_own_folder(self, tmp_path):
+        from yantra.tools.fs import ListDir, ReadFile
+        from yantra.tools.glob import Glob
+        from yantra.tools.search import Grep
+
+        agent, _, folder = self.wire(tmp_path)
+        assert "read the diff" in ReadFile().run(
+            {"path": str(folder / "checklist.md")}, agent.ctx)
+        assert "checklist.md" in Glob().run(
+            {"pattern": "*.md", "path": str(folder)}, agent.ctx)
+        assert "read the diff" in Grep().run(
+            {"pattern": "diff", "path": str(folder)}, agent.ctx)
+        assert "checklist.md" in ListDir().run({"path": str(folder)}, agent.ctx)
+
+    def test_nothing_else_in_the_home_folder_opens(self, tmp_path):
+        from yantra.tools.fs import ReadFile
+
+        agent, _, folder = self.wire(tmp_path)
+        with pytest.raises(ToolError, match="escapes sandbox"):
+            ReadFile().run({"path": str(folder.parent.parent / "tokens.json")},
+                           agent.ctx)
+        with pytest.raises(ToolError, match="escapes sandbox"):
+            ReadFile().run({"path": str(folder / ".." / ".." / "tokens.json")},
+                           agent.ctx)
+
+    def test_nothing_is_written_there(self, tmp_path):
+        from yantra.tools.fs import EditFile, WriteFile
+
+        agent, _, folder = self.wire(tmp_path)
+        with pytest.raises(ToolError, match="escapes sandbox"):
+            WriteFile().run({"path": str(folder / "checklist.md"),
+                             "content": "rm -rf"}, agent.ctx)
+        with pytest.raises(ToolError, match="escapes sandbox"):
+            EditFile().run({"path": str(folder / "checklist.md"),
+                            "old_string": "1.", "new_string": "0."}, agent.ctx)
+
+    def test_a_pulled_skill_shares_nothing(self, tmp_path):
+        from yantra.tools.fs import ReadFile
+
+        agent, skills, folder = self.wire(tmp_path)
+        skills.disable("pr-review")
+        skills.reapply()
+        with pytest.raises(ToolError, match="escapes sandbox"):
+            ReadFile().run({"path": str(folder / "checklist.md")}, agent.ctx)
+
+    def test_a_skill_inside_the_workspace_adds_no_root(self, tmp_path):
+        from yantra.tools.base import ToolContext
+
+        write_skill(tmp_path / "skills", "pr-review")
+        agent = _agent(ctx=ToolContext(cwd=tmp_path))
+        enable_skills(agent, tmp_path, home=tmp_path / "home")
+        assert agent.ctx.read_roots == ()
+
+    def test_a_link_inside_the_folder_cannot_point_out_of_it(self, tmp_path):
+        from yantra.tools.fs import ReadFile
+
+        agent, _, folder = self.wire(tmp_path)
+        (folder / "notes.md").symlink_to(folder.parent.parent / "tokens.json")
+        with pytest.raises(ToolError, match="escapes sandbox"):
+            ReadFile().run({"path": str(folder / "notes.md")}, agent.ctx)
+
+    def test_load_skill_names_each_bundled_file_in_full(self, tmp_path):
+        from yantra.skills.tools import LoadSkill
+        from yantra.tools.fs import ReadFile
+
+        agent, skills, folder = self.wire(tmp_path)
+        (folder / "scripts").mkdir()
+        (folder / "scripts" / "run.py").write_text("print(1)\n")
+        (folder / "__pycache__").mkdir()
+        (folder / "__pycache__" / "run.pyc").write_text("x")
+        text = LoadSkill(skills).run({"name": "pr-review"}, agent.ctx)
+        after = text.split("Its files, by full path:\n")[1].splitlines()
+        listed = "\n".join(line for line in after[:3] if line.startswith("  "))
+        assert listed.splitlines() == [f"  {folder / 'checklist.md'}",
+                                       f"  {folder / 'scripts' / 'run.py'}"]
+        # and each one, copied as given, is readable
+        for line in listed.splitlines():
+            assert ReadFile().run({"path": line.strip()}, agent.ctx)

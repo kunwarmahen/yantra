@@ -386,6 +386,9 @@ class SubagentSpawner:
         # A child cannot stop its parent's turn to wait for an approval:
         # a hold inside one is a refusal coded held_in_child (notes/88).
         child.can_hold = False
+        # A delegated skill's child reads the skill's bundled files the
+        # way its parent could: the same skill folders, nothing wider.
+        child.ctx.read_roots = self.parent.ctx.read_roots
         # ONE CLOCK, AND THE CHILD HEARS IT (notes/91). Its prompts keep the
         # same person waiting as its parent's do, so they are stamped with
         # the parent's turn, and it reads the same notice. Without the stamp a wrapper clock sees a

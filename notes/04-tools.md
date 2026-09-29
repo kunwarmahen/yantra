@@ -44,7 +44,11 @@ why bash is permission-gated rather than sandboxed. Say this honestly in
 the docs instead of implying safety that isn't there. (Since this note was
 written, a real containment layer arrived behind the same tool: the
 pluggable `ToolSandbox`, bubblewrap when available —
-[16-sandboxing.md](16-sandboxing.md).)
+[16-sandboxing.md](16-sandboxing.md).) One exception, for reading only:
+read-only tools may also read inside the folder of any skill that is
+switched on, even outside the working folder, so the model can read the
+files that skill sends it to. It is never a write, and never the folder
+above a skill ([97-when-the-recipe-breaks.md](97-when-the-recipe-breaks.md)).
 
 Two gotchas hit while writing it:
 

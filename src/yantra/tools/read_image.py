@@ -57,7 +57,7 @@ class ReadImage(Tool):
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> ToolOutput:
         raw = require_str(args, "path")
-        path: Path = resolve_in_sandbox(ctx, raw)
+        path: Path = resolve_in_sandbox(ctx, raw, reading=True)
         try:
             block = load_image_block(path)
         except ImageError as exc:

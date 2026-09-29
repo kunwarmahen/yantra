@@ -72,8 +72,9 @@ class Glob(Tool):
         if limit < 1 or limit > MAX_RESULTS:
             raise ToolError(f"limit must be between 1 and {MAX_RESULTS}")
 
-        root = resolve_in_sandbox(ctx, require_str(args, "path",
-                                                   optional=True, default="."))
+        root = resolve_in_sandbox(
+            ctx, require_str(args, "path", optional=True, default="."),
+            reading=True)
         if not root.is_dir():
             raise ToolError(f"not a directory: {root}")
 
