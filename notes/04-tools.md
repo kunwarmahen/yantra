@@ -47,7 +47,10 @@ pluggable `ToolSandbox`, bubblewrap when available —
 [16-sandboxing.md](16-sandboxing.md).) One exception, for reading only:
 read-only tools may also read inside the folder of any skill that is
 switched on, even outside the working folder, so the model can read the
-files that skill sends it to. It is never a write, and never the folder
+files that skill sends it to. (A learned skill promoted to a tool runs
+its script the other way round: as a list of words, never through a
+shell, in bash's own sandbox, and asking like bash does —
+[98-one-call.md](98-one-call.md).) It is never a write, and never the folder
 above a skill ([97-when-the-recipe-breaks.md](97-when-the-recipe-breaks.md)).
 
 Two gotchas hit while writing it:

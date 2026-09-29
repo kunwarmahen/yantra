@@ -260,6 +260,15 @@ If one fails three times in a row, it is **set aside**: it leaves the
 roster, `/skills` marks it `[stale]`, and the next fresh solve replaces
 it ([notes/97](notes/97-when-the-recipe-breaks.md)).
 
+A recipe that has worked five times in a row can become a **tool** of
+its own, so next time the task is one call
+(`ha_fan_set_percentage(fan_name="office", percentage=40)`) instead of
+load, read, run. `/skills` suggests it; `/skills tool NAME` (or the
+page's *make it a tool?* button) writes the tool, tests it once, and
+asks. The script runs as a list of words, never through a shell, and
+each call asks first, like bash. A tool never takes a secret as an
+argument ([notes/98](notes/98-one-call.md)).
+
 ### One-command starts
 
 `start.sh` wraps the common setups so you don't have to remember flags.
@@ -1866,6 +1875,13 @@ src/yantra/
 │                   A recipe that failed but was finished another way is
 │                   offered as an UPDATE (a diff); three failures in a row
 │                   set it aside ([notes/97](notes/97-when-the-recipe-breaks.md))
+│                   promote.py: a learned script promoted to a TOOL -- suggested
+│                   after 5 successes in a row, never automatic; one fresh
+│                   call writes tool.json (parameters + an argv template), one
+│                   gated test run, then the question. argv list, no shell,
+│                   no secret-shaped parameter, bash's sandbox and gate; a
+│                   repair keeps the tool only when its test still fits
+│                   ([notes/98](notes/98-one-call.md))
 ├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
 │                   skills/ + tools/ + evals/, parsed with tomllib, unknown keys
 │                   refused so a typo can never quietly leave a tool armed.

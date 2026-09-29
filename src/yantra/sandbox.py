@@ -70,8 +70,11 @@ class ToolSandbox(Protocol):
     """The one surface the bash tool knows about."""
 
     def execute(self, command: list[str], *, cwd: Path,
-                timeout: int) -> tuple[int, str]:
+                timeout: int, read_only: tuple[Path, ...] = ()) -> tuple[int, str]:
         """Run argv in ``cwd``; return (exit_code, combined stdout+stderr).
+        ``read_only`` names folders outside ``cwd`` the command must be able
+        to READ (a promoted skill's own folder) -- a confining sandbox
+        mounts them read-only; one that confines nothing already sees them.
         Raises CommandTimedOut (with salvage) or re-raises cancellation."""
         ...
         raise NotImplementedError
@@ -104,7 +107,7 @@ class SubprocessSandbox:
         return False
 
     def execute(self, command: list[str], *, cwd: Path,
-                timeout: int) -> tuple[int, str]:
+                timeout: int, read_only: tuple[Path, ...] = ()) -> tuple[int, str]:
         # start_new_session: the child gets its OWN process group, so a
         # timeout/Ctrl-C here can kill the whole tree without touching us.
         process = _popen(
@@ -182,7 +185,8 @@ class BwrapSandbox:
     def confined(self) -> bool:
         return True
 
-    def _argv(self, command: list[str], cwd: Path) -> list[str]:
+    def _argv(self, command: list[str], cwd: Path,
+              read_only: tuple[Path, ...] = ()) -> list[str]:
         argv = [
             self.bwrap,
             "--unshare-pid", "--unshare-ipc", "--unshare-uts",
@@ -200,6 +204,8 @@ class BwrapSandbox:
         env = _child_env(cwd)
         for key, value in env.items():
             argv += ["--setenv", key, value]
+        for folder in read_only:        # seen, never written
+            argv += ["--ro-bind", str(folder), str(folder)]
         argv += [
             "--bind", str(cwd), str(cwd),   # THE writable place
             "--chdir", str(cwd),
@@ -208,9 +214,9 @@ class BwrapSandbox:
         return argv
 
     def execute(self, command: list[str], *, cwd: Path,
-                timeout: int) -> tuple[int, str]:
+                timeout: int, read_only: tuple[Path, ...] = ()) -> tuple[int, str]:
         process = _popen(
-            self._argv(command, cwd),
+            self._argv(command, cwd, read_only),
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

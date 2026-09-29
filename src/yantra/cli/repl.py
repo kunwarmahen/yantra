@@ -41,7 +41,7 @@ from yantra.providers import get_provider
 from yantra.sandbox import ToolSandbox
 from yantra.session import SessionStore, apply_payload
 from yantra.skills.learn import SCOPES, Learner, Offer
-from yantra.skills.loader import SKILL_FILE, skill_roots
+from yantra.skills.loader import PROMOTE_AFTER, SKILL_FILE, skill_roots
 from yantra.tools import default_registry
 
 HELP = """[bold]commands[/bold]
@@ -61,6 +61,8 @@ HELP = """[bold]commands[/bold]
   /skills off|on NAME
                      pull or restore skills MID-SESSION (globs ok: deploy-*)
                      — same switch as /tools, applied to the roster
+  /skills tool NAME  make a learned skill's script a tool of its own (one
+                     call next time; tested and shown to you first)
   /NAME ...          run a skill directly: /pr-review the auth branch
   /learn             save what the last turn did as a skill (it is tested
                      and shown to you first; --learn off stops the offers)
@@ -384,12 +386,26 @@ class Repl:
             for name, worked in learner.after_turn(end):
                 self.console.print(self._counted_line(name, worked),
                                    markup=False, style="dim")
+                self._suggest_tool(name, worked)
             if learn and end.reason == "end_turn":
                 self._offer_skill(learner, forced=False)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](not saved)[/yellow]")
         except Exception as exc:
             self.console.print(f"[yellow]learning skipped: {exc}[/yellow]")
+
+    def _suggest_tool(self, name: str, worked: bool) -> None:
+        """The one line the turn that reaches PROMOTE_AFTER in a row prints.
+        A suggestion only: promoting is the person's call (notes/98)."""
+        skills = getattr(self.agent, "skills", None)
+        skill = skills.get(name) if skills is not None else None
+        if (not worked or skill is None or not skill.suggest_tool
+                or skill.learned.in_a_row != PROMOTE_AFTER):
+            return
+        self.console.print(
+            f"skill {name} has worked {PROMOTE_AFTER} times in a row. Make "
+            f"its script a tool, so next time is one call? /skills tool {name}",
+            markup=False, style="cyan")
 
     def _counted_line(self, name: str, worked: bool) -> str:
         """What one use did to a learned skill's record, in one line --
@@ -474,6 +490,12 @@ class Repl:
                    markup=False)
         print_(f"  cost:   {offer.spent.input_tokens:,} in / "
                f"{offer.spent.output_tokens:,} out tokens to write and test")
+        if offer.tool:
+            print_(f"  tool:   {offer.tool} stays -- the fixed script takes the "
+                   f"same arguments" if offer.keeps_tool else
+                   f"  tool:   {offer.tool} goes -- the fixed script's "
+                   f"arguments changed; it is a recipe again until it has "
+                   f"worked {PROMOTE_AFTER} times in a row", markup=False)
         if offer.repairs is not None:
             # An update is read as a change: the diff, not two whole files.
             # [e]dit first still opens the whole proposed files.
@@ -662,6 +684,15 @@ class Repl:
         if parts and parts[0] in ("off", "on"):
             self._skills_toggle(skills, parts[0], parts[1:])
             return
+        if parts and parts[0] == "tool":
+            if len(parts) != 2:
+                self.console.print("[red]usage: /skills tool NAME[/red]")
+                return
+            try:
+                self._promote(parts[1])
+            except KeyboardInterrupt:
+                self.console.print("\n[yellow](not made a tool)[/yellow]")
+            return
         if arg:
             skill = skills.get(arg)
             if skill is None:
@@ -721,10 +752,17 @@ class Repl:
             off = " [off]" if skills.is_disabled(skill.name) else ""
             off += " [stale]" if skill.is_stale else ""
             kind = " [delegated]" if skill.delegated else ""
+            kind += f" [tool: {skill.tool_name}]" if skill.tool_name else ""
             lines.append(f" {mark} {skill.name} [{skill.source}]{kind}{off} "
                          f"-- {skill.description}")
             if skill.learned is not None:
                 lines.append(f"     learned {skill.learned.render()}")
+            if error := skills.tool_errors.get(skill.name):
+                lines.append(f"     tool not offered: {error}")
+            if skill.suggest_tool:
+                lines.append(f"     worked {skill.learned.in_a_row} times in "
+                             f"a row -- make it a tool? /skills tool "
+                             f"{skill.name}")
         for broken in skills.found.broken:
             lines.append(f" ! {broken.path}: {broken.reason}")
         for name, path in skills.found.shadowed:
@@ -732,6 +770,50 @@ class Repl:
         if skills.loaded:
             lines.append(f"loaded this session: {', '.join(skills.loaded)}")
         return "\n".join(lines)
+
+    def _promote(self, name: str) -> None:
+        """``/skills tool NAME``: write the tool, test it once, ask.
+
+        Works with learning off, like /learn: the flag stops OFFERS, and
+        this is the person asking.
+        """
+        learner = getattr(self.agent, "learner", None) or Learner(self.agent, "ask")
+        offer = learner.propose_tool(
+            name, progress=lambda text: self.console.print(f"[dim]· {text}[/dim]"))
+        if offer is None:
+            self.console.print(f"not made a tool: {learner.last_skip}",
+                               markup=False, style="yellow")
+            return
+        view = offer.view()
+        print_ = self.console.print
+        print_()
+        print_("[bold]Make this a tool?[/bold]")
+        print_(f"  {view['name']} -- {view['description']}", markup=False)
+        print_(f"  from:   the skill {name}", markup=False)
+        for key, spec in view["parameters"]["properties"].items():
+            need = "required" if key in view["parameters"]["required"] else "optional"
+            print_(f"  {key}: {spec.get('type')}, {need} -- "
+                   f"{spec.get('description', '')}", markup=False)
+        print_(f"  runs:   {view['command']}", markup=False)
+        state = "passed" if offer.passed else "FAILED"
+        print_(f"  tested: {state} -- {json.dumps(view['test']['args'])}",
+               markup=False)
+        if view["test"]["output"]:
+            print_(view["test"]["output"], markup=False, style="dim",
+                   highlight=False)
+        print_(f"  cost:   {offer.spent_in:,} in / {offer.spent_out:,} out "
+               f"tokens to write it")
+        print_("  each call still asks first, like bash", style="dim")
+        if not offer.passed:
+            print_("[yellow]its test failed, so it was not made a tool[/yellow]")
+            return
+        answer = self._input("[m]ake it a tool  [N]o > ").strip().lower()
+        if answer not in ("m", "make", "y", "yes"):
+            print_("[dim]not made a tool[/dim]")
+            return
+        skill = learner.save_tool(offer)
+        print_(f"[green]{name} is now the tool {skill.tool_name}[/green] "
+               f"[dim]-- applies to the next model call[/dim]")
 
     def _run_skill_command(self, name: str, arg: str) -> bool:
         """``/pr-review the auth branch`` -> a normal turn, skill in hand.

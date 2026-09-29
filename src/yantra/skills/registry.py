@@ -75,6 +75,12 @@ DELEGATED_FOOTER = (
     "they declare: use run_skill (name + task) for those, not load_skill."
 )
 
+#: Appended only when some skill has been promoted to a tool (notes/98).
+TOOL_FOOTER = (
+    "Skills marked [tool: NAME] are also a tool: for that task, call NAME "
+    "directly -- one call, no load_skill needed."
+)
+
 NAMES_ONLY_FOOTER = (
     "Call list_skills for what each one covers, then load_skill to use it."
 )
@@ -110,6 +116,11 @@ class SkillRegistry:
         #: mid-session, unlike deleting the folder.
         self._disabled: set[str] = set()
         self._agent: Any = None
+        #: Promoted skills' tools, by skill name (skills/promote.py), and
+        #: why a promoted skill's tool could not be offered, when it could
+        #: not -- the skill still works as a recipe either way.
+        self._script_tools: dict[str, Any] = {}
+        self.tool_errors: dict[str, str] = {}
 
     # ---- the set ------------------------------------------------------------
 
@@ -178,14 +189,29 @@ class SkillRegistry:
         if not active:
             return None
         lines = [ROSTER_HEADER]
+        tools = self.live_tools()
         if self.names_only:
-            lines.append(", ".join(s.name for s in active))
+            lines.append(", ".join(
+                s.name + (f" [tool: {tools[s.name]}]" if s.name in tools else "")
+                for s in active))
             lines.append(NAMES_ONLY_FOOTER)
         else:
-            lines.extend(skill.roster_line() for skill in active)
+            lines.extend(skill.roster_line(tools.get(skill.name, ""))
+                         for skill in active)
         if self.delegated_names():
             lines.append(DELEGATED_FOOTER)
+        if tools:
+            lines.append(TOOL_FOOTER)
         return "\n".join(lines)
+
+    def live_tools(self) -> dict[str, str]:
+        """Skill name -> its promoted tool's name, for active skills whose
+        tool is registered and on."""
+        registry = getattr(self._agent, "registry", None)
+        active = {s.name for s in self.active()}
+        return {skill: tool.name for skill, tool in self._script_tools.items()
+                if skill in active and registry is not None
+                and tool.name in registry and not registry.is_disabled(tool.name)}
 
     def delegated_names(self) -> list[str]:
         """Active skills that run in a sub-agent rather than inline."""
@@ -331,6 +357,7 @@ class SkillRegistry:
         if self._agent is None:
             return
         self._share_folders()
+        self._sync_tools()
         prompt = attach_prompt(self._agent)
         prompt.set("skills", self.render_roster())
         prompt.apply()
@@ -350,6 +377,55 @@ class SkillRegistry:
             s.directory.resolve() for s in self.active()
             if not s.directory.resolve().is_relative_to(inside))
 
+    def _sync_tools(self) -> None:
+        """Promoted tools follow their skills: on while the skill is active
+        and still names that tool, off otherwise (pulled, set aside,
+        repaired without it). Off, not unregistered -- history may hold
+        calls to it, the same reason ToolRegistry.disable exists."""
+        registry = getattr(self._agent, "registry", None)
+        if registry is None:
+            return
+        active = {s.name: s for s in self.active()}
+        for skill_name, tool in self._script_tools.items():
+            skill = active.get(skill_name)
+            if tool.name not in registry:
+                continue
+            if skill is not None and skill.tool_name == tool.name:
+                registry.enable(tool.name)
+            else:
+                registry.disable(tool.name)
+
+    def _register_script_tools(self, registry: Any) -> None:
+        """One ScriptTool per promoted skill. A rescan UPDATES a tool already
+        registered (a repair kept it, an edit changed its words) instead of
+        registering the name twice."""
+        from yantra.skills.promote import ScriptTool, load_tool_def
+
+        self.tool_errors = {}
+        for skill in self.found:
+            if not skill.tool_name:
+                continue
+            try:
+                definition = load_tool_def(skill)
+            except SkillError as exc:
+                self.tool_errors[skill.name] = str(exc)
+                continue
+            mine = self._script_tools.get(skill.name)
+            if mine is not None and mine.name == definition.name:
+                mine.update(skill, definition)
+                continue
+            if definition.name in registry:
+                self.tool_errors[skill.name] = (
+                    f"a tool called {definition.name!r} already exists in "
+                    f"this session")
+                continue
+            if mine is not None:          # renamed: the old name goes dark
+                registry.disable(mine.name)
+            tool = ScriptTool(self, skill, definition)
+            registry.register(tool)
+            if tool.name in registry:     # an admission policy may refuse it
+                self._script_tools[skill.name] = tool
+
     def _register_tools(self, agent: Any) -> None:
         """load_skill when there are skills at all; list_skills only when
         the roster had to drop its descriptions. A project with three
@@ -366,6 +442,7 @@ class SkillRegistry:
         # run_skill costs a schema only where a delegated skill exists.
         if self.delegated_names() and RunSkill.name not in registry:
             registry.register(RunSkill(self))
+        self._register_script_tools(registry)
 
     # ---- authoring ------------------------------------------------------------
 
@@ -444,6 +521,7 @@ class SkillRegistry:
 
     def describe(self) -> dict[str, Any]:
         """Snapshot for the web state envelope and tests."""
+        live = self.live_tools()
         return {
             "skills": [
                 {"name": s.name, "description": s.description,
@@ -458,8 +536,13 @@ class SkillRegistry:
                      "since": s.learned.since, "worked": s.learned.worked,
                      "failed": s.learned.failed,
                      "last_ok": s.learned.last_ok,
-                     "failing": s.learned.failing}),
+                     "failing": s.learned.failing,
+                     "in_a_row": s.learned.in_a_row}),
                  "stale": s.is_stale,
+                 "tool": s.tool_name or None,
+                 "tool_live": s.name in live,
+                 "tool_error": self.tool_errors.get(s.name),
+                 "suggest_tool": s.suggest_tool,
                  "enabled": not self.is_disabled(s.name),
                  "loaded": s.name in self.loaded}
                 for s in self.found

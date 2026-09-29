@@ -130,14 +130,17 @@ LEARNED_SOURCES = {"project": "learned-local", "user": "learned-user"}
 ORIGINS = ("learned",)
 
 #: ``learned: 2026-09-28 · worked 6 · failed 2 · last ok 2026-10-02 ·
-#: failing 2``. Every part after the date is optional, so a freshly saved
-#: skill can carry just its date. ``failing`` is the streak: failures in a
-#: row since the last time it worked.
+#: in a row 3 · failing 2``. Every part after the date is optional, so a
+#: freshly saved skill can carry just its date. ``failing`` is the streak
+#: of failures since the last time it worked; ``in a row`` the streak of
+#: successes since the last time it failed -- written only once there has
+#: been a failure, because before that it is ``worked`` again.
 LEARNED_RE = re.compile(
     r"^(?P<since>\d{4}-\d{2}-\d{2})"
     r"(?:\s*·\s*worked\s+(?P<worked>\d+))?"
     r"(?:\s*·\s*failed\s+(?P<failed>\d+))?"
     r"(?:\s*·\s*last ok\s+(?P<last_ok>\d{4}-\d{2}-\d{2}))?"
+    r"(?:\s*·\s*in a row\s+(?P<streak>\d+))?"
     r"(?:\s*·\s*failing\s+(?P<failing>\d+))?$")
 
 #: Failures in a row after which a learned skill is STALE: it leaves the
@@ -146,6 +149,17 @@ LEARNED_RE = re.compile(
 #: offered as the repair. One failure is noise (a server was down); three
 #: in a row is the world having changed.
 STALE_AFTER = 3
+
+#: Successes in a row after which a learned skill with a script is
+#: suggested as a tool (decision 4 in the plan: the suggestion only; the
+#: promotion is the person's). In a row, not in all: a recipe that was
+#: just repaired has to prove the new version, not coast on the old one.
+PROMOTE_AFTER = 5
+
+#: ``tool: fan_control scripts/fan.py`` -- the tool's name, then the
+#: script it runs. Names are snake_case like every built-in tool's.
+TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,47}$")
+TOOL_RE = re.compile(r"^(?P<name>\S+)\s+(?P<script>scripts/[A-Za-z0-9][A-Za-z0-9_.-]*)$")
 
 
 class SkillError(ValueError):
@@ -165,14 +179,30 @@ class LearnedRecord:
     failed: int = 0
     last_ok: str = ""
     failing: int = 0
+    #: Successes since the last failure. None when the line never said,
+    #: which means no failure has happened yet -- see ``in_a_row``.
+    streak: int | None = None
 
     @property
     def stale(self) -> bool:
         return self.failing >= STALE_AFTER
 
+    @property
+    def in_a_row(self) -> int:
+        """Successes since the last failure: the streak when written;
+        otherwise every success when nothing ever failed, and 0 when
+        something did (the line leaves a zero streak out)."""
+        if self.streak is not None:
+            return self.streak
+        return self.worked if not self.failed else 0
+
     def render(self) -> str:
         line = f"{self.since} · worked {self.worked} · failed {self.failed}"
         line += f" · last ok {self.last_ok}" if self.last_ok else ""
+        # Left out when it is 0 (or no failure ever happened): a missing
+        # streak reads back as exactly that -- see in_a_row.
+        if self.failed and self.streak:
+            line += f" · in a row {self.streak}"
         return line + (f" · failing {self.failing}" if self.failing else "")
 
 
@@ -182,14 +212,17 @@ def parse_learned(value: str) -> LearnedRecord:
     if match is None:
         raise SkillError(
             f"learned: expected 'YYYY-MM-DD · worked N · failed N "
-            f"[· last ok YYYY-MM-DD] [· failing N]', got {value!r} -- Yantra "
+            f"[· last ok YYYY-MM-DD] [· in a row N] [· failing N]', got "
+            f"{value!r} -- Yantra "
             f"writes this "
             f"line; delete it and it starts again from zero")
     return LearnedRecord(since=match["since"],
                          worked=int(match["worked"] or 0),
                          failed=int(match["failed"] or 0),
                          last_ok=match["last_ok"] or "",
-                         failing=int(match["failing"] or 0))
+                         failing=int(match["failing"] or 0),
+                         streak=(int(match["streak"])
+                                 if match["streak"] is not None else None))
 
 
 @dataclass(slots=True, frozen=True)
@@ -208,7 +241,7 @@ class Skill:
     origin: str = ""                        # "" (a person wrote it) | learned
     needs: str = ""                         # access it expects, in words
     inputs: str = ""                        # what it asks for each time
-    tool: str = ""                          # reserved: script offered as a tool
+    tool: str = ""                          # "<tool name> scripts/<file>"
     learned: LearnedRecord | None = None    # counters, learned skills only
 
     @property
@@ -222,6 +255,25 @@ class Skill:
         return self.origin == "learned" or self.source in LEARNED_SOURCES.values()
 
     @property
+    def tool_name(self) -> str:
+        """The promoted tool's name, or "" -- the first word of ``tool``."""
+        return self.tool.split()[0] if self.tool else ""
+
+    @property
+    def tool_script(self) -> str:
+        """The script the tool runs, relative to the skill's folder."""
+        return self.tool.split()[1] if len(self.tool.split()) > 1 else ""
+
+    @property
+    def suggest_tool(self) -> bool:
+        """Worth offering as a tool: learned, has a script, not one yet,
+        not set aside, and PROMOTE_AFTER successes in a row."""
+        return (self.learned is not None and not self.tool
+                and not self.is_stale
+                and self.learned.in_a_row >= PROMOTE_AFTER
+                and any((self.directory / "scripts").glob("*")))
+
+    @property
     def directory(self) -> Path:
         """The skill's folder -- the anchor for every bundled file."""
         return self.path.parent
@@ -231,7 +283,7 @@ class Skill:
         """True when this skill runs in a scoped sub-agent, not inline."""
         return self.mode == "subagent"
 
-    def roster_line(self) -> str:
+    def roster_line(self, tool: str = "") -> str:
         """The tier-1 cost: one line in the system prompt, per session.
 
         A delegated skill is MARKED, because the model has to reach for a
@@ -239,6 +291,7 @@ class Skill:
         load_skill for something load_skill deliberately refuses.
         """
         mark = " [delegated]" if self.delegated else ""
+        mark += f" [tool: {tool}]" if tool else ""
         return f"- {self.name}{mark}: {self.description}"
 
 
@@ -421,6 +474,17 @@ def validate_text(text: str, path: Path, *, source: str = "project") -> Skill:
             f"unknown origin {origin!r}: the only one is 'learned' (leave "
             f"it out for a skill a person wrote)")
     learned = fields.get("learned", "").strip()
+    tool = " ".join(fields.get("tool", "").split())
+    if tool:
+        match = TOOL_RE.match(tool)
+        if match is None or not TOOL_NAME_RE.match(match["name"]):
+            raise SkillError(
+                f"tool: expected '<name> scripts/<file>' with a snake_case "
+                f"name (fan_control scripts/fan.py), got {tool!r}")
+        if not origin:
+            raise SkillError(
+                "tool: is for learned skills (origin: learned) -- Yantra "
+                "writes it when a person promotes a recipe's script")
 
     return Skill(
         name=name,
@@ -435,7 +499,7 @@ def validate_text(text: str, path: Path, *, source: str = "project") -> Skill:
         origin=origin,
         needs=" ".join(fields.get("needs", "").split()),
         inputs=" ".join(fields.get("inputs", "").split()),
-        tool=" ".join(fields.get("tool", "").split()),
+        tool=tool,
         learned=parse_learned(learned) if learned else None,
     )
 

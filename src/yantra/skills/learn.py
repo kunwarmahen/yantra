@@ -180,9 +180,14 @@ class Turn:
     steps: list[Step]
     answer: str
 
-    def skills_loaded(self) -> list[str]:
-        return [str(s.arguments.get("name", "")) for s in self.steps
-                if s.name in ("load_skill", "run_skill")]
+    def skills_loaded(self, tools: dict[str, str] | None = None) -> list[str]:
+        """Skills the turn followed. ``tools`` maps a promoted tool's name
+        to its skill's: calling it is following the skill too."""
+        tools = tools or {}
+        return [str(s.arguments.get("name", "")) if s.name in (
+                    "load_skill", "run_skill") else tools[s.name]
+                for s in self.steps
+                if s.name in ("load_skill", "run_skill") or s.name in tools]
 
 
 def _worked(name: str, result: ToolResult) -> bool:
@@ -196,6 +201,15 @@ def _worked(name: str, result: ToolResult) -> bool:
         code = _exit_code(result.content)
         return code is None or code == 0
     return True
+
+
+def used_skill(step: Step, skills: Any) -> Skill | None:
+    """The learned skill a call USED: a load_skill that worked, or a call
+    to a promoted skill's own tool (loader.Skill.tool_name)."""
+    if step.name == "load_skill":
+        return skills.get(str(step.arguments.get("name", ""))) if step.ok else None
+    return next((s for s in skills if s.tool_name and s.tool_name == step.name),
+                None)
 
 
 def _is_prompt(message: Message) -> bool:
@@ -236,14 +250,16 @@ def read_turn(history: list[Message]) -> Turn | None:
 
 def why_not(turn: Turn | None, reason: str,
             *, min_steps: int = MIN_STEPS,
-            repairing: bool = False) -> str | None:
+            repairing: bool = False,
+            tools: dict[str, str] | None = None) -> str | None:
     """The counted half of noticing: None when the turn is worth a look,
     otherwise why not, in words the host can show on ``/learn``."""
     if turn is None:
         return "there is no finished turn to learn from yet"
     if reason != "end_turn":
         return f"the last turn did not finish ({reason})"
-    if not repairing and (loaded := [n for n in turn.skills_loaded() if n]):
+    if not repairing and (loaded := list(dict.fromkeys(
+            n for n in turn.skills_loaded(tools) if n))):
         return f"the last turn already followed a skill ({', '.join(loaded)})"
     if len(turn.steps) < min_steps:
         return (f"the last turn took {len(turn.steps)} tool call(s); fewer "
@@ -572,6 +588,11 @@ class Offer:
     repairs: Skill | None = None
     #: What failed this time, one line, scrubbed.
     failure: str = ""
+    #: A repair of a promoted skill: its tool's name, and whether the new
+    #: test still fits the tool's arguments -- kept if so, dropped if not
+    #: (promote.fits).
+    tool: str = ""
+    keeps_tool: bool = False
 
     def diff(self) -> str:
         """The update as a person reads one: saved version against proposed.
@@ -621,6 +642,8 @@ class Offer:
             "repairs": self.repairs.name if self.repairs else None,
             "failure": self.failure,
             "diff": self.diff(),
+            "tool": ({"name": self.tool, "kept": self.keeps_tool}
+                     if self.tool else None),
         }
 
     def _staged(self, relative: str, fallback: str) -> str:
@@ -693,15 +716,17 @@ class Learner:
         refused = set(getattr(self.agent, "turn_refusals", {}) or {})
         counted: list[tuple[str, bool]] = []
         for index, step in enumerate(turn.steps):
-            if step.name != "load_skill" or not step.ok:
-                continue
-            skill = skills.get(str(step.arguments.get("name", "")))
+            skill = used_skill(step, skills)
             if skill is None or not skill.is_learned:
                 continue
             if skill.name in (name for name, _ in counted):
                 continue
-            # A refusal is the person's call, not the recipe's failure.
-            after = [s for s in turn.steps[index + 1:] if s.call_id not in refused]
+            if step.call_id in refused:
+                continue        # a refused tool call ran nothing
+            # A refusal is the person's call, not the recipe's failure. A
+            # promoted tool's own call is part of the use; a load is not.
+            start = index + (1 if step.name == "load_skill" else 0)
+            after = [s for s in turn.steps[start:] if s.call_id not in refused]
             worked = self.last_reason == "end_turn" and all(s.ok for s in after)
             try:
                 record_use(skill, worked)
@@ -733,7 +758,8 @@ class Learner:
         # and a recovery -- the effort question does not apply.
         skip = why_not(turn, self.last_reason,
                        min_steps=1 if forced or repairs else MIN_STEPS,
-                       repairing=repairs is not None)
+                       repairing=repairs is not None,
+                       tools=self._tool_names())
         if skip:
             self.last_skip = skip
             return None
@@ -779,6 +805,8 @@ class Learner:
                       failure=scrub(failure_line(turn, repairs), found)
                       if repairs else "")
         self._settle_name(offer)
+        if repairs is not None and repairs.tool_name:
+            offer.tool = repairs.tool_name
         if draft.script:
             self._test(offer, say)
             if not offer.tested and offer.test_output.startswith("[not run]"):
@@ -792,7 +820,22 @@ class Learner:
                                   f"{offer.test_runs} time(s), so it was not "
                                   f"offered:\n{_clip(offer.test_output, 600)}")
                 return None
+        if offer.tool:
+            offer.keeps_tool = self._tool_still_fits(repairs, draft)
         return offer
+
+    def _tool_still_fits(self, skill: Skill, draft: Draft) -> bool:
+        """The repair check: same script, and the passing test's words read
+        back through the tool's argv template (promote.fits)."""
+        from yantra.skills.promote import fits, load_tool_def
+
+        if not draft.script or draft.script_name != skill.tool_script:
+            return False
+        try:
+            tool = load_tool_def(skill)
+        except SkillError:
+            return False
+        return fits(tool, draft.test, draft.script_name) is not None
 
     def _repair_target(self, turn: Turn | None) -> tuple[Skill | None, str]:
         """The learned skill this turn followed and saw fail, when the task
@@ -809,9 +852,12 @@ class Learner:
         skill = skills.get(failed[0])
         if skill is None:
             return None, ""
-        loads = [i for i, s in enumerate(turn.steps)
-                 if s.name == "load_skill" and s.arguments.get("name") == skill.name]
-        after = turn.steps[loads[0] + 1:] if loads else []
+        uses = [i for i, s in enumerate(turn.steps)
+                if (s.name == "load_skill" and s.arguments.get("name") == skill.name)
+                or (skill.tool_name and s.name == skill.tool_name)]
+        # a load is not part of the use; a promoted tool's own call is
+        after = (turn.steps[uses[0] + (turn.steps[uses[0]].name == "load_skill"):]
+                 if uses else [])
         first_bad = next((i for i, s in enumerate(after) if not s.ok), None)
         if (self.last_reason != "end_turn" or first_bad is None
                 or not any(s.ok for s in after[first_bad + 1:])):
@@ -819,6 +865,12 @@ class Learner:
                           f"and the task was not finished another way -- "
                           f"there is nothing to update it from")
         return skill, ""
+
+    def _tool_names(self) -> dict[str, str]:
+        """Promoted tool name -> its skill's name, for this session."""
+        skills = getattr(self.agent, "skills", None)
+        return ({s.tool_name: s.name for s in skills if s.tool_name}
+                if skills is not None else {})
 
     def _set_aside(self) -> str:
         skills = getattr(self.agent, "skills", None)
@@ -929,6 +981,144 @@ class Learner:
             return False, result.content
         return _exit_code(result.content) == 0, result.content
 
+    # ---- promotion to a tool (notes/98) -----------------------------------------
+
+    def propose_tool(self, name: str, *,
+                     progress: Callable[[str], None] | None = None) -> Any:
+        """Write a tool for a learned skill's script and test it once.
+
+        Returns a promote.ToolOffer, or None with ``last_skip`` saying why.
+        The suggestion (Skill.suggest_tool) is not required here: the
+        person may promote earlier by asking -- it is their call either way.
+        """
+        from yantra.skills.promote import (
+            FIX_PROPOSAL_PROMPT,
+            MAX_RUNS_SHOWN,
+            PROMOTE_PROMPT,
+            ToolOffer,
+            _only_script,
+            parse_proposal,
+        )
+
+        say = progress or (lambda text: None)
+        self.last_skip = None
+        skills = getattr(self.agent, "skills", None)
+        skill = skills.get(name) if skills is not None else None
+        why, script_name = None, ""
+        if skill is None or not skill.is_learned:
+            why = f"there is no learned skill called {name!r}"
+        elif skill.tool:
+            why = f"{name} is already the tool {skill.tool_name}"
+        elif skill.is_stale:
+            why = f"{name} is set aside after failing; repair it first"
+        else:
+            try:
+                script_name = _only_script(skill)
+            except SkillError as exc:
+                why = str(exc)
+        if why is not None:
+            self.last_skip = why
+            return None
+
+        taken = sorted(n for n in self.agent.registry.names())
+        runs = [s.arguments.get("command", "") for s in self._script_runs(
+            skill, script_name)][-MAX_RUNS_SHOWN:]
+        found: set[str] = set()
+        prompt = PROMOTE_PROMPT.format(
+            worked=skill.learned.in_a_row if skill.learned else 0,
+            skill_md=scrub(_without_counters(_read(skill.path)).strip(), found),
+            script_name=script_name,
+            script=scrub(_read(skill.directory / script_name).strip(), found),
+            runs=("\nHOW IT WAS RUN IN THIS SESSION:\n" + "\n".join(
+                f"$ {scrub(r, found)}" for r in runs) + "\n") if runs else "",
+            taken=", ".join(taken))
+        say(f"writing {name}'s script up as a tool")
+        spent = Usage()
+        reply = self._complete(prompt, spent)
+        try:
+            parsed = parse_proposal(reply)
+        except SkillError as exc:
+            say("the definition broke a rule; asking for one fix")
+            reply = self._complete(FIX_PROPOSAL_PROMPT.format(
+                error=exc, reply=_clip(reply, 4000)), spent)
+            try:
+                parsed = parse_proposal(reply)
+            except SkillError as again:
+                self.last_skip = str(again)
+                return None
+        if isinstance(parsed, str):
+            self.last_skip = f"not made a tool: {parsed}"
+            return None
+        tool, test = parsed
+        if tool.name in self.agent.registry:
+            self.last_skip = (f"the proposed name {tool.name!r} is already a "
+                              f"tool in this session")
+            return None
+        if any(v in json.dumps(test) for v in found):
+            self.last_skip = ("the proposed test carries what looks like a "
+                              "secret, so it was not run")
+            return None
+        offer = ToolOffer(skill=skill, tool=tool, test_args=test,
+                          spent_in=spent.input_tokens,
+                          spent_out=spent.output_tokens)
+        say(f"testing {tool.name} once")
+        offer.passed, offer.test_output = self._run_tool(offer, script_name)
+        if offer.test_output.startswith("[not run]"):
+            self.last_skip = "its test did not run: " + offer.test_output[10:]
+            return None
+        return offer
+
+    def _script_runs(self, skill: Skill, script_name: str) -> list[Step]:
+        """This session's bash calls that ran the skill's script -- real
+        arguments the proposal can pick its test from."""
+        needle = f"{skill.directory}/{script_name}"
+        steps: list[Step] = []
+        for message in self.agent.history:
+            for block in message.content:
+                if (isinstance(block, ToolCall) and block.name == "bash"
+                        and needle in str(block.arguments.get("command", ""))):
+                    steps.append(Step(block.id, "bash", block.arguments, "", True))
+        return steps
+
+    def _run_tool(self, offer: Any, script_name: str) -> tuple[bool, str]:
+        """One call of the proposed tool, through the session's permission
+        gate -- registered for that one call, then taken away again."""
+        from yantra.skills.promote import ScriptTool
+
+        agent = self.agent
+        skill = offer.skill
+        probe = ScriptTool(agent.skills, skill, offer.tool)
+        probe.script = script_name          # not promoted yet: no tool: line
+        probe.run_checks = False
+        agent.registry.register(probe)
+        call = ToolCall(id=f"promote-{uuid.uuid4().hex[:12]}",
+                        name=offer.tool.name, arguments=dict(offer.test_args))
+        could_hold, agent.can_hold = agent.can_hold, False
+        try:
+            result = agent._execute(call)
+        finally:
+            agent.can_hold = could_hold
+            agent.registry.unregister(offer.tool.name)
+            agent._refusals.pop(call.id, None)
+        if call.id in agent.turn_refusals:
+            del agent.turn_refusals[call.id]
+            return False, f"[not run] {result.content}"
+        return not result.is_error, result.content
+
+    def save_tool(self, offer: Any) -> Skill:
+        """The person said yes: write tool.json and the ``tool:`` line."""
+        from yantra.skills.promote import TOOL_FILE, _only_script
+
+        skill = offer.skill
+        script_name = _only_script(skill)
+        text = set_tool_line(_read(skill.path), f"{offer.tool.name} {script_name}")
+        validate_text(text, skill.path, source=skill.source)
+        write_atomic(skill.directory / TOOL_FILE, offer.tool.to_json())
+        write_atomic(skill.path, text)
+        skills = self.agent.skills
+        skills.reload()
+        return skills.get(skill.name) or load_skill(skill.path, source=skill.source)
+
     # ---- saving ----------------------------------------------------------------
 
     def save(self, offer: Offer, *, scope: str | None = None,
@@ -946,11 +1136,17 @@ class Learner:
         target = root / draft.name
         text = skill_md if skill_md is not None else draft.skill_md()
         old = offer.repairs.learned if offer.repairs is not None else None
+        # A repair keeps the record and clears both streaks: the fixed
+        # version has proved nothing yet -- which is also what makes a
+        # dropped tool wait for PROMOTE_AFTER fresh successes.
         record = (LearnedRecord(since=old.since, worked=old.worked,
-                                failed=old.failed, last_ok=old.last_ok)
+                                failed=old.failed, last_ok=old.last_ok,
+                                streak=0)
                   if old is not None
                   else LearnedRecord(since=date.today().isoformat()))
         text = set_learned_line(text, record)
+        keep = offer.repairs if offer.keeps_tool else None
+        text = set_tool_line(text, keep.tool if keep is not None else "")
         validate_text(text, target / SKILL_FILE, source=LEARNED_SOURCES[scope])
 
         root.mkdir(parents=True, exist_ok=True)
@@ -963,6 +1159,9 @@ class Learner:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(body, encoding="utf-8")
                 path.chmod(0o755)
+            if keep is not None:
+                from yantra.skills.promote import TOOL_FILE
+                shutil.copy2(keep.directory / TOOL_FILE, building / TOOL_FILE)
             if offer.replaces is not None and offer.replaces.exists():
                 shutil.rmtree(offer.replaces)
             if target.exists():
@@ -994,8 +1193,10 @@ def _read(path: Path) -> str:
 
 
 def _without_counters(text: str) -> str:
+    """SKILL.md minus the lines only Yantra writes: the counters, and the
+    tool line (a repair's offer says in words whether the tool stays)."""
     return "".join(line for line in text.splitlines(keepends=True)
-                   if not re.match(r"^learned\s*:", line))
+                   if not re.match(r"^(learned|tool)\s*:", line))
 
 
 def _saved_text(skill: Skill) -> str:
@@ -1015,6 +1216,7 @@ def failure_line(turn: Turn, skill: Skill) -> str:
         if step.name == "load_skill" and step.arguments.get("name") == skill.name:
             loaded = True
             continue
+        loaded = loaded or bool(skill.tool_name and step.name == skill.tool_name)
         if loaded and not step.ok:
             first = (step.result.strip().splitlines() or [""])
             detail = next((ln for ln in first if ln.strip()
@@ -1043,6 +1245,21 @@ def set_learned_line(text: str, record: LearnedRecord) -> str:
     return "\n".join(new) + ("\n" if text.endswith("\n") else "")
 
 
+def set_tool_line(text: str, tool: str) -> str:
+    """Put ``tool: <name> scripts/<file>`` in a SKILL.md's frontmatter, or
+    take it out when ``tool`` is empty. Yantra's to write, like the
+    counters: a person promotes through the question, not by typing it."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return text
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    if end is None:
+        return text
+    head = [line for line in lines[1:end] if not re.match(r"^tool\s*:", line, re.I)]
+    new = ["---", *head, *([f"tool: {tool}"] if tool else []), *lines[end:]]
+    return "\n".join(new) + ("\n" if text.endswith("\n") else "")
+
+
 def record_use(skill: Skill, worked: bool, today: str | None = None) -> LearnedRecord:
     """Add one use to a learned skill's counters, on disk."""
     today = today or date.today().isoformat()
@@ -1052,7 +1269,8 @@ def record_use(skill: Skill, worked: bool, today: str | None = None) -> LearnedR
         worked=old.worked + (1 if worked else 0),
         failed=old.failed + (0 if worked else 1),
         last_ok=today if worked else old.last_ok,
-        failing=0 if worked else old.failing + 1)
+        failing=0 if worked else old.failing + 1,
+        streak=old.in_a_row + 1 if worked else 0)
     text = skill.path.read_text(encoding="utf-8")
     write_atomic(skill.path, set_learned_line(text, record))
     return record

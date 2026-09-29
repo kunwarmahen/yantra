@@ -631,6 +631,51 @@ class WebSession:
 
         threading.Thread(target=work, daemon=True, name="yantra-learn").start()
 
+    def start_promote(self, name: str) -> None:
+        """``POST /api/skills/{name}/tool``: the page's ``/skills tool``.
+        Write the tool, test it once through the gate, ask -- a turn of
+        its own for the page, like a save asked for by hand."""
+        self._cancel.clear()
+        self.turn_active = True
+        self.broadcast({"type": "turn_started"})
+
+        def work() -> None:
+            try:
+                self._promote(name)
+            except KeyboardInterrupt:
+                self.broadcast({"type": "learn_skipped",
+                                "reason": "not made a tool"})
+            except Exception as exc:
+                self.broadcast({"type": "learn_skipped",
+                                "reason": f"not made a tool: {exc}"})
+            finally:
+                self.turn_active = False
+                self._cancel.clear()
+                self.broadcast({"type": "state", **self.state()})
+                self.broadcast({"type": "turn_done"})
+
+        threading.Thread(target=work, daemon=True, name="yantra-promote").start()
+
+    def _promote(self, name: str) -> None:
+        from yantra.skills.learn import Learner
+
+        learner = getattr(self.agent, "learner", None) or Learner(self.agent, "ask")
+        offer = learner.propose_tool(
+            name, progress=lambda text: self.broadcast(
+                {"type": "learn_status", "text": text}))
+        if offer is None:
+            self.broadcast({"type": "learn_skipped",
+                            "reason": f"not made a tool: {learner.last_skip}"})
+            return
+        answer = self._ask_human({"type": "tool_offer",
+                                  "id": uuid.uuid4().hex[:8], **offer.view()})
+        if answer.get("decision") != "make" or not offer.passed:
+            self.broadcast({"type": "learn_skipped", "reason": "not made a tool"})
+            return
+        skill = learner.save_tool(offer)
+        self.broadcast({"type": "promoted", "skill": skill.name,
+                        "tool": skill.tool_name})
+
     def _record(self, trajectory) -> None:
         """The recorder's sink: write the line, then tell the page its id.
 
@@ -1249,6 +1294,17 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         require_idle()
         require_skills()
         session.start_learn()
+        return {"ok": True}
+
+    @app.post("/api/skills/{name}/tool")
+    def skills_promote(name: str) -> dict[str, Any]:
+        """Make a learned skill's script a tool of its own. The proposal
+        arrives over the socket as a ``tool_offer`` question; nothing is
+        written until the person says make it."""
+        require_ready()
+        require_idle()
+        require_skills()
+        session.start_promote(name)
         return {"ok": True}
 
     @app.post("/api/skills/reload")

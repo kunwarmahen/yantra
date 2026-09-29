@@ -93,6 +93,12 @@ function route(env) {
     case "permission_request": showPermissionModal(env); break;
     case "ask":                showAskModal(env); break;
     case "learn_offer":        showLearnModal(env); break;
+    case "tool_offer":         showToolModal(env); break;
+    case "promoted":           toast(`${env.skill} is now the tool ${env.tool}`);
+                               addBanner(`${env.skill} is now the tool `
+                                 + `${env.tool} — next time it is one call `
+                                 + `(each call still asks first, like bash)`, false);
+                               break;
     case "learn_status":       setStatus(`· ${env.text}`); break;
     case "learn_counted":      /* the skills panel shows the new counts */ break;
     case "learned":            toast(`saved skill ${env.name}`);
@@ -967,6 +973,10 @@ function showLearnModal(env) {
       <dt>needs</dt><dd>${esc(env.needs || "nothing")}</dd>
       <dt>inputs</dt><dd>${esc(env.inputs || "none")}</dd>
       <dt>tested</dt><dd>${esc(tested)}</dd>
+      ${env.tool ? `<dt>tool</dt><dd>${esc(env.tool.name)} ${env.tool.kept
+        ? "stays — the fixed script takes the same arguments"
+        : "goes — the fixed script's arguments changed; it is a recipe again "
+          + "until it has worked 5 times in a row"}</dd>` : ""}
       <dt>cost</dt><dd>${fmtNum(env.spent?.input ?? 0)} in / ${fmtNum(env.spent?.output ?? 0)} out tokens to write and test</dd>
       ${env.replaces && !update ? `<dt>replaces</dt><dd>${esc(env.replaces)}</dd>` : ""}
     </dl>
@@ -992,6 +1002,39 @@ function showLearnModal(env) {
       skill_md: $("#learn-md").value,
       script: $("#learn-script") ? $("#learn-script").value : null,
     });
+  };
+}
+
+function showToolModal(env) {
+  ui.modalId = env.id;
+  const test = env.test || {};
+  const params = Object.entries(env.parameters?.properties || {}).map(([key, p]) => `
+    <dt>${esc(key)}</dt><dd>${esc(p.type)}, ${(env.parameters.required || [])
+      .includes(key) ? "required" : "optional"}${p.description
+      ? ` — ${esc(p.description)}` : ""}</dd>`).join("");
+  showModal(`
+    <div class="kind-tag">make this a tool?</div>
+    <h3>${esc(env.name)}</h3>
+    <div class="context-note">${esc(env.description)}</div>
+    <dl class="learn-facts">
+      <dt>from</dt><dd>the skill ${esc(env.skill)}</dd>
+      ${params}
+      <dt>runs</dt><dd><code>${esc(env.command)}</code></dd>
+      <dt>tested</dt><dd>${test.passed ? "passed" : "FAILED"} — ${esc(JSON.stringify(test.args))}</dd>
+      <dt>cost</dt><dd>${fmtNum(env.spent?.input ?? 0)} in / ${fmtNum(env.spent?.output ?? 0)} out tokens to write it</dd>
+    </dl>
+    <div class="context-note">Each call still asks first, like bash.</div>
+    ${test.output ? `<details ${test.passed ? "" : "open"}><summary>test output</summary>
+      <pre class="args">${esc(test.output)}</pre></details>` : ""}
+    <details><summary>tool.json</summary><pre class="args">${esc(env.tool_json)}</pre></details>
+    <div class="modal-actions">
+      <button class="m-btn" data-act="no">no</button>
+      ${test.passed ? '<button class="m-btn primary" data-act="make">make it a tool</button>' : ""}
+    </div>`);
+  $("#modal").onclick = (e) => {
+    const act = e.target?.closest?.("[data-act]")?.dataset?.act;
+    if (!act) return;
+    send({ type: "answer", id: env.id, decision: act === "make" ? "make" : "no" });
   };
 }
 
@@ -1463,7 +1506,10 @@ function skillRow(s) {
     + `<span class="t-badge">${esc(s.source)}</span>`
     + (s.mode === "subagent" ? '<span class="t-ro">delegated</span>' : "")
     + (s.stale ? '<span class="t-ro" title="failed 3 times in a row; left out '
-      + 'until a fresh solve repairs it">stale</span>' : "");
+      + 'until a fresh solve repairs it">stale</span>' : "")
+    + (s.tool ? `<span class="t-ro" title="${esc(s.tool_error
+        || "its script is a tool the model can call in one step")}">tool: `
+      + `${esc(s.tool)}${s.tool_error ? " (not offered)" : ""}</span>` : "");
   name.title = s.path;
   row.append(name);
 
@@ -1478,8 +1524,26 @@ function skillRow(s) {
     tally.className = "t-tally";
     tally.textContent = `learned ${c.since} · worked ${c.worked} · failed ${c.failed}`
       + (c.last_ok ? ` · last ok ${c.last_ok}` : "")
+      + (c.in_a_row != null && c.failed ? ` · in a row ${c.in_a_row}` : "")
       + (c.failing ? ` · failing ${c.failing}` : "");
     desc.append(tally);
+  }
+  // The suggestion only -- promoting is the person's call (notes/98).
+  if (s.suggest_tool) {
+    const make = document.createElement("button");
+    make.className = "t-edit t-promote";
+    make.textContent = "make it a tool?";
+    make.title = `worked ${c ? c.in_a_row : 5} times in a row — make its `
+      + "script one tool call (tested and shown to you first)";
+    make.onclick = async () => {
+      make.disabled = true;
+      try {
+        const res = await fetch(`/api/skills/${encodeURIComponent(s.name)}/tool`,
+                                { method: "POST" });
+        if (!res.ok) addBanner(`cannot start: ${(await res.json()).detail}`, true);
+      } finally { make.disabled = false; }
+    };
+    desc.append(make);
   }
   row.append(desc);
 

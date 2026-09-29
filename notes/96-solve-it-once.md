@@ -273,11 +273,10 @@ small models do well. Rediscovering an API is something they do badly.
 
 ## What was deliberately not built
 
-* **Promoting a script to a tool.** A recipe whose script has worked
+* ~~**Promoting a script to a tool.** A recipe whose script has worked
   many times could become one structured tool call, which is cheaper
-  still and easier for small models. The `tool:` key is parsed and
-  kept, but nothing reads it yet. Making the tool is the person's call,
-  and it needs a sandboxed runner of its own.
+  still and easier for small models.~~ Built, and the person decides:
+  [note 98](98-one-call.md).
 * ~~**Repair.** When a saved recipe fails, the agent could solve the
   task fresh and offer the fix as a diff.~~ Built:
   [note 97](97-when-the-recipe-breaks.md).

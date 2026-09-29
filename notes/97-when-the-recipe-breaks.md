@@ -161,9 +161,9 @@ calls, 10,990 tokens, 18 s.
 * **Repairing a hand-written skill.** Only learned skills are counted,
   set aside or updated. A skill a person wrote is theirs to change, and
   a failure of one is reported by nothing but the turn itself.
-* **Promotion to a tool.** Still the next step ([note 96](96-solve-it-once.md)
-  has the argument): a recipe that has worked many times could become
-  one structured call.
+* ~~**Promotion to a tool.** A recipe that has worked many times could
+  become one structured call.~~ Built: [note 98](98-one-call.md). A
+  repair now also says whether a promoted skill keeps its tool.
 
 ## Receipt
 

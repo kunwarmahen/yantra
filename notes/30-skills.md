@@ -387,3 +387,11 @@ a `learned:` counter line Yantra keeps), live in their own `learned/`
 folders, and load exactly like these. Why the write-up happens in a
 fresh, small context rather than in the session, and what it cost
 against the obvious way: [notes/96](96-solve-it-once.md).
+
+One learned skill can break the "one tool, not N" rule above, on
+purpose. When a recipe's script has worked five times in a row, the
+person may promote it to a tool of its own, so the task is one
+structured call instead of load, read, run. That costs a schema per
+promoted skill, which is why it is the person's call and never
+automatic. The tool still goes through tool selection like any other
+([notes/98](98-one-call.md)).
