@@ -114,8 +114,9 @@ searches.
 
 Memory is attached while the agent is built, and MCP servers connect
 afterwards, in the terminal or the page. So the store starts **unbound**.
-Once the servers are up, the host binds it to the named one, connecting
-it from the package's `[[mcp]]` if nothing else did. Until then, or after
+Once the servers are up, the package's `[[mcp]]` among them
+([note 104](104-the-servers-it-came-with.md)), the host binds it to the
+named one. Until then, or after
 the server goes away, a call to the store fails, and the memory layer
 does what it always does: the turn goes on without it, with a line
 saying why.
@@ -210,10 +211,9 @@ is measured in [note 103](103-said-once-found-later.md).
 
 ## What was deliberately not built
 
-* **A package's `[[mcp]]` servers in an ordinary session.** Today they
-  connect under `--eval` only. The memory server is the exception:
-  binding connects it if the package declares it. Connecting every
-  declared server in a normal session is a separate change.
+* ~~**A package's `[[mcp]]` servers in an ordinary session.**~~ Every
+  session now starts them, after the person's own servers, and binding
+  no longer connects anything ([note 104](104-the-servers-it-came-with.md)).
 * **Renaming arguments.** The map renames tools, not arguments. A store
   whose `remember` wants `content` instead of `statement` needs a small
   tool of its own. A map for arguments, too, would be a spec that grows

@@ -551,6 +551,14 @@ class TestMcpLoginFlag:
                               "--cwd", str(tmp_path)]) == 2
         assert "stdio server" in capsys.readouterr().err
 
+    def test_a_packages_server_is_found_too(self, tmp_path, capsys):
+        from yantra.cli import main as cli_main
+        (tmp_path / "agent.toml").write_text(
+            '[[mcp]]\nname = "local"\ncommand = "py"\n')
+        assert cli_main.main(["--mcp-login", "local",
+                              "--cwd", str(tmp_path)]) == 2
+        assert "stdio server" in capsys.readouterr().err
+
     def test_it_is_its_own_mode(self):
         from yantra.cli import main as cli_main
         assert cli_main.main(["--mcp-login", "x", "--prompt", "hi"]) == 2
@@ -1019,3 +1027,51 @@ class TestManagerEndToEnd:
         assert manager.disconnect(cfg.name) > 0
         assert registry.names() == []
         assert manager.servers() == []
+
+
+class TestPackageServersInASession:
+    """A package's [[mcp]] servers connect in an ordinary session, not
+    only under --eval, after everything the person set up themselves."""
+
+    def _start(self, configs, registry=None, already=(), **kw):
+        import io
+        from rich.console import Console
+        from yantra.cli.main import _connect_package_mcp
+        from yantra.mcp import MCPManager
+
+        connector = fake_connector_factory(**kw)
+        manager = MCPManager(registry if registry is not None else ToolRegistry(),
+                             connector=connector)
+        for name in already:
+            manager.connect(_cfg(name))
+        console = Console(file=io.StringIO(), width=200)
+        _connect_package_mcp(configs, manager, console)
+        return manager, connector, console.file.getvalue()
+
+    def test_declared_servers_connect_and_are_announced(self):
+        manager, _, out = self._start([_cfg("docs")])
+        assert sorted(manager.registry.names()) == ["mcp__docs__echo",
+                                                    "mcp__docs__ping"]
+        assert "mcp 'docs' (agent.toml): 2 tool(s)" in out
+        manager.shutdown()
+
+    def test_a_name_the_person_connected_wins(self):
+        manager, connector, out = self._start([_cfg("docs")], already=["docs"])
+        assert connector.calls == ["docs"]           # not connected twice
+        assert "already connected from your own setup" in out
+        manager.shutdown()
+
+    def test_a_dead_server_warns_and_the_rest_still_connect(self):
+        manager, _, out = self._start([_cfg("dead"), _cfg("docs")],
+                                      fail_names=("dead",))
+        assert "mcp 'dead' (agent.toml) unavailable" in out
+        assert "mcp__docs__echo" in manager.registry.names()
+        manager.shutdown()
+
+    def test_the_packages_admission_policy_still_applies(self):
+        registry = ToolRegistry()
+        registry.admit_only(allow=["read_file"])
+        manager, _, _ = self._start([_cfg("docs")], registry=registry)
+        assert "mcp__docs__echo" not in registry.names()
+        assert "mcp__docs__echo" in registry.refused_names()
+        manager.shutdown()

@@ -1083,6 +1083,20 @@ verbs = { list = "all_memories" }   # only for a server: its tool per verb,
                                 # when not remember/recall/forget/list_memories
 ```
 
+A package may also declare the MCP servers it needs. Every session
+starts them — the terminal, the page and `--eval` alike — after your own
+`--mcp-config`, remembered and Setu servers, so a name you already
+connected wins. One that won't start is a yellow line in a session and a
+red suite under `--eval`
+([notes/104](notes/104-the-servers-it-came-with.md)):
+
+```toml
+[[mcp]]
+name    = "docs"
+url     = "https://example.invalid/mcp"
+headers = { Authorization = "Bearer ${DOCS_TOKEN}" }   # or command/args/env
+```
+
 A package may also declare the children it delegates to:
 
 ```toml
@@ -2027,7 +2041,10 @@ src/yantra/
 │                   Streamable HTTP (SSE responses via providers/sse.py):
 │                   handshake, tools/list, tools/call; MCPManager adds/
 │                   removes/toggles servers mid-session, .yantra/mcp.json
-│                   remembers them ([notes/09](notes/09-mcp.md))
+│                   remembers them ([notes/09](notes/09-mcp.md)); a
+│                   package's [[mcp]] connects in every session, last, so
+│                   the person's own server of the same name wins
+│                   ([notes/104](notes/104-the-servers-it-came-with.md))
 ├── mcp_oauth.py    OAuth 2.1 for authenticated HTTP servers, by hand:
 │                   RFC 9728/8414 discovery, RFC 7591 dynamic
 │                   registration, PKCE + a localhost redirect listener,

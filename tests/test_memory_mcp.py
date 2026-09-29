@@ -206,11 +206,12 @@ class TestBinding:
         agent.memory.prime(agent, "hello")
         assert "not connected" in agent.memory.notice
 
-    def test_it_connects_the_packages_server_and_binds(self, monkeypatch):
+    def test_it_binds_to_the_server_the_host_connected(self, monkeypatch):
         agent = self._agent(monkeypatch)
         server = FakeServer()
         manager = _manager_for(agent, server)
-        assert bind_memory_server(agent, manager, [server.config]) is None
+        manager.connect(server.config)
+        assert bind_memory_server(agent, manager) is None
         agent.memory.remember("Lives near RDU")
         assert server.rows == {"evt-1": ("asha", "Lives near RDU")}
 

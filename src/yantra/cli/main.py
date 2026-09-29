@@ -1917,14 +1917,19 @@ def _browse_login(url: str, console: Console) -> int:
     return 0
 
 
-def _find_mcp_config(name: str, config_paths: list[str],
-                     cwd: str) -> MCPServerConfig | None:
-    """Look the server up wherever a launch would have found it."""
+def _find_mcp_config(name: str, config_paths: list[str], cwd: str,
+                     declared=()) -> MCPServerConfig | None:
+    """Look the server up wherever a launch would have found it, in the
+    order a launch connects them: flags, remembered, then the package's
+    ``declared`` servers."""
     for path in config_paths:
         for cfg in load_mcp_configs(Path(path)):
             if cfg.name == name:
                 return cfg
     for cfg in load_remembered(remembered_path(Path(cwd))):
+        if cfg.name == name:
+            return cfg
+    for cfg in declared:
         if cfg.name == name:
             return cfg
     return None
@@ -1965,6 +1970,29 @@ def _connect_setu(args, mcp_manager, agent, console: Console) -> int | None:
     return None
 
 
+def _connect_package_mcp(configs, mcp_manager, console: Console) -> None:
+    """Connect the servers a package declares ([[mcp]] in agent.toml).
+
+    Run LAST, after flags, remembered servers and Setu, so a name the
+    person set up themselves wins over the author's. A server that will
+    not start warns and the session goes on, like every other server
+    here; --eval is where a declared server that is down is red.
+    """
+    for cfg in configs:
+        if cfg.name in mcp_manager.sessions:
+            console.print(f"[dim]mcp '{cfg.name}' (agent.toml): already "
+                          f"connected from your own setup; using that[/dim]")
+            continue
+        try:
+            names = mcp_manager.connect(cfg)
+        except (MCPError, ValueError) as exc:
+            console.print(f"[yellow]mcp '{cfg.name}' (agent.toml) "
+                          f"unavailable: {exc}[/yellow]")
+            continue
+        console.print(f"[dim]mcp '{cfg.name}' (agent.toml): {len(names)} "
+                      f"tool(s) -- {', '.join(names)}[/dim]")
+
+
 def _mcp_login(name: str, args, console: Console) -> int:
     """--mcp-login NAME: the OAuth walk, then a token on disk.
 
@@ -1975,13 +2003,15 @@ def _mcp_login(name: str, args, console: Console) -> int:
     from yantra.mcp_oauth import MCPAuthError, login
 
     try:
-        cfg = _find_mcp_config(name, args.mcp_config, args.cwd)
-    except MCPError as exc:
+        cfg = _find_mcp_config(name, args.mcp_config, args.cwd,
+                               _resolve_spec(args).mcp)
+    except (MCPError, ConfigError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if cfg is None:
-        print(f"error: no mcp server named {name!r} in --mcp-config or "
-              f"{remembered_path(Path(args.cwd))}\n"
+        print(f"error: no mcp server named {name!r} in --mcp-config, "
+              f"{remembered_path(Path(args.cwd))} or the package's "
+              f"[[mcp]]\n"
               "add it first (yantra --mcp-config FILE, or the web panel)",
               file=sys.stderr)
         return 2
@@ -2519,11 +2549,12 @@ def main(argv: list[str] | None = None) -> int:
         if _connect_setu(args, mcp_manager, agent, console) is not None:
             return 2
 
+        _connect_package_mcp(spec.mcp, mcp_manager, console)
+
         # A memory store behind an MCP server binds now that servers are
-        # up -- connecting it from the package's [[mcp]] if nothing above
-        # did -- and before tool selection, since binding takes the
-        # server's own memory tools out of the roster (memory/mcp.py).
-        if problem := bind_memory_server(agent, mcp_manager, list(spec.mcp)):
+        # up, and before tool selection, since binding takes the server's
+        # own memory tools out of the roster (memory/mcp.py).
+        if problem := bind_memory_server(agent, mcp_manager):
             console.print(f"[yellow]{problem}[/yellow]")
         _announce_memory(agent, spec, console)
 

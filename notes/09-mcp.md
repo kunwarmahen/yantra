@@ -335,7 +335,9 @@ second error is the server having read the credential and disliked it
 #### If the server only issues tokens through a login
 
 Most commercial ones do, and then there is no token to paste: the flow
-IS the credential. `yantra --mcp-login NAME` walks it
+IS the credential. `yantra --mcp-login NAME` walks it (NAME may be in
+`--mcp-config`, a remembered server, or a package's `[[mcp]]`,
+[note 104](104-the-servers-it-came-with.md))
 ([mcp_oauth.py](../src/yantra/mcp_oauth.py)), and the panel's 🔑 on any
 http row does the same thing from the browser you already have open.
 

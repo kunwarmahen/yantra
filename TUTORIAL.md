@@ -711,6 +711,12 @@ is a read-only research agent with its own skill, its own tool, its own
 declared child and its own eval suite. Read it before writing your own;
 it is commented the way a tutorial is.
 
+The "servers" in `agent.toml` are MCP servers the agent needs, one
+`[[mcp]]` block each. They start whenever the agent does, in the
+terminal or the page. If you already set up a server with the same
+name yourself, yours is used instead, and a server that won't start
+just prints a warning ([notes/104](notes/104-the-servers-it-came-with.md)).
+
 **The smallest package that works is two lines:**
 
 ```toml

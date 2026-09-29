@@ -242,7 +242,8 @@ Three things a host keeps, because each needs state a spec cannot carry:
 
 * **MCP connections.** `spec.mcp` carries the configs; opening them needs
   a live `MCPManager` whose sessions outlive the build and get closed on
-  every exit path.
+  every exit path. Every session opens them, after the person's own
+  servers ([note 104](104-the-servers-it-came-with.md)).
 * **Tool selection.** `spec.tools_per_turn` carries the width, but the
   catalog must be built after *every* tool is registered — including MCP
   tools, which arrive after the build — so the host decides when.

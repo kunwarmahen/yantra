@@ -207,11 +207,10 @@ def _short(data: Any) -> str:
     return text if len(text) <= 80 else text[:77] + "..."
 
 
-def bind_memory_server(agent: Any, manager: Any,
-                       configs: list[Any] = ()) -> str | None:
-    """The host's half: connect the store's server if it is not up yet
-    (from ``configs``, a package's ``[[mcp]]``), bind the store to it, and
-    take the mapped tools out of the model's roster.
+def bind_memory_server(agent: Any, manager: Any) -> str | None:
+    """The host's half: bind the store to its server, once the host has
+    connected the servers, and take the mapped tools out of the model's
+    roster.
 
     Returns a sentence saying what is wrong, or None when bound. Never
     raises: memory fails open, like everywhere else.
@@ -222,16 +221,9 @@ def bind_memory_server(agent: Any, manager: Any,
         return None
     server = store.server
     if server not in manager.sessions:
-        declared = next((c for c in configs if c.name == server), None)
-        if declared is None:
-            return (f"memory: mcp server {server!r} is not connected "
-                    f"(add it with --mcp-config, the page's MCP panel, or "
-                    f"[[mcp]] in agent.toml)")
-        from yantra.mcp import MCPError
-        try:
-            manager.connect(declared)
-        except (MCPError, ValueError) as exc:
-            return f"memory: mcp server {server!r} unavailable ({exc})"
+        return (f"memory: mcp server {server!r} is not connected "
+                f"(add it with --mcp-config, the page's MCP panel, or "
+                f"[[mcp]] in agent.toml)")
     prefix = f"mcp__{server}__"
     offered = {name.removeprefix(prefix)
                for name in manager.tool_names.get(server, [])}
