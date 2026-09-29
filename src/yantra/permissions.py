@@ -75,6 +75,7 @@ REFUSED_TIMEOUT = "timeout"  # somebody was asked and did not answer in time
 REFUSED_POLICY = "policy"  # a rule refused before any human saw it
 REFUSED_UNSPECIFIED = "unspecified"  # a gate said no and named no cause
 REFUSED_OUT_OF_TIME = "out_of_time"  # this turn's budget for waiting was gone
+REFUSED_NEEDS_PERSON = "needs_person"  # always_ask, and only a blanket yes was on offer
                                      # before the question could be asked
 
 #: Not a refusal: "not yet" (notes/88). A gate answers False with this
@@ -140,6 +141,11 @@ class PermissionRequest:
     #: own turn, because letting an unstamped question eat a real turn's
     #: allowance would be worse than not budgeting it at all.
     turn_id: str = ""
+    #: The tool's ``always_ask``: this call needs a person's yes, and no
+    #: blanket approval counts as one (``yolo`` refuses it; a
+    #: ``SwitchableGate`` in yolo mode asks anyway). Defaulted, so a
+    #: request built by hand is an ordinary one.
+    always_ask: bool = False
     #: tool.summary(args, ctx) with the context pre-bound by the loop, so
     #: an edit-and-reapprove UI can re-render the preview for amended args.
     #: None => the UI falls back to showing raw JSON.
@@ -242,7 +248,19 @@ def allow_read_only(request: PermissionRequest) -> bool:
 
 
 def yolo(request: PermissionRequest) -> bool:
-    """Allow everything (--yolo). You trust the model; you accept the risk."""
+    """Allow everything (--yolo). You trust the model; you accept the risk.
+
+    Except a call marked ``always_ask``: there, "allow everything" is the
+    one answer that does not count, and with no person behind this gate
+    to ask, the call is refused and says why.
+    """
+    if request.always_ask:
+        return refuse(
+            request,
+            f"{request.tool_name} was denied: it needs a person to approve each call, "
+            f"and this session approves everything without asking (--yolo). Ask the "
+            f"person to run it themselves, or to start a session that asks.",
+            code=REFUSED_NEEDS_PERSON)
     return True
 
 
@@ -585,7 +603,9 @@ class SwitchableGate:
     mode: str = "ask"
 
     def __call__(self, request: PermissionRequest) -> bool | Awaitable[bool]:
-        if self.mode == "yolo":
+        # always_ask outranks the mode: yolo here means "stop asking me",
+        # and a call that must be asked about is asked about regardless.
+        if self.mode == "yolo" and not request.always_ask:
             return yolo(request)
         return self.ask(request)  # may be awaitable; passed through untouched
 

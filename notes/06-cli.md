@@ -221,6 +221,11 @@ Two design points worth keeping:
   frontends, and confined-bash auto-approval survives mode flips either
   way. Agents built with a bare function (tests, embedders) are told
   the gate is fixed instead of crashing.
+* **Some calls outrank the mode.** A tool marked `always_ask` — one that
+  spends money — is asked about even in yolo mode, and the plain `yolo`
+  gate (`--yolo` with nobody to ask) refuses it with the code
+  `needs_person`. "The session was in yolo" is not an answer anybody
+  accepts for a purchase ([95](95-the-accounts-you-connected.md)).
 
 ## /tools off|on — pulling tools mid-session
 

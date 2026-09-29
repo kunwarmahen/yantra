@@ -680,6 +680,7 @@ class AsyncAgent:
             arguments=call.arguments,
             summary=summary,
             read_only=tool.read_only,
+            always_ask=getattr(tool, "always_ask", False),
             # So a host that records decisions can match this one to the
             # ToolExecuted it becomes, without counting on the order of
             # somebody else's loop (see PermissionRequest.call_id).

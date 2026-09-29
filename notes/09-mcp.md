@@ -434,6 +434,12 @@ matter:
 * Our mitigations are structural: qualified names, permission gates
   that sub-agents cannot escalate past, and pessimistic side-effect
   assumptions.
+* **A server's `readOnlyHint` is its own claim.** For a server Yantra
+  knows nothing else about, that is all there is. For a Setu connection
+  there is more: the connector's manifest classes every tool, and that —
+  not the hint — decides what runs without asking; a tool the manifest
+  does not list is not registered
+  ([note 95](95-the-accounts-you-connected.md)).
 
 ## Verified live
 

@@ -265,6 +265,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help='MCP config file to connect (repeatable): '
                              '{"servers": {"name": {"command": ..., "args": [...]}}}. '
                              'Tools register as mcp__<server>__<tool>.')
+    parser.add_argument("--setu", nargs="?", const="on", default=None, metavar="PATH",
+                        dest="setu",
+                        help="connect the accounts Setu holds (Gmail, ...) as MCP "
+                             "servers. Found automatically when Setu is installed "
+                             "here or on PATH; this flag says you want it (and "
+                             "errors if it cannot be found), and PATH names the "
+                             "setu program to use. Also YANTRA_SETU=auto|on|off|PATH")
+    parser.add_argument("--no-setu", action="store_const", const="off", dest="setu",
+                        help="do not look for Setu connections this session")
     parser.add_argument("--subagents", action="store_true",
                         help="register spawn_subagent so the model can delegate "
                              "self-contained subtasks to fresh-context child "
@@ -1850,6 +1859,57 @@ def _find_mcp_config(name: str, config_paths: list[str],
     return None
 
 
+def _connect_setu(args, mcp_manager, agent, console: Console) -> int | None:
+    """Connect every Setu connection as an MCP server (setu_link.py).
+
+    Returns an exit code only when Setu was ASKED for (--setu, or
+    YANTRA_SETU=on|PATH) and could not be used; in auto mode a missing
+    Setu is silence and a broken one a warning, because the session does
+    not depend on it.
+    """
+    from yantra import setu_link
+    from yantra.prompt import attach_prompt
+
+    mode, path = setu_link.resolve_mode(getattr(args, "setu", None))
+    try:
+        link = setu_link.load(mode, path)
+    except setu_link.SetuLinkError as exc:
+        if mode == "on":
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        console.print(f"[yellow]setu: {exc}[/yellow]")
+        return None
+    if link is None:
+        return None
+    connected: dict[str, int] = {}
+    for row, cfg in setu_link.mcp_configs(link):
+        existing = mcp_manager.sessions.get(cfg.name)
+        if existing is not None and not setu_link.same_server(existing.config, cfg):
+            console.print(f"[yellow]setu: '{cfg.name}' is already an mcp server with a "
+                          f"different command; leaving it, and {row['ref']} "
+                          "unconnected[/yellow]")
+            continue
+        if existing is None:
+            try:
+                mcp_manager.connect(cfg)
+            except MCPError as exc:
+                console.print(f"[yellow]setu: {row['ref']} unavailable: {exc}[/yellow]")
+                continue
+        kept, removed = setu_link.apply_verbs(agent.registry, cfg.name,
+                                              link.verbs(row["connector"]))
+        if removed:
+            console.print(f"[yellow]setu: {cfg.name} offered tool(s) its manifest does not "
+                          f"list, not registered: {', '.join(removed)}[/yellow]")
+        connected[cfg.name] = len(kept)
+    for problem in link.problems:
+        console.print(f"[yellow]setu: {problem}[/yellow]")
+    prompt = attach_prompt(agent)
+    prompt.set("connections", setu_link.prompt_text(link))
+    prompt.apply()
+    console.print(f"[dim]{setu_link.announce(link, connected)}[/dim]")
+    return None
+
+
 def _mcp_login(name: str, args, console: Console) -> int:
     """--mcp-login NAME: the OAuth walk, then a token on disk.
 
@@ -2357,6 +2417,11 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             console.print(f"[dim]mcp '{cfg.name}' (remembered): "
                           f"{len(names)} tool(s)[/dim]")
+
+        # The person's connected accounts, through Setu -- after explicit
+        # and remembered servers, so a name they configured by hand wins.
+        if _connect_setu(args, mcp_manager, agent, console) is not None:
+            return 2
 
         # Operator kill-switch: YANTRA_DISABLED_TOOLS globs unregister
         # tools AFTER MCP registration (so whole mcp__ servers can go)

@@ -415,6 +415,24 @@ drift. For a click-by-click first run (one terminal, a local model, and
 the three traps that bite everyone once) see
 [notes/09 · trying it in the portal](notes/09-mcp.md#trying-it-in-the-portal-end-to-end).
 
+**Your own accounts, through Setu.** [Setu](https://github.com/kunwarmahen/setu)
+is a separate project that keeps your sign-ins (Gmail first) and runs a
+small MCP server per connection that never holds the key. When it is
+installed here or on `PATH`, Yantra connects every Setu connection at
+startup — no `mcp.json` — and says so in one line:
+
+```
+setu: gmail-personal (7 tool(s)) -- via /home/you/setu/.venv/bin/setu
+```
+
+`YANTRA_SETU=/path/to/setu` names it when it is elsewhere; `--setu` insists
+(and stops if it is missing), `--no-setu` never looks. The model is told
+which accounts are connected and at what level, and which are not. Each
+tool is classed by Setu's manifest, not by the server's own hint: reads
+run, writes ask, anything that spends asks every time even under `--yolo`,
+and a tool the manifest does not list is not registered at all
+([notes/95](notes/95-the-accounts-you-connected.md)).
+
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
 to the terminal live):
@@ -1825,6 +1843,11 @@ src/yantra/
 │                   RFC 9728/8414 discovery, RFC 7591 dynamic
 │                   registration, PKCE + a localhost redirect listener,
 │                   0600 token store with refresh ([notes/09](notes/09-mcp.md))
+├── setu_link.py    the person's Setu connections at startup: found by import
+│                   or `setu status --json`, one MCP server each, tools
+│                   classed by the connector's manifest (read/write/spend,
+│                   unlisted = unregistered), a `connections` prompt layer
+│                   ([notes/95](notes/95-the-accounts-you-connected.md))
 ├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
 │                   over passes/attempts (it does not collapse at 3/3, where
 │                   the textbook one claims certainty from three coin

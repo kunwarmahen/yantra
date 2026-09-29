@@ -69,6 +69,11 @@ class Tool(ABC):
     description: ClassVar[str]
     parameters: ClassVar[dict[str, Any]]
     read_only: ClassVar[bool] = False  # drives permission auto-approval
+    #: A call no blanket approval may cover -- not --yolo, not the page's
+    #: yolo mode: a person says yes to each one or it does not run. For
+    #: tools that spend (buy, pay, refund), where "the session was in
+    #: yolo" is not an answer anybody would accept afterwards.
+    always_ask: ClassVar[bool] = False
     #: Tools this one is useless without -- selection offers them alongside
     #: it (tools/selector.py). browser_fill with no browser_open in reach
     #: is a tool the model can see and never successfully call.
