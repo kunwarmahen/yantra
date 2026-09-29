@@ -35,7 +35,9 @@ the person sees it and corrects it, and ``/memory forget`` removes it.
 
 THE AGENT DECIDES WHAT TO KEEP. The store stores and searches; it never
 reads a transcript and never judges. Statements reach it finished, from
-the ``remember`` tool (which asks first, like any tool that writes).
+the ``remember`` tool (which asks first, like any tool that writes), and
+from a look back over the conversation when it ends (memory/reflect.py),
+which catches what was said in passing and the model never wrote down.
 
 NO IDENTITY, NO MEMORY. Whose memories these are is PASSED IN -- $YANTRA_USER,
 else the login name, for the person's own terminal and page; a service
@@ -165,6 +167,19 @@ class Memory:
         #: Where a failure is said out loud. Hosts set it (terminal line,
         #: page banner); the default keeps the sentence on ``notice`` only.
         self.on_notice: Callable[[str], None] = lambda text: None
+        # ---- the look back at a conversation's end (memory/reflect.py) ----
+        #: ask | auto | off. Hosts set it; ``ask`` where nobody can answer
+        #: is their job to turn off, as with --learn.
+        self.reflect = "ask"
+        #: History messages already looked back over.
+        self.reviewed = 0
+        #: Candidates found mid-turn (before compaction), waiting for the
+        #: host to offer them when the turn ends.
+        self.pending: list[Any] = []
+        #: Candidates the person dropped: not offered again this session.
+        self.declined: set[str] = set()
+        #: The trace's redaction pattern, when the session has one.
+        self.redact: Any = None
 
     # ---- the verbs, scoped to this person --------------------------------
 
@@ -249,7 +264,8 @@ class Memory:
     def describe(self) -> dict[str, Any]:
         """For the page's chip and panel."""
         return {"store": self.store.name, "user": self.user,
-                "in_prompt": len(self.in_prompt), "notice": self.notice}
+                "in_prompt": len(self.in_prompt), "notice": self.notice,
+                "reflect": self.reflect}
 
 
 def _fit(items: list[MemoryItem]) -> list[MemoryItem]:
@@ -269,6 +285,8 @@ def prime_if_new(agent: Any, user_input: str) -> None:
     or a layer never filled (a resumed conversation's next message).
     """
     memory = getattr(agent, "memory", None)
+    if memory is not None and not agent.history:
+        memory.reviewed = 0     # a new conversation: nothing looked at yet
     if memory is not None and (not agent.history or not memory.primed):
         memory.prime(agent, user_input)
 

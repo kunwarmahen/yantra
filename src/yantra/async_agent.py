@@ -67,6 +67,7 @@ from yantra.errors import ToolError
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
 from yantra.memory import prime_if_new
+from yantra.memory.reflect import abefore_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
                                 adecide, allow_read_only, denial_code,
@@ -546,6 +547,9 @@ class AsyncAgent:
     async def compact(self) -> dict:
         """Force two-layer compaction now. Returns stats for the UI."""
         self.abandon_held()
+        memory = getattr(self, "memory", None)
+        if memory is not None:
+            await abefore_compaction(self)   # the sync twin's look back
         before = len(self.history)
         self.history[:], stats = await acompact_history(
             self.history,
@@ -555,6 +559,8 @@ class AsyncAgent:
         )
         stats["messages_before"] = before
         stats["messages_after"] = len(self.history)
+        if memory is not None:
+            memory.reviewed = len(self.history)
         self.last_compaction = stats
         return stats
 

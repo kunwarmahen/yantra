@@ -48,6 +48,7 @@ from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          load_remembered, remembered_path)
 from yantra.mcp_oauth import TOKEN_FILE
 from yantra.memory import memory_mode
+from yantra.memory.reflect import mark_reviewed, reflect_mode
 from yantra.package import MANIFEST, load_package
 from yantra.permissions import (SwitchableGate, allow_read_only,
                                  trust_sandbox, yolo)
@@ -445,6 +446,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "for itself in [memory] via. Same as "
                              "$YANTRA_MEMORY; whose memories: $YANTRA_USER, "
                              "else your login name")
+    parser.add_argument("--reflect", choices=["ask", "auto", "off"], default=None,
+                        help="when a conversation ends (/quit, /clear, "
+                             "/load, a one-shot answer, or before "
+                             "compaction), look back over it with the same "
+                             "model for facts about you said in passing, "
+                             "and ASK which to keep (default; needs someone "
+                             "at the terminal or page); auto keeps them "
+                             "without asking; off never looks (/remember "
+                             "still does). Same as $YANTRA_REFLECT")
     parser.add_argument("prompt_positional", nargs="?", metavar="PROMPT",
                         help="same as --prompt (yantra \"what is in README.md?\")")
     return parser
@@ -2414,6 +2424,22 @@ def main(argv: list[str] | None = None) -> int:
         console.print("[dim]learning: auto -- a solved task whose script "
                       "passes its test is saved as a skill without asking[/dim]")
 
+    # The look back at a conversation's end (memory/reflect.py): the same
+    # rule as learning -- ASK needs somebody to ask, and AUTO says so.
+    try:
+        reflecting = reflect_mode(args.reflect)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if reflecting == "ask" and not attended:
+        reflecting = "off"
+    if memory is not None:
+        memory.reflect = reflecting
+        if reflecting == "auto":
+            console.print("[dim]memory: reflect auto -- facts about you found "
+                          "when a conversation ends are kept without "
+                          "asking[/dim]")
+
     store = SessionStore(Path(args.cwd) / ".yantra" / "session.sqlite3")
     # The manager owns live MCP connections so servers can be added,
     # removed, and toggled MID-session (web panel + REPL /mcp), not just
@@ -2422,6 +2448,9 @@ def main(argv: list[str] | None = None) -> int:
                              memory_path=remembered_path(Path(args.cwd)))
     repl = Repl(agent, console, store=store, sandbox=sandbox,
                 mcp=mcp_manager, trace=_trace_log(args))
+    if memory is not None and repl.trace is not None:
+        # What the trace would scrub, the look back scrubs too.
+        memory.redact = repl.trace.redact
 
     # MCP servers: parse errors are fatal (exit 2); connection failures
     # only warn -- a dead optional integration shouldn't kill the
@@ -2522,6 +2551,7 @@ def main(argv: list[str] | None = None) -> int:
                         settings_loader=load_settings,
                         provider_factory=get_provider,
                     ))
+                    mark_reviewed(agent)
                 except Exception as exc:
                     console.print(f"[red]--resume failed: {exc}; starting fresh[/red]")
 
@@ -2540,6 +2570,8 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 prompt = args.prompt or args.prompt_positional
                 repl.run_turn(prompt, images=images)  # same rendering path as the REPL
+                # A one-shot answer is a whole conversation, and it ends here.
+                repl.end_conversation()
             except KeyboardInterrupt:
                 console.print("\n[yellow](cancelled)[/yellow]")
                 return 130

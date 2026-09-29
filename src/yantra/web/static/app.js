@@ -97,6 +97,7 @@ function route(env) {
     case "setu_signin":        onSignin(env); break;
     case "connections":        onConnections(env); break;
     case "memory_notice":      addBanner(env.text, false, true); break;
+    case "memory_offer":       offerMemories(env.candidates); break;
     case "promoted":           toast(`${env.skill} is now the tool ${env.tool}`);
                                addBanner(`${env.skill} is now the tool `
                                  + `${env.tool} — next time it is one call `
@@ -1384,6 +1385,7 @@ $("#btn-load").onclick = async () => {
     confirm: "restore",
   });
   if (name === null) return;
+  await lookBack(true);   // switching conversations ends this one
   const d = await post("/api/load", { name: name || "default" });
   if (d) {
     applyHeader(d);
@@ -1412,6 +1414,7 @@ $("#btn-clear").onclick = async () => {
     tone: "danger",
   });
   if (!ok) return;
+  await lookBack(true);
   const d = await post("/api/clear");
   if (d) {
     applyHeader(d);
@@ -1483,6 +1486,16 @@ function renderMemory() {
     }
   };
   body.append(form);
+  const look = document.createElement("button");
+  look.className = "m-btn mem-look";
+  look.textContent = "remember from this conversation";
+  look.title = "look back over this conversation for facts about you; "
+    + "you keep or drop each";
+  look.onclick = async () => {
+    $("#mem-backdrop").classList.add("hidden");
+    await lookBack(false);
+  };
+  body.append(look);
   section(body, `${d.items.length} remembered`,
     `${d.store} store, for ${d.user} · ● = in this conversation's prompt`);
   if (d.notice) {
@@ -1518,6 +1531,70 @@ function renderMemory() {
     row.append(main, actions);
     body.append(row);
   }
+}
+
+/* ---------- the look back (memory/reflect.py) ----------
+
+   When a conversation ends here -- clear, or restoring another -- the
+   same model looks back over it for facts about the person said in
+   passing. Each candidate is shown unticked: nothing is kept without a
+   yes. `ending` follows --reflect (off: nothing, auto: kept without
+   asking); the panel's button always looks, and always asks. */
+
+async function lookBack(ending) {
+  if (!ui.lastState?.memory) return;
+  setStatus("· looking back over the conversation");
+  const res = await fetch("/api/memory/reflect", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ending }),
+  });
+  hideStatus();
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { addBanner(data.detail || "looking back failed", false, true); return; }
+  if (data.kept) toast(`remembered ${data.kept} about you`);
+  if (data.candidates?.length) await offerMemories(data.candidates);
+  else if (!ending) toast("nothing new worth remembering in this conversation");
+}
+
+function offerMemories(candidates) {
+  return new Promise((resolve) => {
+    const box = $("#dialog");
+    box.innerHTML = `<h3>worth remembering about you?</h3>
+      <p class="dialog-body">From this conversation, for later ones. Tick
+        what is true and will stay true; the rest is dropped.</p>
+      <div class="mem-offer">${candidates.map((c, i) => `
+        <label><input type="checkbox" data-i="${i}">
+          <span>${esc(c.statement)} <span class="kind">${esc(c.kind)}</span></span>
+        </label>`).join("")}</div>
+      <div class="modal-actions">
+        <button class="m-btn" data-act="none">keep none</button>
+        <button class="m-btn primary" data-act="keep">keep ticked</button>
+      </div>`;
+    $("#dialog-backdrop").classList.remove("hidden");
+    const done = async (keepTicked) => {
+      const ticked = new Set([...box.querySelectorAll("input:checked")]
+        .map((el) => Number(el.dataset.i)));
+      const keep = keepTicked ? candidates.filter((_, i) => ticked.has(i)) : [];
+      const drop = candidates.filter((c) => !keep.includes(c));
+      closeDialog();
+      const d = await post("/api/memory/keep", { keep, drop });
+      if (d?.kept) toast(`remembered ${d.kept} — from the next conversation on`);
+      resolve();
+    };
+    box.onclick = (e) => {
+      const act = e.target.closest("[data-act]")?.dataset.act;
+      if (act === "keep") done(true);
+      else if (act === "none") done(false);
+    };
+    dialogEscape = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      done(false);
+    };
+    document.addEventListener("keydown", dialogEscape, true);
+    $("#dialog-backdrop").onclick = null;
+  });
 }
 
 /* ---------- connections panel (notes/99) ----------

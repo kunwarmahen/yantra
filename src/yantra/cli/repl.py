@@ -31,6 +31,8 @@ from yantra.config import default_model, load_settings
 from yantra.context import RED, estimate_history
 from yantra.errors import ImageError, RateLimitError, UserUnavailable
 from yantra.images import load_image_block
+from yantra.memory.reflect import (Candidate, decline, keep, mark_reviewed,
+                                   reflect)
 from yantra.pricing import is_free, session_cost
 from yantra.prompt import recompose
 from yantra.trace import watch
@@ -71,6 +73,9 @@ HELP = """[bold]commands[/bold]
   /memory forget ID  remove one -- a fact that stopped being true
   /memory add TEXT   tell it something to keep, in your own words
   /memory find WORDS search what is remembered
+  /remember          look back over this conversation now for things
+                     worth keeping about you (it also happens by itself on
+                     /quit, /clear and /load; you keep or drop each)
   /mcp               list connected mcp servers
   /mcp add ...       connect a server MID-SESSION: /mcp add NAME URL, or
                      /mcp add NAME COMMAND [ARGS...] (asks whether to save)
@@ -217,6 +222,20 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
     return gate
 
 
+def _chosen(answer: str, found: list[Candidate]) -> list[Candidate]:
+    """``a`` keeps all; numbers keep those; anything else keeps none."""
+    answer = answer.strip().lower()
+    if answer in ("a", "all", "y", "yes"):
+        return list(found)
+    picked = []
+    for token in answer.replace(",", " ").split():
+        if token.isdigit() and 1 <= int(token) <= len(found):
+            candidate = found[int(token) - 1]
+            if candidate not in picked:
+                picked.append(candidate)
+    return picked
+
+
 class Repl:
     def __init__(self, agent: Agent, console: Console,
                  store: SessionStore | None = None,
@@ -263,6 +282,7 @@ class Repl:
                 line = self._read_line()
             except EOFError:
                 self.console.print()
+                self.end_conversation()
                 return
             except KeyboardInterrupt:
                 self.console.print()  # clear the line, keep the session
@@ -384,6 +404,11 @@ class Repl:
         is one yellow line, and Ctrl-C is a no to the offer, not a
         cancelled turn.
         """
+        memory = getattr(self.agent, "memory", None)
+        if memory is not None and memory.pending:
+            # Found before compaction, mid-turn, with nobody to ask then.
+            found, memory.pending = list(memory.pending), []
+            self._offer_memories(found)
         learner = getattr(self.agent, "learner", None)
         if learner is None:
             return
@@ -486,6 +511,73 @@ class Repl:
         # PLAIN: a statement is the person's (or model's) words, and may
         # hold rich markup that would be swallowed.
         self.console.print("\n".join(lines), markup=False)
+
+    # ---- the look back at a conversation's end (memory/reflect.py) ----------
+
+    def end_conversation(self, *, forced: bool = False) -> None:
+        """Look back over this conversation for facts about the person.
+
+        On /quit, Ctrl-D, /clear, /load and the end of a one-shot run;
+        ``forced`` is /remember, which looks even with --reflect off (the
+        flag stops the automatic look; asking is still allowed). Nothing
+        here may cost the session: a failure is one yellow line, and
+        Ctrl-C is a no.
+        """
+        memory = getattr(self.agent, "memory", None)
+        if memory is None:
+            if forced:
+                self.console.print("[yellow]memory is off for this session, "
+                                   "so there is nothing to keep it in[/yellow]")
+            return
+        if memory.reflect == "off" and not forced:
+            return
+        found, memory.pending = list(memory.pending), []
+        try:
+            with self.console.status("[dim]… looking back over the "
+                                     "conversation[/dim]", spinner="dots"):
+                found += [c for c in reflect(self.agent) if c not in found]
+        except KeyboardInterrupt:
+            self.console.print("[yellow](not looked back over)[/yellow]")
+            return
+        except Exception as exc:
+            self.console.print(f"[yellow]looking back skipped: {exc}[/yellow]")
+            return
+        if not found:
+            if forced:
+                self.console.print("[dim]nothing new worth remembering about "
+                                   "you in this conversation[/dim]")
+            return
+        self._offer_memories(found, auto=memory.reflect == "auto" and not forced)
+
+    def _offer_memories(self, found: list[Candidate], *, auto: bool = False) -> None:
+        """Keep all, some (by number), or none -- the default is none."""
+        memory = self.agent.memory
+        if auto:
+            chosen = found
+        else:
+            lines = ["worth remembering about you, for later conversations?"]
+            lines += [f"  {i}. {c.kind}: {c.statement}"
+                      for i, c in enumerate(found, 1)]
+            self.console.print("\n".join(lines), markup=False)
+            try:
+                answer = self._input("keep [a]ll, numbers (1 3), or [N]one > ")
+            except (EOFError, KeyboardInterrupt):
+                answer = ""
+            chosen = _chosen(answer, found)
+            decline(memory, [c for c in found if c not in chosen])
+        try:
+            ids = keep(memory, chosen)
+        except Exception as exc:
+            self.console.print(f"[red]memory ({memory.store.name}): {exc}; "
+                               f"nothing kept[/red]")
+            return
+        if ids:
+            self.console.print(f"[green]remembered {len(ids)}[/green] "
+                               f"[dim](#{', #'.join(ids)} -- from the next "
+                               f"conversation on; /memory to see or "
+                               f"forget)[/dim]")
+        else:
+            self.console.print("[dim]nothing kept[/dim]")
 
     def _learn_command(self) -> None:
         """``/learn``: the person asks for the last turn to be saved.
@@ -700,6 +792,7 @@ class Repl:
                                  "segment")
                 self.console.print(" · ".join(parts))
             case "clear":
+                self.end_conversation()
                 self.agent.history.clear()
                 self.console.print("[green]history cleared[/green]")
             case "yolo":
@@ -718,7 +811,10 @@ class Repl:
                 self._learn_command()
             case "memory":
                 self._memory_command(arg)
+            case "remember":
+                self.end_conversation(forced=True)
             case "quit" | "exit":
+                self.end_conversation()
                 return True
             case _:
                 # A skill name is a command: /pr-review <anything> runs a
@@ -1281,6 +1377,8 @@ class Repl:
         if payload is None:
             self.console.print(f"[red]no checkpoint named '{session_id}'[/red]")
             return
+        # Switching conversations ends this one (memory/reflect.py).
+        self.end_conversation()
         try:
             summary = apply_payload(
                 self.agent, payload,
@@ -1295,6 +1393,7 @@ class Repl:
         # fresh context and this session's skill roster, not last Tuesday's
         # copy ([notes/29](../notes/29-environment-awareness.md)).
         recompose(self.agent)
+        mark_reviewed(self.agent)
         self.console.print(f"[green]{summary}[/green]")
 
     def _switch_provider(self, name: str) -> None:

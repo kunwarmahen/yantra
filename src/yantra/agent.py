@@ -34,6 +34,7 @@ from yantra.errors import ToolError
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
 from yantra.memory import prime_if_new
+from yantra.memory.reflect import before_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
                                 allow_read_only, decide, denial_code,
@@ -799,6 +800,11 @@ class Agent:
         """Force two-layer compaction now. Returns stats for the UI."""
         # A summary cannot hold a question still waiting for its answer.
         self.abandon_held()
+        # What is about to be folded away is looked back over first, so a
+        # fact said in passing survives the summary (memory/reflect.py).
+        memory = getattr(self, "memory", None)
+        if memory is not None:
+            before_compaction(self)
         before = len(self.history)
         self.history[:], stats = compact_history(
             self.history,
@@ -808,6 +814,8 @@ class Agent:
         )
         stats["messages_before"] = before
         stats["messages_after"] = len(self.history)
+        if memory is not None:
+            memory.reviewed = len(self.history)
         self.last_compaction = stats
         return stats
 

@@ -2068,3 +2068,16 @@ pre.output { color: var(--ink); }
   .mem-row { grid-template-columns: minmax(0, 1fr); }
   .mem-row .conn-actions { grid-column: 1; }
 }
+
+/* ---- the look back: keep or drop each candidate ---- */
+.mem-offer { display: grid; gap: 8px; margin: 0 0 14px; }
+.mem-offer label {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px;
+  align-items: start; padding: 8px 10px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-2);
+  font-size: 13.5px; line-height: 1.5;
+}
+.mem-offer label:has(input:checked) { border-color: var(--accent); }
+#dialog .mem-offer input { width: auto; height: auto; margin: 3px 0 0; }
+.mem-offer .kind { color: var(--ink-3); font-size: 12px; }
+.mem-look { margin: 4px 0 0; }

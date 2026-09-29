@@ -208,11 +208,12 @@ person. … ask for the departure city.
 
 ## What was deliberately not built
 
-* **Remembering what was said in passing.** In session 1 the model
+* ~~**Remembering what was said in passing.**~~ In session 1 the model
   happened to call `remember`. A model that doesn't won't keep "RDU"
-  at all. The fix is a short look back over the conversation when it
-  ends (on `/quit`, `/clear`, or before compaction drops old turns),
-  proposing facts you keep or drop. That review isn't here yet.
+  at all. Built since: a short look back over the conversation when it
+  ends (`/quit`, `/clear`, `/load`, before compaction, or `/remember`)
+  proposes facts you keep or drop —
+  [note 101](101-looking-back.md).
 * **Outside stores.** The four verbs are the whole interface, but only
   `local` exists. An outside store will connect as an MCP server, with
   a map from the four verbs to its tool names, so no store's name or

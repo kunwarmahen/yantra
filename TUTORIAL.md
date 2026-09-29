@@ -410,6 +410,26 @@ remembers about you rides inside every request to your provider. On
 the local road it never leaves the machine.
 ([notes/100](notes/100-what-it-knows-about-you.md))
 
+The model doesn't always stop to call `remember`. You mentioned RDU
+while asking about flights, and it was busy answering about flights. So
+when you finish (`/quit`, `/clear`, loading another conversation), it
+takes one quick look back over the conversation and asks:
+
+```
+> /quit
+worth remembering about you, for later conversations?
+  1. fact: Lives near RDU (Raleigh-Durham area).
+keep [a]ll, numbers (1 3), or [N]one > a
+remembered 1
+```
+
+Press Enter to keep none. Type `/remember` to have it look back at any
+time. It uses the same model you're already talking to, so on Ollama
+nothing new is needed and nothing leaves the machine. `--reflect off`
+stops it looking by itself. `--reflect auto` keeps what it finds without
+asking, for runs where nobody is at the keyboard.
+([notes/101](notes/101-looking-back.md))
+
 ## 7 · Sub-agents — a fresh context window on demand
 
 A long job fills the context window with material that is of no further

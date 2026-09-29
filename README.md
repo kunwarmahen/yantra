@@ -117,6 +117,9 @@ uv run yantra --learn off                            # never offer to save a sol
                                                       #   still saves one by hand)
 uv run yantra --memory off                           # remember nothing about you
                                                       #   across conversations
+uv run yantra --reflect off                          # don't look back over a finished
+                                                      #   conversation for facts about
+                                                      #   you (/remember still does)
 uv run yantra "summarize README.md"                  # one-shot prompt, then exit
 uv run yantra --image photo.png "what's in this picture?"   # vision one-shot
 ```
@@ -283,6 +286,26 @@ home airport you never mentioned. It's framed as *what you said before,
 which may be out of date; the current message wins*. The model keeps a
 new fact with a `remember` tool, one short sentence, and **asks before
 keeping it**. `recall_memory` searches when it needs more.
+
+Most facts are said in passing, though, and a model answering a
+question about flights won't always stop to write one down. So when a
+conversation ends (`/quit`, `/clear`, `/load`, a one-shot answer, or
+just before compaction folds old turns away), the same model **looks
+back over it once** and proposes what it learned about you:
+
+```
+worth remembering about you, for later conversations?
+  1. fact: Lives near RDU (Raleigh-Durham area).
+keep [a]ll, numbers (1 3), or [N]one > a
+```
+
+Nothing is kept without a yes, and a dropped one isn't asked again.
+`/remember` (or *remember from this conversation* on the page) looks
+back on demand. `--reflect auto` keeps them without asking, and
+`--reflect off` never looks by itself (`YANTRA_REFLECT`). The
+conversation is scrubbed of secrets and your `--trace-redact` patterns
+first. On Ollama it's the same local model, with no second one needed
+([notes/101](notes/101-looking-back.md)).
 
 ```
 > /memory
@@ -1909,7 +1932,12 @@ src/yantra/
 │                   per conversation so the cached prefix survives; local.py
 │                   is the built-in sqlite + word-overlap store, tools.py the
 │                   remember (asks first) and recall_memory tools
-│                   ([notes/100](notes/100-what-it-knows-about-you.md))
+│                   ([notes/100](notes/100-what-it-knows-about-you.md));
+│                   reflect.py looks back ONCE when a conversation ends
+│                   (/quit, /clear, /load, before compaction, /remember):
+│                   one plain call to the session's own model, scrubbed
+│                   first, proposing facts the person keeps or drops
+│                   ([notes/101](notes/101-looking-back.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (agent / base / env /
 │                   memory / connections / skills):
 │                   each owner writes one named layer, attach_prompt captures

@@ -59,6 +59,7 @@ from yantra.config import default_model, load_settings
 from yantra.context import estimate_history
 from yantra.errors import ConfigError, ProviderError, UserUnavailable
 from yantra.images import image_block_from_bytes
+from yantra.memory.reflect import mark_reviewed
 from yantra.permissions import (
     ON_TIMEOUT,
     REFUSED_OUT_OF_TIME,
@@ -534,12 +535,25 @@ class WebSession:
         if cancelled and not ended:
             self.broadcast({"type": "turn_cancelled"})
         if end is not None and not cancelled:
+            self._offer_pending_memories()
             self._learn(end)
         self.turn_active = False
         self._cancel.clear()
         self._setu_settle()
         self.broadcast({"type": "state", **self.state()})
         self.broadcast({"type": "turn_done"})
+
+    def _offer_pending_memories(self) -> None:
+        """What a look back before compaction found mid-turn goes to the
+        page when the turn ends; the page answers through
+        /api/memory/keep, like the button's look back."""
+        memory = getattr(self.agent, "memory", None)
+        if memory is None or not memory.pending:
+            return
+        found, memory.pending = list(memory.pending), []
+        self.broadcast({"type": "memory_offer",
+                        "candidates": [{"statement": c.statement, "kind": c.kind}
+                                       for c in found]})
 
     # ---- learning (notes/96) ---------------------------------------------------
 
@@ -1450,6 +1464,54 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(400, str(exc)) from None
         return memory_view(memory)
 
+    @app.post("/api/memory/reflect")
+    async def memory_reflect(req: Request) -> dict[str, Any]:
+        """Look back over this conversation (memory/reflect.py).
+
+        ``ending`` is the page ending a conversation -- clear, or restoring
+        another -- and follows --reflect: off looks at nothing, auto keeps
+        what it finds. Without it this is the person's button, which looks
+        whatever the mode and always asks. The candidates come back to be
+        shown; nothing is kept until /api/memory/keep.
+        """
+        from yantra.memory.reflect import keep, reflect
+        require_idle()
+        memory = require_memory()
+        ending = bool((await req.json()).get("ending"))
+        if ending and memory.reflect == "off":
+            return {**memory_view(memory), "candidates": [], "kept": 0}
+        found, memory.pending = list(memory.pending), []
+        try:
+            found += [c for c in await asyncio.to_thread(reflect, session.agent)
+                      if c not in found]
+        except Exception as exc:
+            raise HTTPException(503, f"looking back failed: {exc}") from None
+        if ending and memory.reflect == "auto":
+            kept = len(keep(memory, found))
+            return {**memory_view(memory), "candidates": [], "kept": kept}
+        return {**memory_view(memory), "kept": 0,
+                "candidates": [{"statement": c.statement, "kind": c.kind}
+                               for c in found]}
+
+    @app.post("/api/memory/keep")
+    async def memory_keep(req: Request) -> dict[str, Any]:
+        """The person's answer to a look back: what to keep, what to drop.
+        Dropped ones are not offered again this session."""
+        from yantra.memory.reflect import Candidate, decline, keep
+        memory = require_memory()
+        body = await req.json()
+
+        def candidates(key: str) -> list[Candidate]:
+            return [Candidate(str(c.get("statement") or ""),
+                              str(c.get("kind") or "fact"))
+                    for c in body.get(key) or [] if isinstance(c, dict)]
+        decline(memory, candidates("drop"))
+        try:
+            kept = keep(memory, [c for c in candidates("keep") if c.statement])
+        except Exception as exc:
+            raise HTTPException(400, f"memory ({memory.store.name}): {exc}") from None
+        return {**memory_view(memory), "kept": len(kept)}
+
     # ---- connections, through Setu (notes/99) --------------------------------
 
     #: A page opened on this computer. Only there can a sign-in's redirect
@@ -1838,6 +1900,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         # Same rule as the REPL's load path: checkpoints store the COMPOSED
         # system, so rebuild it from the live prompt layers.
         recompose(session.agent)
+        mark_reviewed(session.agent)
         return session.state()
 
     @app.post("/api/compact")
