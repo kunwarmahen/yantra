@@ -333,6 +333,13 @@ some of them still works, and `/memory` says what it can't do. Your
 identity goes on every call, so set `YANTRA_USER` to the name the store
 knows you by ([notes/102](notes/102-kept-somewhere-else.md)).
 
+Measured on `qwen3.8:latest`: a fact said once, in passing, changed the
+answer in a fresh conversation 6 of 7 times on `local` and 7 of 7 on
+Smritikosh; with no memory, 0 of 7. Bury it under thirty newer memories
+and word overlap finds 2 of 7, embeddings 6 of 6
+([notes/103](notes/103-said-once-found-later.md),
+[`examples/memory_recall_trial.py`](examples/memory_recall_trial.py)).
+
 ### One-command starts
 
 `start.sh` wraps the common setups so you don't have to remember flags.
@@ -975,7 +982,11 @@ on a local Ollama),
 and without it, counted — free on a local model you price yourself),
 [`examples/name_recall_trial.py`](examples/name_recall_trial.py)
 (how many names does a local model miss? A labelled set of 1,493, scored
-the way the scrubber would use the answer — or bring your own), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+the way the scrubber would use the answer — or bring your own),
+[`examples/memory_recall_trial.py`](examples/memory_recall_trial.py)
+(does a fact said in passing come back in a later conversation? Two
+sessions per fact, on any store — `--distractors` buries it so only the
+store's search can find it), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation

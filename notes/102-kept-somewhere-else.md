@@ -194,6 +194,10 @@ The stand-in rejected any store call that didn't carry
 `--mcp-config`, the session still starts. It prints the *not connected*
 line and carries on without memory.
 
+How often a fact said in passing comes back, on `local` and on
+Smritikosh, and what changes once the fact is buried under newer ones,
+is measured in [note 103](103-said-once-found-later.md).
+
 `tests/test_memory_mcp.py` pins the rest against a fake session:
 
 * the map renames what it names, and a verb left out keeps its own name;
