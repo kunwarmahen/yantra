@@ -38,6 +38,7 @@
     <g id="i-terminal"><path d="M7 9l3 3-3 3M13 15h4"/><rect x="3" y="4" width="18" height="16" rx="3"/></g>
     <g id="i-image"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l4.5-4.5L13 17l3-3 4 4"/></g>
     <g id="i-check"><path d="M5 12.5l4.5 4.5L19 7"/></g>
+    <g id="i-link"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L12 5.6"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></g>
   </defs>
 </svg>
 
@@ -75,6 +76,12 @@
       <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-sliders"/></svg>
       <span id="tools-count">—</span>
+    </button>
+
+    <button class="chip hidden" id="chip-conn" title="connections — accounts you signed in to through Setu, and the sites you could connect">
+      <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-link"/></svg>
+      <span id="conn-count">—</span>
     </button>
 
     <span class="chip chip-static" id="chip-cost" title="session cost — unknown slugs show no figure, never a guess"></span>
@@ -308,6 +315,28 @@
       </div>
       <div id="tools-rows"></div>
     </div>
+  </div>
+</div>
+
+<!-- connections: the accounts Setu keeps, and the sites it could connect
+     (notes/99). Same overlay layer as the tools panel, under approvals. -->
+<div id="conn-backdrop" class="hidden">
+  <div id="conn-panel" role="dialog" aria-modal="true" aria-labelledby="conn-title">
+    <div class="tools-head">
+      <div>
+        <h3 id="conn-title">connections</h3>
+        <span class="tools-note">sign in once; the agent gets that account's tools. Keys stay with Setu on this computer, and the model never sees one.</span>
+      </div>
+      <button class="ghost icon-only" id="conn-refresh" title="ask Setu again — picks up a connection made in a terminal" aria-label="refresh">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg>
+      </button>
+      <button class="ghost icon-only" id="conn-close" title="close" aria-label="close">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div id="conn-body"></div>
   </div>
 </div>
 

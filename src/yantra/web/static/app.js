@@ -94,6 +94,8 @@ function route(env) {
     case "ask":                showAskModal(env); break;
     case "learn_offer":        showLearnModal(env); break;
     case "tool_offer":         showToolModal(env); break;
+    case "setu_signin":        onSignin(env); break;
+    case "connections":        onConnections(env); break;
     case "promoted":           toast(`${env.skill} is now the tool ${env.tool}`);
                                addBanner(`${env.skill} is now the tool `
                                  + `${env.tool} — next time it is one call `
@@ -135,6 +137,7 @@ function onState(env) {
     fetchHistory();
   }
   applyHeader(env);
+  if (!conn.loaded) loadConnections();
   // A turn held before this page was opened (or reloaded) still waits.
   // On a first connect the history is still being replayed, and the
   // panel belongs AFTER it -- fetchHistory draws it once that is done.
@@ -1408,6 +1411,330 @@ $("#btn-clear").onclick = async () => {
     toast("history cleared");
   }
 };
+
+/* ---------- connections panel (notes/99) ----------
+
+   Setu's report, drawn as cards: accounts connected (with their level,
+   their tools, Change access and Disconnect), then connectors installed
+   but not connected (pick a level, name the account, Connect). A sign-in
+   is Setu's: the server runs `setu connect --json`, and this page only
+   shows the address Google's sign-in lives at. It works when this page is
+   open on the computer running Yantra; anywhere else the card shows the
+   command to run there instead. */
+
+const conn = { loaded: false, data: null, signin: null };
+
+$("#chip-conn").onclick = openConnPanel;
+$("#conn-close").onclick = () => $("#conn-backdrop").classList.add("hidden");
+$("#conn-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#conn-backdrop")) $("#conn-backdrop").classList.add("hidden");
+});
+$("#conn-refresh").onclick = async () => {
+  const res = await fetch("/api/connections/refresh", { method: "POST" });
+  if (!res.ok) { addBanner(`cannot refresh: ${(await res.json()).detail}`, true); return; }
+  applyConnections(await res.json());
+  toast("asked Setu again");
+};
+
+async function loadConnections() {
+  conn.loaded = true;
+  try {
+    const res = await fetch("/api/connections");
+    if (res.ok) applyConnections(await res.json());
+  } catch { /* the chip just stays hidden */ }
+}
+
+function applyConnections(data) {
+  // A broadcast carries no "local" (it is the server's, not this tab's).
+  conn.data = { ...data, local: data.local ?? conn.data?.local ?? false };
+  // A sign-in still waiting is news to any tab; one that ended before this
+  // tab saw it is not -- its outcome was told to the tabs that were open.
+  if (data.signin?.running) conn.signin = data.signin;
+  const chip = $("#chip-conn");
+  chip.classList.toggle("hidden", data.mode === "off");
+  $("#conn-count").textContent = data.found
+    ? `${data.connections.length} connected` : "setu";
+  if (!$("#conn-backdrop").classList.contains("hidden")) renderConnections();
+}
+
+function onConnections(env) {
+  applyConnections(env);
+  const sync = env.sync || {};
+  const added = Object.entries(sync.connected || {});
+  if (sync.dropped?.length) toast(`${sync.dropped.join(", ")} disconnected — its tools are gone`);
+  for (const note of sync.notes || []) addBanner(`setu: ${note}`, false, true);
+  if (added.length && conn.justConnected) {
+    const [name, count] = added.find(([n]) => n === conn.justConnected) || added[0];
+    addBanner(`${name} is connected — ${count} tool(s) from the next message on`, false);
+    conn.justConnected = null;
+  }
+}
+
+function onSignin(env) {
+  // "done" only closes the sign-in: the outcome before it (connected,
+  // error, cancelled) is what the box keeps saying.
+  conn.signin = env.event === "done"
+    ? { ...(conn.signin || {}), ref: env.ref, running: false }
+    : { ...(conn.signin || {}), ...env,
+        running: !["connected", "error", "cancelled"].includes(env.event) };
+  if (env.event === "connected") {
+    conn.justConnected = env.ref.replace(":", "-");
+    toast(`signed in: ${env.ref}${env.email ? ` as ${env.email}` : ""}`);
+  }
+  if (env.event === "error") addBanner(`sign-in failed: ${env.message}`, true);
+  if (!$("#conn-backdrop").classList.contains("hidden")) renderConnections();
+}
+
+async function openConnPanel() {
+  $("#conn-backdrop").classList.remove("hidden");
+  $("#conn-body").innerHTML = '<div class="panel-loading">loading…</div>';
+  await loadConnections();
+  renderConnections();
+}
+
+function renderConnections() {
+  const body = $("#conn-body");
+  const d = conn.data;
+  body.textContent = "";
+  if (!d) { body.innerHTML = '<div class="panel-loading">loading…</div>'; return; }
+  if (d.mode === "off") {
+    body.innerHTML = '<div class="conn-box warn"><span>Setu is off for this session '
+      + '(<code>--no-setu</code>). Start Yantra without it to see your connections.</span></div>';
+    return;
+  }
+  if (!d.found) {
+    body.innerHTML = `<div class="conn-box warn"><span>${esc(d.error
+      || "Setu was not found.")} Install Setu, or start Yantra with
+      <code>--setu /path/to/setu</code>, then press refresh.</span></div>`;
+    return;
+  }
+  body.append(signinBox());
+  const setupBox = clientFileBox(d);
+  if (setupBox) body.append(setupBox);
+
+  const names = Object.fromEntries(d.connectors.map((c) => [c.id, c]));
+  section(body, "connected", d.connections.length
+    ? "the agent has these accounts' tools this session"
+    : "nothing yet — connect an account below");
+  for (const row of d.connections) body.append(connectedCard(row, names[row.connector]));
+
+  section(body, "available", "installed on this computer; connect as many accounts as you like");
+  if (!d.connectors.length) {
+    const none = document.createElement("div");
+    none.className = "mcp-empty";
+    none.textContent = "no connectors installed — e.g. uv pip install setu-gmail";
+    body.append(none);
+  }
+  for (const c of d.connectors) body.append(connectorCard(c, d));
+
+  for (const problem of d.problems || []) {
+    const p = document.createElement("div");
+    p.className = "conn-box warn";
+    p.innerHTML = `<span>${esc(problem)}</span>`;
+    body.append(p);
+  }
+  const foot = document.createElement("div");
+  foot.className = "conn-foot";
+  foot.textContent = `Setu ${d.version || ""} · signed in on this computer · `
+    + "keys stay with Setu · nothing is sent to us";
+  body.append(foot);
+}
+
+function section(body, title, note) {
+  const head = document.createElement("div");
+  head.className = "section-head";
+  head.innerHTML = `<div><h4>${esc(title)}</h4><span class="tools-note">${esc(note)}</span></div>`;
+  body.append(head);
+}
+
+function signinBox() {
+  const box = document.createElement("div");
+  const s = conn.signin;
+  if (!s || (!s.running && !["error", "cancelled"].includes(s.event))) return box;
+  if (s.running) {
+    box.className = "conn-box";
+    box.innerHTML = `<span>Waiting for you to sign in to <b>${esc(s.ref)}</b>.
+      ${s.url ? "Open the sign-in, allow access, then come back here."
+              : "Starting…"}</span>`;
+    if (s.url) {
+      const a = document.createElement("a");
+      a.className = "m-btn primary";
+      a.href = s.url; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "open the sign-in";
+      box.append(a);
+    }
+    const cancel = document.createElement("button");
+    cancel.className = "m-btn";
+    cancel.textContent = "cancel";
+    cancel.onclick = () => fetch("/api/connections/cancel", { method: "POST" });
+    box.append(cancel);
+  } else {
+    box.className = "conn-box " + (s.event === "error" ? "bad" : "warn");
+    box.innerHTML = `<span>${s.event === "error"
+      ? `Sign-in to ${esc(s.ref || "")} failed: ${esc(s.message || "")}`
+      : `Sign-in to ${esc(s.ref || "")} cancelled — nothing was saved.`}</span>`;
+  }
+  return box;
+}
+
+function clientFileBox(d) {
+  const needs = d.connectors.filter((c) => !c.ready);
+  if (!needs.length) return null;
+  const box = document.createElement("div");
+  box.className = "conn-box warn";
+  box.innerHTML = `<span>${esc(needs.map((c) => c.name).join(", "))}: signing in to Google
+    needs your "Desktop app" OAuth client file for now. Setu remembers where it is
+    (never its contents) — the Setu README shows how to make one.</span>`;
+  const row = document.createElement("div");
+  row.className = "conn-setup";
+  const input = document.createElement("input");
+  input.placeholder = "/path/to/client_secret_….json";
+  input.spellcheck = false;
+  const save = document.createElement("button");
+  save.className = "m-btn primary";
+  save.textContent = "use this file";
+  save.onclick = async () => {
+    save.disabled = true;
+    try {
+      const res = await fetch("/api/connections/client-file", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: input.value }) });
+      const out = await res.json();
+      if (!res.ok) { addBanner(`not used: ${out.detail}`, true); return; }
+      applyConnections(out);
+      toast("Setu will use that client file");
+    } finally { save.disabled = false; }
+  };
+  row.append(input, save);
+  box.append(row);
+  return box;
+}
+
+function levelSelect(c, current) {
+  const sel = document.createElement("select");
+  for (const lv of c?.levels || []) {
+    const o = document.createElement("option");
+    o.value = lv.name; o.textContent = lv.label;
+    o.title = lv.description || "";
+    if (lv.name === (current || c.default_level)) o.selected = true;
+    sel.append(o);
+  }
+  return sel;
+}
+
+function connectedCard(row, c) {
+  const card = document.createElement("div");
+  card.className = "conn-card";
+  const dot = document.createElement("span");
+  dot.className = "dot" + (row.running ? "" : " dead");
+  dot.title = row.running ? "its server is running this session" : "its server is not running";
+  const main = document.createElement("div");
+  main.innerHTML = `<div class="conn-title">${esc(c?.name || row.connector)}
+      <span class="t-badge">${esc(row.account)}</span></div>
+    <div class="conn-sub">${row.email ? esc(row.email) + " · " : ""}<b>${esc(row.level_label || row.level)}</b>
+      · ${row.tools} tool(s) as <code>mcp__${esc(row.server)}__…</code>
+      ${row.last_used ? " · last used " + esc(String(row.last_used).slice(0, 10)) : ""}</div>`;
+  const actions = document.createElement("div");
+  actions.className = "conn-actions";
+  const change = document.createElement("button");
+  change.className = "m-btn";
+  change.textContent = "change access";
+  const drop = document.createElement("button");
+  drop.className = "m-btn danger";
+  drop.textContent = "disconnect";
+  drop.onclick = () => disconnect(row);
+  actions.append(change, drop);
+  card.append(dot, main, actions);
+
+  const form = document.createElement("div");
+  form.className = "conn-form hidden";
+  const sel = levelSelect(c, row.level);
+  const go = document.createElement("button");
+  go.className = "m-btn primary";
+  go.textContent = "sign in again at this level";
+  go.onclick = () => startSignin(row.connector, row.account, sel.value);
+  form.append(sel, go);
+  change.onclick = () => form.classList.toggle("hidden");
+  card.append(form);
+  if (!conn.data.local) card.append(commandLine(row.connector, row.account, null));
+  return card;
+}
+
+function connectorCard(c, d) {
+  const card = document.createElement("div");
+  card.className = "conn-card";
+  const dot = document.createElement("span");
+  dot.className = "dot dead";
+  const main = document.createElement("div");
+  main.innerHTML = `<div class="conn-title">${esc(c.name)}
+      ${c.connected ? '<span class="t-badge">connected</span>' : ""}</div>
+    <div class="conn-sub">${esc(c.summary || "")}</div>`;
+  card.append(dot, main, document.createElement("div"));
+
+  const form = document.createElement("div");
+  form.className = "conn-form";
+  const account = document.createElement("input");
+  const taken = new Set(d.connections.filter((r) => r.connector === c.id).map((r) => r.account));
+  account.value = taken.has("personal") ? "work" : "personal";
+  account.title = "your name for this account — tools are named after it";
+  account.spellcheck = false;
+  const sel = levelSelect(c, null);
+  const note = document.createElement("div");
+  note.className = "conn-level-note";
+  const describe = () => {
+    const lv = c.levels.find((l) => l.name === sel.value);
+    note.textContent = lv?.description || "";
+  };
+  sel.onchange = describe;
+  describe();
+  const go = document.createElement("button");
+  go.className = "m-btn primary";
+  go.textContent = c.connected ? "connect another" : "connect";
+  go.disabled = !c.ready || !d.local || Boolean(conn.signin?.running);
+  go.title = !c.ready ? c.not_ready
+    : !d.local ? "signing in works from a page on the computer running Yantra"
+    : "opens the site's own sign-in; you choose there";
+  go.onclick = () => startSignin(c.id, account.value.trim() || "personal", sel.value);
+  form.append(account, sel, go);
+  card.append(form, note);
+  if (!d.local) card.append(commandLine(c.id, account.value, sel.value));
+  return card;
+}
+
+function commandLine(connector, account, level) {
+  const line = document.createElement("div");
+  line.className = "conn-cmd";
+  line.innerHTML = `This page is not on the computer running Yantra. There, run
+    <code>setu connect ${esc(connector)} --as ${esc(account)}${level
+      ? " --level " + esc(level) : ""}</code>, then press refresh.`;
+  return line;
+}
+
+async function startSignin(connector, account, level) {
+  const res = await fetch("/api/connections/connect", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ connector, account, level }) });
+  const out = await res.json();
+  if (!res.ok) { addBanner(`cannot sign in: ${out.detail}`, true); return; }
+  conn.signin = { ref: out.ref, running: true, event: "starting" };
+  renderConnections();
+}
+
+async function disconnect(row) {
+  const ok = await openDialog({
+    title: `disconnect ${row.ref}?`,
+    body: `Setu revokes the key at the provider and forgets it; the agent loses `
+      + `${row.tools} tool(s). You can connect again any time.`,
+    confirm: "disconnect", tone: "danger", input: false });
+  if (!ok) return;
+  const res = await fetch("/api/connections/disconnect", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: row.ref }) });
+  const out = await res.json();
+  if (!res.ok) { addBanner(`not disconnected: ${out.detail}`, true); return; }
+  applyConnections(out);
+  toast(`${row.ref} disconnected`);
+}
 
 /* ---------- tools panel ---------- */
 

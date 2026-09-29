@@ -432,6 +432,28 @@ Servers are runtime furniture, not startup wiring: `/mcp` lists them,
 same with health dots and a paste-JSON box.
 ([notes/09](notes/09-mcp.md))
 
+**Your own accounts.** [Setu](https://github.com/kunwarmahen/setu) is a
+separate small program that keeps your sign-ins (Gmail first) so the
+agent can use them without ever seeing a password or key. With it
+installed, Yantra connects your accounts when it starts. In the browser
+UI, the **connections** chip opens a page of cards:
+
+* each account you connected, with its address, its access level
+  (*Read only*, *Read and draft*, …) and how many tools it gives the
+  agent, plus **change access** and **disconnect**;
+* each site you could connect: name the account (`personal`, `work`),
+  pick a level, press **connect**.
+
+Connect shows an *open the sign-in* button. That's Google's own page.
+Sign in there, come back, and the agent has the account's tools from
+your next message. Disconnect takes them away again. This works when
+the page is open on the computer running Yantra. From a phone, the card
+shows the command to run on that computer instead. For now, Google
+sign-in also needs a "Desktop app" client file you make once in
+Google's console. The page asks for its path the first time, and Setu
+remembers it. ([notes/95](notes/95-the-accounts-you-connected.md),
+[notes/99](notes/99-the-connections-page.md))
+
 ## 9 · The tools that make it finish rather than answer
 
 Sixteen built-ins cover the whole autonomy loop, and four more appear if
@@ -2608,6 +2630,7 @@ Most carry a live receipt from a real run.
 | [07](notes/07-reliability-and-scale.md) | retry, parallel tools, persistence, compaction |
 | [08](notes/08-sub-agents.md) | sub-agents: agent-as-tool |
 | [09](notes/09-mcp.md) | MCP by hand, both transports, OAuth 2.1 |
+| [95](notes/95-the-accounts-you-connected.md) [99](notes/99-the-connections-page.md) | your own accounts, through Setu; and a page to connect them |
 | [10](notes/10-evals.md) | evals: measuring right behaviour, not just working code |
 | [11](notes/11-async.md) | one event loop, many conversations |
 | [12](notes/12-builder.md) [18](notes/18-builder-mode.md) | an agent that builds a project, and verification that does not trust it |

@@ -217,6 +217,12 @@ class WebSession:
         #: How the last turn ended, for a save asked for by hand when no
         #: Learner watched it (learning off). "" before the first turn.
         self._last_end = ""
+        #: The Setu sign-in running from the Connections panel, if any
+        #: (setu_link.SignIn), and whether its result still has to reach
+        #: the tools -- held while a turn runs (notes/99).
+        self.signin: Any | None = None
+        self._setu_sync_due = False
+        self._setu_lock = threading.Lock()
 
     def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
         """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
@@ -525,6 +531,7 @@ class WebSession:
             self._learn(end)
         self.turn_active = False
         self._cancel.clear()
+        self._setu_settle()
         self.broadcast({"type": "state", **self.state()})
         self.broadcast({"type": "turn_done"})
 
@@ -626,6 +633,7 @@ class WebSession:
             finally:
                 self.turn_active = False
                 self._cancel.clear()
+                self._setu_settle()
                 self.broadcast({"type": "state", **self.state()})
                 self.broadcast({"type": "turn_done"})
 
@@ -651,6 +659,7 @@ class WebSession:
             finally:
                 self.turn_active = False
                 self._cancel.clear()
+                self._setu_settle()
                 self.broadcast({"type": "state", **self.state()})
                 self.broadcast({"type": "turn_done"})
 
@@ -675,6 +684,65 @@ class WebSession:
         skill = learner.save_tool(offer)
         self.broadcast({"type": "promoted", "skill": skill.name,
                         "tool": skill.tool_name})
+
+    # ---- connections (notes/99) ---------------------------------------------------
+
+    def connections_state(self, *, local: bool = False) -> dict[str, Any]:
+        """The Connections panel: Setu's report (never a secret, by its
+        contract), what this session runs, and the sign-in in progress."""
+        setu = getattr(self.agent, "setu", None)
+        base = ({"mode": "off", "found": False, "connections": [], "connectors": [],
+                 "setup": {}, "problems": [], "error": ""}
+                if setu is None else setu.describe(self.mcp))
+        signin = self.signin
+        return {**base, "local": local,
+                "signin": ({"ref": signin.ref, "running": signin.running,
+                            **{k: v for k, v in signin.last.items()
+                               if k in ("event", "url", "message", "email",
+                                        "level_label")}}
+                           if signin is not None else None)}
+
+    def setu_sync(self) -> dict[str, Any]:
+        """Ask Setu again and make the tools match. Called when no turn is
+        running: a turn's tool list and prompt do not change under it."""
+        setu = getattr(self.agent, "setu", None)
+        if setu is None:
+            return {"connected": {}, "dropped": [], "notes": []}
+        with self._setu_lock:
+            self._setu_sync_due = False
+            setu.refresh()
+            done = setu.sync(self.mcp, self.agent) if self.mcp is not None else None
+        result = ({"connected": done.connected, "dropped": done.dropped,
+                   "notes": done.notes} if done is not None
+                  else {"connected": {}, "dropped": [], "notes": []})
+        self.broadcast({"type": "connections", **self.connections_state(), "sync": result})
+        self.broadcast({"type": "state", **self.state()})
+        return result
+
+    def _setu_settle(self) -> None:
+        """A sign-in that finished during a turn reaches the tools now."""
+        if self._setu_sync_due and not self.turn_active:
+            try:
+                self.setu_sync()
+            except Exception as exc:
+                self.broadcast({"type": "setu_signin", "event": "error",
+                                "message": f"connected, but the tools did not "
+                                           f"update: {exc}"})
+
+    def start_signin(self, connector: str, account: str, level: str) -> None:
+        """Run ``setu connect --json`` and relay it to the page."""
+        from yantra.setu_link import SignIn
+
+        setu = self.agent.setu
+
+        def relay(event: dict[str, Any]) -> None:
+            self.broadcast({"type": "setu_signin", **event})
+            if event.get("event") == "connected":
+                self._setu_sync_due = True
+                if not self.turn_active:
+                    self._setu_settle()
+
+        self.signin = SignIn(setu.program, connector, account, level, relay)
 
     def _record(self, trajectory) -> None:
         """The recorder's sink: write the line, then tell the page its id.
@@ -1317,6 +1385,117 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         require_skills().reload()
         session.broadcast({"type": "state", **session.state()})
         return session.state()
+
+    # ---- connections, through Setu (notes/99) --------------------------------
+
+    #: A page opened on this computer. Only there can a sign-in's redirect
+    #: (to a port Setu opens on THIS machine) come back to it.
+    LOCAL_HOSTS = ("127.0.0.1", "::1", "localhost")
+
+    def is_local(req: Request) -> bool:
+        return bool(req.client) and req.client.host in LOCAL_HOSTS
+
+    def require_setu() -> Any:
+        require_ready()
+        setu = getattr(session.agent, "setu", None)
+        if setu is None:
+            raise HTTPException(400, "Setu is off for this session (--no-setu)")
+        return setu
+
+    def setu_program(setu: Any) -> str:
+        program = setu.program
+        if not program:
+            raise HTTPException(400, setu.error or "Setu was not found: install it, or "
+                                "start Yantra with --setu /path/to/setu")
+        return program
+
+    @app.get("/api/connections")
+    def connections_list(req: Request) -> dict[str, Any]:
+        """The Connections panel's data -- Setu's report, never a key."""
+        require_ready()
+        return session.connections_state(local=is_local(req))
+
+    @app.post("/api/connections/refresh")
+    def connections_refresh(req: Request) -> dict[str, Any]:
+        """Ask Setu again: a connection made in a terminal shows up, and its
+        tools with it. require_idle: the tools and prompt change."""
+        require_idle()
+        require_setu()
+        sync = session.setu_sync()
+        return {**session.connections_state(local=is_local(req)), "sync": sync}
+
+    @app.post("/api/connections/connect")
+    async def connections_connect(req: Request) -> dict[str, Any]:
+        """Start a sign-in. Only from a page on this computer; anywhere else
+        the answer is the command to run here instead."""
+        setu = require_setu()
+        body = await req.json()
+        connector = str(body.get("connector", ""))
+        account = str(body.get("account", "") or "personal").strip()
+        level = str(body.get("level", ""))
+        known = setu.link.connectors if setu.link is not None else {}
+        spec = known.get(connector)
+        if spec is None:
+            raise HTTPException(404, f"no installed connector {connector!r}")
+        if level not in [lv["name"] for lv in spec.get("levels", [])]:
+            raise HTTPException(400, f"{connector} has no access level {level!r}")
+        command = f"setu connect {connector} --as {account} --level {level}"
+        if not is_local(req):
+            raise HTTPException(403, "signing in only works from a page on the computer "
+                                     f"running Yantra -- there, run: {command}")
+        if not spec.get("ready", True):
+            raise HTTPException(409, spec.get("not_ready") or "not ready to sign in")
+        if session.signin is not None and session.signin.running:
+            raise HTTPException(409, f"a sign-in to {session.signin.ref} is already "
+                                     "waiting -- finish or cancel it first")
+        setu_program(setu)
+        from yantra.setu_link import SetuLinkError
+        try:
+            session.start_signin(connector, account, level)
+        except SetuLinkError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"ok": True, "ref": session.signin.ref}
+
+    @app.post("/api/connections/cancel")
+    def connections_cancel() -> dict[str, Any]:
+        require_ready()
+        if session.signin is not None:
+            session.signin.cancel()
+        return {"ok": True}
+
+    @app.post("/api/connections/disconnect")
+    async def connections_disconnect(req: Request) -> dict[str, Any]:
+        """Revoke and forget one connection (Setu does both), then pull its
+        server and tools. require_idle, like every tool-list change."""
+        require_idle()
+        setu = require_setu()
+        ref = str((await req.json()).get("ref", ""))
+        if ref not in [row["ref"] for row in (setu.link.connections if setu.link else [])]:
+            raise HTTPException(404, f"no connection {ref!r}")
+        from yantra.setu_link import run_setu
+        ok, said = await run_in_threadpool(run_setu, setu_program(setu), "disconnect", ref)
+        if not ok:
+            raise HTTPException(502, said or "setu disconnect failed")
+        sync = await run_in_threadpool(session.setu_sync)
+        return {**session.connections_state(local=is_local(req)), "said": said,
+                "sync": sync}
+
+    @app.post("/api/connections/client-file")
+    async def connections_client_file(req: Request) -> dict[str, Any]:
+        """Tell Setu where the Google OAuth client file is. Setu checks it
+        and remembers the PATH; the file is never read by Yantra."""
+        require_idle()
+        setu = require_setu()
+        path = str((await req.json()).get("path", "")).strip()
+        if not path or path.startswith("-"):
+            raise HTTPException(400, "give the path to the client file")
+        from yantra.setu_link import run_setu
+        ok, said = await run_in_threadpool(run_setu, setu_program(setu), "config",
+                                           "client-file", path)
+        if not ok:
+            raise HTTPException(400, said.splitlines()[-1] if said else "setu refused it")
+        await run_in_threadpool(session.setu_sync)
+        return session.connections_state(local=is_local(req))
 
     # ---- MCP server management ----------------------------------------------
 

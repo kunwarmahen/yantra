@@ -109,14 +109,16 @@ LAYER_ORDER = ("agent", "base", "env", "connections", "skills")
 
 It lists each connection with its account and level, the connectors
 installed but not connected, and one instruction: an account that is not
-listed is not connected — say so rather than guessing. It is set once at
-start, like the tool list it describes.
+listed is not connected — say so rather than guessing. It is set at
+start, like the tool list it describes, and rewritten whenever the
+Connections page changes that list ([note 99](99-the-connections-page.md)).
 
 ## What was deliberately not built
 
-* **A Connections page.** Connecting, changing a level and disconnecting
-  stay in Setu's own commands for now. The page wants the same report,
-  so it is a view on what is here, not new plumbing.
+* ~~**A Connections page.** Connecting, changing a level and
+  disconnecting stay in Setu's own commands for now.~~ Built: the page
+  asks Setu to sign in and relays its address, and the tools follow
+  without a restart ([note 99](99-the-connections-page.md)).
 * **One tool set for several accounts.** Two Gmail accounts are two
   servers with their own tools (`mcp__gmail-personal__…`,
   `mcp__gmail-work__…`). Merging them behind an `account` argument keeps

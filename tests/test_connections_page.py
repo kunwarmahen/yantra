@@ -1,0 +1,354 @@
+"""The Connections panel: sign in from the page, and the tools follow.
+
+The bias is A PAGE THAT KNOWS TOO MUCH. Signing in is Setu's: the page
+starts ``setu connect --json`` and shows the address it prints, and
+nothing in Yantra ever holds a code, a key or a client file's contents.
+So these tests drive a fake ``setu`` program -- the same command road a
+real one uses -- and check what reaches the page, what reaches the
+tools, and what never reaches either.
+
+Also designed against:
+
+* **A sign-in started from another device.** Google's reply comes back
+  to a port on THIS computer, so a page elsewhere is refused and given
+  the command instead -- never a sign-in that hangs forever.
+* **Tools changing under a running turn.** A sign-in that finishes
+  mid-turn reaches the tools when the turn ends.
+* **Tools outliving their account.** Disconnect pulls the server and
+  its tools; a connection made in a terminal appears on refresh.
+* **An option smuggled in as an account name.** It is one argv word, so
+  it may not start with ``-``.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import sys
+import textwrap
+import time
+from types import SimpleNamespace
+
+import pytest
+from rich.console import Console
+
+from conftest import ScriptedProvider
+from test_setu_link import CONNECTOR, VERBS
+
+from yantra import setu_link
+from yantra.agent import Agent
+from yantra.cli.main import _connect_setu
+from yantra.mcp import MCPManager
+from yantra.tools.base import ToolRegistry
+
+#: A `setu` with state: connections in a JSON file, a client file that may
+#: or may not be set, and a sign-in that waits for the "person" (a file)
+#: unless told not to.
+FAKE_SETU = """\
+    import json, os, sys, time
+    STATE = {state!r}
+    CONNECTOR = {connector!r}
+    def load():
+        return json.load(open(STATE))
+    def save(s):
+        json.dump(s, open(STATE, "w"))
+    def row(ref, level):
+        connector, account = ref.split(":")
+        return {{"ref": ref, "connector": connector, "account": account,
+                 "email": account + "@example.com", "level": level,
+                 "level_label": level.title(), "scopes": [], "last_used": None,
+                 "installed": True,
+                 "mcp": {{"name": ref.replace(":", "-"), "command": {python!r},
+                         "args": [CONNECTOR]}}}}
+    def emit(**e):
+        print(json.dumps(e), flush=True)
+    s = load()
+    args = sys.argv[1:]
+    s.setdefault("calls", []).append(args)
+    save(s)
+    if args[:2] == ["status", "--json"]:
+        ready = bool(s.get("client_file"))
+        print(json.dumps({{
+            "format": "setu.status.v1", "version": "0.2.0", "command": sys.argv[0],
+            "problems": [],
+            "connections": [row(r, lv) for r, lv in s["connections"].items()],
+            "connectors": [{{"id": "gmail", "name": "Gmail", "summary": "Read your mail.",
+                            "connected": any(r.startswith("gmail:") for r in s["connections"]),
+                            "verbs": {verbs!r}, "default_level": "read",
+                            "levels": [{{"name": "read", "label": "Read only", "description": "",
+                                        "scopes": []}},
+                                       {{"name": "send", "label": "Read, draft and send",
+                                        "description": "", "scopes": []}}],
+                            "ready": ready,
+                            "not_ready": "" if ready else "needs a client file"}}],
+            "setup": {{"google_client_file": s.get("client_file")}}}}))
+    elif args[0] == "connect":
+        ref = "gmail:" + args[args.index("--as") + 1]
+        level = args[args.index("--level") + 1]
+        emit(event="started", ref=ref, level=level, level_label=level.title(), scopes=[])
+        emit(event="url", url="https://accounts.example/o/oauth2/auth?state=abc")
+        while s.get("hold") and not os.path.exists(STATE + ".release"):
+            time.sleep(0.05)
+        if s.get("refuse"):
+            emit(event="error", message="the person said no")
+            sys.exit(2)
+        s = load()
+        s["connections"][ref] = level
+        save(s)
+        emit(event="connected", ref=ref, email=ref.split(":")[1] + "@example.com",
+             level=level, level_label=level.title(), asked_level=level)
+    elif args[0] == "disconnect":
+        s["connections"].pop(args[1], None)
+        save(s)
+        print("disconnected " + args[1])
+    elif args[:2] == ["config", "client-file"]:
+        if not args[2].endswith(".json"):
+            print("error: not a Desktop app client file", file=sys.stderr)
+            sys.exit(2)
+        s["client_file"] = args[2]
+        save(s)
+        print("client-file: " + args[2])
+"""
+
+
+@pytest.fixture
+def setu(tmp_path, monkeypatch):
+    connector = tmp_path / "connector.py"
+    connector.write_text(textwrap.dedent(CONNECTOR))
+    state = tmp_path / "setu-state.json"
+    state.write_text(json.dumps({"connections": {"gmail:personal": "read"},
+                                 "client_file": "/keys/client.json"}))
+    program = tmp_path / "setu"
+    program.write_text(f"#!{sys.executable}\n" + textwrap.dedent(FAKE_SETU).format(
+        state=str(state), connector=str(connector), python=sys.executable, verbs=VERBS))
+    program.chmod(0o755)
+    monkeypatch.setitem(sys.modules, "setu.status", None)
+    monkeypatch.setattr(setu_link.shutil, "which", lambda _name: None)
+    monkeypatch.delenv(setu_link.ENV, raising=False)
+
+    class Fake:
+        path = program
+
+        def get(self):
+            return json.loads(state.read_text())
+
+        def set(self, **kw):
+            data = self.get()
+            data.update(kw)
+            state.write_text(json.dumps(data))
+
+        def release(self):
+            (tmp_path / "setu-state.json.release").write_text("")
+    return Fake()
+
+
+def build(tmp_path, program, flag=None):
+    agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry())
+    manager = MCPManager(agent.registry, agent=agent,
+                         memory_path=tmp_path / ".yantra" / "mcp.json")
+    console = Console(file=io.StringIO(), width=200)
+    _connect_setu(SimpleNamespace(setu=flag or str(program)), manager, agent, console)
+    return agent, manager
+
+
+def served(tmp_path, program, *, local=True):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from yantra.web.server import WebSession, make_app
+
+    agent, manager = build(tmp_path, program)
+    session = WebSession()
+    session.attach(agent, None, mcp=manager)
+    where = ("127.0.0.1", 51000) if local else ("192.168.1.40", 51000)
+    return session, agent, manager, TestClient(make_app(session), client=where)
+
+
+def until(ws, kind, event=None, limit=80):
+    seen = []
+    while len(seen) < limit:
+        seen.append(ws.receive_json())
+        last = seen[-1]
+        if last["type"] == kind and (event is None or last.get("event") == event):
+            return seen
+    raise AssertionError(f"never got {kind}/{event}: {[s['type'] for s in seen]}")
+
+
+# ---- the live handle --------------------------------------------------------------
+
+
+class TestSync:
+    def test_startup_leaves_a_handle_the_page_can_use(self, setu, tmp_path):
+        agent, manager = build(tmp_path, setu.path)
+        try:
+            assert agent.setu.servers == {"gmail-personal"}
+            assert "mcp__gmail-personal__search_threads" in agent.registry
+        finally:
+            manager.shutdown()
+
+    def test_a_connection_made_elsewhere_arrives_on_refresh(self, setu, tmp_path):
+        agent, manager = build(tmp_path, setu.path)
+        try:
+            setu.set(connections={"gmail:personal": "read", "gmail:work": "send"})
+            agent.setu.refresh()
+            done = agent.setu.sync(manager, agent)
+            assert set(done.connected) == {"gmail-personal", "gmail-work"}
+            assert "mcp__gmail-work__search_threads" in agent.registry
+            assert "gmail-work" in agent.system
+        finally:
+            manager.shutdown()
+
+    def test_a_gone_connection_takes_its_tools(self, setu, tmp_path):
+        agent, manager = build(tmp_path, setu.path)
+        try:
+            setu.set(connections={})
+            agent.setu.refresh()
+            done = agent.setu.sync(manager, agent)
+            assert done.dropped == ["gmail-personal"]
+            assert not [n for n in agent.registry.names() if n.startswith("mcp__gmail")]
+            assert "gmail-personal" not in manager.sessions
+        finally:
+            manager.shutdown()
+
+    def test_the_description_carries_no_secret_shaped_field(self, setu, tmp_path):
+        agent, manager = build(tmp_path, setu.path)
+        try:
+            text = json.dumps(agent.setu.describe(manager))
+            assert "secret" not in text and "token" not in text.lower()
+            row = agent.setu.describe(manager)["connections"][0]
+            assert row["tools"] == 3 and row["running"]
+        finally:
+            manager.shutdown()
+
+
+# ---- signing in -------------------------------------------------------------------
+
+
+class TestSignIn:
+    def test_events_arrive_as_setu_prints_them(self, setu):
+        events = []
+        signin = setu_link.SignIn(str(setu.path), "gmail", "work", "read", events.append)
+        signin.thread.join(10)
+        assert [e["event"] for e in events] == ["started", "url", "connected", "done"]
+        assert events[1]["url"].startswith("https://accounts.example/")
+
+    def test_cancel_stops_it_and_saves_nothing(self, setu):
+        setu.set(hold=True)
+        events = []
+        signin = setu_link.SignIn(str(setu.path), "gmail", "work", "read", events.append)
+        deadline = time.time() + 10
+        while len(events) < 2 and time.time() < deadline:
+            time.sleep(0.02)
+        signin.cancel()
+        signin.thread.join(10)
+        assert events[-2]["event"] == "cancelled" and events[-1]["event"] == "done"
+        assert "gmail:work" not in setu.get()["connections"]
+
+    def test_an_account_name_cannot_be_an_option(self, setu):
+        with pytest.raises(setu_link.SetuLinkError, match="account name"):
+            setu_link.SignIn(str(setu.path), "gmail", "--client-file=/etc/x", "read",
+                             lambda e: None)
+
+
+# ---- the page -------------------------------------------------------------------------
+
+
+class TestPage:
+    def test_the_panel_data(self, setu, tmp_path):
+        _, _, manager, client = served(tmp_path, setu.path)
+        try:
+            data = client.get("/api/connections").json()
+            assert data["found"] and data["local"] is True
+            assert data["connections"][0]["ref"] == "gmail:personal"
+            assert data["connectors"][0]["ready"] is True
+        finally:
+            manager.shutdown()
+
+    def test_sign_in_from_the_page_and_the_tools_follow(self, setu, tmp_path):
+        session, agent, manager, client = served(tmp_path, setu.path)
+        try:
+            with client.websocket_connect("/ws") as ws:
+                ws.receive_json()
+                res = client.post("/api/connections/connect", json={
+                    "connector": "gmail", "account": "work", "level": "send"})
+                assert res.status_code == 200, res.text
+                seen = until(ws, "connections")
+            events = [e.get("event") for e in seen if e["type"] == "setu_signin"]
+            assert events[:3] == ["started", "url", "connected"]
+            assert "mcp__gmail-work__send_message" in agent.registry
+            assert seen[-1]["sync"]["connected"]["gmail-work"] == 3
+            assert ["connect", "gmail", "--as", "work", "--level", "send", "--json"] \
+                in setu.get()["calls"]
+        finally:
+            manager.shutdown()
+
+    def test_a_page_on_another_device_is_given_the_command(self, setu, tmp_path):
+        _, _, manager, client = served(tmp_path, setu.path, local=False)
+        try:
+            res = client.post("/api/connections/connect", json={
+                "connector": "gmail", "account": "work", "level": "read"})
+            assert res.status_code == 403
+            assert "setu connect gmail --as work --level read" in res.json()["detail"]
+            assert not any(c[0] == "connect" for c in setu.get()["calls"])
+        finally:
+            manager.shutdown()
+
+    def test_a_level_the_connector_does_not_have_is_refused(self, setu, tmp_path):
+        _, _, manager, client = served(tmp_path, setu.path)
+        try:
+            res = client.post("/api/connections/connect", json={
+                "connector": "gmail", "account": "work", "level": "everything"})
+            assert res.status_code == 400
+        finally:
+            manager.shutdown()
+
+    def test_no_client_file_means_no_sign_in_yet(self, setu, tmp_path):
+        setu.set(client_file=None)
+        _, _, manager, client = served(tmp_path, setu.path)
+        try:
+            res = client.post("/api/connections/connect", json={
+                "connector": "gmail", "account": "work", "level": "read"})
+            assert res.status_code == 409 and "client file" in res.json()["detail"]
+            res = client.post("/api/connections/client-file", json={"path": "/k/c.txt"})
+            assert res.status_code == 400
+            res = client.post("/api/connections/client-file", json={"path": "/k/c.json"})
+            assert res.status_code == 200 and res.json()["connectors"][0]["ready"]
+        finally:
+            manager.shutdown()
+
+    def test_a_sign_in_that_ends_mid_turn_waits_for_the_turn(self, setu, tmp_path):
+        session, agent, manager, client = served(tmp_path, setu.path)
+        try:
+            session.turn_active = True
+            session.start_signin("gmail", "work", "read")
+            session.signin.thread.join(10)
+            assert "mcp__gmail-work__search_threads" not in agent.registry
+            session.turn_active = False
+            session._setu_settle()
+            assert "mcp__gmail-work__search_threads" in agent.registry
+        finally:
+            manager.shutdown()
+
+    def test_disconnect_revokes_through_setu_and_pulls_the_tools(self, setu, tmp_path):
+        _, agent, manager, client = served(tmp_path, setu.path)
+        try:
+            res = client.post("/api/connections/disconnect", json={"ref": "gmail:personal"})
+            assert res.status_code == 200, res.text
+            assert ["disconnect", "gmail:personal"] in setu.get()["calls"]
+            assert res.json()["connections"] == []
+            assert not [n for n in agent.registry.names() if n.startswith("mcp__gmail")]
+        finally:
+            manager.shutdown()
+
+    def test_off_means_the_panel_says_so(self, setu, tmp_path):
+        pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+
+        from yantra.web.server import WebSession, make_app
+
+        agent, manager = build(tmp_path, setu.path, flag="off")
+        session = WebSession()
+        session.attach(agent, None, mcp=manager)
+        client = TestClient(make_app(session))
+        assert client.get("/api/connections").json()["mode"] == "off"
+        assert client.post("/api/connections/refresh").status_code == 400

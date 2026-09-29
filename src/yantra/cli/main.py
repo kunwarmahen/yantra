@@ -1873,48 +1873,32 @@ def _connect_setu(args, mcp_manager, agent, console: Console) -> int | None:
     Returns an exit code only when Setu was ASKED for (--setu, or
     YANTRA_SETU=on|PATH) and could not be used; in auto mode a missing
     Setu is silence and a broken one a warning, because the session does
-    not depend on it.
+    not depend on it. The handle is left on ``agent.setu`` either way
+    (unless off), so the page's Connections panel can look again later.
     """
     from yantra import setu_link
-    from yantra.prompt import attach_prompt
 
     mode, path = setu_link.resolve_mode(getattr(args, "setu", None))
+    if mode == "off":
+        agent.setu = None
+        return None
+    setu = setu_link.Setu(mode=mode, path=path)
+    agent.setu = setu
     try:
-        link = setu_link.load(mode, path)
+        setu.link = setu_link.load(mode, path)
     except setu_link.SetuLinkError as exc:
+        setu.error = str(exc)
         if mode == "on":
             print(f"error: {exc}", file=sys.stderr)
             return 2
         console.print(f"[yellow]setu: {exc}[/yellow]")
         return None
-    if link is None:
+    if setu.link is None:
         return None
-    connected: dict[str, int] = {}
-    for row, cfg in setu_link.mcp_configs(link):
-        existing = mcp_manager.sessions.get(cfg.name)
-        if existing is not None and not setu_link.same_server(existing.config, cfg):
-            console.print(f"[yellow]setu: '{cfg.name}' is already an mcp server with a "
-                          f"different command; leaving it, and {row['ref']} "
-                          "unconnected[/yellow]")
-            continue
-        if existing is None:
-            try:
-                mcp_manager.connect(cfg)
-            except MCPError as exc:
-                console.print(f"[yellow]setu: {row['ref']} unavailable: {exc}[/yellow]")
-                continue
-        kept, removed = setu_link.apply_verbs(agent.registry, cfg.name,
-                                              link.verbs(row["connector"]))
-        if removed:
-            console.print(f"[yellow]setu: {cfg.name} offered tool(s) its manifest does not "
-                          f"list, not registered: {', '.join(removed)}[/yellow]")
-        connected[cfg.name] = len(kept)
-    for problem in link.problems:
-        console.print(f"[yellow]setu: {problem}[/yellow]")
-    prompt = attach_prompt(agent)
-    prompt.set("connections", setu_link.prompt_text(link))
-    prompt.apply()
-    console.print(f"[dim]{setu_link.announce(link, connected)}[/dim]")
+    done = setu.sync(mcp_manager, agent)
+    for note in done.notes:
+        console.print(f"[yellow]setu: {note}[/yellow]")
+    console.print(f"[dim]{setu_link.announce(setu.link, done.connected)}[/dim]")
     return None
 
 

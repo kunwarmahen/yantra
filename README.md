@@ -492,6 +492,19 @@ run, writes ask, anything that spends asks every time even under `--yolo`,
 and a tool the manifest does not list is not registered at all
 ([notes/95](notes/95-the-accounts-you-connected.md)).
 
+In the browser UI, the **connections** chip opens a panel of cards: the
+accounts you connected (address, level, tool count, *change access*,
+*disconnect*) and the connectors installed but not connected (name the
+account, pick a level, *connect*). Connect asks Setu to sign in
+(`setu connect --json`) and shows Google's sign-in as a button. Yantra
+never holds a code or a key. The tools arrive without a restart, or
+when the running turn ends if one is running. Signing in works from a
+page on the computer running Yantra, because Google's reply comes back
+to a port there. Anywhere else, the card shows the command to run. Until
+Setu has its own Google app, the panel asks once for your Desktop OAuth
+client file, and Setu remembers the path
+([notes/99](notes/99-the-connections-page.md)).
+
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
 to the terminal live):
@@ -1922,7 +1935,11 @@ src/yantra/
 │                   or `setu status --json`, one MCP server each, tools
 │                   classed by the connector's manifest (read/write/spend,
 │                   unlisted = unregistered), a `connections` prompt layer
-│                   ([notes/95](notes/95-the-accounts-you-connected.md))
+│                   ([notes/95](notes/95-the-accounts-you-connected.md)).
+│                   Live, not only at startup: `Setu.sync` makes the servers
+│                   match Setu's report, SignIn relays `setu connect --json`
+│                   for the page's Connections panel -- same computer only,
+│                   never under a running turn ([notes/99](notes/99-the-connections-page.md))
 ├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
 │                   over passes/attempts (it does not collapse at 3/3, where
 │                   the textbook one claims certainty from three coin

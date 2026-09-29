@@ -49,14 +49,25 @@ THE MODEL IS TOLD. A ``connections`` prompt layer says which accounts are
 connected and at what level, and which installed connectors are not
 connected -- so "anything in my Outlook?" gets "Outlook isn't connected;
 run `setu connect outlook`" rather than a guess.
+
+LIVE, NOT ONLY AT STARTUP. ``Setu`` is the session's handle on all of
+this (``agent.setu``). ``sync`` makes the MCP servers match what Setu
+reports -- a new connection gets its server and tools, a gone one loses
+them -- and rewrites the prompt layer; startup is its first call, and
+the web page's Connections panel calls it again after a sign-in or a
+disconnect ([notes/99](../../notes/99-the-connections-page.md)). Signing
+in stays Setu's: the page runs ``setu connect --json`` and relays the
+address; Yantra never sees a key, a code, or a client secret.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -244,3 +255,206 @@ def announce(link: Link, connected: dict[str, int]) -> str:
         return f"setu: no connections yet ({link.road})"
     parts = [f"{name} ({count} tool(s))" for name, count in connected.items()]
     return f"setu: {', '.join(parts)} -- via {link.road}"
+
+
+# ---- the live handle --------------------------------------------------------
+
+
+@dataclass(slots=True)
+class Synced:
+    """What one ``sync`` did: servers and their tool counts, and notes."""
+
+    connected: dict[str, int] = field(default_factory=dict)
+    dropped: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Setu:
+    """One session's link to Setu: how it was found, what it said last,
+    and which MCP servers it started (the only ones ``sync`` may stop)."""
+
+    mode: str
+    path: str | None = None
+    link: Link | None = None
+    #: Why the last look failed, when it did -- the page says it.
+    error: str = ""
+    servers: set[str] = field(default_factory=set)
+
+    @property
+    def program(self) -> str | None:
+        """The setu program to run for connect and disconnect: the one
+        Setu reports for itself, else the one named, else PATH's."""
+        reported = (self.link.data.get("command") if self.link else None) or None
+        return reported or self.path or shutil.which("setu")
+
+    def refresh(self) -> Link | None:
+        """Ask Setu again. A page asking is the person asking, so a Setu
+        that cannot be found is an error here even in ``auto``."""
+        try:
+            self.link = load("on" if self.mode == "auto" else self.mode, self.path)
+            self.error = ""
+        except SetuLinkError as exc:
+            self.link, self.error = None, str(exc)
+        return self.link
+
+    def sync(self, manager: Any, agent: Any) -> Synced:
+        """Make the MCP servers match the last report, then rewrite the
+        ``connections`` prompt layer. Never raises for one bad server."""
+        from yantra.mcp import MCPError
+        from yantra.prompt import attach_prompt
+
+        done = Synced()
+        link = self.link
+        wanted = mcp_configs(link) if link is not None else []
+        names = {cfg.name for _, cfg in wanted}
+        for name in sorted(self.servers - names):
+            try:
+                manager.disconnect(name)
+            except MCPError:
+                pass
+            self.servers.discard(name)
+            done.dropped.append(name)
+        for row, cfg in wanted:
+            existing = manager.sessions.get(cfg.name)
+            if existing is not None and not same_server(existing.config, cfg):
+                done.notes.append(f"'{cfg.name}' is already an mcp server with a different "
+                                  f"command; leaving it, and {row['ref']} unconnected")
+                continue
+            if existing is None:
+                try:
+                    manager.connect(cfg)
+                except MCPError as exc:
+                    done.notes.append(f"{row['ref']} unavailable: {exc}")
+                    continue
+                self.servers.add(cfg.name)
+            elif cfg.name not in self.servers and same_server(existing.config, cfg):
+                self.servers.add(cfg.name)   # configured by hand as this very command
+            kept, removed = apply_verbs(agent.registry, cfg.name, link.verbs(row["connector"]))
+            if removed and cfg.name in getattr(manager, "tool_names", {}):
+                # the manager's count is what the page shows: tools the
+                # manifest refused are not the agent's, so not counted
+                manager.tool_names[cfg.name] = [
+                    n for n in manager.tool_names[cfg.name] if n not in removed]
+            if removed:
+                done.notes.append(f"{cfg.name} offered tool(s) its manifest does not list, "
+                                  f"not registered: {', '.join(removed)}")
+            done.connected[cfg.name] = len(kept)
+        if link is not None:
+            done.notes += [p for p in link.problems]
+        prompt = attach_prompt(agent)
+        prompt.set("connections", prompt_text(link) if link is not None else None)
+        prompt.apply()
+        return done
+
+    def describe(self, manager: Any = None) -> dict[str, Any]:
+        """The Connections panel's data. Built from Setu's own report,
+        which carries no secret by contract, plus what this session runs."""
+        link = self.link
+        live = {s["name"]: s for s in (manager.servers() if manager is not None else [])}
+        rows = []
+        for row in (link.connections if link is not None else []):
+            name = (row.get("mcp") or {}).get("name", "")
+            server = live.get(name)
+            rows.append({**{k: row.get(k) for k in (
+                "ref", "connector", "account", "email", "level", "level_label",
+                "last_used")}, "server": name,
+                "tools": server["tools"] if server else 0,
+                "running": bool(server and server["healthy"])})
+        return {
+            "mode": self.mode,
+            "found": link is not None,
+            "road": link.road if link is not None else None,
+            "error": self.error,
+            "version": link.data.get("version") if link is not None else None,
+            "connections": rows,
+            "connectors": list(link.connectors.values()) if link is not None else [],
+            "setup": dict((link.data.get("setup") or {}) if link is not None else {}),
+            "problems": list(link.problems) if link is not None else [],
+        }
+
+
+# ---- signing in and out, for a page ---------------------------------------------
+
+#: An account name as a page may pass it: it becomes one argv word, so it
+#: may not look like an option; Setu has its own rules on top.
+ACCOUNT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
+
+#: How long ``setu disconnect`` / ``setu config`` may take (a revoke is
+#: one request to Google).
+COMMAND_TIMEOUT = 30.0
+
+
+def run_setu(program: str, *args: str, timeout: float = COMMAND_TIMEOUT) -> tuple[bool, str]:
+    """One short setu command -> (worked, what it said)."""
+    try:
+        done = subprocess.run([program, *args], capture_output=True, text=True,
+                              timeout=timeout)
+    except FileNotFoundError:
+        return False, f"no setu program at {program}"
+    except subprocess.TimeoutExpired:
+        return False, f"`setu {args[0]}` took longer than {int(timeout)}s"
+    said = (done.stdout + done.stderr).strip()
+    return done.returncode == 0, said
+
+
+class SignIn:
+    """One ``setu connect --json`` in progress. Events arrive on a thread
+    as Setu prints them -- started, url, connected, error -- and
+    ``on_event`` gets each dict, then a final ``{"event": "done"}``.
+
+    The address in the ``url`` event is Google's sign-in page; its
+    redirect comes back to a port Setu opened on THIS computer, which is
+    why a page may start one only when it is open on this computer too.
+    """
+
+    def __init__(self, program: str, connector: str, account: str, level: str,
+                 on_event: Any) -> None:
+        if not ACCOUNT_RE.match(account):
+            raise SetuLinkError(f"account name {account!r}: letters, digits, '.', '_' "
+                                f"and '-', starting with a letter or digit")
+        self.ref = f"{connector}:{account}"
+        self.on_event = on_event
+        self.last: dict[str, Any] = {}
+        self.cancelled = False
+        self.process = subprocess.Popen(
+            [program, "connect", connector, "--as", account, "--level", level, "--json"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.thread = threading.Thread(
+            target=self._read, daemon=True, name="yantra-setu-signin")
+        self.thread.start()
+
+    def _read(self) -> None:
+        assert self.process.stdout is not None
+        for line in self.process.stdout:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue            # not a line of the contract; never guessed at
+            if isinstance(event, dict) and event.get("event"):
+                self.last = event
+                self.on_event(event)
+        self.process.wait()
+        why = (self.process.stderr.read() if self.process.stderr else "").strip()
+        for pipe in (self.process.stdout, self.process.stderr):
+            if pipe is not None:
+                pipe.close()
+        if self.cancelled:
+            self.last = {"event": "cancelled"}
+            self.on_event(self.last)
+        elif self.last.get("event") not in ("connected", "error"):
+            self.last = {"event": "error",
+                         "message": why.splitlines()[-1] if why else "setu stopped early"}
+            self.on_event(self.last)
+        self.on_event({"event": "done", "ref": self.ref})
+
+    @property
+    def running(self) -> bool:
+        return self.process.poll() is None
+
+    def cancel(self) -> None:
+        """Stop waiting for the person. Setu's port closes with it, and
+        nothing was saved -- a sign-in only saves on its last step."""
+        if self.running:
+            self.cancelled = True
+            self.process.terminate()

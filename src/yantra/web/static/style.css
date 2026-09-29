@@ -1145,7 +1145,7 @@ pre.output { color: var(--ink); }
    7. overlays — modal, dialog, tools panel
    ===================================================================== */
 
-#modal-backdrop, #tools-backdrop, #turns-backdrop, #dialog-backdrop {
+#modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #dialog-backdrop {
   position: fixed;
   inset: 0;
   display: flex;
@@ -1157,7 +1157,7 @@ pre.output { color: var(--ink); }
   backdrop-filter: blur(4px);
   animation: fade-in var(--med) var(--ease);
 }
-#tools-backdrop, #turns-backdrop { z-index: 40; }  /* BELOW the approval modal on purpose */
+#tools-backdrop, #turns-backdrop, #conn-backdrop { z-index: 40; }  /* BELOW the approval modal on purpose */
 #dialog-backdrop { z-index: 45; }
 #modal-backdrop  { z-index: 50; }  /* approvals pop over everything */
 
@@ -1167,7 +1167,7 @@ pre.output { color: var(--ink); }
   to   { opacity: 1; transform: none; }
 }
 
-.sheet, #modal, #tools-panel, #turns-panel, #dialog {
+.sheet, #modal, #tools-panel, #turns-panel, #conn-panel, #dialog {
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--r-5);
@@ -1444,7 +1444,7 @@ pre.output { color: var(--ink); }
    8. tools panel
    ===================================================================== */
 
-#tools-panel, #turns-panel {
+#tools-panel, #turns-panel, #conn-panel {
   width: 100%;
   max-width: 780px;
   max-height: min(86vh, 860px);
@@ -1864,11 +1864,11 @@ pre.output { color: var(--ink); }
 }
 
 @media (max-width: 620px) {
-  #modal-backdrop, #tools-backdrop, #turns-backdrop, #dialog-backdrop {
+  #modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #dialog-backdrop {
     padding: 0;
     align-items: flex-end;
   }
-  #modal, #tools-panel, #turns-panel, #dialog {
+  #modal, #tools-panel, #turns-panel, #conn-panel, #dialog {
     max-width: none;
     max-height: 92vh;
     border-radius: var(--r-5) var(--r-5) 0 0;
@@ -2005,3 +2005,51 @@ pre.output { color: var(--ink); }
 #modal pre.learn-diff .d-del  { color: var(--danger, #c0392b); }
 #modal pre.learn-diff .d-hunk { color: var(--ink-3); }
 #modal pre.learn-diff .d-file { color: var(--ink-3); font-weight: 600; }
+
+/* ---- connections (notes/99) ---- */
+#conn-body { overflow-y: auto; padding: 0 22px 20px; }
+.conn-card {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.conn-card:first-child { border-top: 0; }
+.conn-card .dot { margin-top: 6px; }
+.conn-title { font-weight: 600; color: var(--ink); font-size: 14px; }
+.conn-sub { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.conn-sub code, .conn-cmd code { font-family: var(--mono); font-size: 12px; }
+.conn-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.conn-form {
+  grid-column: 2 / 4;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  margin-top: 6px;
+}
+.conn-form select, .conn-form input, .conn-setup input {
+  height: 34px; padding: 0 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-2);
+  background: var(--surface-1); color: var(--ink); font: inherit; font-size: 13px;
+}
+.conn-form input { width: 12ch; }
+.conn-level-note { grid-column: 2 / 4; font-size: 12px; color: var(--ink-3); }
+.conn-box {
+  margin: 14px 0 4px; padding: 12px 14px;
+  border: 1px solid var(--accent-line); border-radius: var(--r-3);
+  background: var(--accent-soft); color: var(--ink);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  font-size: 13px;
+}
+.conn-box.warn { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
+.conn-box.bad { border-color: var(--danger-line); background: var(--danger-soft); color: var(--danger); }
+.conn-box > span { flex: 1; min-width: 20ch; }
+.conn-setup { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
+.conn-setup input { flex: 1; min-width: 18ch; font-family: var(--mono); font-size: 12px; }
+.conn-cmd { grid-column: 2 / 4; font-size: 12.5px; color: var(--ink-2); }
+.conn-foot { margin-top: 16px; font-size: 12px; color: var(--ink-3); }
+@media (max-width: 560px) {
+  .conn-card { grid-template-columns: 9px minmax(0, 1fr); }
+  .conn-actions { grid-column: 2; justify-content: flex-start; }
+  .conn-form, .conn-level-note, .conn-cmd { grid-column: 2; }
+}
