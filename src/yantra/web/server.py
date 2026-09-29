@@ -1423,7 +1423,9 @@ def make_app(session: WebSession, static_dir: Path | None = None,
 
     def memory_view(memory: Any) -> dict[str, Any]:
         try:
-            items = memory.list(200)
+            # A store that cannot list (memory/mcp.py) still opens the
+            # panel: empty, with ``cannot`` saying why.
+            items = memory.list(200) if "list" not in memory.cannot() else []
         except Exception as exc:  # the store's failure, said plainly
             raise HTTPException(503, f"memory ({memory.store.name}): {exc}") from None
         shown = {item.id for item in memory.in_prompt}
@@ -1447,7 +1449,11 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         memory_id = str((await req.json()).get("id") or "").strip()
         if not memory_id:
             raise HTTPException(400, "which memory? send its id")
-        if not memory.forget(memory_id):
+        try:
+            forgotten = memory.forget(memory_id)
+        except Exception as exc:  # no forget verb, or the store is down
+            raise HTTPException(503, f"memory ({memory.store.name}): {exc}") from None
+        if not forgotten:
             raise HTTPException(404, f"no memory #{memory_id}")
         return memory_view(memory)
 

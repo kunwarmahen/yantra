@@ -154,12 +154,16 @@ class AgentSpec:
     #: lookup, and a library call that builds an agent should not reach the
     #: network because it forgot to say no. The CLI passes a level always.
     env_context: str | None = None
-    #: Memory about the person: ``"local"`` or ``"off"``. None means do not
-    #: attach, like ``env_context`` -- a library build must not read
+    #: Memory about the person: ``"local"``, ``"off"``, or the name of an
+    #: MCP server a store is reached through (memory/mcp.py). None means do
+    #: not attach, like ``env_context`` -- a library build must not read
     #: somebody's memories because it forgot to say no. The CLI resolves a
     #: value always (memory.memory_mode): on for a session of your own,
     #: off for a package that did not ask.
     memory: str | None = None
+    #: ``[memory] verbs``: (verb, tool) pairs naming the MCP server's tool
+    #: for each verb it calls something else. Only read for a server store.
+    memory_verbs: tuple[tuple[str, str], ...] = ()
 
     #: Sandbox root for file tools and bash's working directory.
     cwd: Path | None = None
@@ -205,12 +209,13 @@ class AgentSpec:
                     f"{'|'.join(MODES_ENV)}"
                 )
         if self.memory is not None:
-            from yantra.memory import MODES as MODES_MEMORY
-            if self.memory not in MODES_MEMORY:
-                raise ConfigError(
-                    f"memory {self.memory!r} is not one of "
-                    f"{'|'.join(MODES_MEMORY)}"
-                )
+            from yantra.memory import check_mode
+            from yantra.memory.mcp import check_verbs
+            try:
+                check_mode(self.memory, "memory.via")
+                check_verbs(dict(self.memory_verbs))
+            except ValueError as exc:
+                raise ConfigError(str(exc)) from None
         for name, value in (("max_tokens", self.max_tokens),
                             ("max_iterations", self.max_iterations),
                             ("context_window", self.context_window),
@@ -447,6 +452,14 @@ class AgentSpec:
             else:
                 enable_memory(agent, store, package=(
                     self.name if self.root is not None else None))
+        elif self.memory is not None and self.memory != "off":
+            # A store behind an MCP server. The server connects later, in
+            # the host, which then binds the store to it
+            # (memory.mcp.bind_memory_server); until then it fails open.
+            from yantra.memory import enable_memory
+            from yantra.memory.mcp import McpStore
+            enable_memory(agent, McpStore(self.memory, dict(self.memory_verbs)),
+                          package=(self.name if self.root is not None else None))
 
         # Last, because it appends to a prompt the layers above must already
         # own, and because at "full" it costs one network call.

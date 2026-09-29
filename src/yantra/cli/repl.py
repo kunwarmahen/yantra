@@ -492,6 +492,12 @@ class Repl:
                 self.console.print("[red]usage: /memory [forget ID | add TEXT "
                                    "| find WORDS][/red]")
                 return
+            elif "list" in memory.cannot():
+                self.console.print(
+                    f"memory: {memory.store.name}, for {memory.user} -- this "
+                    f"store cannot list what it keeps; /memory find WORDS "
+                    f"searches it", markup=False)
+                return
             else:
                 items = memory.list(100)
                 title = f"{len(items)} remembered"
@@ -508,6 +514,8 @@ class Repl:
         if not items and not verb:
             lines.append("  nothing yet -- tell the agent about yourself, or "
                          "/memory add TEXT")
+        if cannot := memory.cannot():
+            lines.append(f"  (this store cannot {' or '.join(cannot)})")
         # PLAIN: a statement is the person's (or model's) words, and may
         # hold rich markup that would be swallowed.
         self.console.print("\n".join(lines), markup=False)

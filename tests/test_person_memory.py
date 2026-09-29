@@ -127,9 +127,12 @@ class TestWhoAndWhether:
         assert memory_mode(None, env={"YANTRA_MEMORY": "off"}) == "off"
         assert memory_mode("local", env={"YANTRA_MEMORY": "off"}) == "local"
 
-    def test_an_unknown_mode_is_refused_by_name(self):
-        with pytest.raises(ValueError, match="YANTRA_MEMORY='mem0'"):
-            memory_mode(None, env={"YANTRA_MEMORY": "mem0"})
+    def test_anything_else_names_an_mcp_server(self):
+        assert memory_mode(None, env={"YANTRA_MEMORY": "mem0"}) == "mem0"
+
+    def test_a_malformed_mode_is_refused_by_name(self):
+        with pytest.raises(ValueError, match="YANTRA_MEMORY='my store'"):
+            memory_mode(None, env={"YANTRA_MEMORY": "my store"})
 
     def test_a_package_that_says_nothing_gets_no_memory(self, tmp_path):
         (tmp_path / "agent.toml").write_text('[agent]\nname = "x"\n')
@@ -140,9 +143,9 @@ class TestWhoAndWhether:
             '[agent]\nname = "x"\n[memory]\nvia = "local"\n')
         assert load_package(tmp_path).memory == "local"
 
-    def test_a_package_naming_a_store_that_is_not_there_fails_at_load(self, tmp_path):
-        (tmp_path / "agent.toml").write_text('[memory]\nvia = "somewhere"\n')
-        with pytest.raises(ConfigError, match="memory 'somewhere'"):
+    def test_a_package_naming_a_malformed_store_fails_at_load(self, tmp_path):
+        (tmp_path / "agent.toml").write_text('[memory]\nvia = "some where"\n')
+        with pytest.raises(ConfigError, match="memory.via='some where'"):
             load_package(tmp_path)
 
     def test_the_command_line_wins_over_the_package(self):

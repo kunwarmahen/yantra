@@ -48,6 +48,7 @@ from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          load_remembered, remembered_path)
 from yantra.mcp_oauth import TOKEN_FILE
 from yantra.memory import memory_mode
+from yantra.memory.mcp import bind_memory_server
 from yantra.memory.reflect import mark_reviewed, reflect_mode
 from yantra.package import MANIFEST, load_package
 from yantra.permissions import (SwitchableGate, allow_read_only,
@@ -435,13 +436,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "at the terminal or page); auto saves without "
                              "asking, for unattended runs; off never offers. "
                              "Same as $YANTRA_LEARN (notes/96)")
-    parser.add_argument("--memory", choices=["local", "off"], default=None,
+    parser.add_argument("--memory", default=None, metavar="local|off|SERVER",
                         help="memory about YOU across conversations: what "
                              "you told the agent before (home airport, "
                              "tools you use) goes into the prompt, and a "
                              "remember tool keeps new facts, asking first. "
                              "local (default for your own sessions) keeps "
                              "them in ~/.local/state/yantra/memory.sqlite; "
+                             "the name of a connected MCP server keeps them "
+                             "in the store behind it (notes/102); "
                              "off never reads or writes. A package decides "
                              "for itself in [memory] via. Same as "
                              "$YANTRA_MEMORY; whose memories: $YANTRA_USER, "
@@ -458,6 +461,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("prompt_positional", nargs="?", metavar="PROMPT",
                         help="same as --prompt (yantra \"what is in README.md?\")")
     return parser
+
+
+def _checked_memory(value: str) -> str:
+    try:
+        return memory_mode(value)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from None
 
 
 def _cli_spec(args) -> AgentSpec:
@@ -481,7 +491,8 @@ def _cli_spec(args) -> AgentSpec:
         max_usd_per_turn=args.max_usd,
         permissions_mode="yolo" if args.yolo else None,
         env_context=args.env_context,
-        memory=args.memory,
+        memory=(None if args.memory is None
+                else _checked_memory(args.memory)),
         cwd=Path(args.cwd),
     )
 
@@ -520,6 +531,28 @@ def _resolve_spec(args) -> AgentSpec:
         except ValueError as exc:
             raise ConfigError(str(exc)) from None
     return spec
+
+
+def _announce_memory(agent: Agent, spec: AgentSpec, console: Console) -> None:
+    """Memory is announced like every other thing that reads or writes
+    outside this directory: on by default is only honest when it says so.
+    After MCP servers connect, so a store behind one is counted too."""
+    memory = getattr(agent, "memory", None)
+    if memory is not None:
+        try:
+            count = (f"{len(memory.list())} remembered"
+                     if "list" not in memory.cannot() else "connected")
+        except Exception as exc:  # fails open: the turn does not need it
+            count = f"unreadable ({exc})"
+        cannot = memory.cannot()
+        gaps = f"; cannot {', '.join(cannot)}" if cannot else ""
+        console.print(f"[dim]memory: {memory.store.name} for {memory.user} -- "
+                      f"{count}{gaps} (/memory; --memory off)[/dim]")
+    elif problem := getattr(agent, "memory_problem", None):
+        console.print(f"[yellow]memory: off -- {problem}[/yellow]")
+    elif spec.memory not in (None, "off"):
+        console.print("[yellow]memory: off -- no identity to keep it under "
+                      "(set YANTRA_USER)[/yellow]")
 
 
 def enable_subagents(agent: Agent, console: Console) -> SubagentSpawner:
@@ -2338,23 +2371,10 @@ def main(argv: list[str] | None = None) -> int:
                       "nothing without a ceiling: set --max-usd, or run a "
                       "package with [budget] max_usd_per_turn[/yellow]")
 
-    # Memory is announced like every other thing that reads or writes
-    # outside this directory: on by default is only honest when it says so.
     memory = getattr(agent, "memory", None)
     if memory is not None:
-        try:
-            count = f"{len(memory.list())} remembered"
-        except Exception as exc:  # fails open: the turn does not need it
-            count = f"unreadable ({exc})"
-        console.print(f"[dim]memory: {memory.store.name} for {memory.user} -- "
-                      f"{count} (/memory; --memory off)[/dim]")
         memory.on_notice = (
             lambda text: console.print(f"[yellow]{text}[/yellow]"))
-    elif problem := getattr(agent, "memory_problem", None):
-        console.print(f"[yellow]memory: off -- {problem}[/yellow]")
-    elif spec.memory == "local":
-        console.print("[yellow]memory: off -- no identity to keep it under "
-                      "(set YANTRA_USER)[/yellow]")
 
     env_ctx = getattr(agent, "env_context", None)
     if env_ctx is not None and env_ctx.geo_error:
@@ -2498,6 +2518,14 @@ def main(argv: list[str] | None = None) -> int:
         # and remembered servers, so a name they configured by hand wins.
         if _connect_setu(args, mcp_manager, agent, console) is not None:
             return 2
+
+        # A memory store behind an MCP server binds now that servers are
+        # up -- connecting it from the package's [[mcp]] if nothing above
+        # did -- and before tool selection, since binding takes the
+        # server's own memory tools out of the roster (memory/mcp.py).
+        if problem := bind_memory_server(agent, mcp_manager, list(spec.mcp)):
+            console.print(f"[yellow]{problem}[/yellow]")
+        _announce_memory(agent, spec, console)
 
         # Operator kill-switch: YANTRA_DISABLED_TOOLS globs unregister
         # tools AFTER MCP registration (so whole mcp__ servers can go)

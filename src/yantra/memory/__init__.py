@@ -50,7 +50,9 @@ says why.
 
 STORES PLUG IN; NONE IS NAMED HERE. ``MemoryStore`` is four verbs. The
 built-in ``local`` store (memory/local.py) is sqlite and keyword search,
-there so the feature works with nothing installed.
+there so the feature works with nothing installed. Any other store runs
+an MCP server and is named by it: ``--memory NAME`` or ``[memory] via =
+"NAME"`` reaches it through a verb map (memory/mcp.py).
 """
 
 from __future__ import annotations
@@ -117,6 +119,27 @@ def resolve_user(env: dict[str, str] | None = None) -> str | None:
         return None
 
 
+def check_mode(value: str, where: str = "memory") -> str:
+    """``local``, ``off``, or the name of an MCP server to reach a store
+    through. Raises ValueError, naming ``where``, on anything else."""
+    from yantra.memory.mcp import SERVER_NAME
+
+    mode = value.strip()
+    if mode.lower() in MODES:
+        return mode.lower()
+    if not SERVER_NAME.match(mode):
+        raise ValueError(f"{where}={value!r}: expected {', '.join(MODES)}, "
+                         f"or the name of an MCP server")
+    return mode
+
+
+def supports(store: MemoryStore, verb: str) -> bool:
+    """Whether a store can do ``verb``. Stores that do not say can do all
+    four; one reached over MCP may lack a tool for some (memory/mcp.py)."""
+    check = getattr(store, "supports", None)
+    return check(verb) if callable(check) else True
+
+
 def memory_mode(flag: str | None = None,
                 env: dict[str, str] | None = None) -> str:
     """``--memory`` beats $YANTRA_MEMORY beats ``local``.
@@ -129,10 +152,7 @@ def memory_mode(flag: str | None = None,
     env = os.environ if env is None else env
     where, raw = ("--memory", flag) if flag is not None else \
         (ENV_MODE, env.get(ENV_MODE) or "local")
-    mode = raw.strip().lower()
-    if mode not in MODES:
-        raise ValueError(f"{where}={raw!r}: expected one of {', '.join(MODES)}")
-    return mode
+    return check_mode(raw, where)
 
 
 def _clean(statement: str) -> str:
@@ -210,8 +230,12 @@ class Memory:
         try:
             chosen: list[MemoryItem] = []
             seen: set[str] = set()
-            for item in [*self.recall(first_message, PROMPT_LIMIT),
-                         *self.list(PROMPT_LIMIT)]:
+            found = []
+            if supports(self.store, "recall"):
+                found += self.recall(first_message, PROMPT_LIMIT)
+            if supports(self.store, "list"):
+                found += self.list(PROMPT_LIMIT)
+            for item in found:
                 if item.id not in seen:
                     seen.add(item.id)
                     chosen.append(item)
@@ -265,7 +289,12 @@ class Memory:
         """For the page's chip and panel."""
         return {"store": self.store.name, "user": self.user,
                 "in_prompt": len(self.in_prompt), "notice": self.notice,
-                "reflect": self.reflect}
+                "reflect": self.reflect, "cannot": self.cannot()}
+
+    def cannot(self) -> list[str]:
+        """The verbs this store has no way to do, e.g. ``["forget"]``."""
+        return [verb for verb in ("remember", "recall", "forget", "list")
+                if not supports(self.store, verb)]
 
 
 def _fit(items: list[MemoryItem]) -> list[MemoryItem]:
@@ -320,8 +349,10 @@ __all__ = [
     "MemoryStoreError",
     "MemoryItem",
     "MemoryStore",
+    "check_mode",
     "enable_memory",
     "memory_mode",
     "prime_if_new",
     "resolve_user",
+    "supports",
 ]

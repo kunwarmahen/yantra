@@ -324,6 +324,15 @@ memory. An agent package gets it only when its `agent.toml` asks
 rides in every request; on Ollama it stays on the machine
 ([notes/100](notes/100-what-it-knows-about-you.md)).
 
+A cleverer store (embeddings, a server the whole house shares) plugs in
+as an MCP server: `--memory NAME` (or `[memory] via = "NAME"`) keeps
+memories in the store behind the connected server of that name. Its
+tools are called `remember`, `recall`, `forget` and `list_memories`
+unless `[memory] verbs` maps them to other names. A server that lacks
+some of them still works, and `/memory` says what it can't do. Your
+identity goes on every call, so set `YANTRA_USER` to the name the store
+knows you by ([notes/102](notes/102-kept-somewhere-else.md)).
+
 ### One-command starts
 
 `start.sh` wraps the common setups so you don't have to remember flags.
@@ -1056,8 +1065,11 @@ mode = "ask"                    # ask | yolo
 context = "local"               # off | local | full
 
 [memory]
-via = "local"                   # local | off -- the person's memories; a
-                                # package that says nothing gets off (notes/100)
+via = "local"                   # local | off | an [[mcp]] server's name -- the
+                                # person's memories; a package that says
+                                # nothing gets off (notes/100, notes/102)
+verbs = { list = "all_memories" }   # only for a server: its tool per verb,
+                                # when not remember/recall/forget/list_memories
 ```
 
 A package may also declare the children it delegates to:
@@ -1937,7 +1949,12 @@ src/yantra/
 │                   (/quit, /clear, /load, before compaction, /remember):
 │                   one plain call to the session's own model, scrubbed
 │                   first, proposing facts the person keeps or drops
-│                   ([notes/101](notes/101-looking-back.md))
+│                   ([notes/101](notes/101-looking-back.md)); mcp.py is a
+│                   store behind any MCP server, through a verb map, bound
+│                   once the host's servers connect; user_id on every call,
+│                   the server's own memory tools taken from the model, a
+│                   verb it lacks reported rather than fatal
+│                   ([notes/102](notes/102-kept-somewhere-else.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (agent / base / env /
 │                   memory / connections / skills):
 │                   each owner writes one named layer, attach_prompt captures

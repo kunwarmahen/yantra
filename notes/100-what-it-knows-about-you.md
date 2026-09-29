@@ -214,10 +214,11 @@ person. … ask for the departure city.
   ends (`/quit`, `/clear`, `/load`, before compaction, or `/remember`)
   proposes facts you keep or drop —
   [note 101](101-looking-back.md).
-* **Outside stores.** The four verbs are the whole interface, but only
-  `local` exists. An outside store will connect as an MCP server, with
-  a map from the four verbs to its tool names, so no store's name or
-  address ever appears in Yantra's code.
+* ~~**Outside stores.**~~ The four verbs are the whole interface, and
+  `local` was the only store. Built since: an outside store connects as
+  an MCP server named by `--memory NAME` or `[memory] via`, with a map
+  from the four verbs to its tool names, so no store's name or address
+  appears in Yantra's code — [note 102](102-kept-somewhere-else.md).
 * **Clever search.** Embeddings would need a model and a dependency. A
   store that has them can offer them.
 * **Rewriting the layer mid-conversation.** It would cost the cached

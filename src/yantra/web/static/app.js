@@ -1504,7 +1504,16 @@ function renderMemory() {
     warn.innerHTML = `<span>${esc(d.notice)}</span>`;
     body.append(warn);
   }
-  if (!d.items.length) {
+  const cannot = d.cannot || [];
+  if (cannot.length) {
+    // A store behind an MCP server may lack a tool for some verbs.
+    const gap = document.createElement("div");
+    gap.className = "conn-foot";
+    gap.textContent = `the ${d.store} store cannot ${cannot.join(" or ")}`
+      + (cannot.includes("list") ? " — so what it keeps is not shown here" : "");
+    body.append(gap);
+  }
+  if (!d.items.length && !cannot.includes("list")) {
     const p = document.createElement("div");
     p.className = "conn-foot";
     p.textContent = "nothing yet — tell the agent about yourself, and it "
@@ -1521,13 +1530,15 @@ function renderMemory() {
         ${item.created ? " · " + esc(item.created.slice(0, 10)) : ""}</div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";
-    const drop = document.createElement("button");
-    drop.className = "m-btn danger";
-    drop.textContent = "forget";
-    drop.onclick = async () => {
-      if (await memoryPost("/api/memory/forget", { id: item.id })) toast(`forgot #${item.id}`);
-    };
-    actions.append(drop);
+    if (!cannot.includes("forget")) {
+      const drop = document.createElement("button");
+      drop.className = "m-btn danger";
+      drop.textContent = "forget";
+      drop.onclick = async () => {
+        if (await memoryPost("/api/memory/forget", { id: item.id })) toast(`forgot #${item.id}`);
+      };
+      actions.append(drop);
+    }
     row.append(main, actions);
     body.append(row);
   }

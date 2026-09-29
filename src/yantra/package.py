@@ -93,7 +93,7 @@ SCHEMA: dict[str, frozenset[str]] = {
     "budget": frozenset({"max_usd_per_turn"}),
     "permissions": frozenset({"mode"}),
     "env": frozenset({"context"}),
-    "memory": frozenset({"via"}),
+    "memory": frozenset({"via", "verbs"}),
 }
 
 
@@ -231,6 +231,16 @@ def _pack_prefixes(tools: dict[str, Any], packs: tuple[str, ...],
                         f"letter")
         pairs.append((pack, prefix))
     return tuple(pairs)
+
+
+def _verbs(memory: dict[str, Any], path: Path) -> tuple[tuple[str, str], ...]:
+    """``[memory] verbs`` -> (verb, tool) pairs. Which verbs exist is
+    checked by the spec; here only that it is a table of strings."""
+    raw = memory.get("verbs", {})
+    if not isinstance(raw, dict) or any(not isinstance(v, str)
+                                        for v in raw.values()):
+        _fail(path, "memory.verbs must be a table of verb = \"tool name\"")
+    return tuple(sorted(raw.items()))
 
 
 def _mcp_servers(data: dict[str, Any], path: Path) -> tuple[MCPServerConfig, ...]:
@@ -545,6 +555,7 @@ def load_package(where: Path) -> AgentSpec:
         # A package that says nothing gets no memory: the person's facts
         # reach an agent somebody else wrote only when it asks for them.
         memory=_str(memory, "via", manifest, "memory") or "off",
+        memory_verbs=_verbs(memory, manifest),
         root=root,
     )
     # A package that ships skills and then excludes the tool that loads
