@@ -38,6 +38,7 @@
     <g id="i-terminal"><path d="M7 9l3 3-3 3M13 15h4"/><rect x="3" y="4" width="18" height="16" rx="3"/></g>
     <g id="i-image"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l4.5-4.5L13 17l3-3 4 4"/></g>
     <g id="i-check"><path d="M5 12.5l4.5 4.5L19 7"/></g>
+    <g id="i-bookmark"><path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/></g>
     <g id="i-link"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L12 5.6"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></g>
   </defs>
 </svg>
@@ -82,6 +83,12 @@
       <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-link"/></svg>
       <span id="conn-count">—</span>
+    </button>
+
+    <button class="chip hidden" id="chip-mem" title="memory — what the agent remembers about you across conversations">
+      <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-bookmark"/></svg>
+      <span id="mem-count">—</span>
     </button>
 
     <span class="chip chip-static" id="chip-cost" title="session cost — unknown slugs show no figure, never a guess"></span>
@@ -337,6 +344,24 @@
       </button>
     </div>
     <div id="conn-body"></div>
+  </div>
+</div>
+
+<!-- memory: what is remembered about the person, across conversations.
+     Read and corrected here without a model turn. -->
+<div id="mem-backdrop" class="hidden">
+  <div id="mem-panel" role="dialog" aria-modal="true" aria-labelledby="mem-title">
+    <div class="tools-head">
+      <div>
+        <h3 id="mem-title">memory</h3>
+        <span class="tools-note" id="mem-note">what the agent remembers about you. It goes into the prompt at the start of each conversation; changes here apply from the next one.</span>
+      </div>
+      <button class="ghost icon-only" id="mem-close" title="close" aria-label="close">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div id="mem-body"></div>
   </div>
 </div>
 

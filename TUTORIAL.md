@@ -372,6 +372,44 @@ call, like any command. Your token is never one of its arguments: the
 script reads it from your file, as before.
 ([notes/98](notes/98-one-call.md))
 
+### It remembers you
+
+Skills remember *how* to do something. Memory remembers *who you are*.
+Tell it once, in passing, that you live near RDU:
+
+```
+> I live near RDU. What should I think about when booking flights to Denver?
+→ remember()
+  remember: Lives near RDU (Raleigh-Durham International Airport)   [y/n/e] y
+```
+
+The model decided that fact was worth keeping, and it asked before
+keeping it. Quit, start a new session tomorrow, and ask *"find me
+flights to Austin"*. It starts from RDU without being told, and says
+so: *"From RDU (near where you live) → AUS"*. It didn't look anything
+up. What it remembers about you is in its instructions from the first
+message, because a model has no reason to go looking for a home airport
+you never mentioned.
+
+```
+> /memory
+memory: local, for asha -- 1 remembered
+ * #1  Lives near RDU (Raleigh-Durham International Airport)
+> /memory forget 1          # you moved
+> /memory add I use uv, not pip
+```
+
+It's on for your own sessions and kept in one file,
+`~/.local/state/yantra/memory.sqlite`, across every project. An agent
+package gets it only if its `agent.toml` asks (`[memory] via = "local"`).
+`--memory off` turns it off. On the web page, the bookmark chip in the
+header opens the same list.
+
+The same tradeoff as `--env-context`: on a cloud model, what it
+remembers about you rides inside every request to your provider. On
+the local road it never leaves the machine.
+([notes/100](notes/100-what-it-knows-about-you.md))
+
 ## 7 · Sub-agents — a fresh context window on demand
 
 A long job fills the context window with material that is of no further

@@ -33,6 +33,7 @@ from yantra.context import (
 from yantra.errors import ToolError
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
+from yantra.memory import prime_if_new
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
                                 allow_read_only, decide, denial_code,
@@ -400,6 +401,10 @@ class Agent:
         # the next message: its waiting calls are answered as abandoned,
         # so the history this message joins is valid again (notes/88).
         self.abandon_held()
+        # A conversation's first message fills the memory layer, once --
+        # before the message joins history, which is how "first" is told
+        # (memory/__init__.py). Nothing happens without ``agent.memory``.
+        prime_if_new(self, user_input)
         blocks: list[Block] = [TextBlock(user_input)]
         if images:
             blocks.extend(images)

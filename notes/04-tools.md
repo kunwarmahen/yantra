@@ -203,6 +203,11 @@ Verified live across PROCESSES: one session saved a deploy checklist via
 write_note; a brand-new process recalled it by query — persistence is
 the feature, so the verification crosses the boundary it claims to.
 
+Notes are about the PROJECT and live in its `.yantra/`. What the agent
+knows about the PERSON — home airport, tools they use, corrections — is
+a different store with a different owner, carried into the prompt rather
+than waiting to be recalled: [notes/100](100-what-it-knows-about-you.md).
+
 ## ask_user: a tool can hold a service, not just do work
 
 Every tool before this one closed over *state* (memory.json's path) or

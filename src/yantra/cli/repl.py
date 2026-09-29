@@ -66,6 +66,11 @@ HELP = """[bold]commands[/bold]
   /NAME ...          run a skill directly: /pr-review the auth branch
   /learn             save what the last turn did as a skill (it is tested
                      and shown to you first; --learn off stops the offers)
+  /memory            what the agent remembers about you across
+                     conversations (* = in this conversation's prompt)
+  /memory forget ID  remove one -- a fact that stopped being true
+  /memory add TEXT   tell it something to keep, in your own words
+  /memory find WORDS search what is remembered
   /mcp               list connected mcp servers
   /mcp add ...       connect a server MID-SESSION: /mcp add NAME URL, or
                      /mcp add NAME COMMAND [ARGS...] (asks whether to save)
@@ -423,6 +428,65 @@ class Repl:
         return (f"skill {name}: this use counted as failed "
                 f"({record.failing} in a row; set aside at 3)")
 
+    def _memory_command(self, arg: str) -> None:
+        """``/memory``: read and correct what is remembered about you.
+
+        Local and free -- no model turn. What changes here reaches the
+        prompt at the next conversation (/clear), not mid-conversation:
+        the layer is filled once so the cached prefix survives.
+        """
+        memory = getattr(self.agent, "memory", None)
+        if memory is None:
+            self.console.print("[yellow]memory is off for this session "
+                               "(--memory off, a package that did not ask, "
+                               "or no identity -- set YANTRA_USER)[/yellow]")
+            return
+        verb, _, rest = arg.partition(" ")
+        rest = rest.strip()
+        try:
+            if verb == "forget":
+                if not rest:
+                    self.console.print("[red]usage: /memory forget ID[/red]")
+                elif memory.forget(rest):
+                    self.console.print(f"[green]forgot #{rest}[/green] -- "
+                                       "gone from the next conversation on")
+                else:
+                    self.console.print(f"[red]no memory #{rest}[/red]")
+                return
+            if verb == "add":
+                if not rest:
+                    self.console.print("[red]usage: /memory add TEXT[/red]")
+                    return
+                memory_id = memory.remember(rest, kind="fact")
+                self.console.print(f"[green]remembered #{memory_id}[/green]")
+                return
+            if verb == "find":
+                items = memory.recall(rest, 20) if rest else []
+                title = f"{len(items)} match {rest!r}"
+            elif verb:
+                self.console.print("[red]usage: /memory [forget ID | add TEXT "
+                                   "| find WORDS][/red]")
+                return
+            else:
+                items = memory.list(100)
+                title = f"{len(items)} remembered"
+        except Exception as exc:  # a store's own failure, said plainly
+            self.console.print(f"[red]memory ({memory.store.name}): "
+                               f"{exc}[/red]")
+            return
+        shown = {item.id for item in memory.in_prompt}
+        lines = [f"memory: {memory.store.name}, for {memory.user} -- {title}"]
+        for item in items:
+            mark = "*" if item.id in shown else " "
+            where = f"  [{item.package}]" if item.package else ""
+            lines.append(f" {mark} #{item.id}  {item.statement}{where}")
+        if not items and not verb:
+            lines.append("  nothing yet -- tell the agent about yourself, or "
+                         "/memory add TEXT")
+        # PLAIN: a statement is the person's (or model's) words, and may
+        # hold rich markup that would be swallowed.
+        self.console.print("\n".join(lines), markup=False)
+
     def _learn_command(self) -> None:
         """``/learn``: the person asks for the last turn to be saved.
 
@@ -652,6 +716,8 @@ class Repl:
                 self._skills_command(arg)
             case "learn":
                 self._learn_command()
+            case "memory":
+                self._memory_command(arg)
             case "quit" | "exit":
                 return True
             case _:

@@ -115,6 +115,8 @@ uv run yantra --no-skills                            # ignore skills entirely
 uv run yantra --learn off                            # never offer to save a solved
                                                       #   task as a skill (/learn
                                                       #   still saves one by hand)
+uv run yantra --memory off                           # remember nothing about you
+                                                      #   across conversations
 uv run yantra "summarize README.md"                  # one-shot prompt, then exit
 uv run yantra --image photo.png "what's in this picture?"   # vision one-shot
 ```
@@ -268,6 +270,36 @@ page's *make it a tool?* button) writes the tool, tests it once, and
 asks. The script runs as a list of words, never through a shell, and
 each call asks first, like bash. A tool never takes a secret as an
 argument ([notes/98](notes/98-one-call.md)).
+
+### It remembers you across conversations
+
+Tell it once, in passing, that you live near RDU. Next week, in a new
+session, *"find me flights to Austin"* starts from RDU without being
+told, and says so: *"From RDU (near where you live) → AUS"*.
+
+What it knows about you goes into the system prompt at the first message
+of each conversation, because a model has no reason to go looking for a
+home airport you never mentioned. It's framed as *what you said before,
+which may be out of date; the current message wins*. The model keeps a
+new fact with a `remember` tool, one short sentence, and **asks before
+keeping it**. `recall_memory` searches when it needs more.
+
+```
+> /memory
+memory: local, for asha -- 1 remembered
+ * #1  Lives near RDU (Raleigh-Durham International Airport)
+```
+
+`/memory forget ID` removes one, `/memory add TEXT` keeps one in your
+words, and `/memory find WORDS` searches. The page's bookmark chip opens
+the same list. It's on for your own sessions, stored in
+`~/.local/state/yantra/memory.sqlite` across every project, under
+`$YANTRA_USER` or else your login name. With no identity, there is no
+memory. An agent package gets it only when its `agent.toml` asks
+(`[memory] via = "local"`), and evals never do. `--memory off` or
+`YANTRA_MEMORY=off` turns it off. On a cloud model, what is remembered
+rides in every request; on Ollama it stays on the machine
+([notes/100](notes/100-what-it-knows-about-you.md)).
 
 ### One-command starts
 
@@ -999,6 +1031,10 @@ mode = "ask"                    # ask | yolo
 
 [env]
 context = "local"               # off | local | full
+
+[memory]
+via = "local"                   # local | off -- the person's memories; a
+                                # package that says nothing gets off (notes/100)
 ```
 
 A package may also declare the children it delegates to:
@@ -1866,7 +1902,16 @@ src/yantra/
 │                   separate held block -- an older reader loads a valid
 │                   conversation, this one resumes it
 │                   ([notes/88](notes/88-not-yet.md))
-├── prompt.py       the system prompt as ORDERED LAYERS (base / env / skills):
+├── memory/         what the agent knows about the PERSON across conversations
+│                   (not write_note's project notes): MemoryStore is four verbs
+│                   (remember/recall/forget/list), identity is passed in (no
+│                   identity, no memory), a `memory` prompt layer filled ONCE
+│                   per conversation so the cached prefix survives; local.py
+│                   is the built-in sqlite + word-overlap store, tools.py the
+│                   remember (asks first) and recall_memory tools
+│                   ([notes/100](notes/100-what-it-knows-about-you.md))
+├── prompt.py       the system prompt as ORDERED LAYERS (agent / base / env /
+│                   memory / connections / skills):
 │                   each owner writes one named layer, attach_prompt captures
 │                   the operator's --system exactly once, recompose() rebuilds
 │                   after a /load restores a stale composed string
@@ -2238,7 +2283,8 @@ src/yantra/
 │   ├── search.py   grep — ripgrep subprocess when available, pure-python
 │   │               walker fallback (identical output contract)
 │   ├── memory.py   scratchpad: write_note / recall_notes — JSON store under
-│   │               .yantra/, ranked substring retrieval, survives restarts
+│   │               .yantra/, ranked substring retrieval, survives restarts;
+│   │               notes about the PROJECT (the person's are memory/)
 │   ├── todo.py     live plan state vs memory's durable facts: todo_write /
 │   │               todo_read — replace-whole-list semantics ([notes/24](notes/24-todo-lists.md))
 │   └── ask_user.py pause-and-ask-the-human tool: UserChannel protocol

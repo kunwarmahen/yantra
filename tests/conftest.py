@@ -77,6 +77,14 @@ def seal_ambient_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def private_state_home(tmp_path_factory, monkeypatch):
+    """Memory about the person lives under $XDG_STATE_HOME (memory/local.py),
+    and a session of your own has it on by default -- so a test driving
+    the CLI would otherwise read and write the real one on this machine."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("state")))
+
+
 class Recorder:
     """MockTransport handler wrapper that records every request it sees.
 

@@ -823,6 +823,11 @@ def _agent_for(case: EvalCase, seen: list[str], *, agent_cls,
             max_iterations=max_iterations, permissions=permissions,
             **kwargs, **extra,
         )
+    if spec.memory is not None:
+        # Never the person's memories, whatever the package asks for: a
+        # verdict that depended on what this machine's owner once said is
+        # not a verdict on the package, and a case must not write to them.
+        spec = replace(spec, memory=None)
     if spec.max_iterations is None:
         spec = replace(spec, max_iterations=max_iterations)
     if spec.context_window is None and context_window is not None:

@@ -104,7 +104,7 @@ A new prompt layer, `connections`, sits between `env` and `skills`
 again):
 
 ```python
-LAYER_ORDER = ("agent", "base", "env", "connections", "skills")
+LAYER_ORDER = ("agent", "base", "env", "memory", "connections", "skills")
 ```
 
 It lists each connection with its account and level, the connectors

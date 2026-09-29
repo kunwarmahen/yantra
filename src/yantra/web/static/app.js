@@ -96,6 +96,7 @@ function route(env) {
     case "tool_offer":         showToolModal(env); break;
     case "setu_signin":        onSignin(env); break;
     case "connections":        onConnections(env); break;
+    case "memory_notice":      addBanner(env.text, false, true); break;
     case "promoted":           toast(`${env.skill} is now the tool ${env.tool}`);
                                addBanner(`${env.skill} is now the tool `
                                  + `${env.tool} — next time it is one call `
@@ -234,6 +235,15 @@ function applyHeader(s) {
   const off = (s.disabled_tools || []).length;
   $("#tools-count").textContent =
     (s.tools ? s.tools.length : "—") + (off ? ` · ${off} off` : "");
+  // memory chip: hidden when memory is off; the count is what this
+  // conversation's prompt carries, the tooltip says whose and where
+  const mem = s.memory;
+  $("#chip-mem").classList.toggle("hidden", !mem);
+  if (mem) {
+    $("#mem-count").textContent = `${mem.in_prompt} in prompt`;
+    $("#chip-mem").title = `memory — ${mem.store} store, for ${mem.user}`
+      + (mem.notice ? `\n\n${mem.notice}` : "");
+  }
   renderPressure(s);
   renderBudget(s);
   renderRecording(s);
@@ -1411,6 +1421,104 @@ $("#btn-clear").onclick = async () => {
     toast("history cleared");
   }
 };
+
+/* ---------- memory panel ----------
+
+   What is remembered about the person, newest first; the ones this
+   conversation's prompt carries are marked. Forget and add work without
+   a model turn, and apply from the next conversation (the prompt layer
+   is filled once, so the cached prefix survives). */
+
+const memPanel = { data: null };
+
+$("#chip-mem").onclick = openMemPanel;
+$("#mem-close").onclick = () => $("#mem-backdrop").classList.add("hidden");
+$("#mem-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#mem-backdrop")) $("#mem-backdrop").classList.add("hidden");
+});
+
+async function openMemPanel() {
+  $("#mem-backdrop").classList.remove("hidden");
+  $("#mem-body").innerHTML = '<div class="panel-loading">loading…</div>';
+  const res = await fetch("/api/memory");
+  const data = await res.json();
+  if (!res.ok) {
+    $("#mem-body").innerHTML = `<div class="conn-box warn"><span>${esc(data.detail)}</span></div>`;
+    return;
+  }
+  memPanel.data = data;
+  renderMemory();
+}
+
+async function memoryPost(path, body) {
+  const res = await fetch(path, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) { addBanner(`memory: ${data.detail}`, true); return false; }
+  memPanel.data = data;
+  renderMemory();
+  return true;
+}
+
+function renderMemory() {
+  const d = memPanel.data;
+  const body = $("#mem-body");
+  body.textContent = "";
+  const form = document.createElement("form");
+  form.className = "mem-add";
+  const input = document.createElement("input");
+  input.placeholder = "tell it something to keep — e.g. I live near RDU";
+  input.maxLength = 300;
+  const add = document.createElement("button");
+  add.className = "m-btn primary";
+  add.textContent = "remember";
+  form.append(input, add);
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (!input.value.trim()) return;
+    if (await memoryPost("/api/memory/add", { statement: input.value })) {
+      toast("remembered — from the next conversation on");
+    }
+  };
+  body.append(form);
+  section(body, `${d.items.length} remembered`,
+    `${d.store} store, for ${d.user} · ● = in this conversation's prompt`);
+  if (d.notice) {
+    const warn = document.createElement("div");
+    warn.className = "conn-box warn";
+    warn.innerHTML = `<span>${esc(d.notice)}</span>`;
+    body.append(warn);
+  }
+  if (!d.items.length) {
+    const p = document.createElement("div");
+    p.className = "conn-foot";
+    p.textContent = "nothing yet — tell the agent about yourself, and it "
+      + "asks before keeping anything.";
+    body.append(p);
+  }
+  for (const item of d.items) {
+    const row = document.createElement("div");
+    row.className = "conn-card mem-row";
+    const main = document.createElement("div");
+    main.innerHTML = `<div class="conn-title">${item.in_prompt ? "● " : ""}${esc(item.statement)}</div>
+      <div class="conn-sub">#${esc(item.id)}${item.kind ? " · " + esc(item.kind) : ""}
+        ${item.package ? " · from " + esc(item.package) : ""}
+        ${item.created ? " · " + esc(item.created.slice(0, 10)) : ""}</div>`;
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    const drop = document.createElement("button");
+    drop.className = "m-btn danger";
+    drop.textContent = "forget";
+    drop.onclick = async () => {
+      if (await memoryPost("/api/memory/forget", { id: item.id })) toast(`forgot #${item.id}`);
+    };
+    actions.append(drop);
+    row.append(main, actions);
+    body.append(row);
+  }
+}
 
 /* ---------- connections panel (notes/99) ----------
 

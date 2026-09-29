@@ -47,6 +47,7 @@ from yantra.mcp import (MCPAuthRequired, MCPError, MCPHttpSession,
                          MCPManager, MCPServerConfig, load_mcp_configs,
                          load_remembered, remembered_path)
 from yantra.mcp_oauth import TOKEN_FILE
+from yantra.memory import memory_mode
 from yantra.package import MANIFEST, load_package
 from yantra.permissions import (SwitchableGate, allow_read_only,
                                  trust_sandbox, yolo)
@@ -433,6 +434,17 @@ def build_parser() -> argparse.ArgumentParser:
                              "at the terminal or page); auto saves without "
                              "asking, for unattended runs; off never offers. "
                              "Same as $YANTRA_LEARN (notes/96)")
+    parser.add_argument("--memory", choices=["local", "off"], default=None,
+                        help="memory about YOU across conversations: what "
+                             "you told the agent before (home airport, "
+                             "tools you use) goes into the prompt, and a "
+                             "remember tool keeps new facts, asking first. "
+                             "local (default for your own sessions) keeps "
+                             "them in ~/.local/state/yantra/memory.sqlite; "
+                             "off never reads or writes. A package decides "
+                             "for itself in [memory] via. Same as "
+                             "$YANTRA_MEMORY; whose memories: $YANTRA_USER, "
+                             "else your login name")
     parser.add_argument("prompt_positional", nargs="?", metavar="PROMPT",
                         help="same as --prompt (yantra \"what is in README.md?\")")
     return parser
@@ -459,6 +471,7 @@ def _cli_spec(args) -> AgentSpec:
         max_usd_per_turn=args.max_usd,
         permissions_mode="yolo" if args.yolo else None,
         env_context=args.env_context,
+        memory=args.memory,
         cwd=Path(args.cwd),
     )
 
@@ -489,6 +502,13 @@ def _resolve_spec(args) -> AgentSpec:
         spec = replace(spec, env_context=default_env_context())
     if spec.skills is None:
         spec = replace(spec, skills=True)
+    if spec.memory is None:
+        # Reached only with no package (a package always says, off when
+        # silent) and no flag: a session of your own.
+        try:
+            spec = replace(spec, memory=memory_mode())
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from None
     return spec
 
 
@@ -2307,6 +2327,24 @@ def main(argv: list[str] | None = None) -> int:
         console.print("[yellow]--budget-notice and --budget-cap-reply do "
                       "nothing without a ceiling: set --max-usd, or run a "
                       "package with [budget] max_usd_per_turn[/yellow]")
+
+    # Memory is announced like every other thing that reads or writes
+    # outside this directory: on by default is only honest when it says so.
+    memory = getattr(agent, "memory", None)
+    if memory is not None:
+        try:
+            count = f"{len(memory.list())} remembered"
+        except Exception as exc:  # fails open: the turn does not need it
+            count = f"unreadable ({exc})"
+        console.print(f"[dim]memory: {memory.store.name} for {memory.user} -- "
+                      f"{count} (/memory; --memory off)[/dim]")
+        memory.on_notice = (
+            lambda text: console.print(f"[yellow]{text}[/yellow]"))
+    elif problem := getattr(agent, "memory_problem", None):
+        console.print(f"[yellow]memory: off -- {problem}[/yellow]")
+    elif spec.memory == "local":
+        console.print("[yellow]memory: off -- no identity to keep it under "
+                      "(set YANTRA_USER)[/yellow]")
 
     env_ctx = getattr(agent, "env_context", None)
     if env_ctx is not None and env_ctx.geo_error:

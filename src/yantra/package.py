@@ -93,6 +93,7 @@ SCHEMA: dict[str, frozenset[str]] = {
     "budget": frozenset({"max_usd_per_turn"}),
     "permissions": frozenset({"mode"}),
     "env": frozenset({"context"}),
+    "memory": frozenset({"via"}),
 }
 
 
@@ -459,6 +460,7 @@ def load_package(where: Path) -> AgentSpec:
     budget = _table(data, "budget", manifest)
     permissions = _table(data, "permissions", manifest)
     env = _table(data, "env", manifest)
+    memory = _table(data, "memory", manifest)
 
     # The prompt: a declared path is required to exist (you asked for that
     # file); the conventional prompt.md is used only if it happens to be
@@ -540,6 +542,9 @@ def load_package(where: Path) -> AgentSpec:
         max_usd_per_turn=_float(budget, "max_usd_per_turn", manifest, "budget"),
         permissions_mode=_str(permissions, "mode", manifest, "permissions"),
         env_context=_str(env, "context", manifest, "env"),
+        # A package that says nothing gets no memory: the person's facts
+        # reach an agent somebody else wrote only when it asks for them.
+        memory=_str(memory, "via", manifest, "memory") or "off",
         root=root,
     )
     # A package that ships skills and then excludes the tool that loads

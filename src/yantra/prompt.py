@@ -16,6 +16,7 @@ So the string gets a seam before the second appender exists. A
     agent   the agent package's own prompt -- who this agent IS (notes/32)
     base    the operator's --system, captured verbatim, never edited
     env     env_context's fact sheet + policy (notes/29)
+    memory  what the person told you in earlier conversations (memory/)
     connections  which of the person's accounts are connected, and how far (setu_link.py)
     skills  the skill roster (notes/30)
 
@@ -50,7 +51,7 @@ from typing import Any
 
 #: Declared render order. Layers not in this tuple are rejected loudly:
 #: a typo'd name would otherwise vanish into a dict and render nothing.
-LAYER_ORDER = ("agent", "base", "env", "connections", "skills")
+LAYER_ORDER = ("agent", "base", "env", "memory", "connections", "skills")
 
 #: Attribute the composer lives under on an Agent (or any object with a
 #: ``system``). Set by attach_prompt; read by recompose.

@@ -260,6 +260,12 @@ class WebSession:
         # events and between tool calls, so a click lands mid-model-call --
         # as close to terminal Ctrl-C as a signal-less worker can get.
         agent.interrupt_check = self._cancel.is_set
+        # A memory store that failed says so on the page, as a banner in
+        # the conversation it failed for (memory/__init__.py: fails open,
+        # out loud).
+        if getattr(agent, "memory", None) is not None:
+            agent.memory.on_notice = lambda text: self.broadcast(
+                {"type": "memory_notice", "text": text})
 
     @property
     def channel(self) -> WebSession:
@@ -907,6 +913,10 @@ class WebSession:
             # agent without a SkillRegistry (--no-skills, embedders).
             "skills": (agent.skills.describe()
                        if hasattr(agent, "skills") else None),
+            # Memory about the person (memory/): which store, whose, how
+            # many went into this conversation's prompt. None when off.
+            "memory": (agent.memory.describe()
+                       if getattr(agent, "memory", None) is not None else None),
             "tools": agent.registry.names(),
             # Runtime-disabled subset of ``tools`` (the /api/tools panel's
             # toggles); empty for a stock session.
@@ -1385,6 +1395,60 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         require_skills().reload()
         session.broadcast({"type": "state", **session.state()})
         return session.state()
+
+    # ---- memory about the person (memory/) -----------------------------------
+
+    def require_memory() -> Any:
+        require_ready()
+        memory = getattr(session.agent, "memory", None)
+        if memory is None:
+            raise HTTPException(400, "memory is off for this session "
+                                "(--memory off, a package that did not ask, "
+                                "or no identity -- set YANTRA_USER)")
+        return memory
+
+    def memory_view(memory: Any) -> dict[str, Any]:
+        try:
+            items = memory.list(200)
+        except Exception as exc:  # the store's failure, said plainly
+            raise HTTPException(503, f"memory ({memory.store.name}): {exc}") from None
+        shown = {item.id for item in memory.in_prompt}
+        return {**memory.describe(),
+                "items": [{"id": i.id, "statement": i.statement,
+                           "created": i.created, "package": i.package,
+                           "kind": i.kind, "in_prompt": i.id in shown}
+                          for i in items]}
+
+    @app.get("/api/memory")
+    def memory_list() -> dict[str, Any]:
+        """The memory panel: everything remembered about this person, and
+        which of it this conversation's prompt carries. No model turn."""
+        return memory_view(require_memory())
+
+    @app.post("/api/memory/forget")
+    async def memory_forget(req: Request) -> dict[str, Any]:
+        """Delete one. Takes effect from the next conversation: the prompt
+        layer is filled once, so the cached prefix is not rewritten."""
+        memory = require_memory()
+        memory_id = str((await req.json()).get("id") or "").strip()
+        if not memory_id:
+            raise HTTPException(400, "which memory? send its id")
+        if not memory.forget(memory_id):
+            raise HTTPException(404, f"no memory #{memory_id}")
+        return memory_view(memory)
+
+    @app.post("/api/memory/add")
+    async def memory_add(req: Request) -> dict[str, Any]:
+        """The person telling it something directly -- their words, no
+        model in between, so no approval either."""
+        from yantra.memory import MemoryStoreError
+        memory = require_memory()
+        statement = str((await req.json()).get("statement") or "")
+        try:
+            memory.remember(statement, kind="fact")
+        except MemoryStoreError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return memory_view(memory)
 
     # ---- connections, through Setu (notes/99) --------------------------------
 

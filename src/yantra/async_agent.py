@@ -66,6 +66,7 @@ from yantra.context import RED, SUMMARY_PROMPT, acompact_history, estimate_histo
 from yantra.errors import ToolError
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
+from yantra.memory import prime_if_new
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
                                 adecide, allow_read_only, denial_code,
@@ -228,6 +229,10 @@ class AsyncAgent:
         outstanding tool calls get synthesized error results first.
         """
         self.abandon_held()   # the sync twin's rule (notes/88)
+        # The sync twin's memory rule, off the event loop: a store may be
+        # slow, and one conversation's first message must not stall others.
+        if getattr(self, "memory", None) is not None:
+            await asyncio.to_thread(prime_if_new, self, user_input)
         blocks: list[Block] = [TextBlock(user_input)]
         if images:
             blocks.extend(images)

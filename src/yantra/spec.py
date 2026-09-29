@@ -154,6 +154,12 @@ class AgentSpec:
     #: lookup, and a library call that builds an agent should not reach the
     #: network because it forgot to say no. The CLI passes a level always.
     env_context: str | None = None
+    #: Memory about the person: ``"local"`` or ``"off"``. None means do not
+    #: attach, like ``env_context`` -- a library build must not read
+    #: somebody's memories because it forgot to say no. The CLI resolves a
+    #: value always (memory.memory_mode): on for a session of your own,
+    #: off for a package that did not ask.
+    memory: str | None = None
 
     #: Sandbox root for file tools and bash's working directory.
     cwd: Path | None = None
@@ -197,6 +203,13 @@ class AgentSpec:
                 raise ConfigError(
                     f"env context {self.env_context!r} is not one of "
                     f"{'|'.join(MODES_ENV)}"
+                )
+        if self.memory is not None:
+            from yantra.memory import MODES as MODES_MEMORY
+            if self.memory not in MODES_MEMORY:
+                raise ConfigError(
+                    f"memory {self.memory!r} is not one of "
+                    f"{'|'.join(MODES_MEMORY)}"
                 )
         for name, value in (("max_tokens", self.max_tokens),
                             ("max_iterations", self.max_iterations),
@@ -414,6 +427,26 @@ class AgentSpec:
                         f"{where}: sub-agent {sub.name!r} would shadow a "
                         f"tool of the same name ({exc}); rename the "
                         f"sub-agent") from None
+
+        # Memory about the person (memory/): the handle and its two tools,
+        # under the admission policy like everything else. The layer itself
+        # is filled later, by the conversation's first message. Nobody to
+        # remember things about -- no $YANTRA_USER, no login name -- means
+        # nothing is attached, which the host reports.
+        if self.memory == "local":
+            import sqlite3
+
+            from yantra.memory import enable_memory
+            from yantra.memory.local import LocalStore
+            try:
+                store = LocalStore()
+            except (OSError, sqlite3.Error) as exc:
+                # Fails open: a session is not refused over its memory.
+                agent.memory = None
+                agent.memory_problem = f"cannot open the local store ({exc})"
+            else:
+                enable_memory(agent, store, package=(
+                    self.name if self.root is not None else None))
 
         # Last, because it appends to a prompt the layers above must already
         # own, and because at "full" it costs one network call.
