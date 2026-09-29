@@ -130,8 +130,13 @@ class SkillRegistry:
         return [s.name for s in self.active()]
 
     def active(self) -> list[Skill]:
-        """Everything the MODEL can see: discovered minus disabled."""
-        return [s for s in self.found if s.name not in self._disabled]
+        """Everything the MODEL can see: discovered minus disabled, minus
+        learned skills gone STALE (loader.STALE_AFTER failures in a row).
+        A stale recipe is worse than none -- the model would follow it into
+        the same wall -- so it waits, still listed by /skills, until a fresh
+        solve repairs it (learn.py)."""
+        return [s for s in self.found
+                if s.name not in self._disabled and not s.is_stale]
 
     # ---- runtime enable/disable ---------------------------------------------
 
@@ -436,7 +441,9 @@ class SkillRegistry:
                  "counters": (None if s.learned is None else {
                      "since": s.learned.since, "worked": s.learned.worked,
                      "failed": s.learned.failed,
-                     "last_ok": s.learned.last_ok}),
+                     "last_ok": s.learned.last_ok,
+                     "failing": s.learned.failing}),
+                 "stale": s.is_stale,
                  "enabled": not self.is_disabled(s.name),
                  "loaded": s.name in self.loaded}
                 for s in self.found

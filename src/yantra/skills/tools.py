@@ -78,6 +78,14 @@ class LoadSkill(Tool):
                 f"skill {name!r} runs as a scoped sub-agent -- call "
                 f"run_skill with name={name!r} and a 'task' instead. Its "
                 f"instructions are not loaded inline on purpose.")
+        if skill is not None and skill.is_stale:
+            # Not in the roster, but a model can still name it. Following a
+            # recipe that failed three times running walks into the same
+            # wall; solving fresh is what repairs it (notes/96).
+            raise ToolError(
+                f"skill {name!r} has failed {skill.learned.failing} times in "
+                f"a row and is set aside -- do the task with your tools "
+                f"directly instead")
         try:
             skill = self.skills.load(name)
         except PermissionError:

@@ -129,14 +129,23 @@ LEARNED_SOURCES = {"project": "learned-local", "user": "learned-user"}
 #: The only value ``origin`` may hold. Absent means written by a person.
 ORIGINS = ("learned",)
 
-#: ``learned: 2026-09-28 · worked 6 · failed 0 · last ok 2026-10-02``.
-#: Every part after the date is optional, so a freshly saved skill can
-#: carry just its date.
+#: ``learned: 2026-09-28 · worked 6 · failed 2 · last ok 2026-10-02 ·
+#: failing 2``. Every part after the date is optional, so a freshly saved
+#: skill can carry just its date. ``failing`` is the streak: failures in a
+#: row since the last time it worked.
 LEARNED_RE = re.compile(
     r"^(?P<since>\d{4}-\d{2}-\d{2})"
     r"(?:\s*·\s*worked\s+(?P<worked>\d+))?"
     r"(?:\s*·\s*failed\s+(?P<failed>\d+))?"
-    r"(?:\s*·\s*last ok\s+(?P<last_ok>\d{4}-\d{2}-\d{2}))?$")
+    r"(?:\s*·\s*last ok\s+(?P<last_ok>\d{4}-\d{2}-\d{2}))?"
+    r"(?:\s*·\s*failing\s+(?P<failing>\d+))?$")
+
+#: Failures in a row after which a learned skill is STALE: it leaves the
+#: roster, so the model solves the task fresh instead of following a
+#: recipe that has stopped working -- and that fresh solve is what gets
+#: offered as the repair. One failure is noise (a server was down); three
+#: in a row is the world having changed.
+STALE_AFTER = 3
 
 
 class SkillError(ValueError):
@@ -155,10 +164,16 @@ class LearnedRecord:
     worked: int = 0
     failed: int = 0
     last_ok: str = ""
+    failing: int = 0
+
+    @property
+    def stale(self) -> bool:
+        return self.failing >= STALE_AFTER
 
     def render(self) -> str:
         line = f"{self.since} · worked {self.worked} · failed {self.failed}"
-        return line + (f" · last ok {self.last_ok}" if self.last_ok else "")
+        line += f" · last ok {self.last_ok}" if self.last_ok else ""
+        return line + (f" · failing {self.failing}" if self.failing else "")
 
 
 def parse_learned(value: str) -> LearnedRecord:
@@ -167,12 +182,14 @@ def parse_learned(value: str) -> LearnedRecord:
     if match is None:
         raise SkillError(
             f"learned: expected 'YYYY-MM-DD · worked N · failed N "
-            f"[· last ok YYYY-MM-DD]', got {value!r} -- Yantra writes this "
+            f"[· last ok YYYY-MM-DD] [· failing N]', got {value!r} -- Yantra "
+            f"writes this "
             f"line; delete it and it starts again from zero")
     return LearnedRecord(since=match["since"],
                          worked=int(match["worked"] or 0),
                          failed=int(match["failed"] or 0),
-                         last_ok=match["last_ok"] or "")
+                         last_ok=match["last_ok"] or "",
+                         failing=int(match["failing"] or 0))
 
 
 @dataclass(slots=True, frozen=True)
@@ -193,6 +210,11 @@ class Skill:
     inputs: str = ""                        # what it asks for each time
     tool: str = ""                          # reserved: script offered as a tool
     learned: LearnedRecord | None = None    # counters, learned skills only
+
+    @property
+    def is_stale(self) -> bool:
+        """A learned skill that failed STALE_AFTER times in a row."""
+        return self.learned is not None and self.learned.stale
 
     @property
     def is_learned(self) -> bool:

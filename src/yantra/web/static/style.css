@@ -1988,3 +1988,20 @@ pre.output { color: var(--ink); }
 }
 #modal .learn-error { margin: 0 0 10px; }
 .t-tally { margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+#modal pre.learn-diff {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
+#modal pre.learn-diff .d-add  { color: var(--ok, #2f8f4e); }
+#modal pre.learn-diff .d-del  { color: var(--danger, #c0392b); }
+#modal pre.learn-diff .d-hunk { color: var(--ink-3); }
+#modal pre.learn-diff .d-file { color: var(--ink-3); font-weight: 600; }

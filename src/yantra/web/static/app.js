@@ -924,6 +924,18 @@ function showAskModal(env) {
   };
 }
 
+/* A unified diff, one span per line, so added and removed lines read at a
+   glance. Escaped line by line -- the text is a skill a model wrote. */
+function diffLines(diff) {
+  if (!diff) return "(no change to the files)";
+  return diff.split("\n").map((line) => {
+    const cls = line.startsWith("+++") || line.startsWith("---") ? "d-file"
+      : line.startsWith("+") ? "d-add" : line.startsWith("-") ? "d-del"
+      : line.startsWith("@@") ? "d-hunk" : "";
+    return `<span class="${cls}">${esc(line)}</span>`;
+  }).join("\n");
+}
+
 /* The save question for a learned skill (notes/96). Everything that would
    be written is on screen and editable; the default is no. Saving with an
    edit that breaks a rule comes back as the same question with the error
@@ -939,10 +951,15 @@ function showLearnModal(env) {
       <input type="radio" name="learn-scope" value="${esc(key)}"
              ${key === env.scope ? "checked" : ""}>
       ${esc(s.label)}</label>`).join("");
+  const update = !!env.repairs;
   showModal(`
-    <div class="kind-tag">save this as a skill?</div>
+    <div class="kind-tag">${update ? "update this skill?" : "save this as a skill?"}</div>
     <h3>${esc(env.name)}</h3>
     ${env.error ? `<div class="banner banner-error learn-error">${esc(env.error)}</div>` : ""}
+    ${update ? `<div class="context-note">It failed this time — ${esc(env.failure)}.
+      The task was then finished another way; this is that way, written over
+      the saved recipe.</div>
+      <pre class="learn-diff">${diffLines(env.diff)}</pre>` : ""}
     <div class="context-note">${esc(env.description)}</div>
     ${env.renamed_from ? `<div class="context-note">renamed: a skill you wrote is
       already called ${esc(env.renamed_from)}</div>` : ""}
@@ -951,10 +968,10 @@ function showLearnModal(env) {
       <dt>inputs</dt><dd>${esc(env.inputs || "none")}</dd>
       <dt>tested</dt><dd>${esc(tested)}</dd>
       <dt>cost</dt><dd>${fmtNum(env.spent?.input ?? 0)} in / ${fmtNum(env.spent?.output ?? 0)} out tokens to write and test</dd>
-      ${env.replaces ? `<dt>replaces</dt><dd>${esc(env.replaces)}</dd>` : ""}
+      ${env.replaces && !update ? `<dt>replaces</dt><dd>${esc(env.replaces)}</dd>` : ""}
     </dl>
-    <div class="learn-scope">${scopes}</div>
-    <label class="learn-label" for="learn-md">SKILL.md — edit before saving if you like</label>
+    ${update ? "" : `<div class="learn-scope">${scopes}</div>`}
+    <label class="learn-label" for="learn-md">SKILL.md${update ? " as proposed" : ""} — edit before saving if you like</label>
     <textarea id="learn-md" class="learn-text" spellcheck="false">${esc(env.skill_md)}</textarea>
     ${env.script_name ? `
       <label class="learn-label" for="learn-script">${esc(env.script_name)}</label>
@@ -963,7 +980,7 @@ function showLearnModal(env) {
       <pre class="args">${esc(test.output)}</pre></details>` : ""}
     <div class="modal-actions">
       <button class="m-btn" data-act="no">no</button>
-      <button class="m-btn primary" data-act="save">save skill</button>
+      <button class="m-btn primary" data-act="save">${update ? "update skill" : "save skill"}</button>
     </div>`);
   $("#modal").onclick = (e) => {
     const act = e.target?.closest?.("[data-act]")?.dataset?.act;
@@ -1444,7 +1461,9 @@ function skillRow(s) {
   const name = document.createElement("div");
   name.innerHTML = `<span class="t-name">${esc(s.name)}</span>`
     + `<span class="t-badge">${esc(s.source)}</span>`
-    + (s.mode === "subagent" ? '<span class="t-ro">delegated</span>' : "");
+    + (s.mode === "subagent" ? '<span class="t-ro">delegated</span>' : "")
+    + (s.stale ? '<span class="t-ro" title="failed 3 times in a row; left out '
+      + 'until a fresh solve repairs it">stale</span>' : "");
   name.title = s.path;
   row.append(name);
 
@@ -1458,7 +1477,8 @@ function skillRow(s) {
     const tally = document.createElement("div");
     tally.className = "t-tally";
     tally.textContent = `learned ${c.since} · worked ${c.worked} · failed ${c.failed}`
-      + (c.last_ok ? ` · last ok ${c.last_ok}` : "");
+      + (c.last_ok ? ` · last ok ${c.last_ok}` : "")
+      + (c.failing ? ` · failing ${c.failing}` : "");
     desc.append(tally);
   }
   row.append(desc);

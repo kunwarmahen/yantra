@@ -278,12 +278,12 @@ small models do well. Rediscovering an API is something they do badly.
   still and easier for small models. The `tool:` key is parsed and
   kept, but nothing reads it yet. Making the tool is the person's call,
   and it needs a sandboxed runner of its own.
-* **Repair.** When a saved recipe fails, the agent could solve the task
-  fresh and offer the fix as a diff. Today the counter records the
-  failure and the person sees it in `/skills`.
-* **Going stale.** A recipe that fails several times in a row should
-  stop being offered until it is fixed. That needs repair first, or
-  it's just a way to lose skills.
+* ~~**Repair.** When a saved recipe fails, the agent could solve the
+  task fresh and offer the fix as a diff.~~ Built:
+  [note 97](97-when-the-recipe-breaks.md).
+* ~~**Going stale.** A recipe that fails several times in a row should
+  stop being offered until it is fixed.~~ Built, alongside repair:
+  [note 97](97-when-the-recipe-breaks.md).
 * **Inputs from memory, needs from connections.** `inputs:` and
   `needs:` are words for now. Filling "which fan" from what the agent
   remembers, and "Home Assistant" from a Setu connection
@@ -339,6 +339,26 @@ The skill saves about 15k tokens a run. Before, the save only paid
 for itself after about twenty reuses. Now it pays for itself on the
 first one. Each reuse hit `fan.living_room_ceiling`, with one list, one
 `set_percentage` and one read-back in the server's log.
+
+**On ordinary work.** The check runs after every turn that passes the
+count, so its cost on work that is *not* a recipe matters as much as
+its cost on work that is. Six everyday tasks in a small Python project,
+`--learn auto` so anything judged worth keeping would have been saved:
+
+| task | turn (tokens) | decision | deciding cost |
+|---|---|---|---|
+| fix a failing test | 14,061 | skip — "a one-off bug fix" | 2,156 · 10 s |
+| explain where approval is decided | 55,186 | skip — "a fixed fact about this repo" | 3,879 · 9 s |
+| three largest files | 7,049 | skip by count (2 calls) | 0 |
+| summarise the last commits | 4,742 | skip by count (1 call) | 0 |
+| list every TODO | 11,885 | skip — "a single grep, not a recipe" | 2,792 · 19 s |
+| add a function with a test | 49,595 | skip — "a one-off feature" | 3,866 · 10 s |
+
+Six right answers and no false offers. The price is real, though:
+7 to 23 percent more tokens on a turn that passes the count, about ten
+seconds on a local model. On a cloud model that is money spent on
+turns that save nothing, and `--learn off` is the answer for a session
+of pure code work.
 
 `2248 passed, 1 skipped` (was 2199). The new tests are in
 `tests/test_learned_skills.py`, and each one guards against one of the

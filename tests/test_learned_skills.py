@@ -471,11 +471,46 @@ class TestCounters:
         record_use(load_skill(path), False, today="2026-10-03")
         again = load_skill(path)
         assert again.learned.render() == \
-            "2026-10-02 · worked 1 · failed 1 · last ok 2026-10-02"
+            "2026-10-02 · worked 1 · failed 1 · last ok 2026-10-02 · failing 1"
         assert again.origin == "learned"
         text = path.read_text()
         assert text.count("learned:") == 1 and text.count("origin:") == 1
         assert set_learned_line("no frontmatter", again.learned) == "no frontmatter"
+
+
+class TestStale:
+    """Three failures in a row set a recipe aside; one success forgives."""
+
+    def learned(self, tmp_path, line: str):
+        folder = tmp_path / ".yantra/skills/learned/home-fan"
+        folder.mkdir(parents=True)
+        (folder / SKILL_FILE).write_text(
+            "---\ndescription: Turn a Home Assistant fan on or off. Use when "
+            f"asked.\norigin: learned\nlearned: {line}\n---\n\n1. Run it.\n")
+        agent = make_agent(tmp_path, [])
+        return agent, agent.skills.get("home-fan")
+
+    def test_a_success_resets_the_streak(self, tmp_path):
+        _, skill = self.learned(tmp_path, "2026-09-28 · worked 1 · failed 2 · failing 2")
+        assert record_use(skill, True, today="2026-10-01").failing == 0
+
+    def test_the_third_failure_in_a_row_leaves_the_roster(self, tmp_path):
+        agent, skill = self.learned(tmp_path, "2026-09-28 · worked 4 · failed 2 · failing 2")
+        assert "home-fan" in agent.skills.render_roster()
+        record_use(skill, False)
+        agent.skills.reload()
+        stale = agent.skills.get("home-fan")
+        assert stale.is_stale and agent.skills.render_roster() is None
+        # still listed for the person, and named as stale
+        assert agent.skills.describe()["skills"][0]["stale"] is True
+
+    def test_a_model_that_names_a_stale_recipe_is_told_to_solve_fresh(self, tmp_path):
+        from yantra.errors import ToolError
+        from yantra.skills.tools import LoadSkill
+
+        agent, _ = self.learned(tmp_path, "2026-09-28 · worked 4 · failed 3 · failing 3")
+        with pytest.raises(ToolError, match="failed 3 times in a row"):
+            LoadSkill(agent.skills).run({"name": "home-fan"}, agent.ctx)
 
 
 class TestMode:
@@ -671,3 +706,116 @@ class TestRecipeShape:
         text = LoadSkill(agent.skills).run({"name": skill.name}, agent.ctx)
         assert f'"{skill.directory}/scripts/greet.py"' in text
         assert "$SKILL_DIR" not in text
+
+
+# ---- repair: a recipe that failed, and the way that worked instead ----------------------
+
+FIXED_SCRIPT = SCRIPT.replace('"greeted"', '"said hello to"')
+
+
+def saved_skill(tmp_path, line="2026-09-28 · worked 4 · failed 0 · last ok 2026-09-29"):
+    """greet-someone as a learned skill in the user root, with a record."""
+    folder = tmp_path / "home/.yantra/skills/learned/greet-someone"
+    (folder / "scripts").mkdir(parents=True)
+    (folder / SKILL_FILE).write_text(
+        "---\nname: greet-someone\ndescription: Greet someone by name through "
+        "the greeting script. Use when asked to greet.\norigin: learned\n"
+        f"learned: {line}\n---\n\n1. Run python3 \"$SKILL_DIR/scripts/greet.py\" WHO.\n")
+    (folder / "scripts/greet.py").write_text(SCRIPT)
+    return folder
+
+
+def followed_and_failed(recovered: bool = True) -> list:
+    """Load the skill, a step fails, then (maybe) another way works."""
+    steps = [assistant_tool_call("l", "load_skill", {"name": "greet-someone"}),
+             assistant_tool_call("f", "bash", {"command": "echo 'no such route' && exit 4"})]
+    if recovered:
+        steps.append(assistant_tool_call("w", "bash", {"command": "echo said hello to mars"}))
+    return [*steps, assistant_text("Said hello to mars.")]
+
+
+def updated(script: str = FIXED_SCRIPT) -> str:
+    return reply(script).replace("VERDICT: save", "VERDICT: update").replace(
+        "NAME: greet-someone", "NAME: something-else")
+
+
+class TestRepair:
+    def test_a_failed_recipe_finished_another_way_is_offered_as_an_update(self, tmp_path):
+        saved_skill(tmp_path)
+        agent = make_agent(tmp_path, [*followed_and_failed(), assistant_text(updated())])
+        learner = learner_after(agent, "greet mars")
+        assert learner.last_counted == [("greet-someone", False)]
+        offer = learner.consider()
+        assert offer is not None, learner.last_skip
+        sent = agent.provider.last_request()["messages"][0].text()
+        assert "A saved skill, greet-someone, was followed" in sent
+        assert 'print("greeted", sys.argv[1])' in sent        # the saved script
+        assert "learned:" not in sent                          # never the counters
+        assert offer.repairs.name == "greet-someone"
+        assert offer.draft.name == "greet-someone"             # the reply cannot rename it
+        assert offer.failure == "bash: no such route"
+        assert '-print("greeted", sys.argv[1])' in offer.diff()
+        assert '+print("said hello to", sys.argv[1])' in offer.diff()
+        assert "learned:" not in offer.diff()
+        view = offer.view(tmp_path, home=tmp_path / "home")
+        assert view["repairs"] == "greet-someone" and view["diff"]
+
+    def test_saving_an_update_keeps_the_record_and_forgives_the_streak(self, tmp_path):
+        folder = saved_skill(tmp_path)
+        agent = make_agent(tmp_path, [*followed_and_failed(), assistant_text(updated())])
+        learner = learner_after(agent, "greet mars")
+        skill = learner.save(learner.consider())
+        assert skill.directory == folder
+        assert (folder / "scripts/greet.py").read_text() == FIXED_SCRIPT
+        # 4 worked before; this turn's failure counted; the streak is gone
+        record = skill.learned
+        assert (record.since, record.worked, record.failed, record.failing) == \
+            ("2026-09-28", 4, 1, 0)
+
+    def test_a_failure_that_was_not_the_recipes_fault_is_left_alone(self, tmp_path):
+        saved_skill(tmp_path)
+        agent = make_agent(tmp_path, [*followed_and_failed(), assistant_text(
+            "VERDICT: skip\nREASON: the server was down, the recipe is fine")])
+        learner = learner_after(agent, "greet mars")
+        assert learner.consider() is None
+        assert learner.last_skip == \
+            "greet-someone left as it is: the server was down, the recipe is fine"
+
+    def test_nothing_to_update_from_when_no_other_way_worked(self, tmp_path):
+        saved_skill(tmp_path)
+        agent = make_agent(tmp_path, followed_and_failed(recovered=False))
+        learner = learner_after(agent, "greet mars")
+        assert learner.consider() is None       # and no model call was made
+        assert "nothing to update it from" in learner.last_skip
+
+    def test_a_recipe_that_worked_is_still_not_relearned(self, tmp_path):
+        saved_skill(tmp_path)
+        agent = make_agent(tmp_path, [
+            assistant_tool_call("l", "load_skill", {"name": "greet-someone"}),
+            assistant_tool_call("w", "bash", {"command": "echo hi"}),
+            assistant_text("done")])
+        learner = learner_after(agent, "greet mars")
+        assert learner.consider() is None
+        assert "already followed a skill" in learner.last_skip
+
+    def test_a_fresh_solve_is_told_about_set_aside_recipes(self, tmp_path):
+        saved_skill(tmp_path, "2026-09-28 · worked 4 · failed 3 · failing 3")
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(reply())])
+        offer = learner_after(agent).consider()
+        sent = agent.provider.last_request()["messages"][0].text()
+        assert "set aside because they kept failing" in sent
+        assert "- greet-someone: Greet someone by name" in sent
+        # same name -> the stale one is replaced, not joined
+        assert offer.replaces == tmp_path / "home/.yantra/skills/learned/greet-someone"
+
+    def test_the_terminal_shows_the_update_as_a_diff(self, tmp_path):
+        saved_skill(tmp_path)
+        agent, repl, out = TestTerminal().repl(
+            tmp_path, ["s"], [*followed_and_failed(), assistant_text(updated())])
+        repl.run_turn("greet mars")
+        text = out.getvalue()
+        assert "greet-someone: this use counted as failed (1 in a row; set aside at 3)" in text
+        assert "Update this skill?" in text and "failed this time -- bash: no such route" in text
+        assert '+print("said hello to", sys.argv[1])' in text
+        assert "[c]hange scope" not in text
+        assert agent.skills.get("greet-someone").learned.failing == 0

@@ -49,10 +49,20 @@ Counters (``worked``/``failed``) are Yantra's, never the model's: a
 learned skill loaded in a turn WORKED when the turn finished and no call
 after the load failed, and FAILED otherwise. Crude, and honest about
 being crude -- it is what the harness saw, not a grade.
+
+THE FAILED TURN IS THE REPAIR ([notes/97](../../notes/97-when-the-recipe-breaks.md)).
+A recipe that failed while the task was still finished another way has
+its fix sitting in the history already. The same one-call write-up is
+pointed at it, with the saved skill beside the steps, and the answer is
+offered as an update -- a diff, same name, same folder, the record kept
+and the streak cleared. Three failures in a row with nothing to repair
+from set a recipe aside (loader.STALE_AFTER); the next fresh solve is
+told its name, and replaces it.
 """
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -225,14 +235,15 @@ def read_turn(history: list[Message]) -> Turn | None:
 
 
 def why_not(turn: Turn | None, reason: str,
-            *, min_steps: int = MIN_STEPS) -> str | None:
+            *, min_steps: int = MIN_STEPS,
+            repairing: bool = False) -> str | None:
     """The counted half of noticing: None when the turn is worth a look,
     otherwise why not, in words the host can show on ``/learn``."""
     if turn is None:
         return "there is no finished turn to learn from yet"
     if reason != "end_turn":
         return f"the last turn did not finish ({reason})"
-    if loaded := [n for n in turn.skills_loaded() if n]:
+    if not repairing and (loaded := [n for n in turn.skills_loaded() if n]):
         return f"the last turn already followed a skill ({', '.join(loaded)})"
     if len(turn.steps) < min_steps:
         return (f"the last turn took {len(turn.steps)} tool call(s); fewer "
@@ -298,15 +309,8 @@ def digest(turn: Turn, found: set[str] | None = None) -> str:
 
 # ---- the one model call -------------------------------------------------------
 
-DISTIL_PROMPT = """\
-You are writing down a recipe, so that the next time someone asks for \
-this kind of task it takes two steps instead of ten.
-
-Below is ONE task a person asked for, every tool call that was made, and \
-what each returned. Failed calls are shown in one line each.
-
-{decide}
-
+#: What every write-up -- a new skill or an updated one -- must obey.
+RULES = """\
 Rules for the skill:
 - Write ONLY what the steps below show. No tips, pitfalls, error codes, \
 retries or fallbacks that did not happen here.
@@ -320,12 +324,15 @@ up, never written into it.
 - If a script turns the task into one command, write it: python3 \
 standard library only (or bash), taking the inputs as command-line \
 arguments, printing what it did, and exiting non-zero when it failed. \
-Otherwise write no script.
+Otherwise write no script."""
 
+#: The reply's shape. ``{verdict}`` and ``{name}`` differ between a new
+#: skill and an update; everything else is one format, one parser.
+SHAPE = """\
 Reply in EXACTLY this shape, with nothing before it:
 
-VERDICT: save
-NAME: short-lowercase-hyphenated-name
+VERDICT: {verdict}
+NAME: {name}
 DESCRIPTION: What it does, then "Use when ..." -- one or two sentences.
 SCOPE: user   (or project, only when the recipe is about the code in \
 this folder)
@@ -345,12 +352,51 @@ folder, or paths the person gives stop working.
 the whole script (leave this section out when SCRIPT is none)
 === END ===
 
-When it is not worth saving, reply with exactly two lines:
+When it is not worth {skipping}, reply with exactly two lines:
 
 VERDICT: skip
-REASON: one short sentence
+REASON: one short sentence"""
 
-{digest}
+DISTIL_PROMPT = """\
+You are writing down a recipe, so that the next time someone asks for \
+this kind of task it takes two steps instead of ten.
+
+Below is ONE task a person asked for, every tool call that was made, and \
+what each returned. Failed calls are shown in one line each.
+
+{decide}
+{set_aside}
+""" + RULES + "\n\n" + SHAPE.format(
+    verdict="save", name="short-lowercase-hyphenated-name",
+    skipping="saving") + "\n\n{digest}\n"
+
+#: A learned skill was followed, a step failed, and the task was finished
+#: another way. The fresh solve IS the repair; this asks for it written
+#: over the old recipe -- same one-call, small-context shape as a new one.
+UPDATE_PROMPT = """\
+A saved skill, {name}, was followed for the task below, and a step \
+failed. The task was then finished another way. Update the skill so the \
+next run follows the way that worked.
+
+First decide. Reply "VERDICT: skip" if the steps show the failure was \
+not the skill's fault (a server that was down, a mistake in what the \
+person asked for), or that the task was not really finished.
+
+THE SAVED SKILL, AS IT IS NOW:
+{saved}
+
+""" + RULES + "\n\n" + SHAPE.format(
+    verdict="update", name="{name}   (keep this name)",
+    skipping="updating") + "\n\n{digest}\n"
+
+#: Added to a new write-up when learned skills have been set aside: a
+#: fresh solve of what one of them did should take its name and replace
+#: it, not sit beside it.
+SET_ASIDE = """\
+These saved skills were set aside because they kept failing. If this \
+task is what one of them was for, use its NAME, so the new recipe \
+replaces it:
+{names}
 """
 
 DECIDE_ASKED = """\
@@ -364,7 +410,7 @@ DECIDE_FORCED = """\
 The person asked for this to be saved. Reply "VERDICT: skip" only if the \
 steps show the task did not work."""
 
-REPAIR_PROMPT = """\
+FIX_SCRIPT_PROMPT = """\
 This script was just written to repeat a task, and its test failed.
 
 TEST COMMAND:
@@ -464,9 +510,9 @@ def parse_reply(text: str) -> Draft | str:
     verdict = fields.get("verdict", "").lower()
     if verdict.startswith("skip"):
         return fields.get("reason") or "the model judged it not worth keeping"
-    if not verdict.startswith("save"):
+    if not verdict.startswith(("save", "update")):
         raise LearnError("the write-up did not follow the format "
-                         "(no 'VERDICT: save' or 'VERDICT: skip')")
+                         "(no 'VERDICT: save', 'update' or 'skip')")
 
     name = _slug(fields.get("name", ""))
     if not NAME_RE.match(name or "-") or name == "learned":
@@ -521,6 +567,33 @@ class Offer:
     replaces: Path | None = None
     #: The draft's name was taken by a hand-written skill and changed.
     renamed_from: str = ""
+    #: The learned skill this offer would update, when the turn followed
+    #: it and a step failed -- then the question is "update it?".
+    repairs: Skill | None = None
+    #: What failed this time, one line, scrubbed.
+    failure: str = ""
+
+    def diff(self) -> str:
+        """The update as a person reads one: saved version against proposed.
+        The counter line is left out of both sides -- it is Yantra's, and
+        a diff full of it would bury the change."""
+        if self.repairs is None:
+            return ""
+        chunks = []
+        old_dir, draft = self.repairs.directory, self.draft
+        pairs = [(SKILL_FILE, _without_counters(_read(old_dir / SKILL_FILE)),
+                  _without_counters(self._staged(SKILL_FILE, draft.skill_md())))]
+        names = {draft.script_name} | {
+            f"scripts/{p.name}" for p in (old_dir / "scripts").glob("*")
+            if p.is_file()} - {""}
+        for name in sorted(names):
+            pairs.append((name, _read(old_dir / name),
+                          self._staged(name, "") if name == draft.script_name else ""))
+        for name, old, new in pairs:
+            chunks.extend(difflib.unified_diff(
+                old.splitlines(keepends=True), new.splitlines(keepends=True),
+                fromfile=f"{name} (saved)", tofile=f"{name} (proposed)"))
+        return "".join(chunks)
 
     def view(self, cwd: Path, home: Path | None = None) -> dict[str, Any]:
         """The save question's data, for a page or a test."""
@@ -545,6 +618,9 @@ class Offer:
                       "output": self.spent.output_tokens},
             "replaces": str(self.replaces) if self.replaces else None,
             "renamed_from": self.renamed_from,
+            "repairs": self.repairs.name if self.repairs else None,
+            "failure": self.failure,
+            "diff": self.diff(),
         }
 
     def _staged(self, relative: str, fallback: str) -> str:
@@ -591,6 +667,8 @@ class Learner:
         self.home = home if home is not None else getattr(skills, "home", None)
         #: Why the last ``consider`` offered nothing, for ``/learn``.
         self.last_skip: str | None = None
+        #: What ``after_turn`` counted last: (name, worked) pairs.
+        self.last_counted: list[tuple[str, bool]] = []
         #: How the last turn ended, set by ``after_turn``. A host that makes
         #: a Learner on demand (``/learn`` with learning off) sets it itself.
         self.last_reason = ""
@@ -632,6 +710,7 @@ class Learner:
             counted.append((skill.name, worked))
         if counted:
             skills.reload()
+        self.last_counted = counted
         return counted
 
     # ---- notice, distil, test ------------------------------------------------
@@ -645,19 +724,32 @@ class Learner:
         say = progress or (lambda text: None)
         self.last_skip = None
         turn = read_turn(self.agent.history)
+        repairs, failure = self._repair_target(turn)
+        if repairs is None and failure:
+            self.last_skip = failure
+            return None
         # Asked for by name, two steps are still a recipe: the person has
-        # answered "was it worth it" already.
+        # answered "was it worth it" already. A repair is a load, a failure
+        # and a recovery -- the effort question does not apply.
         skip = why_not(turn, self.last_reason,
-                       min_steps=1 if forced else MIN_STEPS)
+                       min_steps=1 if forced or repairs else MIN_STEPS,
+                       repairing=repairs is not None)
         if skip:
             self.last_skip = skip
             return None
 
         found: set[str] = set()
-        prompt = DISTIL_PROMPT.format(
-            decide=DECIDE_FORCED if forced else DECIDE_ASKED,
-            digest=digest(turn, found))
-        say("looking at what worked, to see if it is worth keeping")
+        if repairs is not None:
+            prompt = UPDATE_PROMPT.format(
+                name=repairs.name, saved=scrub(_saved_text(repairs), found),
+                digest=digest(turn, found))
+            say(f"{repairs.name} failed this time; seeing whether it needs "
+                f"updating")
+        else:
+            prompt = DISTIL_PROMPT.format(
+                decide=DECIDE_FORCED if forced else DECIDE_ASKED,
+                set_aside=self._set_aside(), digest=digest(turn, found))
+            say("looking at what worked, to see if it is worth keeping")
         spent = Usage()
         reply = self._complete(prompt, spent)
         try:
@@ -666,9 +758,15 @@ class Learner:
             self.last_skip = str(exc)
             return None
         if isinstance(parsed, str):
-            self.last_skip = f"not worth keeping: {parsed}"
+            self.last_skip = (f"{repairs.name} left as it is: {parsed}"
+                              if repairs else f"not worth keeping: {parsed}")
             return None
         draft = parsed
+        if repairs is not None:
+            # An update keeps its name and its home, whatever the reply said.
+            draft.name = repairs.name
+            draft.scope = next((k for k, v in LEARNED_SOURCES.items()
+                                if v == repairs.source), draft.scope)
 
         written = f"{draft.skill_md()}\n{draft.script}\n{draft.test}"
         if any(v in written for v in found) or _TOKEN_SHAPES.search(written):
@@ -677,7 +775,9 @@ class Learner:
             return None
 
         offer = Offer(draft=draft, staging=self._stage(draft), tested=None,
-                      spent=spent)
+                      spent=spent, repairs=repairs,
+                      failure=scrub(failure_line(turn, repairs), found)
+                      if repairs else "")
         self._settle_name(offer)
         if draft.script:
             self._test(offer, say)
@@ -693,6 +793,40 @@ class Learner:
                                   f"offered:\n{_clip(offer.test_output, 600)}")
                 return None
         return offer
+
+    def _repair_target(self, turn: Turn | None) -> tuple[Skill | None, str]:
+        """The learned skill this turn followed and saw fail, when the task
+        was then finished another way -- (skill, "").
+
+        (None, reason) when a followed skill failed and there is nothing
+        to repair FROM: no step after the failure worked. (None, "") when
+        no learned skill failed this turn at all.
+        """
+        failed = [name for name, worked in self.last_counted if not worked]
+        skills = getattr(self.agent, "skills", None)
+        if not failed or turn is None or skills is None:
+            return None, ""
+        skill = skills.get(failed[0])
+        if skill is None:
+            return None, ""
+        loads = [i for i, s in enumerate(turn.steps)
+                 if s.name == "load_skill" and s.arguments.get("name") == skill.name]
+        after = turn.steps[loads[0] + 1:] if loads else []
+        first_bad = next((i for i, s in enumerate(after) if not s.ok), None)
+        if (self.last_reason != "end_turn" or first_bad is None
+                or not any(s.ok for s in after[first_bad + 1:])):
+            return None, (f"the last turn followed {skill.name}, which failed, "
+                          f"and the task was not finished another way -- "
+                          f"there is nothing to update it from")
+        return skill, ""
+
+    def _set_aside(self) -> str:
+        skills = getattr(self.agent, "skills", None)
+        stale = [s for s in skills if s.is_stale] if skills is not None else []
+        if not stale:
+            return ""
+        return SET_ASIDE.format(names="\n".join(
+            f"- {s.name}: {s.description}" for s in stale))
 
     def _complete(self, prompt: str, spent: Usage) -> str:
         """One plain completion, fresh context, no tools -- and its cost on
@@ -724,6 +858,9 @@ class Learner:
 
     def _settle_name(self, offer: Offer) -> None:
         """A hand-written skill keeps its name; a learned one is replaced."""
+        if offer.repairs is not None:
+            offer.replaces = offer.repairs.directory
+            return
         skills = getattr(self.agent, "skills", None)
         existing = skills.get(offer.draft.name) if skills is not None else None
         if existing is None:
@@ -751,7 +888,7 @@ class Learner:
             if ok or attempt == MAX_TEST_RUNS or output.startswith("[not run]"):
                 return
             say("the test failed; asking for one fix")
-            reply = self._complete(REPAIR_PROMPT.format(
+            reply = self._complete(FIX_SCRIPT_PROMPT.format(
                 test=draft.test, output=_clip(output, 2000),
                 script_name=draft.script_name, script=draft.script),
                 offer.spent)
@@ -808,7 +945,12 @@ class Learner:
         root = learned_root(scope, self.cwd, home=self.home)
         target = root / draft.name
         text = skill_md if skill_md is not None else draft.skill_md()
-        text = set_learned_line(text, LearnedRecord(since=date.today().isoformat()))
+        old = offer.repairs.learned if offer.repairs is not None else None
+        record = (LearnedRecord(since=old.since, worked=old.worked,
+                                failed=old.failed, last_ok=old.last_ok)
+                  if old is not None
+                  else LearnedRecord(since=date.today().isoformat()))
+        text = set_learned_line(text, record)
         validate_text(text, target / SKILL_FILE, source=LEARNED_SOURCES[scope])
 
         root.mkdir(parents=True, exist_ok=True)
@@ -844,6 +986,43 @@ class Learner:
         shutil.rmtree(offer.staging, ignore_errors=True)
 
 
+def _read(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _without_counters(text: str) -> str:
+    return "".join(line for line in text.splitlines(keepends=True)
+                   if not re.match(r"^learned\s*:", line))
+
+
+def _saved_text(skill: Skill) -> str:
+    """A learned skill as the update call sees it: SKILL.md, then each
+    script, minus the counter line (the model never writes that)."""
+    parts = [_without_counters(_read(skill.path)).strip()]
+    for script in sorted((skill.directory / "scripts").glob("*")):
+        if script.is_file():
+            parts.append(f"=== scripts/{script.name} ===\n{_read(script).strip()}")
+    return "\n\n".join(parts)
+
+
+def failure_line(turn: Turn, skill: Skill) -> str:
+    """The first call that failed after ``skill`` was loaded, in one line."""
+    loaded = False
+    for step in turn.steps:
+        if step.name == "load_skill" and step.arguments.get("name") == skill.name:
+            loaded = True
+            continue
+        if loaded and not step.ok:
+            first = (step.result.strip().splitlines() or [""])
+            detail = next((ln for ln in first if ln.strip()
+                           and not ln.startswith("exit code")), first[0])
+            return f"{step.name}: {_clip(detail, 200)}"
+    return ""
+
+
 # ---- the counter line -----------------------------------------------------------
 
 
@@ -872,7 +1051,8 @@ def record_use(skill: Skill, worked: bool, today: str | None = None) -> LearnedR
         since=old.since,
         worked=old.worked + (1 if worked else 0),
         failed=old.failed + (0 if worked else 1),
-        last_ok=today if worked else old.last_ok)
+        last_ok=today if worked else old.last_ok,
+        failing=0 if worked else old.failing + 1)
     text = skill.path.read_text(encoding="utf-8")
     write_atomic(skill.path, set_learned_line(text, record))
     return record

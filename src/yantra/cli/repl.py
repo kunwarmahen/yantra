@@ -382,14 +382,30 @@ class Repl:
             return
         try:
             for name, worked in learner.after_turn(end):
-                self.console.print(f"[dim]skill {name}: this use counted as "
-                                   f"{'worked' if worked else 'failed'}[/dim]")
+                self.console.print(self._counted_line(name, worked),
+                                   markup=False, style="dim")
             if learn and end.reason == "end_turn":
                 self._offer_skill(learner, forced=False)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](not saved)[/yellow]")
         except Exception as exc:
             self.console.print(f"[yellow]learning skipped: {exc}[/yellow]")
+
+    def _counted_line(self, name: str, worked: bool) -> str:
+        """What one use did to a learned skill's record, in one line --
+        including how close a failing one is to being set aside."""
+        if worked:
+            return f"skill {name}: this use counted as worked"
+        skills = getattr(self.agent, "skills", None)
+        skill = skills.get(name) if skills is not None else None
+        record = skill.learned if skill is not None else None
+        if record is None:
+            return f"skill {name}: this use counted as failed"
+        if record.stale:
+            return (f"skill {name}: failed {record.failing} times in a row -- "
+                    f"set aside until a fresh solve repairs it")
+        return (f"skill {name}: this use counted as failed "
+                f"({record.failing} in a row; set aside at 3)")
 
     def _learn_command(self) -> None:
         """``/learn``: the person asks for the last turn to be saved.
@@ -434,7 +450,14 @@ class Repl:
         draft, view = offer.draft, offer.view(Path(self.agent.ctx.cwd))
         print_ = self.console.print
         print_()
-        print_("[bold]Save this as a skill?[/bold]")
+        if offer.repairs is not None:
+            print_("[bold]Update this skill?[/bold]")
+            print_(f"  {draft.name} failed this time -- {offer.failure}",
+                   markup=False)
+            print_("  the task was then finished another way; this is that "
+                   "way, written over the saved recipe")
+        else:
+            print_("[bold]Save this as a skill?[/bold]")
         print_(f"  {draft.name} -- {draft.description}", markup=False)
         if offer.renamed_from:
             print_(f"  (renamed: a skill you wrote is already called "
@@ -451,6 +474,14 @@ class Repl:
                    markup=False)
         print_(f"  cost:   {offer.spent.input_tokens:,} in / "
                f"{offer.spent.output_tokens:,} out tokens to write and test")
+        if offer.repairs is not None:
+            # An update is read as a change: the diff, not two whole files.
+            # [e]dit first still opens the whole proposed files.
+            print_(f"[dim]── changes {'─' * 54}[/dim]")
+            print_(offer.diff().rstrip() or "(no change to the files)",
+                   markup=False, highlight=False)
+            print_(f"[dim]{'─' * 64}[/dim]")
+            return
         if offer.replaces is not None:
             print_(f"  replaces the learned skill at {offer.replaces}",
                    markup=False)
@@ -476,8 +507,11 @@ class Repl:
         while True:
             self._show_offer(offer, scope)
             answer = self._input(
-                f"[s]ave  [e]dit first  [c]hange scope to "
-                f"{other[scope]}  [N]o > ").strip().lower()
+                "[s]ave  [e]dit first  [N]o > " if offer.repairs is not None
+                else f"[s]ave  [e]dit first  [c]hange scope to "
+                     f"{other[scope]}  [N]o > ").strip().lower()
+            if answer in ("c", "scope") and offer.repairs is not None:
+                continue   # an update stays where the skill already lives
             if answer in ("c", "scope"):
                 scope = other[scope]
                 continue
@@ -685,6 +719,7 @@ class Repl:
         for skill in skills:
             mark = "*" if skill.name in skills.loaded else " "
             off = " [off]" if skills.is_disabled(skill.name) else ""
+            off += " [stale]" if skill.is_stale else ""
             kind = " [delegated]" if skill.delegated else ""
             lines.append(f" {mark} {skill.name} [{skill.source}]{kind}{off} "
                          f"-- {skill.description}")

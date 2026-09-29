@@ -253,6 +253,13 @@ happened, never by the model. Why the write-up runs in a fresh, small
 context, and what that saved against the obvious way:
 [notes/96](notes/96-solve-it-once.md).
 
+Recipes break when the world under them changes. If a saved recipe
+fails and the task still gets done another way, that other way is
+offered as an **update**, shown as a diff against the saved version.
+If one fails three times in a row, it is **set aside**: it leaves the
+roster, `/skills` marks it `[stale]`, and the next fresh solve replaces
+it ([notes/97](notes/97-when-the-recipe-breaks.md)).
+
 ### One-command starts
 
 `start.sh` wraps the common setups so you don't have to remember flags.
@@ -1855,7 +1862,10 @@ src/yantra/
 │                   small model call that decides and writes, the script
 │                   tested through the session's own bash and gate (<= 2
 │                   runs), then the save question; learned/ roots, counters
-│                   Yantra keeps ([notes/96](notes/96-solve-it-once.md))
+│                   Yantra keeps ([notes/96](notes/96-solve-it-once.md)).
+│                   A recipe that failed but was finished another way is
+│                   offered as an UPDATE (a diff); three failures in a row
+│                   set it aside ([notes/97](notes/97-when-the-recipe-breaks.md))
 ├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
 │                   skills/ + tools/ + evals/, parsed with tomllib, unknown keys
 │                   refused so a typo can never quietly leave a tool armed.
