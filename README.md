@@ -112,6 +112,9 @@ uv run yantra --skills-dir ~/shared-skills           # extra skills root (repeat
 uv run yantra --no-skills                            # ignore skills entirely
                                                       #   ...and /skills off NAME
                                                       #   pulls one mid-session
+uv run yantra --learn off                            # never offer to save a solved
+                                                      #   task as a skill (/learn
+                                                      #   still saves one by hand)
 uv run yantra "summarize README.md"                  # one-shot prompt, then exit
 uv run yantra --image photo.png "what's in this picture?"   # vision one-shot
 ```
@@ -209,6 +212,46 @@ directly. The web UI gets a skills section in the tools panel — switches to
 turn one off, and an editor (＋ new, or `edit` on any row) that writes a
 real `SKILL.md` for you, validated by the same loader before it saves. Full design notes, including why the roster is frozen and what
 `allowed-tools` does *not* do: [notes/30](notes/30-skills.md).
+
+### It remembers how it solved something (learned skills)
+
+The first *"turn the bedroom fan to 60%"* takes eight steps: find Home
+Assistant, learn its API, work out that the bedroom fan is
+`fan.master_bedroom_ceiling` and not the `switch.bedroom_fan_light` next
+to it, get the payload right. The second time should take two.
+
+So when a turn solves something that took real work (it finished, it
+made four or more tool calls, and the model judges it will come up again
+with different inputs), the agent writes the **working** path down as a
+skill, runs its script once to test it, and asks:
+
+```
+Save this as a skill?
+  home-fan -- Set a Home Assistant fan's speed by its name. Use when …
+  scope:  you, in every project -> ~/.yantra/skills/learned/home-fan
+  needs:  a Home Assistant URL and token (ha.env)
+  inputs: fan name, percentage
+  tested: passed (1 run) -- $ python3 "$SKILL_DIR/scripts/fan.py" …
+── SKILL.md ──── … every line that would be saved …
+── scripts/fan.py ──── … the whole script …
+[s]ave  [e]dit first  [c]hange scope to project  [N]o >
+```
+
+Nothing is saved without a yes, and the default is no. The web page asks
+the same question in a dialog where both files are editable. A saved
+skill never holds a secret or a personal fact: the token and the fan's
+id are **inputs**, and the model never saw the token in the first place.
+Next session the skill is in the roster like any other, and a small
+local model follows a recipe that is known to work instead of
+rediscovering the API, which is the part small models do badly.
+
+`/learn` saves the last turn by hand (the page has a *save last turn*
+button); `--learn off` stops the offers; `--learn auto` saves without
+asking, for unattended runs only. `/skills` shows each learned skill's
+record (`worked 3 · failed 0 · last ok …`), counted by Yantra from what
+happened, never by the model. Why the write-up runs in a fresh, small
+context, and what that saved against the obvious way:
+[notes/96](notes/96-solve-it-once.md).
 
 ### One-command starts
 
@@ -1807,6 +1850,12 @@ src/yantra/
 │                   allowed-tools is ENFORCED rather than announced; /skills
 │                   off|on + $YANTRA_DISABLED_SKILLS are the operator's switch
 │                   ([notes/30](notes/30-skills.md))
+│                   learn.py: a SOLVED turn written down as a skill -- counted
+│                   gate (finished, 4+ calls, no skill followed), ONE fresh
+│                   small model call that decides and writes, the script
+│                   tested through the session's own bash and gate (<= 2
+│                   runs), then the save question; learned/ roots, counters
+│                   Yantra keeps ([notes/96](notes/96-solve-it-once.md))
 ├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
 │                   skills/ + tools/ + evals/, parsed with tomllib, unknown keys
 │                   refused so a typo can never quietly leave a tool armed.

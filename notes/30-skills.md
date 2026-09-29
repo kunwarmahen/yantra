@@ -310,6 +310,7 @@ Nearest wins:
 | `.yantra/skills/` | private overrides — gitignored |
 | `skills/` | the set your repo commits |
 | `~/.yantra/skills/` | yours, everywhere |
+| `.yantra/skills/learned/`, `~/.yantra/skills/learned/` | written by the agent after solving a task, and approved by you — searched last, so a skill a person wrote always wins its name ([notes/96](96-solve-it-once.md)) |
 
 `.yantra/` is machine state — a sqlite session store, job logs, a Chrome
 profile — and it is gitignored. Skills are hand-written source meant to
@@ -367,3 +368,15 @@ road picks it up — terminal, browser, and the container (which mounts
 In the web UI they get a section in the servers/skills/tools panel, with
 a filled dot for each skill the model actually pulled this session —
 which is the first question every skill author asks.
+
+## Skills the agent writes itself
+
+Everything above is about skills a person wrote. The same format also
+holds skills the agent writes down after it solves something — the
+eight-step "which entity is the bedroom fan" discovery, saved as a
+two-step recipe with a tested script — once you have read it and said
+yes. They carry a few more header keys (`origin`, `needs`, `inputs`, and
+a `learned:` counter line Yantra keeps), live in their own `learned/`
+folders, and load exactly like these. Why the write-up happens in a
+fresh, small context rather than in the session, and what it cost
+against the obvious way: [notes/96](96-solve-it-once.md).

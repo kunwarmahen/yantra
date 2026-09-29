@@ -214,7 +214,9 @@ class TestDiscovery:
         monkeypatch.delenv("YANTRA_SKILLS_PATH", raising=False)
         sources = [source for _, source in
                    skill_roots(tmp_path, home=tmp_path / "home")]
-        assert sources == ["local", "project", "user"]
+        # learned roots come last: a hand-written skill wins its name
+        assert sources == ["local", "project", "user",
+                           "learned-local", "learned-user"]
 
 
 # ---- the live registry: roster, delivery, wiring ---------------------------

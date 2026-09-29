@@ -110,7 +110,14 @@ class LoadSkill(Tool):
                     + " -- adapt the steps that need them, or say plainly "
                       "that the skill cannot be completed here.")
         lines.append("")
-        lines.append(skill.body)
+        body = skill.body
+        if skill.is_learned:
+            # A learned recipe names its script as "$SKILL_DIR/scripts/..."
+            # -- the form its test ran in -- so the model runs it from the
+            # working folder, where the paths the person gave still mean
+            # what they meant (notes/96).
+            body = body.replace("$SKILL_DIR", str(skill.directory))
+        lines.append(body)
         return "\n".join(lines)
 
 

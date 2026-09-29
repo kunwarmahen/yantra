@@ -1952,3 +1952,39 @@ pre.output { color: var(--ink); }
 }
 .turn-row .turn-mark { margin: 6px 0 0 18px; }
 .turn-row .turn-mark-id { display: none; }   /* the head already says it */
+
+/* ---- the save-a-learned-skill question (notes/96) ---- */
+
+.learn-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 12px 0;
+  font-size: 12.5px;
+}
+.learn-facts dt { color: var(--ink-3); font-weight: 600; }
+.learn-facts dd { margin: 0; overflow-wrap: anywhere; }
+.learn-scope { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 12px; }
+.learn-label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+#modal textarea.learn-text {
+  min-height: 160px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  resize: vertical;
+}
+#modal .learn-error { margin: 0 0 10px; }
+.t-tally { margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }

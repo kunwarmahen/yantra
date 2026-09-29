@@ -92,6 +92,16 @@ function route(env) {
 
     case "permission_request": showPermissionModal(env); break;
     case "ask":                showAskModal(env); break;
+    case "learn_offer":        showLearnModal(env); break;
+    case "learn_status":       setStatus(`· ${env.text}`); break;
+    case "learn_counted":      /* the skills panel shows the new counts */ break;
+    case "learned":            toast(`saved skill ${env.name}`);
+                               addBanner(`saved skill ${env.name} — next time `
+                                 + `the model follows it instead of finding `
+                                 + `the way again (${env.path})`, false);
+                               break;
+    case "learn_skipped":      if (env.reason) addBanner(env.reason, false, true);
+                               break;
     case "resolved":           closeModalIf(env.id); break;
 
     case "budget_warning": onBudgetWarning(env); break;
@@ -914,6 +924,60 @@ function showAskModal(env) {
   };
 }
 
+/* The save question for a learned skill (notes/96). Everything that would
+   be written is on screen and editable; the default is no. Saving with an
+   edit that breaks a rule comes back as the same question with the error
+   on top, and the edit kept. */
+function showLearnModal(env) {
+  ui.modalId = env.id;
+  const test = env.test || {};
+  const tested = test.passed == null
+    ? "no script, so nothing to run"
+    : `passed (${test.runs} run${test.runs > 1 ? "s" : ""}) — $ ${test.command}`;
+  const scopes = Object.entries(env.scopes || {}).map(([key, s]) => `
+    <label class="choice-row" title="${esc(s.path)}">
+      <input type="radio" name="learn-scope" value="${esc(key)}"
+             ${key === env.scope ? "checked" : ""}>
+      ${esc(s.label)}</label>`).join("");
+  showModal(`
+    <div class="kind-tag">save this as a skill?</div>
+    <h3>${esc(env.name)}</h3>
+    ${env.error ? `<div class="banner banner-error learn-error">${esc(env.error)}</div>` : ""}
+    <div class="context-note">${esc(env.description)}</div>
+    ${env.renamed_from ? `<div class="context-note">renamed: a skill you wrote is
+      already called ${esc(env.renamed_from)}</div>` : ""}
+    <dl class="learn-facts">
+      <dt>needs</dt><dd>${esc(env.needs || "nothing")}</dd>
+      <dt>inputs</dt><dd>${esc(env.inputs || "none")}</dd>
+      <dt>tested</dt><dd>${esc(tested)}</dd>
+      <dt>cost</dt><dd>${fmtNum(env.spent?.input ?? 0)} in / ${fmtNum(env.spent?.output ?? 0)} out tokens to write and test</dd>
+      ${env.replaces ? `<dt>replaces</dt><dd>${esc(env.replaces)}</dd>` : ""}
+    </dl>
+    <div class="learn-scope">${scopes}</div>
+    <label class="learn-label" for="learn-md">SKILL.md — edit before saving if you like</label>
+    <textarea id="learn-md" class="learn-text" spellcheck="false">${esc(env.skill_md)}</textarea>
+    ${env.script_name ? `
+      <label class="learn-label" for="learn-script">${esc(env.script_name)}</label>
+      <textarea id="learn-script" class="learn-text" spellcheck="false">${esc(env.script)}</textarea>` : ""}
+    ${test.output ? `<details><summary>test output</summary>
+      <pre class="args">${esc(test.output)}</pre></details>` : ""}
+    <div class="modal-actions">
+      <button class="m-btn" data-act="no">no</button>
+      <button class="m-btn primary" data-act="save">save skill</button>
+    </div>`);
+  $("#modal").onclick = (e) => {
+    const act = e.target?.closest?.("[data-act]")?.dataset?.act;
+    if (!act) return;
+    if (act === "no") { send({ type: "answer", id: env.id, decision: "no" }); return; }
+    send({
+      type: "answer", id: env.id, decision: "save",
+      scope: $("#modal input[name=learn-scope]:checked")?.value ?? env.scope,
+      skill_md: $("#learn-md").value,
+      script: $("#learn-script") ? $("#learn-script").value : null,
+    });
+  };
+}
+
 /* ---------- small dialogs and menus ----------
    The browser's prompt()/confirm() are the one place this UI used to fall
    out of its own skin. Same flows, same payloads -- just rendered here, on
@@ -1387,6 +1451,16 @@ function skillRow(s) {
   const desc = document.createElement("div");
   desc.className = "t-desc";
   desc.textContent = s.description;
+  // A learned skill's record: counted by Yantra from what it saw, never
+  // by the model (notes/96).
+  const c = s.counters;
+  if (c) {
+    const tally = document.createElement("div");
+    tally.className = "t-tally";
+    tally.textContent = `learned ${c.since} · worked ${c.worked} · failed ${c.failed}`
+      + (c.last_ok ? ` · last ok ${c.last_ok}` : "");
+    desc.append(tally);
+  }
   row.append(desc);
 
   // Same switch as a tool row: off = out of the roster, refuses to load.
@@ -1494,6 +1568,17 @@ function closeSkillForm() {
 }
 
 $("#skill-new-btn").onclick = () => openSkillForm(null);
+
+$("#skill-learn-btn").onclick = async () => {
+  // The offer itself arrives over the socket, like an approval does.
+  const res = await fetch("/api/learn", { method: "POST" });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => ({}))).detail;
+    toast(detail || "cannot save a skill right now");
+    return;
+  }
+  closeToolsPanel();
+};
 $("#skill-cancel").onclick = closeSkillForm;
 
 $("#skill-save").onclick = async () => {

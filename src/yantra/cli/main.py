@@ -53,6 +53,7 @@ from yantra.permissions import (SwitchableGate, allow_read_only,
 from yantra.providers import get_provider
 from yantra.sandbox import autodetect
 from yantra.spec import AgentSpec
+from yantra.skills.learn import enable_learning, learn_mode
 from yantra.session import SessionStore, apply_payload
 from yantra.subagent import SpawnSubagent, SubagentSpawner
 from yantra.tools import default_registry
@@ -425,6 +426,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-skills", action="store_true", dest="no_skills",
                         help="do not load skills at all: no roster in the "
                              "system prompt, no load_skill tool")
+    parser.add_argument("--learn", choices=["ask", "auto", "off"], default=None,
+                        help="after a turn that solved something worth "
+                             "keeping, write it down as a skill, test it, "
+                             "and ASK before saving (default; needs someone "
+                             "at the terminal or page); auto saves without "
+                             "asking, for unattended runs; off never offers. "
+                             "Same as $YANTRA_LEARN (notes/96)")
     parser.add_argument("prompt_positional", nargs="?", metavar="PROMPT",
                         help="same as --prompt (yantra \"what is in README.md?\")")
     return parser
@@ -2366,6 +2374,23 @@ def main(argv: list[str] | None = None) -> int:
         for broken_skill in skills.found.broken:
             console.print(f"[yellow]skill {broken_skill.path}: "
                           f"{broken_skill.reason}[/yellow]")
+
+    # Learning: offers to save a solved turn as a skill (notes/96). ASK
+    # needs somebody to ask, so a piped one-shot run turns it off rather
+    # than stopping to wait for an answer that cannot come; AUTO is the
+    # unattended mode and says so on screen, because it writes files.
+    try:
+        mode = learn_mode(args.learn)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    attended = web_session is not None or (sys.stdin.isatty()
+                                           and sys.stdout.isatty())
+    if mode == "ask" and not attended:
+        mode = "off"
+    if enable_learning(agent, mode) is not None and mode == "auto":
+        console.print("[dim]learning: auto -- a solved task whose script "
+                      "passes its test is saved as a skill without asking[/dim]")
 
     store = SessionStore(Path(args.cwd) / ".yantra" / "session.sqlite3")
     # The manager owns live MCP connections so servers can be added,

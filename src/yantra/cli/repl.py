@@ -24,7 +24,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.status import Status
 
-from yantra.agent import Agent
+from yantra.agent import Agent, TurnEnd
 from yantra.builder import BUILD_SYSTEM, BuildSpec, run_build
 from yantra.cli.render import Renderer
 from yantra.config import default_model, load_settings
@@ -40,7 +40,8 @@ from yantra.permissions import (REFUSED_USER, PermissionRequest,
 from yantra.providers import get_provider
 from yantra.sandbox import ToolSandbox
 from yantra.session import SessionStore, apply_payload
-from yantra.skills.loader import skill_roots
+from yantra.skills.learn import SCOPES, Learner, Offer
+from yantra.skills.loader import SKILL_FILE, skill_roots
 from yantra.tools import default_registry
 
 HELP = """[bold]commands[/bold]
@@ -61,6 +62,8 @@ HELP = """[bold]commands[/bold]
                      pull or restore skills MID-SESSION (globs ok: deploy-*)
                      — same switch as /tools, applied to the roster
   /NAME ...          run a skill directly: /pr-review the auth branch
+  /learn             save what the last turn did as a skill (it is tested
+                     and shown to you first; --learn off stops the offers)
   /mcp               list connected mcp servers
   /mcp add ...       connect a server MID-SESSION: /mcp add NAME URL, or
                      /mcp add NAME COMMAND [ARGS...] (asks whether to save)
@@ -240,6 +243,9 @@ class Repl:
         # Images staged by /image, consumed by the NEXT turn (validated at
         # attach time so a bad path errors immediately, not mid-conversation).
         self._pending_images: list[ImageBlock] = []
+        #: How the last turn ended -- what /learn needs when no Learner
+        #: watched it (learning off). "" before the first turn.
+        self._last_end = ""
 
     # ---- main loop ---------------------------------------------------------
 
@@ -317,11 +323,16 @@ class Repl:
         self.renderer(event)
 
     def run_turn(self, user_input: str,
-                 *, images: list[ImageBlock] | None = None) -> None:
+                 *, images: list[ImageBlock] | None = None,
+                 learn: bool = True) -> None:
         """One user turn, fully rendered. Public because one-shot mode and
         the REPL share this exact path. ``images`` (loaded via
         yantra.images) ride along in the same user message -- how
-        ``yantra --image shot.png "what is this?"`` works."""
+        ``yantra --image shot.png "what is this?"`` works.
+
+        ``learn=False`` counts the turn against any learned skill it used
+        but never offers to save it -- a turn that ran a skill by name
+        already had its recipe."""
         stream = self.agent.run_streaming(user_input, images=images)
         if self.trace is not None:
             # A TEE, not a consumer: the renderer still sees every event
@@ -334,9 +345,12 @@ class Repl:
         spinner = self.console.status("[dim]… connecting[/dim]", spinner="dots")
         spinner.start()
         self._spinner = spinner  # _on_stream_event drops it at first delta
+        end: TurnEnd | None = None
         try:
             for event in stream:  # ToolExecuted / TurnEnd only
                 self.renderer(event)
+                if isinstance(event, TurnEnd):
+                    end = event
         except BaseException:
             # Deterministic cleanup on ANY abnormal exit (including
             # KeyboardInterrupt raised mid-pull): closing the generator
@@ -350,6 +364,158 @@ class Repl:
             if self._spinner is not None:
                 self._spinner.stop()
                 self._spinner = None
+        if end is not None:
+            self._last_end = end.reason
+            self._after_turn(end, learn=learn)
+
+    # ---- learning (notes/96) --------------------------------------------------
+
+    def _after_turn(self, end: TurnEnd, *, learn: bool) -> None:
+        """Count learned skills the turn used; offer to save what it solved.
+
+        Nothing here may cost the answer that was just printed: a failure
+        is one yellow line, and Ctrl-C is a no to the offer, not a
+        cancelled turn.
+        """
+        learner = getattr(self.agent, "learner", None)
+        if learner is None:
+            return
+        try:
+            for name, worked in learner.after_turn(end):
+                self.console.print(f"[dim]skill {name}: this use counted as "
+                                   f"{'worked' if worked else 'failed'}[/dim]")
+            if learn and end.reason == "end_turn":
+                self._offer_skill(learner, forced=False)
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow](not saved)[/yellow]")
+        except Exception as exc:
+            self.console.print(f"[yellow]learning skipped: {exc}[/yellow]")
+
+    def _learn_command(self) -> None:
+        """``/learn``: the person asks for the last turn to be saved.
+
+        Works with learning off (the flag stops OFFERS; asking is still
+        allowed) -- a Learner is made for the one request.
+        """
+        if getattr(self.agent, "skills", None) is None:
+            self.console.print("[yellow]skills are off for this session "
+                               "(--no-skills), so there is nowhere to save "
+                               "one[/yellow]")
+            return
+        learner = getattr(self.agent, "learner", None)
+        if learner is None:
+            learner = Learner(self.agent, "ask")
+            learner.last_reason = self._last_end
+        try:
+            self._offer_skill(learner, forced=True)
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow](not saved)[/yellow]")
+
+    def _offer_skill(self, learner: Learner, *, forced: bool) -> None:
+        offer = learner.consider(
+            forced=forced,
+            progress=lambda text: self.console.print(f"[dim]· {text}[/dim]"))
+        if offer is None:
+            if forced and learner.last_skip:
+                self.console.print(f"nothing saved: {learner.last_skip}",
+                                   markup=False, style="yellow")
+            return
+        if learner.mode == "auto" and not forced:
+            skill = learner.save(offer)
+            self.console.print(f"[green]saved skill {skill.name}[/green] "
+                               f"[dim]({skill.directory})[/dim]")
+            return
+        self._ask_to_save(learner, offer)
+
+    def _show_offer(self, offer: Offer, scope: str) -> None:
+        """The save question's body: everything that would be written.
+        PLAIN text for the file contents -- a skill is full of brackets
+        that rich would read as markup."""
+        draft, view = offer.draft, offer.view(Path(self.agent.ctx.cwd))
+        print_ = self.console.print
+        print_()
+        print_("[bold]Save this as a skill?[/bold]")
+        print_(f"  {draft.name} -- {draft.description}", markup=False)
+        if offer.renamed_from:
+            print_(f"  (renamed: a skill you wrote is already called "
+                   f"{offer.renamed_from})", markup=False)
+        print_(f"  scope:  {SCOPES[scope]} -> {view['scopes'][scope]['path']}",
+               markup=False)
+        print_(f"  needs:  {draft.needs or 'nothing'}", markup=False)
+        print_(f"  inputs: {draft.inputs or 'none'}", markup=False)
+        if offer.tested is None:
+            print_("  tested: no script, so nothing to run")
+        else:
+            print_(f"  tested: passed ({offer.test_runs} run"
+                   f"{'s' if offer.test_runs > 1 else ''}) -- $ {draft.test}",
+                   markup=False)
+        print_(f"  cost:   {offer.spent.input_tokens:,} in / "
+               f"{offer.spent.output_tokens:,} out tokens to write and test")
+        if offer.replaces is not None:
+            print_(f"  replaces the learned skill at {offer.replaces}",
+                   markup=False)
+        for label, path in self._offer_files(offer):
+            print_(f"[dim]── {label} {'─' * max(3, 60 - len(label))}[/dim]")
+            print_(path.read_text(encoding="utf-8").rstrip(), markup=False,
+                   highlight=False)
+        print_(f"[dim]{'─' * 64}[/dim]")
+
+    @staticmethod
+    def _offer_files(offer: Offer) -> list[tuple[str, Path]]:
+        """The staged files, which ARE the offer: edits land there."""
+        files = [(SKILL_FILE, offer.staging / SKILL_FILE)]
+        if offer.draft.script_name:
+            files.append((offer.draft.script_name,
+                          offer.staging / offer.draft.script_name))
+        return files
+
+    def _ask_to_save(self, learner: Learner, offer: Offer) -> None:
+        """Save / edit first / change scope / no -- the default is no."""
+        scope = offer.draft.scope
+        other = {"user": "project", "project": "user"}
+        while True:
+            self._show_offer(offer, scope)
+            answer = self._input(
+                f"[s]ave  [e]dit first  [c]hange scope to "
+                f"{other[scope]}  [N]o > ").strip().lower()
+            if answer in ("c", "scope"):
+                scope = other[scope]
+                continue
+            if answer in ("e", "edit"):
+                self._edit_offer(offer)
+                continue
+            if answer not in ("s", "save", "y", "yes"):
+                learner.discard(offer)
+                self.console.print("[dim]not saved[/dim]")
+                return
+            files = dict(self._offer_files(offer))
+            script = files.get(offer.draft.script_name)
+            try:
+                skill = learner.save(
+                    offer, scope=scope,
+                    skill_md=files[SKILL_FILE].read_text(encoding="utf-8"),
+                    script=script.read_text(encoding="utf-8") if script else None)
+            except Exception as exc:
+                self.console.print(f"cannot save it as it is: {exc}",
+                                   markup=False, style="red")
+                continue
+            self.console.print(f"[green]saved skill {skill.name}[/green] "
+                               f"[dim]({skill.directory}) -- next time, the "
+                               f"model follows it instead of rediscovering "
+                               f"the way[/dim]")
+            return
+
+    def _edit_offer(self, offer: Offer) -> None:
+        """$EDITOR on each staged file; without one, the paths and a pause."""
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        files = [path for _, path in self._offer_files(offer)]
+        if editor and sys.stdin.isatty() and sys.stdout.isatty():
+            for path in files:
+                subprocess.run([editor, str(path)])
+            return
+        self.console.print("edit these, then press Enter:\n  "
+                           + "\n  ".join(str(p) for p in files), markup=False)
+        self._input("")
 
     # ---- slash commands ----------------------------------------------------
 
@@ -428,6 +594,8 @@ class Repl:
                 self._image_command(arg)
             case "skills":
                 self._skills_command(arg)
+            case "learn":
+                self._learn_command()
             case "quit" | "exit":
                 return True
             case _:
@@ -520,6 +688,8 @@ class Repl:
             kind = " [delegated]" if skill.delegated else ""
             lines.append(f" {mark} {skill.name} [{skill.source}]{kind}{off} "
                          f"-- {skill.description}")
+            if skill.learned is not None:
+                lines.append(f"     learned {skill.learned.render()}")
         for broken in skills.found.broken:
             lines.append(f" ! {broken.path}: {broken.reason}")
         for name, path in skills.found.shadowed:
@@ -560,7 +730,8 @@ class Repl:
                    f"Task: {task}")
         self.console.print(f"[dim]running skill {skill.name!r}[/dim]")
         try:
-            self.run_turn(message, images=self._take_pending_images())
+            self.run_turn(message, images=self._take_pending_images(),
+                          learn=False)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](cancelled)[/yellow]")
         return True

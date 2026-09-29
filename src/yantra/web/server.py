@@ -214,6 +214,9 @@ class WebSession:
         #: with_deadline's reason.
         self.on_timeout: str | None = None
         self._wait_left: float | None = None
+        #: How the last turn ended, for a save asked for by hand when no
+        #: Learner watched it (learning off). "" before the first turn.
+        self._last_end = ""
 
     def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
         """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
@@ -493,9 +496,12 @@ class WebSession:
                            resumes=resumes)
         ended = False  # a natural TurnEnd went out -- don't double-report
         cancelled = False
+        end: TurnEnd | None = None
         try:
             for event in stream:
                 ended = ended or isinstance(event, TurnEnd)
+                if isinstance(event, TurnEnd):
+                    end = event
                 self._emit(event)
                 if self._cancel.is_set():
                     cancelled = True
@@ -515,10 +521,115 @@ class WebSession:
                             "message": f"{type(exc).__name__}: {exc}"})
         if cancelled and not ended:
             self.broadcast({"type": "turn_cancelled"})
+        if end is not None and not cancelled:
+            self._learn(end)
         self.turn_active = False
         self._cancel.clear()
         self.broadcast({"type": "state", **self.state()})
         self.broadcast({"type": "turn_done"})
+
+    # ---- learning (notes/96) ---------------------------------------------------
+
+    def _learn(self, end: TurnEnd | None, *, forced: bool = False) -> None:
+        """The terminal's after-turn offer, on the page: count learned
+        skills the turn used, then offer to save what it solved.
+
+        Runs on the turn's worker, before ``turn_done``, so the input stays
+        busy while the question is up -- the same order the terminal keeps.
+        Nothing here may cost the answer already on the page: a failure is
+        a banner, and Stop is a no.
+        """
+        if end is not None:
+            # Kept even with learning off: a save asked for later by hand
+            # needs to know this turn finished.
+            self._last_end = end.reason
+        learner = getattr(self.agent, "learner", None)
+        if learner is None and forced:
+            from yantra.skills.learn import Learner
+            learner = Learner(self.agent, "ask")
+            learner.last_reason = self._last_end
+        if learner is None:
+            return
+        try:
+            if end is not None:
+                for name, worked in learner.after_turn(end):
+                    self.broadcast({"type": "learn_counted", "name": name,
+                                    "worked": worked})
+                if end.reason != "end_turn":
+                    return
+            offer = learner.consider(
+                forced=forced,
+                progress=lambda text: self.broadcast(
+                    {"type": "learn_status", "text": text}))
+            if offer is None:
+                if forced:
+                    self.broadcast({"type": "learn_skipped",
+                                    "reason": learner.last_skip})
+                return
+            if learner.mode == "auto" and not forced:
+                skill = learner.save(offer)
+                self.broadcast({"type": "learned", "name": skill.name,
+                                "path": str(skill.directory)})
+                return
+            self._ask_to_save(learner, offer)
+        except KeyboardInterrupt:
+            self.broadcast({"type": "learn_skipped", "reason": "not saved"})
+        except Exception as exc:
+            self.broadcast({"type": "learn_skipped",
+                            "reason": f"learning skipped: {exc}"})
+
+    def _ask_to_save(self, learner: Any, offer: Any) -> None:
+        """Put the offer to the page; save, re-ask with the error, or drop."""
+        error = ""
+        while True:
+            envelope = {"type": "learn_offer", "id": uuid.uuid4().hex[:8],
+                        **offer.view(self.agent.ctx.cwd, home=learner.home),
+                        "error": error}
+            try:
+                answer = self._ask_human(envelope)
+            except KeyboardInterrupt:
+                learner.discard(offer)
+                raise
+            if answer.get("decision") != "save":
+                learner.discard(offer)
+                self.broadcast({"type": "learn_skipped", "reason": "not saved"})
+                return
+            scope = answer.get("scope")
+            text = answer.get("skill_md")
+            script = answer.get("script")
+            try:
+                skill = learner.save(
+                    offer, scope=scope if scope in ("user", "project") else None,
+                    skill_md=text if isinstance(text, str) else None,
+                    script=script if isinstance(script, str) else None)
+            except (SkillError, OSError, ValueError) as exc:
+                # What the person wrote stays in the offer they see again:
+                # the staged files ARE the offer (Offer.view reads them).
+                offer.keep_edits(text if isinstance(text, str) else None,
+                                 script if isinstance(script, str) else None)
+                error = str(exc)
+                continue
+            self.broadcast({"type": "learned", "name": skill.name,
+                            "path": str(skill.directory)})
+            return
+
+    def start_learn(self) -> None:
+        """``POST /api/learn``: save the last turn because the person asked.
+        A turn of its own for the page -- the input is busy until it ends."""
+        self._cancel.clear()
+        self.turn_active = True
+        self.broadcast({"type": "turn_started"})
+
+        def work() -> None:
+            try:
+                self._learn(None, forced=True)
+            finally:
+                self.turn_active = False
+                self._cancel.clear()
+                self.broadcast({"type": "state", **self.state()})
+                self.broadcast({"type": "turn_done"})
+
+        threading.Thread(target=work, daemon=True, name="yantra-learn").start()
 
     def _record(self, trajectory) -> None:
         """The recorder's sink: write the line, then tell the page its id.
@@ -1129,6 +1240,16 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         session.broadcast({"type": "state", **session.state()})
         return {"name": skill.name, "path": str(skill.path),
                 **session.state()}
+
+    @app.post("/api/learn")
+    def learn() -> dict[str, Any]:
+        """Save what the last turn did as a skill -- the page's ``/learn``.
+        The offer arrives over the socket like any other question."""
+        require_ready()
+        require_idle()
+        require_skills()
+        session.start_learn()
+        return {"ok": True}
 
     @app.post("/api/skills/reload")
     def skills_reload() -> dict[str, Any]:

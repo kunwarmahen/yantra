@@ -61,7 +61,8 @@ ROSTER_HEADER = (
     "Skills available to you -- procedural knowledge written for THIS "
     "project. When a task matches one, call load_skill with its name and "
     "follow the instructions it returns BEFORE doing the work; they are "
-    "more specific than your defaults and were written by the operator. "
+    "more specific than your defaults and were written, or approved, by "
+    "the operator. "
     "These are the ONLY skills: when none of them fits the task, do not "
     "call load_skill at all -- use your tools directly. A skill name that "
     "is not listed here does not exist."
@@ -373,26 +374,27 @@ class SkillRegistry:
                 f"invalid name {name!r}: lowercase letters, digits and "
                 f"hyphens only (it doubles as a slash command and a path)")
 
+        existing = self.found.get(name)
+        # The editor only knows the hand-written keys; a learned skill's
+        # own (origin, needs, inputs, tool, its counters) ride through an
+        # edit untouched rather than being wiped by a form that never
+        # showed them.
+        kept = {}
+        if existing is not None:
+            kept = {"origin": existing.origin, "needs": existing.needs,
+                    "inputs": existing.inputs, "tool": existing.tool,
+                    "learned": existing.learned}
         text = render_skill_md(
             name, description, body, mode=mode, allowed_tools=allowed_tools,
-            output_format=output_format, max_iterations=max_iterations)
+            output_format=output_format, max_iterations=max_iterations,
+            **kept)
 
-        existing = self.found.get(name)
         path = (existing.path if existing is not None
                 else self.cwd.joinpath(*PROJECT_SHARED, name, SKILL_FILE))
         # Parse it as if it had been read from that path: the folder-name
         # check and every other rule fire here, not after it is on disk.
         validate_text(text, path)
-
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(text)
-            os.replace(tmp, path)
-        finally:
-            if os.path.exists(tmp):
-                os.unlink(tmp)
+        write_atomic(path, text)
 
         self.reload()
         written = self.found.get(name)
@@ -428,6 +430,13 @@ class SkillRegistry:
                  "allowed_tools": list(s.allowed_tools),
                  "missing_tools": self.missing_tools(s),
                  "mode": s.mode,
+                 "learned": s.is_learned,
+                 "needs": s.needs,
+                 "inputs": s.inputs,
+                 "counters": (None if s.learned is None else {
+                     "since": s.learned.since, "worked": s.learned.worked,
+                     "failed": s.learned.failed,
+                     "last_ok": s.learned.last_ok}),
                  "enabled": not self.is_disabled(s.name),
                  "loaded": s.name in self.loaded}
                 for s in self.found
@@ -438,6 +447,21 @@ class SkillRegistry:
             "disabled": self.disabled_names(),
             "names_only": self.names_only,
         }
+
+
+def write_atomic(path: Path, text: str) -> None:
+    """Temp file + os.replace, so a crash mid-save leaves the previous
+    version rather than half a file -- the same rule the note store
+    follows. Shared with learn.py, which rewrites counter lines."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 
 def enable_skills(agent: Any, cwd: Path | None = None,

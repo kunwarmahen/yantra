@@ -50,6 +50,18 @@ runs in a fresh child agent that physically has no other tools
 registered (see subagent.py). That is the only enforcement the harness
 can honestly offer, and it costs a fresh context window to get.
 
+LEARNED SKILLS. A skill the agent wrote down after solving a task (see
+learn.py) is the same format with five more keys -- ``origin: learned``,
+``needs`` (the access it expects), ``inputs`` (what it asks for each
+time), ``tool`` (reserved for promoting its script to a tool) and
+``learned``, a counter line Yantra rewrites and the model never does:
+
+    learned: 2026-09-28 · worked 6 · failed 0 · last ok 2026-10-02
+
+They live in their own ``learned/`` folders, one for the person and one
+for the project, searched AFTER every hand-written root: a skill
+somebody wrote by hand always wins the name over one the agent wrote.
+
 Broken skills never raise into the session. discover() returns them in
 a parallel ``broken`` list so ``/skills`` can show the file and the
 reason -- one bad folder must not cost you the other nine.
@@ -101,9 +113,66 @@ PROJECT_PRIVATE = (".yantra", "skills")
 PROJECT_SHARED = ("skills",)
 USER_ROOT = (".yantra", "skills")
 
+#: Learned skills get a folder of their own inside each private root, so
+#: what the agent wrote never mixes with what a person wrote, and
+#: deleting every learned skill is one ``rm -r``. The PROJECT one is
+#: private (under the gitignored .yantra/): nothing the agent learned
+#: reaches a repo unless a person moves it into skills/.
+LEARNED_DIR = "learned"
+LEARNED_LOCAL = (*PROJECT_PRIVATE, LEARNED_DIR)
+LEARNED_USER = (*USER_ROOT, LEARNED_DIR)
+
+#: Sources a learned root reports, keyed by scope -- the words the save
+#: question uses ("you" or "this project").
+LEARNED_SOURCES = {"project": "learned-local", "user": "learned-user"}
+
+#: The only value ``origin`` may hold. Absent means written by a person.
+ORIGINS = ("learned",)
+
+#: ``learned: 2026-09-28 · worked 6 · failed 0 · last ok 2026-10-02``.
+#: Every part after the date is optional, so a freshly saved skill can
+#: carry just its date.
+LEARNED_RE = re.compile(
+    r"^(?P<since>\d{4}-\d{2}-\d{2})"
+    r"(?:\s*·\s*worked\s+(?P<worked>\d+))?"
+    r"(?:\s*·\s*failed\s+(?P<failed>\d+))?"
+    r"(?:\s*·\s*last ok\s+(?P<last_ok>\d{4}-\d{2}-\d{2}))?$")
+
 
 class SkillError(ValueError):
     """A skill file that cannot be trusted to mean what it says."""
+
+
+@dataclass(slots=True, frozen=True)
+class LearnedRecord:
+    """The ``learned:`` line, parsed: when it was saved and how it has done.
+
+    Counted by Yantra from what it saw (learn.py, ``record_uses``), never
+    by the model -- a skill that graded itself would always pass.
+    """
+
+    since: str
+    worked: int = 0
+    failed: int = 0
+    last_ok: str = ""
+
+    def render(self) -> str:
+        line = f"{self.since} · worked {self.worked} · failed {self.failed}"
+        return line + (f" · last ok {self.last_ok}" if self.last_ok else "")
+
+
+def parse_learned(value: str) -> LearnedRecord:
+    """``2026-09-28 · worked 6 · failed 0`` -> LearnedRecord, or SkillError."""
+    match = LEARNED_RE.match(" ".join(value.split()))
+    if match is None:
+        raise SkillError(
+            f"learned: expected 'YYYY-MM-DD · worked N · failed N "
+            f"[· last ok YYYY-MM-DD]', got {value!r} -- Yantra writes this "
+            f"line; delete it and it starts again from zero")
+    return LearnedRecord(since=match["since"],
+                         worked=int(match["worked"] or 0),
+                         failed=int(match["failed"] or 0),
+                         last_ok=match["last_ok"] or "")
 
 
 @dataclass(slots=True, frozen=True)
@@ -119,6 +188,16 @@ class Skill:
     mode: str = "inline"                    # inline | subagent
     output_format: str = ""                 # subagent mode: shape of the answer
     max_iterations: int = 0                 # subagent mode: 0 = spawner default
+    origin: str = ""                        # "" (a person wrote it) | learned
+    needs: str = ""                         # access it expects, in words
+    inputs: str = ""                        # what it asks for each time
+    tool: str = ""                          # reserved: script offered as a tool
+    learned: LearnedRecord | None = None    # counters, learned skills only
+
+    @property
+    def is_learned(self) -> bool:
+        """Written by the agent, not a person -- by its key or its folder."""
+        return self.origin == "learned" or self.source in LEARNED_SOURCES.values()
 
     @property
     def directory(self) -> Path:
@@ -314,6 +393,13 @@ def validate_text(text: str, path: Path, *, source: str = "project") -> Skill:
             "output-format and max-iterations only mean something with "
             "mode: subagent -- an inline skill's answer is just the turn")
 
+    origin = fields.get("origin", "").strip().lower()
+    if origin and origin not in ORIGINS:
+        raise SkillError(
+            f"unknown origin {origin!r}: the only one is 'learned' (leave "
+            f"it out for a skill a person wrote)")
+    learned = fields.get("learned", "").strip()
+
     return Skill(
         name=name,
         description=description,
@@ -324,6 +410,11 @@ def validate_text(text: str, path: Path, *, source: str = "project") -> Skill:
         mode=mode,
         output_format=" ".join(fields.get("output_format", "").split()),
         max_iterations=max_iterations,
+        origin=origin,
+        needs=" ".join(fields.get("needs", "").split()),
+        inputs=" ".join(fields.get("inputs", "").split()),
+        tool=" ".join(fields.get("tool", "").split()),
+        learned=parse_learned(learned) if learned else None,
     )
 
 
@@ -353,7 +444,12 @@ def render_skill_md(name: str, description: str, body: str, *,
                     mode: str = "inline",
                     allowed_tools: Iterable[str] = (),
                     output_format: str = "",
-                    max_iterations: int = 0) -> str:
+                    max_iterations: int = 0,
+                    origin: str = "",
+                    needs: str = "",
+                    inputs: str = "",
+                    tool: str = "",
+                    learned: LearnedRecord | None = None) -> str:
     """Compose a SKILL.md from fields -- the inverse of the parser.
 
     Used by hosts that AUTHOR skills rather than only read them (the web
@@ -373,6 +469,13 @@ def render_skill_md(name: str, description: str, body: str, *,
         lines += _fold("output-format", " ".join(output_format.split()))
     if max_iterations:
         lines.append(f"max-iterations: {max_iterations}")
+    if origin:
+        lines.append(f"origin: {origin}")
+    for key, value in (("needs", needs), ("inputs", inputs), ("tool", tool)):
+        if value.strip():
+            lines += _fold(key, " ".join(value.split()))
+    if learned is not None:
+        lines.append(f"learned: {learned.render()}")
     lines.append(FENCE)
     return "\n".join(lines) + "\n\n" + body.strip() + "\n"
 
@@ -395,8 +498,22 @@ def skill_roots(cwd: Path | None = None,
             roots.append((Path(entry).expanduser(), "path"))
     roots.append((cwd.joinpath(*PROJECT_PRIVATE), "local"))
     roots.append((cwd.joinpath(*PROJECT_SHARED), "project"))
-    roots.append(((home or Path.home()).joinpath(*USER_ROOT), "user"))
+    home = home or Path.home()
+    roots.append((home.joinpath(*USER_ROOT), "user"))
+    # Learned roots last: a hand-written skill wins its name (see top).
+    roots.append((cwd.joinpath(*LEARNED_LOCAL), LEARNED_SOURCES["project"]))
+    roots.append((home.joinpath(*LEARNED_USER), LEARNED_SOURCES["user"]))
     return roots
+
+
+def learned_root(scope: str, cwd: Path | None = None,
+                 *, home: Path | None = None) -> Path:
+    """Where a learned skill of this scope is saved: "user" or "project"."""
+    if scope == "user":
+        return (home or Path.home()).joinpath(*LEARNED_USER)
+    if scope == "project":
+        return (cwd or Path.cwd()).resolve().joinpath(*LEARNED_LOCAL)
+    raise ValueError(f"unknown scope {scope!r}: expected user or project")
 
 
 def prepend_skill_path(dirs) -> None:

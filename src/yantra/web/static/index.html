@@ -253,13 +253,19 @@
         <div class="section-head">
           <div>
             <h4>skills</h4>
-            <span class="tools-note">instructions you wrote; the model loads one only when the task matches</span>
+            <span class="tools-note">instructions you wrote or approved; the model loads one only when the task matches</span>
           </div>
           <div class="section-actions">
             <button class="m-btn" id="skill-new-btn" title="write a new skill">
               <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
                    stroke-linecap="round" aria-hidden="true"><use href="#i-plus"/></svg>
               new
+            </button>
+            <button class="m-btn" id="skill-learn-btn"
+                    title="write the last turn down as a skill: it is tested, then shown to you before anything is saved">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-save"/></svg>
+              save last turn
             </button>
             <button class="m-btn" id="skills-reload" title="re-scan after editing a SKILL.md">
               <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"

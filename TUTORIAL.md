@@ -144,7 +144,7 @@ uv run yantra --image photo.png "what's this?"  # vision one-shot
 
 Type something that needs a file and watch it reach for one. The REPL's
 commands are `/help /model /provider /tools /history /usage /save /load
-/compact /clear /image /build /quit`, plus `/mcp`, `/skills`, `/env` and
+/compact /clear /image /build /quit`, plus `/mcp`, `/skills`, `/learn`, `/env` and
 `/yolo` as those features arrive below. Ctrl-C cancels the current turn,
 not the session.
 
@@ -293,6 +293,54 @@ stop being advice: the instructions run in a **fresh child agent** built
 with exactly those tools and nothing else, and only its conclusion comes
 back. Use it where isolation is the point — a survey that must not be
 able to write. ([notes/30](notes/30-skills.md))
+
+### Skills it writes itself
+
+You don't have to write every skill. When a turn solves something that
+took real work, the agent can write the working steps down for you.
+
+Say you ask *"turn the bedroom fan to 60%"*. The first time, the agent
+has to find Home Assistant, work out its API, and pick the right device
+out of thirty. That took `qwen3.8:latest` eight tool calls. When the
+turn ends, Yantra checks three things. Did it finish? Did it take four
+or more tool calls? Will it come up again with different inputs? The
+first two are counted. The third goes to the model in one short, fresh
+request. That request sees only the task and the steps, never the whole
+conversation. If the answer is yes, the same request writes the skill
+and a small script. Yantra runs the script once to test it, and then
+asks you:
+
+```
+Save this as a skill?
+  ha-set-fan-percentage -- Turn a Home Assistant fan entity on at a given percentage …
+  scope:  you, in every project -> ~/.yantra/skills/learned/ha-set-fan-percentage
+  tested: passed (1 run) -- $ python3 "$SKILL_DIR/scripts/ha_set_fan.py" ha.env office 50
+  cost:   3,112 in / 2,950 out tokens to write and test
+── SKILL.md ──── … every line …
+── scripts/ha_set_fan.py ──── … the whole script …
+[s]ave  [e]dit first  [c]hange scope to project  [N]o >
+```
+
+Press `s` and it is saved. Press Enter and nothing is. Next session,
+*"set the living room fan to 30%"* loads the skill and runs the script:
+two or three tool calls instead of six to nine, and about 10k tokens
+instead of about 26k.
+
+Three rules keep this safe:
+
+* **You read it before it exists.** The question shows every line that
+  would be saved, and the default answer is no.
+* **No secrets, no personal facts.** Your token never reaches the model
+  that writes the skill, and your fan's name is an *input*, not part of
+  the recipe.
+* **Its test runs like any other command.** It runs through the same
+  permission prompt and the same sandbox as the rest of the session.
+
+On a local model this is worth the most. The first solve can be slow
+and full of wrong guesses, and every later run follows a recipe that is
+known to work. `/learn` saves the last turn by hand, and `--learn off`
+stops the offers. On the web page, the same question comes up as a
+dialog. ([notes/96](notes/96-solve-it-once.md))
 
 ## 7 · Sub-agents — a fresh context window on demand
 
@@ -2540,7 +2588,7 @@ Most carry a live receipt from a real run.
 | [19](notes/19-responses-api.md) | the third dialect |
 | [22](notes/22-web-ui.md) | the browser UI |
 | [23](notes/23-glob.md) [24](notes/24-todo-lists.md) [25](notes/25-web-fetch.md) [26](notes/26-background-bash.md) [28](notes/28-browser-tools.md) [92](notes/92-the-window-that-stayed-open.md) [93](notes/93-a-page-for-a-person.md) [94](notes/94-a-form-the-way-a-person-fills-it.md) | the self-reliance tools, one note each; a browser that closes when the turn does, hands you the page when a step is yours, and fills a form the way you would |
-| [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) | knowing where it is; teaching it your procedures |
+| [29](notes/29-environment-awareness.md) [30](notes/30-skills.md) [96](notes/96-solve-it-once.md) | knowing where it is; teaching it your procedures, and letting it write down its own |
 | **[31](notes/31-agent-packages.md)** | **an agent you can hand to someone** — the hinge |
 | [32](notes/32-package-tools.md) [53](notes/53-a-tool-that-arrives-by-pip.md) | a package brings its own tools — from its own folder, or from pip |
 | [33](notes/33-evals-as-a-gate.md) [35](notes/35-roster-and-pass-rates.md) [41](notes/41-a-gate-you-can-point.md) [42](notes/42-two-runs-of-the-same-suite.md) [44](notes/44-a-ceiling-and-a-floor.md) [46](notes/46-the-cases-that-were-red.md) [47](notes/47-what-seven-of-ten-is-evidence-of.md) [49](notes/49-three-runs-side-by-side.md) [57](notes/57-a-turn-written-down.md) [62](notes/62-the-reports-you-already-have.md) [63](notes/63-the-whole-turn-written-down.md) [65](notes/65-the-turn-behind-the-red-line.md) [66](notes/66-what-each-case-cost.md) [67](notes/67-the-agent-or-the-vendor.md) [68](notes/68-the-version-nobody-bumped.md) [70](notes/70-a-list-to-choose-from.md) [72](notes/72-what-changed-under-a-name.md) [74](notes/74-a-verdict-you-write-down.md) [75](notes/75-what-answered.md) [77](notes/77-a-mark-taken-back.md) [79](notes/79-scrubbed-before-it-is-written.md) [81](notes/81-the-turns-the-page-never-saw.md) [83](notes/83-a-table-that-fits.md) [84](notes/84-a-verdict-already-reached.md) [90](notes/90-what-it-said.md) | the acceptance gate, and everything that grew on it |
