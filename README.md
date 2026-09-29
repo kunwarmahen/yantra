@@ -339,6 +339,11 @@ Smritikosh; with no memory, 0 of 7. Bury it under thirty newer memories
 and word overlap finds 2 of 7, embeddings 6 of 6
 ([notes/103](notes/103-said-once-found-later.md),
 [`examples/memory_recall_trial.py`](examples/memory_recall_trial.py)).
+Repeated five times, `qwen3.8:latest` answers from memory 29 of 35
+(67–92%) and `gemma4:12b` 22 of 35. Once the fact is in the prompt,
+both use it about nine times in ten, so on a local model the look back
+is where memory is won or lost
+([notes/105](notes/105-a-rate-not-a-picture.md)).
 
 ### One-command starts
 
@@ -986,7 +991,9 @@ the way the scrubber would use the answer — or bring your own),
 [`examples/memory_recall_trial.py`](examples/memory_recall_trial.py)
 (does a fact said in passing come back in a later conversation? Two
 sessions per fact, on any store — `--distractors` buries it so only the
-store's search can find it), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+store's search can find it, `--repeat` turns one run into a rate with
+an interval, and `--rescore` puts saved runs of different models side
+by side), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation
@@ -1973,7 +1980,8 @@ src/yantra/
 │                   reflect.py looks back ONCE when a conversation ends
 │                   (/quit, /clear, /load, before compaction, /remember):
 │                   one plain call to the session's own model, scrubbed
-│                   first, proposing facts the person keeps or drops
+│                   first, reading what was said (no reasoning, tool calls
+│                   by name only), proposing facts the person keeps or drops
 │                   ([notes/101](notes/101-looking-back.md)); mcp.py is a
 │                   store behind any MCP server, through a verb map, bound
 │                   once the host's servers connect; user_id on every call,

@@ -167,7 +167,12 @@ uv run python examples/memory_recall_trial.py --distractors 30
 uv run python examples/memory_recall_trial.py --store smritikosh \
     --mcp-config smritikosh.json --distractors 30 --out run.jsonl
 uv run python examples/memory_recall_trial.py --rescore run.jsonl
+uv run python examples/memory_recall_trial.py --repeat 5 --out qwen.jsonl
+uv run python examples/memory_recall_trial.py --rescore qwen.jsonl gemma.jsonl
 ```
+
+`--repeat` and comparing saved runs came later
+([note 105](105-a-rate-not-a-picture.md)).
 
 Each scenario runs under an identity of its own. On an MCP store, the
 trial forgets everything it kept when it finishes, including the
@@ -181,11 +186,9 @@ can't find, a false keep, and a dead store.
 
 ## What was deliberately not built
 
-* **More than one model, and more than one run.** One run per setting
-  on one local model is a picture, not a rate. The look back's
-  variance on `units` shows why repeats matter. The trial runs the same
-  way on any `--provider`/`--model`, and `--out` plus `--rescore` make a
-  pile of runs cheap to regrade.
+* ~~**More than one model, and more than one run.**~~ `--repeat N` and
+  a side-by-side `--rescore` of saved runs, measured on two local models
+  ([note 105](105-a-rate-not-a-picture.md)).
 * **A narrower prompt layer.** The dilution finding points at fewer,
   better-ranked lines when a store searches well. That's a change to
   `PROMPT_LIMIT` and to how the layer mixes search with recency, and it

@@ -42,14 +42,30 @@ and it costs no model call.
     uv run python examples/memory_recall_trial.py --store smritikosh \\
         --mcp-config smritikosh.json --distractors 30
 
-Every scenario runs under an identity of its own (``trial-<run>-<id>``),
-and on an MCP store what the trial kept is forgotten again at the end.
+ONE RUN IS A PICTURE, NOT A RATE. The look back keeps a different fact
+on a different run, and a model has off turns. ``--repeat N`` runs every
+scenario N times, each under a fresh identity, and the report gives
+counts with a 95% interval. Every row records its model, store and
+distractors, so runs saved with ``--out`` can be graded together:
+
+    uv run python examples/memory_recall_trial.py --repeat 5 --out qwen.jsonl
+    uv run python examples/memory_recall_trial.py --repeat 5 \\
+        --model gemma4:12b --out gemma.jsonl
+    uv run python examples/memory_recall_trial.py --rescore qwen.jsonl gemma.jsonl
+
+Given runs of more than one setting, ``--rescore`` reports each and then
+puts them side by side.
+
+Every scenario runs under an identity of its own (``trial-<run>-<id>``,
+with ``-r<n>`` per repeat), and on an MCP store what the trial kept is
+forgotten again at the end.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 import tempfile
@@ -161,9 +177,14 @@ class Trial:
                  for call in message.tool_calls()]
         return response.message.text(), calls, None
 
-    def run_case(self, case: dict, run_id: str) -> dict:
+    def user(self, case: dict, run_id: str, rep: int) -> str:
         user = f"trial-{run_id}-{case['id']}"
-        row: dict = {"id": case["id"], "user": user}
+        return user + f"-r{rep}" if getattr(self.args, "repeat", 1) > 1 else user
+
+    def run_case(self, case: dict, run_id: str, rep: int = 1) -> dict:
+        user = self.user(case, run_id, rep)
+        row: dict = {"id": case["id"], "user": user, "rep": rep,
+                     **setting_of(self.args)}
         started = time.time()
 
         # ---- session 1: said in passing, then the look back -------------
@@ -273,55 +294,127 @@ def mark(value) -> str:
     return {True: "yes", False: "no", None: "-"}.get(value, str(value))
 
 
-def report(rows: list[dict], down: dict | None, args) -> None:
-    print(f"\nstore={args.store} model={args.model} "
-          f"distractors={args.distractors}\n")
+SETTING = ("provider", "model", "store", "distractors")
+
+
+def setting_of(source) -> dict:
+    """What a row was run with, so a pile of saved runs can be told apart."""
+    get = source.get if isinstance(source, dict) else \
+        lambda key, default=None: getattr(source, key, default)
+    return {key: get(key) for key in SETTING}
+
+
+def label(setting: dict) -> str:
+    buried = f", buried {setting['distractors']}" if setting["distractors"] else ""
+    return f"{setting['model']}, {setting['store']}{buried}"
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """A 95% interval for a rate of k in n. Honest at the small n a trial
+    has, where "5/5" still means somewhere above about 57%."""
+    if n == 0:
+        return 0.0, 1.0
+    p = k / n
+    centre = (p + z * z / (2 * n)) / (1 + z * z / n)
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return max(0.0, centre - half), min(1.0, centre + half)
+
+
+def rate(k: int, n: int, interval: bool) -> str:
+    if not interval or n == 0:
+        return f"{k}/{n}"
+    lo, hi = wilson(k, n)
+    return f"{k}/{n} ({round(100 * lo)}-{round(100 * hi)}%)"
+
+
+def tally(values: list) -> str:
+    """One case's cell: yes/no for a single run, a count over repeats."""
+    if len(values) == 1:
+        return mark(values[0])
+    known = [v for v in values if v is not None]
+    return f"{sum(bool(v) for v in known)}/{len(known)}" if known else "-"
+
+
+def totals(rows: list[dict]) -> dict[str, tuple[int, int]]:
+    """Every measure of one setting, as (hits, out of)."""
+    graded = [r for r in rows if "passed" in r]
+    searched = [r for r in graded if "rank" in r]
+    baseline = [r for r in graded if "baseline_passed" in r]
+    negatives = [r for r in rows if "false_keep" in r]
+    out = {"kept": (sum(r["kept_fact"] for r in graded), len(graded))}
+    if searched:
+        out["found by search"] = (sum(bool(r["rank"]) for r in searched),
+                                  len(searched))
+    out["in prompt"] = (sum(r["in_prompt"] for r in graded), len(graded))
+    out["answered from memory"] = (sum(r["passed"] for r in graded), len(graded))
+    out["recall_memory called"] = (sum(r["recall_called"] for r in graded),
+                                   len(graded))
+    if baseline:
+        out["baseline"] = (sum(r["baseline_passed"] for r in baseline), len(baseline))
+        out["isolated"] = (sum(r["isolated"] for r in baseline), len(baseline))
+    if negatives:
+        out["kept what it should not"] = (sum(r["false_keep"] for r in negatives),
+                                          len(negatives))
+    return out
+
+
+def report(rows: list[dict], down: dict | None, setting: dict) -> None:
+    reps = max((r.get("rep", 1) for r in rows), default=1)
+    print(f"\nstore={setting['store']} model={setting['model']} "
+          f"distractors={setting['distractors']}"
+          + (f" repeat={reps}" if reps > 1 else "") + "\n")
     head = ("case", "remember", "kept", "search", "in prompt", "answer",
             "recall", "baseline", "isolated")
     print("  ".join(f"{h:<10}" for h in head))
+    by_case: dict[str, list[dict]] = {}
     for row in rows:
-        if "passed" not in row:
-            continue
-        rank = row.get("rank")
-        search = "-" if "rank" not in row else (
-            f"#{rank} of {row['stored']}" if rank else "missed")
-        cells = (row["id"], mark(row["remember_called"]), mark(row["kept_fact"]),
-                 search, mark(row["in_prompt"]),
-                 "PASS" if row["passed"] else "fail",
-                 mark(row["recall_called"]),
-                 mark(row.get("baseline_passed")) if "baseline_passed" in row
-                 else "-", mark(row.get("isolated")))
+        if "passed" in row:
+            by_case.setdefault(row["id"], []).append(row)
+    for case_id, group in by_case.items():
+        if len(group) == 1 and "rank" in group[0]:
+            row = group[0]
+            search = (f"#{row['rank']} of {row['stored']}" if row["rank"]
+                      else "missed")
+        elif all("rank" in r for r in group):
+            search = f"{sum(bool(r['rank']) for r in group)}/{len(group)}"
+        else:
+            search = "-"
+        answer = (("PASS" if group[0]["passed"] else "fail") if len(group) == 1
+                  else f"{sum(r['passed'] for r in group)}/{len(group)}")
+        cells = (case_id, tally([r["remember_called"] for r in group]),
+                 tally([r["kept_fact"] for r in group]), search,
+                 tally([r["in_prompt"] for r in group]), answer,
+                 tally([r["recall_called"] for r in group]),
+                 tally([r.get("baseline_passed") for r in group]),
+                 tally([r.get("isolated") for r in group]))
         print("  ".join(f"{c:<10}" for c in cells))
-    graded = [r for r in rows if "passed" in r]
-    negatives = [r for r in rows if "false_keep" in r]
-    n = len(graded)
-    searched = [r for r in graded if "rank" in r]
-    line = [f"kept {sum(r['kept_fact'] for r in graded)}/{n}"]
-    if searched:
-        line.append(f"found by search {sum(bool(r['rank']) for r in searched)}"
-                    f"/{len(searched)}")
-    line += [
-             f"in prompt {sum(r['in_prompt'] for r in graded)}/{n}",
-             f"answered from memory {sum(r['passed'] for r in graded)}/{n}",
-             f"recall_memory called {sum(r['recall_called'] for r in graded)}/{n}"]
-    if any("baseline_passed" in r for r in graded):
-        line.append(f"baseline {sum(r['baseline_passed'] for r in graded)}/{n}")
-        line.append(f"isolated {sum(r['isolated'] for r in graded)}/{n}")
-    if negatives:
-        line.append(f"kept what it should not {sum(r['false_keep'] for r in negatives)}"
-                    f"/{len(negatives)}")
-    print("\n" + " · ".join(line))
+    print("\n" + " · ".join(f"{name} {rate(k, n, reps > 1)}"
+                            for name, (k, n) in totals(rows).items()))
     if down is not None:
         print("store down: " + ("answered, with notice: " + str(down["notice"])
                                 if down["answered"] and down["notice"]
                                 else f"FAILED ({down})"))
     for row in rows:
+        where = row["id"] + (f" r{row['rep']}" if reps > 1 else "")
         if row.get("error"):
-            print(f"  {row['id']}: {row['error']}")
+            print(f"  {where}: {row['error']}")
         elif "later_answer" in row and not row["later_answer"].strip():
             # Not a memory miss: the model said nothing at all. Counted as a
             # fail, and named, so nobody reads it as the store's fault.
-            print(f"  {row['id']}: empty answer (no text, no error)")
+            print(f"  {where}: empty answer (no text, no error)")
+
+
+def compare(groups: dict[tuple, list[dict]]) -> None:
+    """Several settings side by side: one column each, one measure a line."""
+    columns = [(dict(zip(SETTING, key, strict=True)), totals(rows))
+               for key, rows in groups.items()]
+    measures = list(dict.fromkeys(m for _, t in columns for m in t))
+    print("\n| | " + " | ".join(label(s) for s, _ in columns) + " |")
+    print("|---" * (len(columns) + 1) + "|")
+    for measure in measures:
+        cells = [rate(*t[measure], True) if measure in t else "-"
+                 for _, t in columns]
+        print(f"| {measure} | " + " | ".join(cells) + " |")
 
 
 def main() -> int:
@@ -341,20 +434,18 @@ def main() -> int:
     parser.add_argument("--only", default="", help="case ids, comma-separated")
     parser.add_argument("--no-baseline", action="store_true",
                         help="skip the other-identity run (one call less a case)")
+    parser.add_argument("--repeat", type=int, default=1,
+                        help="run every scenario N times, for a rate")
     parser.add_argument("--out", type=Path, help="write every row as JSON lines")
-    parser.add_argument("--rescore", type=Path,
-                        help="grade a saved --out file again, calling nothing")
+    parser.add_argument("--rescore", type=Path, nargs="+",
+                        help="grade saved --out files again, calling nothing; "
+                             "runs of different settings are compared")
     args = parser.parse_args()
     args.distractors = max(0, min(args.distractors, len(DISTRACTORS)))
+    args.repeat = max(1, args.repeat)
 
     if args.rescore:
-        cases = {c["id"]: c for c in load_cases(args.cases, None)}
-        rows = [json.loads(line) for line in args.rescore.read_text().splitlines()
-                if line.strip()]
-        for row in rows:
-            score(cases[row["id"]], row)
-        report(rows, None, args)
-        return 0
+        return rescore(args)
 
     provider = get_provider(args.provider, load_settings(args.provider))
     manager = None
@@ -368,15 +459,19 @@ def main() -> int:
     run_id = uuid.uuid4().hex[:6]
     cases = load_cases(args.cases, set(filter(None, args.only.split(","))))
     rows: list[dict] = []
-    users = [f"trial-{run_id}-{c['id']}" for c in cases]
+    users: list[str] = []
     try:
-        for case in cases:
-            print(f"{case['id']} ...", end=" ", flush=True)
-            row = trial.run_case(case, run_id)
-            rows.append(row)
-            verdict = ("PASS" if row.get("passed") else "fail") if "passed" in row \
-                else ("kept it" if row.get("false_keep") else "let it go")
-            print(f"{verdict} ({row['seconds']}s)")
+        for rep in range(1, args.repeat + 1):
+            for case in cases:
+                tag = f" r{rep}" if args.repeat > 1 else ""
+                print(f"{case['id']}{tag} ...", end=" ", flush=True)
+                users.append(trial.user(case, run_id, rep))
+                row = trial.run_case(case, run_id, rep)
+                rows.append(row)
+                verdict = ("PASS" if row.get("passed") else "fail") \
+                    if "passed" in row \
+                    else ("kept it" if row.get("false_keep") else "let it go")
+                print(f"{verdict} ({row['seconds']}s)")
         first = next((c for c in cases if c.get("later")), None)
         down = trial.store_down(first) if first else None
     finally:
@@ -386,7 +481,28 @@ def main() -> int:
         provider.close()
     if args.out:
         args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    report(rows, down, args)
+    report(rows, down, setting_of(args))
+    return 0
+
+
+def rescore(args) -> int:
+    """Grade saved runs again. A row saved before rows carried their
+    setting takes it from the command line."""
+    cases = {c["id"]: c for c in load_cases(args.cases, None)}
+    fallback = setting_of(args)
+    groups: dict[tuple, list[dict]] = {}
+    for path in args.rescore:
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            score(cases[row["id"]], row)
+            setting = {k: row.get(k, fallback[k]) for k in SETTING}
+            groups.setdefault(tuple(setting[k] for k in SETTING), []).append(row)
+    for key, rows in groups.items():
+        report(rows, None, dict(zip(SETTING, key, strict=True)))
+    if len(groups) > 1:
+        compare(groups)
     return 0
 
 

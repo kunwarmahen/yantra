@@ -26,7 +26,7 @@ import re
 import pytest
 from rich.console import Console
 
-from conftest import ScriptedProvider, assistant_text
+from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 
 from yantra.agent import Agent
 from yantra.async_agent import AsyncAgent
@@ -37,7 +37,7 @@ from yantra.memory.reflect import (Candidate, before_compaction, keep,
                                    mark_reviewed, parse_reply, reflect,
                                    reflect_mode)
 from yantra.tools.base import ToolRegistry
-from yantra.types import Usage
+from yantra.types import ThinkingBlock, Usage
 
 RDU = "fact: Lives near RDU (Raleigh-Durham airport)."
 
@@ -134,6 +134,30 @@ class TestReflect:
         assert "(nothing yet)" in prompt
         assert agent.total_usage.input_tokens == 900
         assert agent.provider.requests[-1]["tools"] == []
+
+    def test_the_models_reasoning_is_not_what_the_person_said(self, store):
+        """The reasoning reads the system prompt, so a username in it is the
+        machine's, not something the person told anyone."""
+        agent = _agent(store, [assistant_text("Pin torch in pyproject."),
+                               assistant_text("NONE")])
+        list(agent.run_streaming("my uv sync fails on torch"))
+        agent.history[-1].content.insert(0, ThinkingBlock(
+            thinking="The user is mahen, working in /home/mahen/yantra.",
+            signature=""))
+        reflect(agent)
+        seen = _transcript_of(agent.provider)
+        assert "uv sync fails" in seen and "Pin torch" in seen
+        assert "mahen" not in seen
+        assert isinstance(agent.history[-1].content[0], ThinkingBlock)  # untouched
+
+    def test_a_tool_calls_arguments_are_the_assistants_too(self, store):
+        agent = _agent(store, [
+            assistant_tool_call("c1", "bash", {"command": "cd /home/mahen/yantra"}),
+            assistant_text("I can't run commands here."), assistant_text("NONE")])
+        list(agent.run_streaming("my uv sync fails on torch"))
+        reflect(agent)
+        seen = _transcript_of(agent.provider)
+        assert "tool_call: bash({})" in seen and "mahen" not in seen
 
     def test_turns_already_looked_at_are_not_sent_again(self, store):
         agent = _agent(store, [assistant_text("ok"), assistant_text("NONE"),

@@ -110,6 +110,16 @@ A candidate that still has `[redacted]` in it is dropped rather than
 offered. A memory with a hole in it is either useless or shaped like a
 secret. What you keep is scrubbed once more on the way into the store.
 
+## What was said, not what was thought
+
+The look back reads what you said and what the assistant replied. It
+doesn't read the model's reasoning, and it sees each tool call by name
+only, without its arguments. Both belong to the assistant, and both can
+quote the system prompt. A model thinking *"the user is mahen, in
+/home/mahen"* once led the look back to keep *"Their Linux username is
+mahen"*, which the person never said
+([notes/105](105-a-rate-not-a-picture.md)).
+
 ## A conversation you restore counts as looked at
 
 `/load`, the page's *restore*, and `--resume` bring back a conversation

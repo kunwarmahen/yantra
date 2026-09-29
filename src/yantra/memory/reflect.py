@@ -39,6 +39,15 @@ word lists when the session has them. A candidate that still carries a
 ``[redacted]`` is dropped rather than offered: a memory with a hole in
 it is either useless or the shape of a secret.
 
+WHAT WAS SAID, NOT WHAT WAS THOUGHT. The model's reasoning and the
+arguments of its tool calls are left out of the transcript. Both are the
+assistant's, and both read the system prompt: a model thinking "the user
+is mahen, in /home/mahen", or calling bash with ``cd /home/mahen/...``,
+hands the look back a fact the person never said, and the look back kept
+it. The assistant's replies stay, because an answer ("Neovim") only
+means something next to its question ("which editor?"); for those, the
+prompt's own rule is the guard.
+
 LOOKED AT ONCE. ``Memory.reviewed`` counts the history messages already
 looked back over, so /remember followed by /quit asks about the new
 turns only, and a conversation compacted twice is not read twice.
@@ -52,7 +61,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from yantra.context import render_segment
-from yantra.types import Message, TextBlock, Usage
+from yantra.types import (Message, RedactedThinkingBlock, TextBlock,
+                          ThinkingBlock, ToolCall, Usage)
 
 ENV_MODE = "YANTRA_REFLECT"
 MODES = ("ask", "auto", "off")
@@ -168,6 +178,19 @@ def unreviewed(memory: Any, history: list[Message]) -> list[Message]:
     return tail if said else []
 
 
+def spoken(messages: list[Message]) -> list[Message]:
+    """The conversation without the model's reasoning, and its tool calls
+    by name only."""
+    def said(block):
+        if isinstance(block, ToolCall):
+            return ToolCall(block.id, block.name, {})
+        return block
+    thought = (ThinkingBlock, RedactedThinkingBlock)
+    return [Message(m.role, [said(b) for b in m.content
+                             if not isinstance(b, thought)])
+            for m in messages]
+
+
 def build_prompt(transcript: str, remembered: list[str]) -> str:
     known = "\n".join(f"- {s}" for s in remembered) or "(nothing yet)"
     return PROMPT.format(remembered=known, limit=MAX_CANDIDATES,
@@ -218,7 +241,7 @@ def _prepare(agent: Any) -> tuple[Any, str, list[str]] | None:
         memory.reviewed = len(agent.history)
         return None
     remembered = [item.statement for item in memory.list(100)]
-    transcript = _clip(scrub(render_segment(tail), memory.redact),
+    transcript = _clip(scrub(render_segment(spoken(tail)), memory.redact),
                        TRANSCRIPT_CHARS)
     return memory, build_prompt(transcript, remembered), remembered
 
