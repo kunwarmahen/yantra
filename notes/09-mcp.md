@@ -311,7 +311,11 @@ that indirection is the point rather than a convenience. `remember`
 writes `.yantra/mcp.json` into the working directory; storing the
 literal token there would put a live credential one `git add -A` away
 from a public repository. The placeholder is what lands on disk, and it
-resolves afresh every launch. An UNSET variable is an error, not an
+resolves afresh every launch. A stdio server's `env` values are
+expanded the same way, so a key a local server needs can live in `.env`
+rather than in the config. Until they were, `"${API_KEY}"` reached the
+server as that literal text, which a server reads as a bad token, not a
+missing one. An UNSET variable is an error, not an
 empty string:
 
 ```

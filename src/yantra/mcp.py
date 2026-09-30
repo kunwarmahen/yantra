@@ -228,11 +228,11 @@ def _expand_env_refs(value: str, *, server: str, where: str) -> str:
 
     A credential belongs in the environment, not in a config file that
     gets committed or a remembered entry that sits in the working
-    directory -- so header values may point at one instead of carrying
-    it. An UNSET variable is an error rather than an empty string: the
-    alternative is sending ``Authorization: Bearer `` and reading the
-    server's 401 as "wrong password" instead of "you never set the
-    variable".
+    directory -- so header values (and a stdio server's env values) may
+    point at one instead of carrying it. An UNSET variable is an error
+    rather than an empty string: the alternative is sending
+    ``Authorization: Bearer `` and reading the server's 401 as "wrong
+    password" instead of "you never set the variable".
     """
     missing: list[str] = []
 
@@ -341,9 +341,12 @@ class MCPSession:
 
     def start(self) -> None:
         """Spawn the subprocess and run the initialize handshake."""
+        # ``env`` values may point at the environment, as headers do: the
+        # same ${VAR}, the same refusal when it is unset.
         env = os.environ.copy()
-        if self.config.env:
-            env.update(self.config.env)
+        for key, value in (self.config.env or {}).items():
+            env[key] = _expand_env_refs(value, server=self.config.name,
+                                        where=f"env {key!r}")
         try:
             self._proc = subprocess.Popen(
                 [self.config.command, *self.config.args],

@@ -520,7 +520,8 @@ config file:
 
 `${MY_TOKEN}` resolves at connect time (unset ⇒ a named error, never a
 blank `Bearer`), and `remember` stores the placeholder rather than the
-token.
+token. A stdio server's `env` values resolve the same way, so
+`"env": {"API_KEY": "${API_KEY}"}` keeps its key in `.env` too.
 
 Servers that only issue tokens through a login — most commercial ones —
 get the spec's OAuth 2.1 flow instead, hand-rolled like everything else

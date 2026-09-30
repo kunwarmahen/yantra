@@ -630,6 +630,29 @@ class TestAuthHeaders:
         with pytest.raises(MCPError, match="YANTRA_TEST_MCP_TOKEN"):
             MCPHttpSession(cfg)
 
+    def test_a_stdio_servers_env_expands_the_same_way(self, monkeypatch):
+        """A stdio server's key goes in env; "${VAR}" must arrive as the
+        key, not as the literal text, which a server reads as a bad token."""
+        from yantra.mcp import MCPSession
+        monkeypatch.setenv("YANTRA_TEST_MCP_TOKEN", "t0ken")
+        seen = {}
+
+        def popen(argv, **kw):
+            seen.update(kw["env"])
+            raise OSError("not really starting it")
+
+        monkeypatch.setattr("yantra.mcp.subprocess.Popen", popen)
+        cfg = MCPServerConfig(name="x", command="srv",
+                              env={"API_KEY": "${YANTRA_TEST_MCP_TOKEN}",
+                                   "PLAIN": "as is"})
+        with pytest.raises((MCPError, OSError)):
+            MCPSession(cfg).start()
+        assert seen["API_KEY"] == "t0ken" and seen["PLAIN"] == "as is"
+
+        monkeypatch.delenv("YANTRA_TEST_MCP_TOKEN")
+        with pytest.raises(MCPError, match="YANTRA_TEST_MCP_TOKEN"):
+            MCPSession(cfg).start()
+
     def test_config_file_round_trips_headers(self, tmp_path):
         cfg_file = tmp_path / "mcp.json"
         cfg_file.write_text(json.dumps({"servers": {"a": {
