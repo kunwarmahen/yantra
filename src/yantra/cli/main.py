@@ -253,8 +253,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="one-time LOGIN for an authenticated MCP server: "
                              "runs the OAuth flow in your browser and saves "
                              "the token under ~/.local/state/yantra. NAME "
-                             "must be a server in --mcp-config or already "
-                             "remembered. No model, no API key needed")
+                             "must be a server in --mcp-config, already "
+                             "remembered, or in the package's [[mcp]]. No "
+                             "model, no API key needed")
     parser.add_argument("--prompt", help="one-shot mode: run this prompt and exit")
     parser.add_argument("--image", action="append", default=[], metavar="PATH",
                         help="attach an image (png/jpeg/gif/webp, <=5 MB) to "
