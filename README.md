@@ -342,7 +342,8 @@ and word overlap finds 2 of 7, embeddings 6 of 6
 Repeated five times, `qwen3.8:latest` answers from memory 29 of 35
 (67–92%) and `gemma4:12b` 22 of 35. Once the fact is in the prompt,
 both use it about nine times in ten, so on a local model the look back
-is where memory is won or lost
+is where memory is won or lost. Buried under thirty other facts, qwen
+answered from memory 13 of 35 on `local` and 27 of 35 on Smritikosh
 ([notes/105](notes/105-a-rate-not-a-picture.md)).
 
 ### One-command starts

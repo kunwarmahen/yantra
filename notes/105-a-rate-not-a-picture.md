@@ -128,6 +128,55 @@ one planted.
 started with an empty prompt 140 times in 140 (97–100%). The trip was
 kept 0 times in 20 (0–16%).
 
+## And on a store that searches by meaning
+
+The same four settings on Smritikosh (pgvector, `nomic-embed-text` on the
+same Ollama), reached as an MCP server through the verb map in
+[note 102](102-kept-somewhere-else.md). These ran after the look back
+fix below.
+
+| | qwen3.8 | gemma4:12b | qwen3.8, buried | gemma4:12b, buried |
+|---|---|---|---|---|
+| kept by session 1 | 30/35 (71-94%) | 28/35 (64-90%) | 30/35 (71-94%) | 20/35 (41-72%) |
+| in session 2's prompt | 30/35 (71-94%) | 28/35 (64-90%) | 30/35 (71-94%) | 16/35 (30-62%) |
+| **answered from memory** | **28/35 (64-90%)** | **25/35 (55-84%)** | **27/35 (61-88%)** | **16/35 (30-62%)** |
+| same question, no memory | 2/35 | 0/35 | 0/35 | 0/35 |
+| `recall_memory` called | 0/35 | 0/35 | 0/35 | 0/35 |
+| other identity saw nothing | 35/35 | 35/35 | 35/35 | 35/35 |
+| kept "flying to SFO Tuesday" | 0/5 | 0/5 | 0/5 | 0/5 |
+
+**Buried, the store is the whole difference.** On `local`, qwen answered
+from a buried fact 13 times in 35. On Smritikosh it answered 27 times in
+35, and the ranges don't overlap. Smritikosh's search put every fact qwen
+kept into the prompt, 30 of 30, from under thirty others. gemma went
+from 4 of 35 to 16. Unburied, the two stores are the same within the
+noise (qwen 29 and 28, gemma 22 and 25), as note 103 predicted: the
+recent top-up carries a fresh fact on any store.
+
+**When the fact is in the prompt, nobody searches.** `recall_memory` was
+called 0 times in 140 on Smritikosh. On `local`, buried, qwen searched 8
+times in 35, and only then. The model reaches for the tool when the
+prompt leaves it guessing, which is exactly when a store that ranks well
+has already done the work.
+
+**Meaning search needs the fact worded with its meaning.** gemma kept
+the editor fact 4 times as the bare *"Uses Neovim."*, and the search
+never found it: for *"format-on-save for Python"* it ranked *"Works with
+Python."* first, and *"Uses Neovim."* didn't make the top twenty. qwen
+kept *"Uses Neovim as their text editor"* and was found every time. How
+the look back words a fact decides whether a store can find it later.
+That is a prompt change to the look back, not a store change.
+
+**Twenty lines still dilute.** qwen had *"Is vegetarian"* in its buried
+prompt 5 times in 5 and used it twice. Unburied, with the same fact among
+fewer lines, it used it 4 times in 5. The narrower prompt layer is aimed
+at exactly this.
+
+**The look back doesn't depend on the store.** It runs before anything
+is buried or searched, so its misses are the same everywhere. gemma kept
+`packages` 0 times in 5 in one setting and 3 in 5 in the next, which is
+the noise in a single five-run cell.
+
 ## A leak the repeats found
 
 Across 80 qwen sessions, the store ended up with a fact about the
@@ -161,8 +210,15 @@ on qwen, buried. The look back proposed no machine fact in any of the
 six. One path was still kept, *"Works on the project 'yantra' at
 /home/mahen/..."*, but it came from the model's own `remember` call in
 session 1 (the fourth route), and the look back proposed nothing that
-conversation. Six conversations can't prove a leak of about one in
-twenty is gone. The tests pin the mechanism; this only shows it held.
+conversation.
+
+The 160 Smritikosh conversations ran with both fixes in place. The look
+back proposed a machine fact in none of them, against 3 in 80 qwen
+conversations before. One was still kept, *"Mahen is vegetarian"*, and
+again it came from the model's own `remember` call, which named the
+person after the machine's username. In a real session that call asks
+first, and the person would see their username being used as their
+name.
 
 `tests/test_reflection.py` pins both: a username in reasoning or in a
 tool call's arguments never reaches the look back, and the history
@@ -172,10 +228,6 @@ person, and a pile of saved runs is graded per setting.
 
 ## What was deliberately not built
 
-* **Repeats on Smritikosh.** The runs above are all on the `local`
-  store. The trial runs the same way against a store behind an MCP
-  server (`--store smritikosh --mcp-config ...`), and adding its columns
-  is one command per setting.
 * **A cloud model.** Both models here are local, so the numbers are
   free to reproduce. The trial takes any `--provider`/`--model`. On a
   frontier cloud model it costs four model calls per scenario per
@@ -183,6 +235,12 @@ person, and a pile of saved runs is graded per setting.
 * **A pass/fail threshold.** The trial reports; it doesn't gate. What
   counts as good enough for memory is a judgement about a product, not
   a number the trial can know.
-* **Rerunning every column after the leak fix.** The fix changes what
-  the look back reads, not how it chooses among real facts, and the
-  leaks were 4 of 80 sessions. The rates above were measured before it.
+* **Rerunning the `local` columns after the leak fix.** The fix changes
+  what the look back reads, not how it chooses among real facts. The
+  `local` rates were measured before it and the Smritikosh ones after,
+  and the look back's keep rates match across the two within the noise.
+* **Rewording what the look back keeps.** A fact kept with its meaning
+  (*"Uses Neovim as their text editor"*) is found by a store that
+  searches by meaning; a bare one isn't. That is a change to the look
+  back's prompt, and it should be measured with this trial, not guessed
+  at.
