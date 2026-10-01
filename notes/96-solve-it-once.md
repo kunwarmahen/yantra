@@ -225,7 +225,9 @@ Each one gets a result: **worked** if the turn finished and no call
 after the load failed, **failed** otherwise. A shell command that
 exited non-zero counts as failed, even though the `bash` tool reports
 it as data rather than as an error. A call the person refused doesn't
-count against the recipe.
+count against the recipe. For a recipe with a script, only the
+recipe's own calls count, not the commands the model ran to look
+around ([note 106](106-what-the-recipe-leaves-out.md)).
 
 That rule is crude, and it says so. But it is what the harness saw,
 not a grade the model gave itself, and it has already paid its way.

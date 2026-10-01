@@ -2028,7 +2028,9 @@ src/yantra/
 │                   OUT (fan id, server, env file) as facts, handed to
 │                   memory under the look back's mode; load_skill brings
 │                   matching ones back under a learned recipe's steps, and
-│                   says whether each `needs: setu:<id>` is connected
+│                   says whether each `needs: setu:<id>` is connected; a
+│                   use is judged on the recipe's OWN calls (its script or
+│                   tool), not a look-around `ls` that exited 1
 │                   ([notes/106](notes/106-what-the-recipe-leaves-out.md))
 │                   promote.py: a learned script promoted to a TOOL -- suggested
 │                   after 5 successes in a row, never automatic; one fresh

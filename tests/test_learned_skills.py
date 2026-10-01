@@ -1054,3 +1054,39 @@ class TestNeedsThroughSetu:
         repl.run_turn("greet world")
         text = out.getvalue()
         assert "Gmail: connected" in text and "Outlook: not connected" in text
+
+
+class TestJudgedOnItsOwnSteps:
+    """A use is judged on the recipe's own calls -- its script or tool --
+    not on every call after the load. The BIAS: on qwen3.8 a look-around
+    ``ls`` that exited 1 marked three correct reuses failed, which sets a
+    working recipe aside; and the opposite error, a broken script that
+    the model routed around being counted as worked, must not follow."""
+
+    def turn(self, tmp_path, *middle):
+        folder = saved_skill(tmp_path)
+        script = f'python3 "{folder}/scripts/greet.py"'
+        steps = [assistant_tool_call("l", "load_skill", {"name": "greet-someone"})]
+        for n, command in enumerate(middle):
+            steps.append(assistant_tool_call(
+                f"s{n}", "bash", {"command": command.replace("SCRIPT", script)}))
+        agent = make_agent(tmp_path, [*steps, assistant_text("Greeted mars.")])
+        return learner_after(agent, "greet mars"), agent
+
+    def test_a_failed_look_around_does_not_fail_the_recipe(self, tmp_path):
+        learner, agent = self.turn(tmp_path, "ls missing.env", "SCRIPT mars")
+        assert learner.last_counted == [("greet-someone", True)]
+        assert agent.skills.get("greet-someone").learned.failing == 0
+
+    def test_the_recipes_own_failure_still_counts_and_is_repaired(self, tmp_path):
+        learner, agent = self.turn(tmp_path, "ls missing.env",
+                                   "SCRIPT", "echo said hello to mars")
+        agent.provider.script.append(assistant_text(updated()))
+        assert learner.last_counted == [("greet-someone", False)]
+        offer = learner.consider()
+        assert offer is not None and offer.repairs.name == "greet-someone"
+        assert offer.failure == "bash: Traceback (most recent call last):"  # not ls
+
+    def test_a_recipe_never_run_is_judged_on_every_call(self, tmp_path):
+        learner, _ = self.turn(tmp_path, "ls missing.env", "echo greeted mars")
+        assert learner.last_counted == [("greet-someone", False)]

@@ -171,8 +171,8 @@ earlier one, **counted as failed**, even though each set the fan
 correctly. A learned skill's use fails when any call after the load
 fails, and a look-around command that exits non-zero (`ls` on a missing
 path, `grep` over folders it can't read) is a failed call. Three such
-uses in a row would set a working recipe aside. That's not fixed here:
-see below.
+uses in a row would set a working recipe aside. Fixed afterwards: see
+the next section.
 
 **Setu's half** has no live receipt: there's no Home Assistant connector
 in Setu yet, and the Gmail connector's recipes need a real inbox. It's
@@ -195,12 +195,46 @@ prompt, the terminal question and the page's.
 * `setu:<id>` resolves to connected, not connected, or unknown, and
   plain words add nothing.
 
+## Judged on its own steps
+
+A use is now judged on **the recipe's own calls**: its promoted tool,
+or a command that runs something from the skill's folder. A look-around
+`ls` that exits 1 isn't the recipe failing, so it doesn't count. The
+script failing still does, even if the model then works around it. The
+`python3`-on-a-bash-script reuse above is still a failure, and is
+still repaired. Repair uses the same rule: the recipe's own first
+failure, then anything at all that worked after it. The one line the
+update question shows is the script's error, not the `ls`.
+
+A recipe with no script has no calls of its own to look at, and neither
+does a turn that never ran the script. Those are judged the old way, on
+every call after the load.
+
+The script is recognised by its full folder path in the command, which
+is how `load_skill` hands it over. Three more reuses on `qwen3.8:latest`,
+with the same recipe:
+
+| reuse | calls | tokens (in + out) | failed calls | counted |
+|---|---|---|---|---|
+| fan to 60% | 2 | 9,503 | 0 | worked |
+| fan to 70% | 2 | 9,532 | 0 | worked |
+| fan to 80% | 6 | 25,974 | 1 (`bash home/.yantra/…`, exit 127) | worked |
+
+In the third, the model first typed the script's path relative to the
+wrong folder, then ran it by its full path, and it worked. Under the
+old rule that reuse would have been the recipe's second failure in a
+row. The record now reads `worked 3 · failed 2 · in a row 3`, and each
+of the three set the fan in one call, according to the server's log.
+
+`2455 passed, 1 skipped` (was 2452).
+
 ## What was deliberately not built
 
-* **A fairer counter.** The fix is probably to count a use as failed
+* ~~**A fairer counter.** The fix is probably to count a use as failed
   only when the recipe's own script (or its promoted tool) fails, not
   any command after the load. That changes what triggers a repair,
-  which is a decision of its own, so it isn't made here.
+  which is a decision of its own, so it isn't made here.~~ Built: see
+  *Judged on its own steps* above.
 * **Facts for a promoted tool.** A skill promoted to a tool
   ([note 98](98-one-call.md)) can be called without `load_skill`, so its
   inputs aren't looked up. The prompt layer still carries the facts.

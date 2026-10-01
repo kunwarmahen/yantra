@@ -46,9 +46,12 @@ script the agent just wrote is code nobody has read yet, and nothing
 here gets to run it on a looser rule than the turn that produced it.
 
 Counters (``worked``/``failed``) are Yantra's, never the model's: a
-learned skill loaded in a turn WORKED when the turn finished and no call
-after the load failed, and FAILED otherwise. Crude, and honest about
-being crude -- it is what the harness saw, not a grade.
+learned skill loaded in a turn WORKED when the turn finished and none of
+the RECIPE'S OWN calls failed -- its script or its tool (own_steps) --
+and FAILED otherwise. A look-around ``ls`` that exits 1 is not the
+recipe failing. A recipe with no script is judged on every call after
+the load. Crude, and honest about being crude -- it is what the harness
+saw, not a grade.
 
 THE SAME CALL FINDS THE FACTS. Keeping the person's values out of a
 recipe means someone has to remember them: the bedroom fan's entity id
@@ -220,6 +223,30 @@ def used_skill(step: Step, skills: Any) -> Skill | None:
         return skills.get(str(step.arguments.get("name", ""))) if step.ok else None
     return next((s for s in skills if s.tool_name and s.tool_name == step.name),
                 None)
+
+
+def own_steps(skill: Skill, steps: list[Step]) -> list[Step] | None:
+    """The calls that were the recipe itself: its promoted tool, or a
+    command that runs something from its folder.
+
+    A use is judged on these, not on every call after the load. Small
+    models look around while following a recipe -- an ``ls`` for a file
+    that is not there, a ``grep`` over folders it cannot read -- and those
+    exit non-zero without the recipe having failed at anything. Counted,
+    they set working recipes aside (notes/106).
+
+    None when the recipe has no script, or the turn never ran it: then
+    nothing marks the recipe's own steps, and every call after the load
+    is judged, as before.
+    """
+    scripts = skill.directory / "scripts"
+    if not skill.tool_name and not (scripts.is_dir() and any(scripts.iterdir())):
+        return None
+    folder = str(skill.directory)
+    own = [s for s in steps
+           if (skill.tool_name and s.name == skill.tool_name)
+           or (s.name == "bash" and folder in str(s.arguments.get("command", "")))]
+    return own or None
 
 
 def _is_prompt(message: Message) -> bool:
@@ -757,7 +784,8 @@ class Learner:
             # promoted tool's own call is part of the use; a load is not.
             start = index + (1 if step.name == "load_skill" else 0)
             after = [s for s in turn.steps[start:] if s.call_id not in refused]
-            worked = self.last_reason == "end_turn" and all(s.ok for s in after)
+            judged = own_steps(skill, after) or after
+            worked = self.last_reason == "end_turn" and all(s.ok for s in judged)
             try:
                 record_use(skill, worked)
             except (OSError, SkillError):
@@ -924,7 +952,9 @@ class Learner:
         # a load is not part of the use; a promoted tool's own call is
         after = (turn.steps[uses[0] + (turn.steps[uses[0]].name == "load_skill"):]
                  if uses else [])
-        first_bad = next((i for i, s in enumerate(after) if not s.ok), None)
+        # the recipe's own first failure, then anything at all that worked
+        bad = next((s for s in own_steps(skill, after) or after if not s.ok), None)
+        first_bad = after.index(bad) if bad is not None else None
         if (self.last_reason != "end_turn" or first_bad is None
                 or not any(s.ok for s in after[first_bad + 1:])):
             return None, (f"the last turn followed {skill.name}, which failed, "
@@ -1284,14 +1314,18 @@ def _saved_text(skill: Skill) -> str:
 
 
 def failure_line(turn: Turn, skill: Skill) -> str:
-    """The first call that failed after ``skill`` was loaded, in one line."""
-    loaded = False
+    """The first of the recipe's own calls that failed after ``skill`` was
+    loaded (own_steps), in one line."""
+    loaded, after = False, []
     for step in turn.steps:
         if step.name == "load_skill" and step.arguments.get("name") == skill.name:
             loaded = True
             continue
         loaded = loaded or bool(skill.tool_name and step.name == skill.tool_name)
-        if loaded and not step.ok:
+        if loaded:
+            after.append(step)
+    for step in own_steps(skill, after) or after:
+        if not step.ok:
             first = (step.result.strip().splitlines() or [""])
             detail = next((ln for ln in first if ln.strip()
                            and not ln.startswith("exit code")), first[0])
