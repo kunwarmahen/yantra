@@ -388,7 +388,10 @@ It's the same request, so on a local model it costs no extra time, and
 on a cloud model no extra money. Next time, when the recipe loads,
 Yantra searches your memory and puts the matching facts right under the
 steps. On `qwen3.8:latest` the reuses went straight to the right fan,
-without listing every device first. A recipe that needs one of your
+without listing every device first. A recipe promoted to a tool works
+the same way: the facts go in the tool's own description, because the
+model fills in a tool's details without loading the recipe
+([notes/108](notes/108-where-the-model-reads.md)). A recipe that needs one of your
 Setu accounts says so (`needs: setu:gmail`). If that account isn't
 connected, the model tells you to connect it rather than trying
 something else. ([notes/106](notes/106-what-the-recipe-leaves-out.md))

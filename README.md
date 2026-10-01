@@ -279,7 +279,10 @@ lists what it left out (*"Their bedroom fan is
 fan.master_bedroom_ceiling in Home Assistant"*) and offers those to
 memory after the skill's question, under `--reflect`'s rules. Next time
 `load_skill` puts the matching ones right under the steps, so the fan
-isn't looked up again. A recipe can also say which account it needs
+isn't looked up again. A recipe promoted to a tool is called without
+loading anything, so the same facts go in the tool's description, where
+the model reads while filling in `fan`
+([notes/108](notes/108-where-the-model-reads.md)). A recipe can also say which account it needs
 (`needs: setu:gmail`). The save question and `load_skill` then say
 whether that account is connected, and if it isn't, the model tells you
 to connect it instead of working around it
@@ -2045,7 +2048,10 @@ src/yantra/
 │                   gated test run, then the question. argv list, no shell,
 │                   no secret-shaped parameter, bash's sandbox and gate; a
 │                   repair keeps the tool only when its test still fits
-│                   ([notes/98](notes/98-one-call.md))
+│                   ([notes/98](notes/98-one-call.md)); called without
+│                   load_skill, so its recipe's remembered inputs ride in
+│                   its description, looked up with each new conversation
+│                   ([notes/108](notes/108-where-the-model-reads.md))
 ├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
 │                   skills/ + tools/ + evals/, parsed with tomllib, unknown keys
 │                   refused so a typo can never quietly leave a tool armed.

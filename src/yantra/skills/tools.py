@@ -182,30 +182,41 @@ class LoadSkill(Tool):
         with the recipe's words and the person's request, and put right
         under the steps that need them. Not left to ``recall_memory`` --
         measured, small models never call it (notes/103).
-
-        Candidates, not orders: the current request wins. Nothing at all
-        when there is no memory, it holds nothing that matches, or the
-        store fails -- a recipe must load whatever memory is doing.
         """
-        from yantra.memory import supports
         from yantra.skills.learn import read_turn
 
         agent = getattr(self.skills, "_agent", None)
-        memory = getattr(agent, "memory", None)
-        if memory is None or not supports(memory.store, "recall"):
-            return []
-        turn = read_turn(agent.history)
-        query = " ".join(filter(None, (skill.description, skill.inputs,
-                                       turn.task if turn else "")))
-        try:
-            found = memory.recall(query, MAX_REMEMBERED_INPUTS)
-        except Exception:
-            return []
+        turn = read_turn(getattr(agent, "history", []))
+        found = remembered_inputs(agent, skill, turn.task if turn else "")
         if not found:
             return []
         return ["", "What you remember about this person that may fill its "
                     "inputs (use what fits; what they asked for now wins):",
-                *(f"- {item.statement}" for item in found)]
+                *(f"- {statement}" for statement in found)]
+
+
+def remembered_inputs(agent: Any, skill: Any, task: str) -> list[str]:
+    """The statements memory holds that may fill ``skill``'s inputs,
+    searched with its description, its inputs and ``task``.
+
+    Shared by load_skill and a promoted tool's description (promote.py),
+    which a model fills without loading anything. Candidates, not orders:
+    the current request wins. Empty when the skill names no inputs, there
+    is no memory, it holds nothing that matches, or the store fails -- a
+    recipe must work whatever memory is doing.
+    """
+    from yantra.memory import supports
+
+    memory = getattr(agent, "memory", None)
+    if (not skill.inputs or memory is None
+            or not supports(memory.store, "recall")):
+        return []
+    query = " ".join(filter(None, (skill.description, skill.inputs, task)))
+    try:
+        found = memory.recall(query, MAX_REMEMBERED_INPUTS)
+    except Exception:
+        return []
+    return [item.statement for item in found or ()]
 
 
 class RunSkill(Tool):

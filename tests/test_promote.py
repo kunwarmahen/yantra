@@ -21,6 +21,7 @@ from test_learned_skills import (
     followed_and_failed,
     learner_after,
     make_agent,
+    remembering,
     reply,
     run,
     saved_skill,
@@ -286,6 +287,74 @@ class TestRunning:
         argv = sandbox._argv(["true"], tmp_path, (tmp_path / "skill",))
         at = argv.index(str(tmp_path / "skill"))
         assert argv[at - 1] == "--ro-bind"
+
+
+# ---- what it is filled with --------------------------------------------------------
+
+
+class TestInputsFromMemory:
+    """A promoted tool is called without load_skill, so the facts load_skill
+    would have brought ride in its description. The BIAS is against a tool
+    the model fills by guessing what the person already said -- and
+    against memory ever getting in the way of the call."""
+
+    def agent(self, tmp_path, *, inputs=True, facts=(), store_fails=False):
+        folder = promoted(tmp_path)
+        if inputs:
+            text = (folder / SKILL_FILE).read_text()
+            (folder / SKILL_FILE).write_text(text.replace(
+                "origin: learned", "origin: learned\ninputs: who (the name to greet)"))
+        agent = make_agent(tmp_path, [assistant_text("done")] * 3)
+        memory = remembering(agent, tmp_path)
+        for fact in facts:
+            memory.remember(fact)
+        if store_fails:
+            def broken(*a, **k):
+                raise OSError("disk gone")
+            memory.store.recall = broken
+        return agent, memory
+
+    @staticmethod
+    def described(agent) -> str:
+        return next(spec.description for spec in agent.registry.specs()
+                    if spec.name == "greet_person")
+
+    def test_matching_facts_reach_the_schema_the_model_fills(self, tmp_path):
+        agent, _ = self.agent(tmp_path, facts=["Their sister is called Mira.",
+                                               "Prefers tea to coffee."])
+        assert "may fill" not in self.described(agent)   # nothing before a turn
+        run(agent, "greet my sister")
+        head, tail = self.described(agent).split("may fill its arguments", 1)
+        assert head.startswith(GREET["description"])
+        assert "- Their sister is called Mira." in tail
+        assert "tea" not in tail
+
+    def test_nothing_is_added_without_inputs_or_without_a_match(self, tmp_path):
+        agent, _ = self.agent(tmp_path, inputs=False,
+                              facts=["Their sister is called Mira."])
+        run(agent, "greet my sister")
+        assert self.described(agent) == GREET["description"]
+        agent, _ = self.agent(tmp_path / "b", facts=["Prefers tea to coffee."])
+        run(agent, "greet my sister")
+        assert self.described(agent) == GREET["description"]
+
+    def test_a_new_conversation_looks_again(self, tmp_path):
+        agent, memory = self.agent(tmp_path, facts=["Their sister is called Mira."])
+        run(agent, "greet my sister")
+        memory.forget(memory.list()[0].id)
+        run(agent, "greet my sister again")           # same conversation: kept
+        assert "Mira" in self.described(agent)
+        agent.history.clear()
+        run(agent, "greet my sister")
+        assert self.described(agent) == GREET["description"]
+
+    def test_a_failing_store_leaves_the_tool_working(self, tmp_path):
+        agent, _ = self.agent(tmp_path, facts=["Their sister is called Mira."],
+                              store_fails=True)
+        run(agent, "greet my sister")
+        assert self.described(agent) == GREET["description"]
+        assert agent.registry.get("greet_person").run(
+            {"who": "Mira"}, agent.ctx) == "greeted Mira"
 
 
 # ---- a call is a use -------------------------------------------------------------

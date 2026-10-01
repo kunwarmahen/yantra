@@ -378,6 +378,8 @@ class ScriptTool(Tool):
 
     def __init__(self, skills: Any, skill: Skill, tool: ToolDef) -> None:
         self.skills = skills
+        #: What memory holds that may fill its arguments (remember()).
+        self.remembered: list[str] = []
         self.update(skill, tool)
 
     def update(self, skill: Skill, tool: ToolDef) -> None:
@@ -388,12 +390,35 @@ class ScriptTool(Tool):
         self.script = skill.tool_script
         self.definition = tool
         self.name = tool.name
-        self.description = tool.description
+        self.description = self._describe()
         self.parameters = tool.parameters
         self.always_ask = bool(SPENDS.search(skill.needs or ""))
         #: False only for the promotion's own test run: the skill is not
         #: a tool yet, so "is it still this tool?" has no answer.
         self.run_checks = True
+
+    def remember(self, statements: list[str]) -> None:
+        """Facts that may fill its arguments, said in its description.
+
+        A recipe's inputs come back when load_skill delivers it, but a
+        promoted tool is called without loading anything -- the model
+        fills ``fan`` from the schema alone. So the facts go where it
+        reads while filling it: the description, refreshed with each new
+        conversation (SkillRegistry.recall_tool_inputs). The memory layer
+        may carry them too, but twenty lines ranked by the first message
+        bury a fact the request never names (notes/103).
+        """
+        self.remembered = list(statements)
+        self.description = self._describe()
+
+    def _describe(self) -> str:
+        if not self.remembered:
+            return self.definition.description
+        return "\n".join([
+            self.definition.description, "",
+            "What you remember about this person that may fill its "
+            "arguments (use what fits; what they asked for now wins):",
+            *(f"- {statement}" for statement in self.remembered)])
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         return (f"{self.name}({json.dumps(args, default=str)}) -- runs "

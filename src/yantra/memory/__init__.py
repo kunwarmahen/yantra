@@ -318,6 +318,11 @@ def prime_if_new(agent: Any, user_input: str) -> None:
         memory.reviewed = 0     # a new conversation: nothing looked at yet
     if memory is not None and (not agent.history or not memory.primed):
         memory.prime(agent, user_input)
+        # A promoted skill's tool is filled without load_skill, so its
+        # remembered inputs ride in its description (skills/promote.py).
+        skills = getattr(agent, "skills", None)
+        if skills is not None and hasattr(skills, "recall_tool_inputs"):
+            skills.recall_tool_inputs(user_input)
 
 
 def enable_memory(agent: Any, store: MemoryStore, *, user: str | None = None,

@@ -235,9 +235,11 @@ of the three set the fan in one call, according to the server's log.
   any command after the load. That changes what triggers a repair,
   which is a decision of its own, so it isn't made here.~~ Built: see
   *Judged on its own steps* above.
-* **Facts for a promoted tool.** A skill promoted to a tool
+* ~~**Facts for a promoted tool.** A skill promoted to a tool
   ([note 98](98-one-call.md)) can be called without `load_skill`, so its
-  inputs aren't looked up. The prompt layer still carries the facts.
+  inputs aren't looked up. The prompt layer still carries the facts.~~
+  Built: the facts ride in the tool's description
+  ([note 108](108-where-the-model-reads.md)).
 * **Facts when the write-up skips.** A turn judged not worth a recipe
   writes no facts. The end-of-conversation look back still sees it.
 * **A Home Assistant connector.** `needs: setu:homeassistant` works as

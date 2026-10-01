@@ -214,6 +214,10 @@ small model to go wrong.
 * a repair keeps the tool when the arguments fit, and drops it when
   they don't.
 
+A promoted tool is called without `load_skill`, so the facts that fill
+its recipe's inputs reach it another way: through its description
+([note 108](108-where-the-model-reads.md)).
+
 ## What was deliberately not built
 
 * **Promoting without asking.** Five in a row makes the suggestion.

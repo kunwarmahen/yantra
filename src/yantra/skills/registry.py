@@ -425,6 +425,31 @@ class SkillRegistry:
             registry.register(tool)
             if tool.name in registry:     # an admission policy may refuse it
                 self._script_tools[skill.name] = tool
+                memory = getattr(self._agent, "memory", None)
+                if memory is not None and memory.primed:
+                    # Promoted mid-conversation: its facts now, not at
+                    # the next conversation.
+                    self._recall_for(tool, self._current_task())
+
+    def recall_tool_inputs(self, task: str) -> None:
+        """Each promoted tool's remembered inputs, looked up for a new
+        conversation whose first message is ``task`` (ScriptTool.remember).
+        Called by memory as it fills its layer; never raises."""
+        for tool in self._script_tools.values():
+            self._recall_for(tool, task)
+
+    def _recall_for(self, tool: Any, task: str) -> None:
+        from yantra.skills.tools import remembered_inputs
+
+        skill = self.get(tool.skill_name)
+        found = remembered_inputs(self._agent, skill, task) if skill else []
+        tool.remember(found)
+
+    def _current_task(self) -> str:
+        from yantra.skills.learn import read_turn
+
+        turn = read_turn(getattr(self._agent, "history", []))
+        return turn.task if turn else ""
 
     def _register_tools(self, agent: Any) -> None:
         """load_skill when there are skills at all; list_skills only when
