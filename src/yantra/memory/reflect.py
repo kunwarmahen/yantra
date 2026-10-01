@@ -106,6 +106,10 @@ Only what the person said or plainly showed. Not what the assistant \
 suggested, guessed or looked up. Nothing already remembered (listed \
 below). No passwords, tokens, keys or account numbers.
 
+Plainly showed includes HOW they say things: the currency they quote \
+prices in, the units they measure in, the language they write in. Said \
+in passing inside a task, a habit like that is still about the person.
+
 Already remembered:
 {remembered}
 

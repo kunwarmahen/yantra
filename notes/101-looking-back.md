@@ -61,7 +61,9 @@ already have is dropped before you see it.
 Each fact is asked to say what it's about (*"Uses Neovim as their text
 editor"*, not *"Uses Neovim."*), because a store that searches by
 meaning can't find a bare name
-([note 107](107-a-fact-that-says-what-it-is.md)).
+([note 107](107-a-fact-that-says-what-it-is.md)). A habit shown in how
+the person talks — the currency, the units, the language — counts as
+something they plainly showed, even when it came up inside a task.
 
 **On the local road this needs no second model.** The model that just
 answered does the look back, on the same machine. On a cloud model the

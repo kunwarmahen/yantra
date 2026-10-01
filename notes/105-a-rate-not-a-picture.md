@@ -102,7 +102,9 @@ degrees Celsius here today. Too hot for a 10k at noon?"* led to the
 Celsius fact 1 time in 10 on qwen and 0 in 10 on gemma. Both keep
 *"runs 10k distances"* instead, which is true and is closer to what the
 person was talking about. Note 103 saw this once in four runs. Now it's
-a rate.
+a rate. (Fixed since: with the look back told that a habit shown in
+passing counts, both kept it 5 times in 5 —
+[note 107](107-a-fact-that-says-what-it-is.md#a-habit-said-in-passing).)
 
 **Buried, qwen goes looking, sometimes.** Note 103 found `recall_memory`
 called in 0 of 28 later sessions and concluded that the fact has to be

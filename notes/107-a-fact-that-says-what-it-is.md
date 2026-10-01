@@ -105,7 +105,8 @@ for a model that was already doing what the rule asks.
 **What it doesn't fix:** `units`. gemma kept *"Uses Celsius for
 temperature"* once in 5, and qwen never did. qwen keeps *"Runs 10k
 distances"* instead, which is true but not the thing that mattered. That's
-a choice about **what** to keep, not how to word it.
+a choice about **what** to keep, not how to word it. (Fixed since: see
+*A habit said in passing* below.)
 
 **Runs are saved as they go.** The first attempt at these numbers died
 40 minutes in when the store's server stopped, and the trial lost every
@@ -115,6 +116,58 @@ before the crash are on disk.
 
 `2459 passed, 1 skipped` (was 2455). The new tests are in
 `tests/test_reflection.py` and `tests/test_memory_recall_trial.py`.
+
+## A habit said in passing
+
+*"It's 31 degrees Celsius here today. Too hot for a 10k run at noon?"*
+shows how the person measures temperature. Both models read it as part
+of the task: the heat and the run were what was being asked about, and
+the rule says *"not about the task"*. So they kept the run.
+
+The look back's prompt now says that how a person says things counts as
+something they plainly showed:
+
+```
+Plainly showed includes HOW they say things: the currency they quote
+prices in, the units they measure in, the language they write in. Said
+in passing inside a task, a habit like that is still about the person.
+```
+
+The `remember` tool's description says the same in a few words. The
+examples are categories, not answers: neither *Celsius* nor *metric*
+appears, and the test that keeps the trial's answers out of both
+prompts still passes.
+
+`--store local --distractors 30 --repeat 5`, same Ollama:
+
+| | gemma4:12b before | gemma4:12b after | qwen3.8 before | qwen3.8 after |
+|---|---|---|---|---|
+| `units` kept | 0/5 | **5/5** | 0/5 | **5/5** |
+| `units` answered from memory | 0/5 | **5/5** | 0/5 | **5/5** |
+| all seven kept | 27/35 (61-88%) | 32/35 (78-97%) | 30/35 (71-94%) | 35/35 (90-100%) |
+| kept "flying to SFO Tuesday" | 0/5 | 0/5 | 0/5 | 0/5 |
+
+*Before* is note 105's buried `local` run, which also came before the
+wording rule, so the *all seven* row may move for either reason. The
+`units` rows don't: with the wording rule alone (the Smritikosh run
+above), `units` was kept 1 time in 5 and 0 times in 5.
+
+What was kept: *"Uses Celsius for temperature."* (gemma, 5 runs in 5),
+*"Measures temperature in Celsius."* and *"Uses degrees Celsius (°C)
+for temperature."* (qwen). Every one says what the unit is for. The run
+is still kept alongside, about half the time. The trip is still never
+kept, so the new paragraph didn't loosen the "still true in months"
+rule.
+
+Buried on `local`, qwen answered from memory 11 of 35 times, against 13
+in note 105, and gemma 9 against 4. The noise in either is large. One
+row moved the wrong way: qwen kept `packages` 5 times in 5 as *"Uses uv
+as their Python package manager"*, but word-overlap search found it 0
+times in 5, where note 105 found it 3. The later question, *"How do I
+add requests as a dependency to my project?"*, shares no word with that
+wording. Note 105's rows weren't saved, so the old wording can't be
+checked. This is the `local` store's known limit (below), not a fact
+that was lost.
 
 ## What was deliberately not built
 

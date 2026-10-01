@@ -465,6 +465,8 @@ text editor"* rather than *"Uses Neovim."*, so a later search can find
 it from a question about editors. On a store that searches by meaning,
 that took `gemma4:12b` from 16 to 28 of 35 answers that came from a
 buried fact ([notes/107](notes/107-a-fact-that-says-what-it-is.md)).
+How you say things counts as well. Mention *"31 degrees Celsius"* while
+asking about something else, and it keeps that you measure in Celsius.
 ([notes/101](notes/101-looking-back.md))
 
 ## 7 · Sub-agents — a fresh context window on demand

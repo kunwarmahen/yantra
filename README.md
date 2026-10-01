@@ -362,7 +362,10 @@ answered from memory 13 of 35 on `local` and 27 of 35 on Smritikosh
 what it's about to be found that way (*"Uses Neovim as their text
 editor"*, not *"Uses Neovim."*). With the look back asking for that,
 buried gemma went from 16 to 28 of 35 on Smritikosh
-([notes/107](notes/107-a-fact-that-says-what-it-is.md)).
+([notes/107](notes/107-a-fact-that-says-what-it-is.md)). A habit said in
+passing counts too: *"It's 31 degrees Celsius here"* used to be read as
+part of the question, and now both models keep *"Measures temperature
+in Celsius"* 5 times in 5.
 
 ### One-command starts
 

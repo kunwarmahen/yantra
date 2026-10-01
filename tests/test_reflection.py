@@ -415,6 +415,15 @@ class TestWording:
         assert "say what the thing IS" in PROMPT
         assert "says what the thing IS" in Remember.description
 
+    def test_a_habit_shown_in_passing_counts_in_both(self):
+        # "It's 31 degrees ... here today" was read as the task, and the
+        # units it showed were kept by neither model (notes/107).
+        from yantra.memory.reflect import PROMPT
+        from yantra.memory.tools import Remember
+
+        assert "the units they measure in" in PROMPT
+        assert "currency or units they talk in" in Remember.description
+
     def test_the_line_format_is_said_right_before_its_examples(self):
         # A wording rule placed between "one line per fact" and the example
         # lines made qwen3.8 and gemma4:12b drop the "fact:" prefix: every
