@@ -399,3 +399,45 @@ class TestWeb:
         got = client.post("/api/memory/reflect", json={}).json()
         client.post("/api/memory/keep", json={"keep": [], "drop": got["candidates"]})
         assert "lives near rdu (raleigh-durham airport)." in agent.memory.declined
+
+
+class TestWording:
+    """A kept fact must be findable later, which means it says what it is
+    about (notes/105: a bare "Uses Neovim." was never found by meaning
+    search). The BIAS here is against the prompt teaching to the test: its
+    examples must not be the trial's own answers, or the trial would
+    measure copying, not the rule."""
+
+    def test_the_rule_is_in_both_ways_a_fact_is_kept(self):
+        from yantra.memory.reflect import PROMPT
+        from yantra.memory.tools import Remember
+
+        assert "say what the thing IS" in PROMPT
+        assert "says what the thing IS" in Remember.description
+
+    def test_the_line_format_is_said_right_before_its_examples(self):
+        # A wording rule placed between "one line per fact" and the example
+        # lines made qwen3.8 and gemma4:12b drop the "fact:" prefix: every
+        # candidate was then unparseable, and the trial kept 0 of 35.
+        from yantra.memory.reflect import PROMPT
+
+        rule, examples = PROMPT.split("Start every line with its kind", 1)
+        assert "say what the thing IS" in rule
+        assert examples.split("\n", 2)[1].startswith("fact: ")
+
+    def test_its_examples_are_not_the_trials_answers(self):
+        import json
+        from pathlib import Path
+
+        from yantra.memory.reflect import PROMPT
+        from yantra.memory.tools import Remember
+
+        cases = Path(__file__).parent.parent / "examples" / "memory_recall_cases.jsonl"
+        answers = [json.loads(line)["fact"] for line in cases.read_text().splitlines()
+                   if line.strip()]
+        taught = PROMPT.split("The conversation:")[0] + Remember.description
+        # RDU is the prompt's one deliberate example and predates the trial's
+        # scoring of it; every other answer must be absent.
+        for answer in answers:
+            if answer and "RDU" not in answer:
+                assert not re.search(answer, taught, re.IGNORECASE), answer

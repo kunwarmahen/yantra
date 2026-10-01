@@ -239,8 +239,9 @@ person, and a pile of saved runs is graded per setting.
   what the look back reads, not how it chooses among real facts. The
   `local` rates were measured before it and the Smritikosh ones after,
   and the look back's keep rates match across the two within the noise.
-* **Rewording what the look back keeps.** A fact kept with its meaning
+* ~~**Rewording what the look back keeps.** A fact kept with its meaning
   (*"Uses Neovim as their text editor"*) is found by a store that
   searches by meaning; a bare one isn't. That is a change to the look
   back's prompt, and it should be measured with this trial, not guessed
-  at.
+  at.~~ Built and measured: gemma4:12b, buried on Smritikosh, went from
+  16 to 28 of 35 ([note 107](107-a-fact-that-says-what-it-is.md)).

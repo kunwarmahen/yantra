@@ -35,8 +35,9 @@ class Remember(Tool):
         "still be true in months and would change an answer in a later "
         "conversation: where they live, what they use, what they prefer, a "
         "correction of something you had wrong. One short sentence, in the "
-        "third person ('Lives near RDU (Raleigh-Durham airport)'). Not the "
-        "task at hand, not plans for next week."
+        "third person ('Lives near RDU (Raleigh-Durham airport)'), that "
+        "says what the thing IS: 'Uses Fish as their command-line shell', "
+        "not 'Uses Fish'. Not the task at hand, not plans for next week."
     )
     parameters: ClassVar[dict] = {
         "type": "object",

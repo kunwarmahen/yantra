@@ -460,6 +460,9 @@ def main() -> int:
     cases = load_cases(args.cases, set(filter(None, args.only.split(","))))
     rows: list[dict] = []
     users: list[str] = []
+    # Each row is written the moment it is graded: a store or model that
+    # dies forty minutes in costs the scenario it died in, not the run.
+    out = args.out.open("w", encoding="utf-8") if args.out else None
     try:
         for rep in range(1, args.repeat + 1):
             for case in cases:
@@ -468,6 +471,9 @@ def main() -> int:
                 users.append(trial.user(case, run_id, rep))
                 row = trial.run_case(case, run_id, rep)
                 rows.append(row)
+                if out is not None:
+                    out.write(json.dumps(row) + "\n")
+                    out.flush()
                 verdict = ("PASS" if row.get("passed") else "fail") \
                     if "passed" in row \
                     else ("kept it" if row.get("false_keep") else "let it go")
@@ -475,12 +481,12 @@ def main() -> int:
         first = next((c for c in cases if c.get("later")), None)
         down = trial.store_down(first) if first else None
     finally:
+        if out is not None:
+            out.close()
         if manager is not None:
             trial.cleanup(users)       # every case, even one that crashed
             manager.shutdown()
         provider.close()
-    if args.out:
-        args.out.write_text("".join(json.dumps(r) + "\n" for r in rows))
     report(rows, down, setting_of(args))
     return 0
 

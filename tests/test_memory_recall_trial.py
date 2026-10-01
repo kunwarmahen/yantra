@@ -133,3 +133,37 @@ class TestRepeats:
         out = capsys.readouterr().out
         assert "| | qwen, local | gemma, local |" in out
         assert "| answered from memory | 2/3 (21-94%) | 1/1 (21-100%) |" in out
+
+
+class TestSavedAsItGoes:
+    """A long run that dies -- the store's server stopped forty minutes in
+    -- must keep the rows it already graded. The BIAS is against a trial
+    that writes --out only at the end and loses everything to one crash."""
+
+    def test_rows_graded_before_a_crash_are_on_disk(self, tmp_path, monkeypatch):
+        import pytest
+
+        cases = tmp_path / "cases.jsonl"
+        second = {**AIRPORT, "id": "airport2"}
+        cases.write_text(json.dumps(AIRPORT) + "\n" + json.dumps(second) + "\n")
+        out = tmp_path / "rows.jsonl"
+        provider = ScriptedProvider([
+            assistant_text("RDU fares are good."), assistant_text("fact: Lives near RDU."),
+            assistant_text("From RDU: nonstops daily."), assistant_text("Where from?"),
+        ])
+        real = trial.Trial.run_case
+
+        def dies_second(self, case, *a, **k):
+            if case["id"] == "airport2":   # what a stopped store's server did
+                raise ConnectionError("All connection attempts failed")
+            return real(self, case, *a, **k)
+
+        monkeypatch.setattr(trial.Trial, "run_case", dies_second)
+        monkeypatch.setattr(trial, "get_provider", lambda *a, **k: provider)
+        monkeypatch.setattr(trial, "load_settings", lambda *a, **k: None)
+        monkeypatch.setattr(sys, "argv", ["trial", "--cases", str(cases),
+                                          "--out", str(out)])
+        with pytest.raises(ConnectionError):
+            trial.main()
+        rows = [json.loads(line) for line in out.read_text().splitlines()]
+        assert [r["id"] for r in rows] == ["airport"] and rows[0]["passed"]

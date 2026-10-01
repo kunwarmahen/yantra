@@ -39,6 +39,14 @@ word lists when the session has them. A candidate that still carries a
 ``[redacted]`` is dropped rather than offered: a memory with a hole in
 it is either useless or the shape of a secret.
 
+A FACT SAYS WHAT IT IS ABOUT. "Uses Neovim." is true and nearly
+unfindable: a store that searches by meaning ranked it below twenty
+other facts for "format-on-save for Python", while "Uses Neovim as their
+text editor" was found every time (notes/105). The prompt asks for the
+kind of thing as well as the value -- with examples the recall trial
+does not use, so the trial still measures the rule and not a copied
+answer.
+
 WHAT WAS SAID, NOT WHAT WAS THOUGHT. The model's reasoning and the
 arguments of its tool calls are left out of the transcript. Both are the
 assistant's, and both read the system prompt: a model thinking "the user
@@ -101,8 +109,13 @@ below). No passwords, tokens, keys or account numbers.
 Already remembered:
 {remembered}
 
-Reply with one line per fact, at most {limit}, each one short \
-self-contained sentence in the third person:
+Word each one so someone asking about it later finds it: say what the \
+thing IS. "Uses Fish as their command-line shell", not "Uses Fish"; \
+"Their dog is named Biscuit", not "Biscuit".
+
+Reply with one line per fact, at most {limit}. Start every line with its \
+kind -- fact:, preference: or correction: -- then one short \
+self-contained sentence in the third person, like these:
 fact: Lives near RDU (Raleigh-Durham airport).
 preference: Prefers short answers.
 correction: Their manager is Priya, not Sam.

@@ -456,6 +456,12 @@ time. It uses the same model you're already talking to, so on Ollama
 nothing new is needed and nothing leaves the machine. `--reflect off`
 stops it looking by itself. `--reflect auto` keeps what it finds without
 asking, for runs where nobody is at the keyboard.
+
+Each fact is written to say what it's about, *"Uses Neovim as their
+text editor"* rather than *"Uses Neovim."*, so a later search can find
+it from a question about editors. On a store that searches by meaning,
+that took `gemma4:12b` from 16 to 28 of 35 answers that came from a
+buried fact ([notes/107](notes/107-a-fact-that-says-what-it-is.md)).
 ([notes/101](notes/101-looking-back.md))
 
 ## 7 · Sub-agents — a fresh context window on demand

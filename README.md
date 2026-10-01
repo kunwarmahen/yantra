@@ -355,7 +355,11 @@ Repeated five times, `qwen3.8:latest` answers from memory 29 of 35
 both use it about nine times in ten, so on a local model the look back
 is where memory is won or lost. Buried under thirty other facts, qwen
 answered from memory 13 of 35 on `local` and 27 of 35 on Smritikosh
-([notes/105](notes/105-a-rate-not-a-picture.md)).
+([notes/105](notes/105-a-rate-not-a-picture.md)). A fact has to say
+what it's about to be found that way (*"Uses Neovim as their text
+editor"*, not *"Uses Neovim."*). With the look back asking for that,
+buried gemma went from 16 to 28 of 35 on Smritikosh
+([notes/107](notes/107-a-fact-that-says-what-it-is.md)).
 
 ### One-command starts
 
@@ -1006,7 +1010,8 @@ the way the scrubber would use the answer — or bring your own),
 sessions per fact, on any store — `--distractors` buries it so only the
 store's search can find it, `--repeat` turns one run into a rate with
 an interval, and `--rescore` puts saved runs of different models side
-by side), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+by side; `--out` saves each row as it's graded, so a crash keeps what
+ran), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation
@@ -1995,7 +2000,9 @@ src/yantra/
 │                   one plain call to the session's own model, scrubbed
 │                   first, reading what was said (no reasoning, tool calls
 │                   by name only), proposing facts the person keeps or drops
-│                   ([notes/101](notes/101-looking-back.md)); mcp.py is a
+│                   ([notes/101](notes/101-looking-back.md)), each worded to
+│                   say what it is about so a later search finds it
+│                   ([notes/107](notes/107-a-fact-that-says-what-it-is.md)); mcp.py is a
 │                   store behind any MCP server, through a verb map, bound
 │                   once the host's servers connect; user_id on every call,
 │                   the server's own memory tools taken from the model, a
