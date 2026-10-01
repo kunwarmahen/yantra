@@ -535,8 +535,8 @@ class WebSession:
         if cancelled and not ended:
             self.broadcast({"type": "turn_cancelled"})
         if end is not None and not cancelled:
-            self._offer_pending_memories()
             self._learn(end)
+            self._offer_pending_memories()
         self.turn_active = False
         self._cancel.clear()
         self._setu_settle()
@@ -544,9 +544,10 @@ class WebSession:
         self.broadcast({"type": "turn_done"})
 
     def _offer_pending_memories(self) -> None:
-        """What a look back before compaction found mid-turn goes to the
-        page when the turn ends; the page answers through
-        /api/memory/keep, like the button's look back."""
+        """What was found mid-turn -- by a look back before compaction, or
+        by a skill's write-up -- goes to the page when the turn ends; the
+        page answers through /api/memory/keep, like the button's look
+        back. After the skill's question, in the order they were found."""
         memory = getattr(self.agent, "memory", None)
         if memory is None or not memory.pending:
             return
@@ -650,6 +651,7 @@ class WebSession:
         def work() -> None:
             try:
                 self._learn(None, forced=True)
+                self._offer_pending_memories()
             finally:
                 self.turn_active = False
                 self._cancel.clear()

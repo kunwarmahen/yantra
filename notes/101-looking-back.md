@@ -199,13 +199,16 @@ that yet.
 
 ## What was deliberately not built
 
-* **Learned-skill inputs from the same look back.** Device ids, a home
+* ~~**Learned-skill inputs from the same look back.** Device ids, a home
   server's name, a city: these are facts about the person, and they are
   also what a learned skill ([note 96](96-solve-it-once.md)) needs as
   inputs. One look back could propose both. The skill learner already
   has its own write-up step, and both halves are still settling, so
   they stay separate for now. Joining them later means a second kind of
-  line from the same call, not a second call.
+  line from the same call, not a second call.~~ Built the other way
+  round: the skill's write-up lists the facts it kept out, in this
+  note's line format, and they go through this note's rules
+  ([note 106](106-what-the-recipe-leaves-out.md)).
 * **Corrections that replace.** *"correction: Their manager is Priya,
   not Sam"* is kept as a new memory. The old one stays until you
   `/memory forget` it. Deciding which old sentence a correction

@@ -372,6 +372,27 @@ call, like any command. Your token is never one of its arguments: the
 script reads it from your file, as before.
 ([notes/98](notes/98-one-call.md))
 
+A recipe never holds your values, but someone has to remember them, or
+every run looks up the bedroom fan again. So the request that writes
+the recipe also lists what it left out, and after the skill's question
+you're asked about those too:
+
+```
+worth remembering about you, for later conversations?
+  1. fact: Their bedroom fan is fan.master_bedroom_ceiling in Home Assistant.
+  2. fact: Their Home Assistant URL and token are in the file ha.env.
+keep [a]ll, numbers (1 3), or [N]one >
+```
+
+It's the same request, so on a local model it costs no extra time, and
+on a cloud model no extra money. Next time, when the recipe loads,
+Yantra searches your memory and puts the matching facts right under the
+steps. On `qwen3.8:latest` the reuses went straight to the right fan,
+without listing every device first. A recipe that needs one of your
+Setu accounts says so (`needs: setu:gmail`). If that account isn't
+connected, the model tells you to connect it rather than trying
+something else. ([notes/106](notes/106-what-the-recipe-leaves-out.md))
+
 ### It remembers you
 
 Skills remember *how* to do something. Memory remembers *who you are*.

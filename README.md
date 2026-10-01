@@ -274,6 +274,17 @@ asks. The script runs as a list of words, never through a shell, and
 each call asks first, like bash. A tool never takes a secret as an
 argument ([notes/98](notes/98-one-call.md)).
 
+The recipe keeps the way, never your values, so the same write-up also
+lists what it left out (*"Their bedroom fan is
+fan.master_bedroom_ceiling in Home Assistant"*) and offers those to
+memory after the skill's question, under `--reflect`'s rules. Next time
+`load_skill` puts the matching ones right under the steps, so the fan
+isn't looked up again. A recipe can also say which account it needs
+(`needs: setu:gmail`). The save question and `load_skill` then say
+whether that account is connected, and if it isn't, the model tells you
+to connect it instead of working around it
+([notes/106](notes/106-what-the-recipe-leaves-out.md)).
+
 ### It remembers you across conversations
 
 Tell it once, in passing, that you live near RDU. Next week, in a new
@@ -2012,7 +2023,13 @@ src/yantra/
 │                   Yantra keeps ([notes/96](notes/96-solve-it-once.md)).
 │                   A recipe that failed but was finished another way is
 │                   offered as an UPDATE (a diff); three failures in a row
-│                   set it aside ([notes/97](notes/97-when-the-recipe-breaks.md))
+│                   set it aside ([notes/97](notes/97-when-the-recipe-breaks.md)).
+│                   The same write-up lists the person's values it kept
+│                   OUT (fan id, server, env file) as facts, handed to
+│                   memory under the look back's mode; load_skill brings
+│                   matching ones back under a learned recipe's steps, and
+│                   says whether each `needs: setu:<id>` is connected
+│                   ([notes/106](notes/106-what-the-recipe-leaves-out.md))
 │                   promote.py: a learned script promoted to a TOOL -- suggested
 │                   after 5 successes in a row, never automatic; one fresh
 │                   call writes tool.json (parameters + an argv template), one
@@ -2067,7 +2084,9 @@ src/yantra/
 │                   Live, not only at startup: `Setu.sync` makes the servers
 │                   match Setu's report, SignIn relays `setu connect --json`
 │                   for the page's Connections panel -- same computer only,
-│                   never under a running turn ([notes/99](notes/99-the-connections-page.md))
+│                   never under a running turn ([notes/99](notes/99-the-connections-page.md)).
+│                   resolve_needs: a learned skill's `setu:<id>` against the
+│                   report ([notes/106](notes/106-what-the-recipe-leaves-out.md))
 ├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
 │                   over passes/attempts (it does not collapse at 3/3, where
 │                   the textbook one claims certainty from three coin

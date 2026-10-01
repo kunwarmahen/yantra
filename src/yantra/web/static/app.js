@@ -984,7 +984,9 @@ function showLearnModal(env) {
     ${env.renamed_from ? `<div class="context-note">renamed: a skill you wrote is
       already called ${esc(env.renamed_from)}</div>` : ""}
     <dl class="learn-facts">
-      <dt>needs</dt><dd>${esc(env.needs || "nothing")}</dd>
+      <dt>needs</dt><dd>${esc(env.needs || "nothing")}${(env.connections || []).map((c) =>
+        `<br>${esc(c.name)}: ${c.connected ? "connected" : c.known ? "not connected"
+          : "no such connector in Setu here"}`).join("")}</dd>
       <dt>inputs</dt><dd>${esc(env.inputs || "none")}</dd>
       <dt>tested</dt><dd>${esc(tested)}</dd>
       ${env.tool ? `<dt>tool</dt><dd>${esc(env.tool.name)} ${env.tool.kept

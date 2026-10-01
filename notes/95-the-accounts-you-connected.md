@@ -113,6 +113,11 @@ listed is not connected — say so rather than guessing. It is set at
 start, like the tool list it describes, and rewritten whenever the
 Connections page changes that list ([note 99](99-the-connections-page.md)).
 
+A learned recipe can name the connection it needs (`needs: setu:gmail`).
+When it loads, the model is told which server's tools that is, or that
+it's not connected and the person has to connect it
+([note 106](106-what-the-recipe-leaves-out.md)).
+
 ## What was deliberately not built
 
 * ~~**A Connections page.** Connecting, changing a level and

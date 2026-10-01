@@ -50,6 +50,15 @@ learned skill loaded in a turn WORKED when the turn finished and no call
 after the load failed, and FAILED otherwise. Crude, and honest about
 being crude -- it is what the harness saw, not a grade.
 
+THE SAME CALL FINDS THE FACTS. Keeping the person's values out of a
+recipe means someone has to remember them: the bedroom fan's entity id
+was discovered once, and a recipe that asks for it every time has only
+moved the discovery. So the write-up also lists them, as the look back
+at a conversation's end would (memory/reflect.py), and they go to memory
+under the look back's own ask/auto/off -- offered when the turn ends,
+whatever the person says to the skill. One call learns both kinds of
+thing; the recipe names the input, memory holds this person's value.
+
 THE FAILED TURN IS THE REPAIR ([notes/97](../../notes/97-when-the-recipe-breaks.md)).
 A recipe that failed while the task was still finished another way has
 its fix sitting in the history already. The same one-call write-up is
@@ -89,6 +98,7 @@ from yantra.skills.loader import (
     render_skill_md,
     validate_text,
 )
+from yantra.setu_link import connectors_hint, resolve_needs
 from yantra.skills.registry import write_atomic
 from yantra.trace import REDACT_PRESETS
 from yantra.types import Message, TextBlock, ToolCall, ToolResult, Usage
@@ -335,7 +345,7 @@ say where they come from (a file the person named, an environment \
 variable). Values shown as [redacted] are secrets.
 - No personal facts. This person's server addresses, device names and \
 ids, places and account names are INPUTS the skill asks for or looks \
-up, never written into it.
+up, never written into it. List them under FACTS instead.
 - Keep the path that worked; drop the dead ends.
 - If a script turns the task into one command, write it: python3 \
 standard library only (or bash), taking the inputs as command-line \
@@ -353,7 +363,7 @@ DESCRIPTION: What it does, then "Use when ..." -- one or two sentences.
 SCOPE: user   (or project, only when the recipe is about the code in \
 this folder)
 INPUTS: each input, and where it comes from
-NEEDS: the access it needs, in words (or none)
+NEEDS: the access it needs, in words (or none){connectors}
 SCRIPT: scripts/<file>   (or none)
 TEST: one shell command, run from the working folder, that repeats \
 THIS task with THIS task's inputs; write the script's path as \
@@ -361,11 +371,20 @@ THIS task with THIS task's inputs; write the script's path as \
 === INSTRUCTIONS ===
 # A short title
 Numbered steps the next run follows. If there is a script, one step runs \
-it from the working folder, exactly as TEST does: \
+it from the working folder, exactly as TEST does -- the same program \
+(python3 for a Python script, bash for a shell one), the same arguments: \
 python3 "$SKILL_DIR/scripts/<file>" ... -- never cd into the skill's \
 folder, or paths the person gives stop working.
 === SCRIPT ===
 the whole script (leave this section out when SCRIPT is none)
+=== FACTS ===
+The person's own values the steps show and the skill takes as INPUTS \
+(their devices and ids, server addresses, places, account names, the \
+file they said holds their credentials), one line each, as a sentence \
+that says what the value IS:
+fact: Their bedroom fan is fan.master_bedroom_ceiling in Home Assistant.
+fact: Their Home Assistant URL and token are in the file ha.env.
+Never a secret. Leave this section out when there are none.
 === END ===
 
 When it is not worth {skipping}, reply with exactly two lines:
@@ -384,7 +403,7 @@ what each returned. Failed calls are shown in one line each.
 {set_aside}
 """ + RULES + "\n\n" + SHAPE.format(
     verdict="save", name="short-lowercase-hyphenated-name",
-    skipping="saving") + "\n\n{digest}\n"
+    skipping="saving", connectors="{connectors}") + "\n\n{digest}\n"
 
 #: A learned skill was followed, a step failed, and the task was finished
 #: another way. The fresh solve IS the repair; this asks for it written
@@ -403,7 +422,7 @@ THE SAVED SKILL, AS IT IS NOW:
 
 """ + RULES + "\n\n" + SHAPE.format(
     verdict="update", name="{name}   (keep this name)",
-    skipping="updating") + "\n\n{digest}\n"
+    skipping="updating", connectors="{connectors}") + "\n\n{digest}\n"
 
 #: Added to a new write-up when learned skills have been set aside: a
 #: fresh solve of what one of them did should take its name and replace
@@ -459,6 +478,9 @@ class Draft:
     script_name: str = ""
     script: str = ""
     test: str = ""
+    #: The FACTS section as written: this person's values, kept out of
+    #: the skill and offered to memory instead (settle_facts).
+    facts: str = ""
 
     def skill_md(self, learned: LearnedRecord | None = None) -> str:
         return render_skill_md(self.name, self.description, self.body,
@@ -538,14 +560,15 @@ def parse_reply(text: str) -> Draft | str:
     if len(description) < MIN_DESCRIPTION:
         raise LearnError("the write-up's description is too thin to ever be "
                          "picked")
-    body = _section(text, "INSTRUCTIONS", "SCRIPT", "END").strip()
+    body = _section(text, "INSTRUCTIONS", "SCRIPT", "FACTS", "END").strip()
     if not body:
         raise LearnError("the write-up has no instructions")
     scope = fields.get("scope", "user").split()[0:1] or ["user"]
     scope = scope[0].lower().strip(".,")
     script_name = _none(fields.get("script", "")).split()[0:1]
     script_name = script_name[0] if script_name else ""
-    script = _unfence(_section(text, "SCRIPT", "END")) if script_name else ""
+    script = (_unfence(_section(text, "SCRIPT", "FACTS", "END"))
+              if script_name else "")
     if script_name:
         # One file, directly under scripts/ -- the draft may not reach
         # anywhere else in the skill's folder, or out of it.
@@ -561,7 +584,8 @@ def parse_reply(text: str) -> Draft | str:
                  inputs=_none(fields.get("inputs", "")),
                  needs=_none(fields.get("needs", "")),
                  body=body, script_name=script_name, script=script,
-                 test=_none(fields.get("test", "")) if script_name else "")
+                 test=_none(fields.get("test", "")) if script_name else "",
+                 facts=_section(text, "FACTS", "END").strip())
 
 
 # ---- the offer ------------------------------------------------------------------
@@ -593,6 +617,9 @@ class Offer:
     #: (promote.fits).
     tool: str = ""
     keeps_tool: bool = False
+    #: Each ``setu:<id>`` the draft needs, against what Setu reports now
+    #: (setu_link.Need) -- the save question says which are connected.
+    connections: list[Any] = field(default_factory=list)
 
     def diff(self) -> str:
         """The update as a person reads one: saved version against proposed.
@@ -628,6 +655,7 @@ class Offer:
                        for k, v in SCOPES.items()},
             "inputs": draft.inputs,
             "needs": draft.needs,
+            "connections": [n.describe() for n in self.connections],
             "skill_md": self._staged(SKILL_FILE, draft.skill_md()),
             "script_name": draft.script_name,
             "script": (self._staged(draft.script_name, draft.script)
@@ -695,6 +723,8 @@ class Learner:
         #: How the last turn ended, set by ``after_turn``. A host that makes
         #: a Learner on demand (``/learn`` with learning off) sets it itself.
         self.last_reason = ""
+        #: How many facts the last write-up handed to memory.
+        self.facts_found = 0
 
     @property
     def cwd(self) -> Path:
@@ -768,13 +798,14 @@ class Learner:
         if repairs is not None:
             prompt = UPDATE_PROMPT.format(
                 name=repairs.name, saved=scrub(_saved_text(repairs), found),
-                digest=digest(turn, found))
+                connectors=self._connectors_hint(), digest=digest(turn, found))
             say(f"{repairs.name} failed this time; seeing whether it needs "
                 f"updating")
         else:
             prompt = DISTIL_PROMPT.format(
                 decide=DECIDE_FORCED if forced else DECIDE_ASKED,
-                set_aside=self._set_aside(), digest=digest(turn, found))
+                set_aside=self._set_aside(), connectors=self._connectors_hint(),
+                digest=digest(turn, found))
             say("looking at what worked, to see if it is worth keeping")
         spent = Usage()
         reply = self._complete(prompt, spent)
@@ -800,11 +831,13 @@ class Learner:
                               "so it was not offered")
             return None
 
+        self.facts_found = self.settle_facts(draft.facts, found)
         offer = Offer(draft=draft, staging=self._stage(draft), tested=None,
                       spent=spent, repairs=repairs,
                       failure=scrub(failure_line(turn, repairs), found)
                       if repairs else "")
         self._settle_name(offer)
+        offer.connections = resolve_needs(draft.needs, self._setu_link())
         if repairs is not None and repairs.tool_name:
             offer.tool = repairs.tool_name
         if draft.script:
@@ -823,6 +856,39 @@ class Learner:
         if offer.tool:
             offer.keeps_tool = self._tool_still_fits(repairs, draft)
         return offer
+
+    def settle_facts(self, text: str, found: set[str]) -> int:
+        """The write-up's FACTS, handed to memory the way a look back's are.
+
+        One call, two kinds of thing learned: the recipe keeps the way, and
+        the values it takes as inputs -- which fan, which server -- are
+        facts about this person, so they go where facts go. Under the
+        look back's own mode: ``ask`` leaves them on ``memory.pending``
+        for the host to offer when the turn ends, ``auto`` keeps them,
+        ``off`` drops them. The same dedup applies (what is known, what
+        was dropped), and a fact that carries a value scrubbed from the
+        steps is not offered: that value was a secret.
+
+        Returns how many were kept or left to offer. Never raises -- a fact
+        must not cost the skill it came with.
+        """
+        from yantra.memory.reflect import keep, parse_reply as parse_facts
+
+        memory = getattr(self.agent, "memory", None)
+        if not text or memory is None or memory.reflect == "off":
+            return 0
+        try:
+            remembered = [item.statement for item in memory.list(100)]
+            facts = [c for c in parse_facts(text, remembered, memory.declined)
+                     if not any(v in c.statement for v in found)
+                     and c not in memory.pending]
+            if memory.reflect == "auto":
+                return len(keep(memory, facts))
+            memory.pending.extend(facts)
+            return len(facts)
+        except Exception as exc:
+            memory._fail(f"facts from the write-up not kept ({exc})")
+            return 0
 
     def _tool_still_fits(self, skill: Skill, draft: Draft) -> bool:
         """The repair check: same script, and the passing test's words read
@@ -871,6 +937,14 @@ class Learner:
         skills = getattr(self.agent, "skills", None)
         return ({s.tool_name: s.name for s in skills if s.tool_name}
                 if skills is not None else {})
+
+    def _setu_link(self) -> Any:
+        setu = getattr(self.agent, "setu", None)
+        return getattr(setu, "link", None)
+
+    def _connectors_hint(self) -> str:
+        hint = connectors_hint(self._setu_link())
+        return f"\n  {hint.rstrip()}" if hint else ""
 
     def _set_aside(self) -> str:
         skills = getattr(self.agent, "skills", None)

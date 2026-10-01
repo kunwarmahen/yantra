@@ -819,3 +819,238 @@ class TestRepair:
         assert '+print("said hello to", sys.argv[1])' in text
         assert "[c]hange scope" not in text
         assert agent.skills.get("greet-someone").learned.failing == 0
+
+
+# ---- the facts a write-up finds (the join with memory) -----------------------------
+
+
+FACTS = """=== FACTS ===
+fact: Their greeting server is greet.home.lan.
+fact: Their usual greeting target is world.
+=== END ===
+"""
+
+
+def with_facts(text: str = FACTS) -> str:
+    return reply().replace("=== END ===\n", text)
+
+
+def remembering(agent, tmp_path, mode="ask"):
+    from yantra.memory import enable_memory
+    from yantra.memory.local import LocalStore
+
+    enable_memory(agent, LocalStore(tmp_path / "memory.sqlite"), user="asha")
+    agent.memory.reflect = mode
+    return agent.memory
+
+
+class TestFacts:
+    """One write-up, two kinds of thing learned. The BIAS: a value kept
+    out of the recipe must not be lost -- and must not reach memory on
+    any rule looser than the look back's own (a yes under ask, nothing
+    under off, never a secret, never twice)."""
+
+    def test_the_facts_section_is_neither_script_nor_instructions(self):
+        draft = parse_reply(with_facts())
+        assert draft.script == SCRIPT and "fact:" not in draft.body
+        assert draft.facts.splitlines()[0] == ("fact: Their greeting server "
+                                               "is greet.home.lan.")
+
+    def test_under_ask_they_wait_for_the_host(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(with_facts())])
+        memory = remembering(agent, tmp_path)
+        learner = learner_after(agent)
+        assert learner.consider() is not None
+        assert learner.facts_found == 2
+        assert [c.statement for c in memory.pending][0] == (
+            "Their greeting server is greet.home.lan.")
+        assert memory.list() == []                    # nothing kept without a yes
+
+    def test_under_auto_they_are_kept_and_under_off_dropped(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(with_facts())])
+        memory = remembering(agent, tmp_path, mode="auto")
+        learner_after(agent).consider()
+        assert len(memory.list()) == 2 and memory.pending == []
+
+        other = make_agent(tmp_path / "b", [*solved_turn(), assistant_text(with_facts())])
+        memory = remembering(other, tmp_path / "b", mode="off")
+        learner_after(other).consider()
+        assert memory.pending == [] and memory.list() == []
+
+    def test_known_and_dropped_facts_are_not_offered_again(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(with_facts())])
+        memory = remembering(agent, tmp_path)
+        memory.remember("Their greeting server is greet.home.lan.")
+        memory.declined.add("their usual greeting target is world.")
+        learner_after(agent).consider()
+        assert memory.pending == []
+
+    def test_a_fact_carrying_a_scrubbed_value_is_not_offered(self, tmp_path):
+        agent = make_agent(tmp_path, [
+            assistant_tool_call("c0", "bash", {"command": f"echo HA_TOKEN={SECRET}"}),
+            *solved_turn(), assistant_text(with_facts(
+                f"=== FACTS ===\nfact: Their key ends {SECRET[-12:]}x.\n"
+                f"fact: Their token is {SECRET}.\n=== END ===\n"))])
+        memory = remembering(agent, tmp_path)
+        learner_after(agent).consider()
+        assert all(SECRET not in c.statement for c in memory.pending)
+
+    def test_no_memory_no_facts_and_the_skill_is_still_offered(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(with_facts())])
+        learner = learner_after(agent)
+        assert learner.consider() is not None and learner.facts_found == 0
+
+    def test_the_terminal_asks_about_facts_after_the_skill(self, tmp_path):
+        agent, repl, out = TestTerminal().repl(
+            tmp_path, ["", "1"], [*solved_turn(), assistant_text(with_facts())])
+        memory = remembering(agent, tmp_path)
+        repl.run_turn("greet world")
+        text = out.getvalue()
+        assert text.index("Save this as a skill?") < text.index(
+            "worth remembering about you")
+        assert "not saved" in text                       # no to the skill ...
+        assert [m.statement for m in memory.list()] == [  # ... yes to one fact
+            "Their greeting server is greet.home.lan."]
+
+    def test_the_page_offers_facts_after_the_skill(self, tmp_path):
+        page = TestPage()
+        agent, client = page.serve(tmp_path, [*solved_turn(),
+                                              assistant_text(with_facts())])
+        remembering(agent, tmp_path)
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            client.post("/api/message", json={"text": "greet world"})
+            offer = page.until(ws, "learn_offer")[-1]
+            ws.send_json({"type": "answer", "id": offer["id"], "decision": "no"})
+            facts = page.until(ws, "memory_offer")[-1]
+            page.until(ws, "turn_done")
+        assert [c["statement"] for c in facts["candidates"]] == [
+            "Their greeting server is greet.home.lan.",
+            "Their usual greeting target is world."]
+
+
+class TestInputsFromMemory:
+    """The other half of the join: the values a recipe left out come back
+    when it loads. The BIAS is against a recipe that rediscovers what the
+    person already told it -- and against memory getting in the way of a
+    recipe loading at all."""
+
+    def load(self, tmp_path, *, inputs=True, facts=(), store_fails=False):
+        folder = saved_skill(tmp_path)
+        if inputs:
+            text = (folder / SKILL_FILE).read_text()
+            (folder / SKILL_FILE).write_text(text.replace(
+                "origin: learned", "origin: learned\ninputs: who (the name to greet)"))
+        agent = make_agent(tmp_path, [
+            assistant_tool_call("l", "load_skill", {"name": "greet-someone"}),
+            assistant_text("done")])
+        memory = remembering(agent, tmp_path)
+        for fact in facts:
+            memory.remember(fact)
+        if store_fails:
+            def broken(*a, **k):
+                raise OSError("disk gone")
+            memory.store.recall = broken
+        run(agent, "greet my sister")
+        return next(b.content for m in agent.history for b in m.content
+                    if getattr(b, "tool_call_id", None) == "l")
+
+    def test_matching_facts_come_under_the_steps(self, tmp_path):
+        result = self.load(tmp_path, facts=["Their sister is called Mira.",
+                                            "Prefers tea to coffee."])
+        head, tail = result.split("may fill its inputs", 1)
+        assert 'greet.py" WHO' in head
+        assert "- Their sister is called Mira." in tail
+        assert "tea" not in tail
+
+    def test_nothing_is_added_without_inputs_or_without_a_match(self, tmp_path):
+        assert "may fill" not in self.load(tmp_path, inputs=False,
+                                           facts=["Their sister is called Mira."])
+        assert "may fill" not in self.load(tmp_path / "b",
+                                           facts=["Prefers tea to coffee."])
+
+    def test_a_failing_store_still_delivers_the_recipe(self, tmp_path):
+        result = self.load(tmp_path, facts=["Their sister is called Mira."],
+                           store_fails=True)
+        assert 'greet.py" WHO' in result and "may fill" not in result
+
+
+class TestNeedsThroughSetu:
+    """``needs: setu:<id>`` checked against what Setu reports. The BIAS is
+    against a recipe followed into an account that is not there -- the
+    fix is the person's, and the model should say so, not improvise."""
+
+    STATUS = {
+        "format": "setu.status.v1", "connections": [{
+            "ref": "gmail:personal", "connector": "gmail", "installed": True,
+            "mcp": {"name": "gmail-personal", "command": "x", "args": []}}],
+        "connectors": [{"id": "gmail", "name": "Gmail", "connected": True},
+                       {"id": "outlook", "name": "Outlook", "connected": False}]}
+
+    def setu(self):
+        from yantra.setu_link import Link, Setu
+
+        return Setu(mode="auto", link=Link(self.STATUS, road="test"))
+
+    def test_resolved_against_the_report(self):
+        from yantra.setu_link import Link, resolve_needs
+
+        link = Link(self.STATUS, road="test")
+        needs = resolve_needs("mail, through setu:gmail and SETU:outlook, "
+                              "setu:shopify", link)
+        assert [(n.connector, n.connected, n.known) for n in needs] == [
+            ("gmail", True, True), ("outlook", False, True), ("shopify", False, False)]
+        assert needs[0].servers == ("gmail-personal",)
+        assert resolve_needs("a Home Assistant token", link) == []
+        assert [n.connected for n in resolve_needs("setu:gmail", None)] == [False]
+
+    def load(self, tmp_path, needs: str, *, setu=True):
+        folder = saved_skill(tmp_path)
+        text = (folder / SKILL_FILE).read_text()
+        (folder / SKILL_FILE).write_text(text.replace(
+            "origin: learned", f"origin: learned\nneeds: {needs}"))
+        agent = make_agent(tmp_path, [
+            assistant_tool_call("l", "load_skill", {"name": "greet-someone"}),
+            assistant_text("done")])
+        agent.setu = self.setu() if setu else None
+        run(agent)
+        return next(b.content for m in agent.history for b in m.content
+                    if getattr(b, "tool_call_id", None) == "l")
+
+    def test_load_names_the_server_of_a_connected_account(self, tmp_path):
+        result = self.load(tmp_path, "setu:gmail")
+        assert "Needs Gmail (setu:gmail): connected -- use its tools " \
+               "(mcp__gmail-personal__*)" in result
+
+    def test_load_says_stop_when_it_is_not_connected(self, tmp_path):
+        result = self.load(tmp_path, "setu:outlook")
+        assert "NOT connected: do not work around it" in result
+        assert "`setu connect outlook`" in result
+        assert "NOT connected" in self.load(tmp_path / "b", "setu:gmail", setu=False)
+
+    def test_words_alone_add_nothing(self, tmp_path):
+        assert "Needs" not in self.load(tmp_path, "a greeting server")
+
+    def test_the_write_up_is_told_the_ids_and_the_offer_says_connected(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(
+            reply().replace("NEEDS: none", "NEEDS: setu:gmail"))])
+        agent.setu = self.setu()
+        offer = learner_after(agent).consider()
+        sent = agent.provider.last_request()["messages"][0].text()
+        assert "setu:gmail (Gmail), setu:outlook (Outlook)" in sent
+        view = offer.view(tmp_path, home=tmp_path / "home")
+        assert view["connections"][0]["connected"] is True
+
+    def test_without_setu_the_write_up_hears_nothing_of_it(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(reply())])
+        learner_after(agent).consider()
+        assert "setu:" not in agent.provider.last_request()["messages"][0].text()
+
+    def test_the_terminal_question_says_connected_or_not(self, tmp_path):
+        agent, repl, out = TestTerminal().repl(tmp_path, [""], [
+            *solved_turn(), assistant_text(
+                reply().replace("NEEDS: none", "NEEDS: setu:gmail setu:outlook"))])
+        agent.setu = self.setu()
+        repl.run_turn("greet world")
+        text = out.getvalue()
+        assert "Gmail: connected" in text and "Outlook: not connected" in text

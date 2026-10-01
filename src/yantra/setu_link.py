@@ -50,6 +50,13 @@ connected and at what level, and which installed connectors are not
 connected -- so "anything in my Outlook?" gets "Outlook isn't connected;
 run `setu connect outlook`" rather than a guess.
 
+A RECIPE SAYS WHICH ACCOUNT IT NEEDS. A learned skill's ``needs:`` may
+name ``setu:gmail``; when it loads, the model is told which server's
+tools that is, or that it is not connected and the person has to connect
+it -- rather than a recipe followed four steps into a missing account.
+The skill's write-up is handed the connector ids to name, and the save
+question says whether each is connected (``resolve_needs``).
+
 LIVE, NOT ONLY AT STARTUP. ``Setu`` is the session's handle on all of
 this (``agent.setu``). ``sync`` makes the MCP servers match what Setu
 reports -- a new connection gets its server and tools, a gone one loses
@@ -255,6 +262,80 @@ def announce(link: Link, connected: dict[str, int]) -> str:
         return f"setu: no connections yet ({link.road})"
     parts = [f"{name} ({count} tool(s))" for name, count in connected.items()]
     return f"setu: {', '.join(parts)} -- via {link.road}"
+
+
+# ---- what a learned skill needs ---------------------------------------------
+
+#: A connection named in a skill's ``needs:`` -- ``setu:gmail``. Anything
+#: else in the line is words for a person, and stays that.
+NEED_RE = re.compile(r"\bsetu:([a-z0-9][a-z0-9_-]*)", re.IGNORECASE)
+
+
+@dataclass(frozen=True, slots=True)
+class Need:
+    """One ``setu:<connector>`` a skill names, against what Setu reports."""
+
+    connector: str
+    name: str                      # the connector's own name, or the id
+    known: bool                    # Setu has this connector installed
+    servers: tuple[str, ...] = ()  # MCP servers of its connections, if any
+
+    @property
+    def connected(self) -> bool:
+        return bool(self.servers)
+
+    def describe(self) -> dict[str, Any]:
+        return {"connector": self.connector, "name": self.name, "known": self.known,
+                "connected": self.connected, "servers": list(self.servers)}
+
+
+def resolve_needs(text: str, link: Link | None) -> list[Need]:
+    """Each ``setu:<id>`` in ``text``, looked up in Setu's last report.
+    No link means nothing is known: every need comes back unconnected."""
+    wanted = list(dict.fromkeys(m.lower() for m in NEED_RE.findall(text or "")))
+    if not wanted:
+        return []
+    connectors = link.connectors if link is not None else {}
+    rows = link.connections if link is not None else []
+    out = []
+    for cid in wanted:
+        info = connectors.get(cid)
+        servers = tuple((row.get("mcp") or {}).get("name", "") for row in rows
+                        if row.get("connector") == cid and (row.get("mcp") or {}).get("name"))
+        out.append(Need(cid, (info or {}).get("name") or cid, info is not None, servers))
+    return out
+
+
+def need_lines(needs: list[Need]) -> list[str]:
+    """What load_skill tells the model about a recipe's connections: which
+    server to use when there is one, and to stop and say so when there is
+    not -- a recipe run without its account fails four steps in, and the
+    fix is the person's (``setu connect``), never the model's."""
+    lines = []
+    for need in needs:
+        if need.connected:
+            tools = ", ".join(f"mcp__{s}__*" for s in need.servers)
+            lines.append(f"Needs {need.name} (setu:{need.connector}): connected -- "
+                         f"use its tools ({tools}).")
+        else:
+            how = (f"they can run `setu connect {need.connector}`" if need.known
+                   else f"Setu has no {need.connector} connector installed here")
+            lines.append(f"Needs {need.name} (setu:{need.connector}), which is NOT "
+                         f"connected: do not work around it. Tell the person the "
+                         f"recipe needs {need.name} connected ({how}).")
+    return lines
+
+
+def connectors_hint(link: Link | None) -> str:
+    """For a skill's write-up: the ids a NEEDS line may name. Empty when
+    Setu reports no connectors, so the prompt says nothing about Setu."""
+    connectors = link.connectors if link is not None else {}
+    if not connectors:
+        return ""
+    names = ", ".join(f"setu:{cid} ({c.get('name', cid)})"
+                      for cid, c in sorted(connectors.items()))
+    return (f"When the steps used one of these connected accounts, name it in "
+            f"NEEDS exactly as written here: {names}.\n")
 
 
 # ---- the live handle --------------------------------------------------------

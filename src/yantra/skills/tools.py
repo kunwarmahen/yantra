@@ -42,6 +42,9 @@ DELIVERY_HEADER = (
 #: project, not a procedure; the folder line still covers the rest.
 MAX_LISTED_FILES = 20
 
+#: How many remembered facts come with a learned recipe (LoadSkill).
+MAX_REMEMBERED_INPUTS = 5
+
 
 def bundled_files(directory: Path) -> list[Path]:
     """A skill's files other than SKILL.md, shallowest first, capped.
@@ -153,7 +156,56 @@ class LoadSkill(Tool):
             # what they meant (notes/96).
             body = body.replace("$SKILL_DIR", str(skill.directory))
         lines.append(body)
+        if skill.is_learned and skill.inputs:
+            lines.extend(self._remembered_inputs(skill))
+        if skill.needs:
+            lines.extend(self._connections(skill))
         return "\n".join(lines)
+
+    def _connections(self, skill: Any) -> list[str]:
+        """Each ``setu:<connector>`` the skill needs, said against what Setu
+        reports now: which server's tools to use, or that it is not
+        connected and the person has to fix that (setu_link.need_lines)."""
+        from yantra.setu_link import need_lines, resolve_needs
+
+        setu = getattr(getattr(self.skills, "_agent", None), "setu", None)
+        needs = resolve_needs(skill.needs, getattr(setu, "link", None))
+        return ["", *need_lines(needs)] if needs else []
+
+    def _remembered_inputs(self, skill: Any) -> list[str]:
+        """What memory holds that may fill a learned recipe's inputs.
+
+        A recipe names its inputs and never holds them ("which fan" is an
+        input; ``fan.master_bedroom_ceiling`` is this person's). Their
+        values were offered to memory when the recipe was written
+        (learn.settle_facts), and this is where they come back: searched
+        with the recipe's words and the person's request, and put right
+        under the steps that need them. Not left to ``recall_memory`` --
+        measured, small models never call it (notes/103).
+
+        Candidates, not orders: the current request wins. Nothing at all
+        when there is no memory, it holds nothing that matches, or the
+        store fails -- a recipe must load whatever memory is doing.
+        """
+        from yantra.memory import supports
+        from yantra.skills.learn import read_turn
+
+        agent = getattr(self.skills, "_agent", None)
+        memory = getattr(agent, "memory", None)
+        if memory is None or not supports(memory.store, "recall"):
+            return []
+        turn = read_turn(agent.history)
+        query = " ".join(filter(None, (skill.description, skill.inputs,
+                                       turn.task if turn else "")))
+        try:
+            found = memory.recall(query, MAX_REMEMBERED_INPUTS)
+        except Exception:
+            return []
+        if not found:
+            return []
+        return ["", "What you remember about this person that may fill its "
+                    "inputs (use what fits; what they asked for now wins):",
+                *(f"- {item.statement}" for item in found)]
 
 
 class RunSkill(Tool):

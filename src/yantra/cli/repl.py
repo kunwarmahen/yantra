@@ -404,25 +404,29 @@ class Repl:
         is one yellow line, and Ctrl-C is a no to the offer, not a
         cancelled turn.
         """
-        memory = getattr(self.agent, "memory", None)
-        if memory is not None and memory.pending:
-            # Found before compaction, mid-turn, with nobody to ask then.
-            found, memory.pending = list(memory.pending), []
-            self._offer_memories(found)
         learner = getattr(self.agent, "learner", None)
-        if learner is None:
-            return
         try:
-            for name, worked in learner.after_turn(end):
-                self.console.print(self._counted_line(name, worked),
-                                   markup=False, style="dim")
-                self._suggest_tool(name, worked)
-            if learn and end.reason == "end_turn":
-                self._offer_skill(learner, forced=False)
+            if learner is not None:
+                for name, worked in learner.after_turn(end):
+                    self.console.print(self._counted_line(name, worked),
+                                       markup=False, style="dim")
+                    self._suggest_tool(name, worked)
+                if learn and end.reason == "end_turn":
+                    self._offer_skill(learner, forced=False)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](not saved)[/yellow]")
         except Exception as exc:
             self.console.print(f"[yellow]learning skipped: {exc}[/yellow]")
+        self._offer_pending_memories()
+
+    def _offer_pending_memories(self) -> None:
+        """Facts found mid-turn -- before compaction, or by a skill's
+        write-up -- with nobody to ask then. Asked after the skill's
+        question, so the two are read in the order they were found."""
+        memory = getattr(self.agent, "memory", None)
+        if memory is not None and memory.pending:
+            found, memory.pending = list(memory.pending), []
+            self._offer_memories(found)
 
     def _suggest_tool(self, name: str, worked: bool) -> None:
         """The one line the turn that reaches PROMOTE_AFTER in a row prints.
@@ -606,6 +610,7 @@ class Repl:
             self._offer_skill(learner, forced=True)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](not saved)[/yellow]")
+        self._offer_pending_memories()
 
     def _offer_skill(self, learner: Learner, *, forced: bool) -> None:
         offer = learner.consider(
@@ -645,6 +650,11 @@ class Repl:
         print_(f"  scope:  {SCOPES[scope]} -> {view['scopes'][scope]['path']}",
                markup=False)
         print_(f"  needs:  {draft.needs or 'nothing'}", markup=False)
+        for need in offer.connections:
+            print_(f"          {need.name}: " + (
+                "connected" if need.connected else
+                "not connected" if need.known else
+                "no such connector in Setu here"), markup=False)
         print_(f"  inputs: {draft.inputs or 'none'}", markup=False)
         if offer.tested is None:
             print_("  tested: no script, so nothing to run")

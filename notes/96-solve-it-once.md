@@ -283,11 +283,14 @@ small models do well. Rediscovering an API is something they do badly.
 * ~~**Going stale.** A recipe that fails several times in a row should
   stop being offered until it is fixed.~~ Built, alongside repair:
   [note 97](97-when-the-recipe-breaks.md).
-* **Inputs from memory, needs from connections.** `inputs:` and
+* ~~**Inputs from memory, needs from connections.** `inputs:` and
   `needs:` are words for now. Filling "which fan" from what the agent
   remembers, and "Home Assistant" from a Setu connection
   ([note 95](95-the-accounts-you-connected.md)), comes when memory and
-  a Home Assistant connector exist.
+  a Home Assistant connector exist.~~ Built: the write-up hands the
+  values it left out to memory, `load_skill` brings them back, and
+  `needs: setu:<id>` is checked against Setu
+  ([note 106](106-what-the-recipe-leaves-out.md)).
 * **Sharing.** A learned recipe holds no data, so it could be shared.
   But that needs its own checks before anything leaves the machine.
 * **Choosing which learned skills to show.** Every learned skill's
