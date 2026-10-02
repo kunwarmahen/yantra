@@ -117,7 +117,10 @@ gemma searched once in 35.
 A prompt layer of twenty facts about the person, none of them the one
 needed, seems to tell qwen that there's a memory worth searching. That
 matters for the next change. A narrower prompt layer might also make the
-model search less. That can only be measured, not argued.
+model search less. That can only be measured, not argued. (Measured
+since: at eight lines the search rate barely moved, and the layer lost
+facts the store ranked low, so it stayed at twenty —
+[note 109](109-fewer-lines-fewer-facts.md).)
 
 **A neighbouring memory can do some of the work.** Two of qwen's buried
 `editor` passes had no Neovim in the prompt and no search. They had

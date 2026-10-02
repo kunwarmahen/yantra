@@ -73,6 +73,12 @@ MODES = ("local", "off")
 #: at most. Enough for a person's standing facts; a store holding more
 #: than this is what ``recall_memory`` is for.
 PROMPT_LIMIT = 20
+#: How many of those lines the store's search may fill before the most
+#: recent top up the rest. All of them: eight lines with five searched
+#: thinned the dilution notes/103 found, and cost more than it saved --
+#: a store that searches by meaning ranks some facts eighteenth, and a
+#: narrow layer cannot reach them (notes/109).
+PROMPT_SEARCHED = PROMPT_LIMIT
 PROMPT_CHARS = 2_000
 #: One statement's ceiling. A memory is a sentence, not a document.
 MAX_STATEMENT_CHARS = 300
@@ -221,10 +227,11 @@ class Memory:
     def prime(self, agent: Any, first_message: str) -> None:
         """Fill the ``memory`` layer for a new conversation. Never raises.
 
-        What matches the first message comes first, then the most recent
-        of the rest, up to ``PROMPT_LIMIT``. The top-up is the RDU case:
-        "flights to Austin" shares no word with "lives near RDU", and the
-        fact has to be there anyway.
+        What matches the first message comes first, up to
+        ``PROMPT_SEARCHED``, then the most recent of the rest, up to
+        ``PROMPT_LIMIT``. The top-up is the RDU case: "flights to Austin"
+        shares no word with "lives near RDU", and on a store that searches
+        by words alone the fact has to be there anyway.
         """
         self.primed = True
         try:
@@ -232,7 +239,7 @@ class Memory:
             seen: set[str] = set()
             found = []
             if supports(self.store, "recall"):
-                found += self.recall(first_message, PROMPT_LIMIT)
+                found += self.recall(first_message, PROMPT_SEARCHED)
             if supports(self.store, "list"):
                 found += self.list(PROMPT_LIMIT)
             for item in found:

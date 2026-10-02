@@ -210,6 +210,19 @@ class TestPromptLayer:
         assert memory.in_prompt[0].statement == "Airport: RDU"
         assert len(memory.in_prompt) == 4
 
+    def test_the_search_leads_and_the_newest_fill_up_to_the_limit(self, store):
+        from yantra.memory import PROMPT_LIMIT
+        for n in range(3):
+            store.remember("asha", f"Flies a lot, trip {n}", {})
+        for n in range(PROMPT_LIMIT + 2):
+            store.remember("asha", f"unrelated fact {n}", {})
+        agent = _agent(store, [assistant_text("ok")])
+        agent.run("plan my trip")
+        lines = [i.statement for i in agent.memory.in_prompt]
+        assert len(lines) == PROMPT_LIMIT
+        assert all(line.startswith("Flies") for line in lines[:3])
+        assert lines[3] == f"unrelated fact {PROMPT_LIMIT + 1}"
+
     def test_filled_once_so_the_prefix_survives_a_mid_conversation_write(self, store):
         agent = _agent(store, [assistant_text("a"), assistant_text("b")])
         agent.run("hello")

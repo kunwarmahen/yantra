@@ -189,10 +189,14 @@ can't find, a false keep, and a dead store.
 * ~~**More than one model, and more than one run.**~~ `--repeat N` and
   a side-by-side `--rescore` of saved runs, measured on two local models
   ([note 105](105-a-rate-not-a-picture.md)).
-* **A narrower prompt layer.** The dilution finding points at fewer,
+* ~~**A narrower prompt layer.** The dilution finding points at fewer,
   better-ranked lines when a store searches well. That's a change to
   `PROMPT_LIMIT` and to how the layer mixes search with recency, and it
-  should be measured with this trial before and after, not guessed at.
+  should be measured with this trial before and after, not guessed at.~~
+  Measured, and turned down: eight lines lifted use of a fact in the
+  layer from 91% to 97%, but cut facts the store ranked below fifth, and
+  gemma4:12b on Smritikosh fell from 31 to 25 of 35
+  ([note 109](109-fewer-lines-fewer-facts.md)).
 * **Smritikosh's own context block.** Its `get_context` tool builds a
   prompt block from its graph and profile. The verb map deliberately
   uses only the four verbs, and the prompt layer is Yantra's job.

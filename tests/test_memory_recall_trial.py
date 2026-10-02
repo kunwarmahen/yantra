@@ -135,6 +135,29 @@ class TestRepeats:
         assert "| answered from memory | 2/3 (21-94%) | 1/1 (21-100%) |" in out
 
 
+    def test_before_and_after_a_layer_change_are_told_apart(self, tmp_path, capsys):
+        def row(passed, layer=None):
+            return {"id": "airport", "rep": 1, "kept": ["Lives near RDU"],
+                    "later_answer": "From RDU" if passed else "Where from?",
+                    "prompt": ["Lives near RDU"], "recall_called": False,
+                    "remember_called": False, "model": "qwen",
+                    "provider": "ollama", "store": "local", "distractors": 30,
+                    **({"layer": layer} if layer else {})}
+        cases = tmp_path / "cases.jsonl"
+        cases.write_text(json.dumps(AIRPORT) + "\n")
+        before, after = tmp_path / "before.jsonl", tmp_path / "after.jsonl"
+        # saved before the layer was recorded: it ran with the old one
+        before.write_text(json.dumps(row(False)) + "\n")
+        after.write_text(json.dumps(row(True, "8 lines, 5 searched")) + "\n")
+        args = Namespace(rescore=[before, after], cases=cases,
+                         provider="ollama", model="qwen", store="local",
+                         distractors=30)
+        assert trial.rescore(args) == 0
+        out = capsys.readouterr().out
+        assert (f"| | qwen, local, buried 30 ({trial.OLD_LAYER}) | "
+                "qwen, local, buried 30 (8 lines, 5 searched) |") in out
+
+
 class TestSavedAsItGoes:
     """A long run that dies -- the store's server stopped forty minutes in
     -- must keep the rows it already graded. The BIAS is against a trial

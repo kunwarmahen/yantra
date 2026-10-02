@@ -365,7 +365,10 @@ buried gemma went from 16 to 28 of 35 on Smritikosh
 ([notes/107](notes/107-a-fact-that-says-what-it-is.md)). A habit said in
 passing counts too: *"It's 31 degrees Celsius here"* used to be read as
 part of the question, and now both models keep *"Measures temperature
-in Celsius"* 5 times in 5.
+in Celsius"* 5 times in 5. The layer stays at twenty lines. Eight lines
+crowded the right fact less, but dropped the ones a store ranks low:
+buried gemma on Smritikosh fell from 31 to 25 of 35
+([notes/109](notes/109-fewer-lines-fewer-facts.md)).
 
 ### One-command starts
 
@@ -1016,8 +1019,8 @@ the way the scrubber would use the answer — or bring your own),
 sessions per fact, on any store — `--distractors` buries it so only the
 store's search can find it, `--repeat` turns one run into a rate with
 an interval, and `--rescore` puts saved runs of different models side
-by side; `--out` saves each row as it's graded, so a crash keeps what
-ran), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+by side, naming the prompt layer each ran with when they differ;
+`--out` saves each row as it's graded, so a crash keeps what ran), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation
@@ -2000,7 +2003,9 @@ src/yantra/
 │                   per conversation so the cached prefix survives; local.py
 │                   is the built-in sqlite + word-overlap store, tools.py the
 │                   remember (asks first) and recall_memory tools
-│                   ([notes/100](notes/100-what-it-knows-about-you.md));
+│                   ([notes/100](notes/100-what-it-knows-about-you.md)); the
+│                   layer is twenty lines, search first, then the newest
+│                   ([notes/109](notes/109-fewer-lines-fewer-facts.md));
 │                   reflect.py looks back ONCE when a conversation ends
 │                   (/quit, /clear, /load, before compaction, /remember):
 │                   one plain call to the session's own model, scrubbed

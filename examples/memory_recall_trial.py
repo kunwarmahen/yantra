@@ -32,8 +32,9 @@ unrelated facts about the same person AFTER session 1, so the fact is the
 oldest thing in the store and only the store's SEARCH can bring it into
 the prompt. "Find me flights to Austin" shares no word with "lives near
 RDU": word overlap (the ``local`` store) cannot find it, and a store that
-searches by meaning might. The ``in prompt`` column is that measurement,
-and it costs no model call.
+searches by meaning might. The ``search`` column is where the fact
+ranked in that search, twenty deep, and costs no model call; ``in
+prompt`` is whether it made the layer.
 
     uv run python examples/memory_recall_trial.py \\
         --provider ollama --model qwen3.8:latest
@@ -74,11 +75,19 @@ import uuid
 from pathlib import Path
 
 from yantra import get_provider, load_settings
-from yantra.memory import PROMPT_LIMIT, MemoryItem, enable_memory
+from yantra.memory import PROMPT_LIMIT, PROMPT_SEARCHED, MemoryItem, enable_memory
 from yantra.memory.reflect import keep, reflect
 from yantra.spec import AgentSpec
 
 CASES = Path(__file__).resolve().parent / "memory_recall_cases.jsonl"
+
+#: How deep the ``search`` column looks. Fixed, not the layer's size, so
+#: "found by search" means the same thing whatever the layer carries.
+SEARCH_DEPTH = 20
+#: The prompt layer's shape, saved on every row. Rows saved before it
+#: was recorded all ran with the old one.
+LAYER = f"{PROMPT_LIMIT} lines, {PROMPT_SEARCHED} searched"
+OLD_LAYER = "20 lines, 20 searched"
 
 #: True of a person, and no help with any scenario's later question.
 DISTRACTORS = [
@@ -215,7 +224,7 @@ class Trial:
         # ---- the store's own search, before any model sees it -------------
         try:
             row["search"] = [i.statement for i in
-                             one.memory.recall(case["later"], PROMPT_LIMIT)]
+                             one.memory.recall(case["later"], SEARCH_DEPTH)]
         except Exception as exc:
             row["search"], row["error"] = [], f"recall failed: {exc}"
         row["stored"] = len(kept) + self.args.distractors
@@ -294,7 +303,7 @@ def mark(value) -> str:
     return {True: "yes", False: "no", None: "-"}.get(value, str(value))
 
 
-SETTING = ("provider", "model", "store", "distractors")
+SETTING = ("provider", "model", "store", "distractors", "layer")
 
 
 def setting_of(source) -> dict:
@@ -304,9 +313,10 @@ def setting_of(source) -> dict:
     return {key: get(key) for key in SETTING}
 
 
-def label(setting: dict) -> str:
+def label(setting: dict, layer: bool = False) -> str:
     buried = f", buried {setting['distractors']}" if setting["distractors"] else ""
-    return f"{setting['model']}, {setting['store']}{buried}"
+    layer = f" ({setting['layer']})" if layer and setting.get("layer") else ""
+    return f"{setting['model']}, {setting['store']}{buried}{layer}"
 
 
 def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
@@ -361,7 +371,7 @@ def totals(rows: list[dict]) -> dict[str, tuple[int, int]]:
 def report(rows: list[dict], down: dict | None, setting: dict) -> None:
     reps = max((r.get("rep", 1) for r in rows), default=1)
     print(f"\nstore={setting['store']} model={setting['model']} "
-          f"distractors={setting['distractors']}"
+          f"distractors={setting['distractors']} layer={setting['layer']!r}"
           + (f" repeat={reps}" if reps > 1 else "") + "\n")
     head = ("case", "remember", "kept", "search", "in prompt", "answer",
             "recall", "baseline", "isolated")
@@ -409,7 +419,8 @@ def compare(groups: dict[tuple, list[dict]]) -> None:
     columns = [(dict(zip(SETTING, key, strict=True)), totals(rows))
                for key, rows in groups.items()]
     measures = list(dict.fromkeys(m for _, t in columns for m in t))
-    print("\n| | " + " | ".join(label(s) for s, _ in columns) + " |")
+    layers = len({s.get("layer") for s, _ in columns}) > 1   # before/after
+    print("\n| | " + " | ".join(label(s, layers) for s, _ in columns) + " |")
     print("|---" * (len(columns) + 1) + "|")
     for measure in measures:
         cells = [rate(*t[measure], True) if measure in t else "-"
@@ -443,6 +454,7 @@ def main() -> int:
     args = parser.parse_args()
     args.distractors = max(0, min(args.distractors, len(DISTRACTORS)))
     args.repeat = max(1, args.repeat)
+    args.layer = LAYER
 
     if args.rescore:
         return rescore(args)
@@ -493,9 +505,10 @@ def main() -> int:
 
 def rescore(args) -> int:
     """Grade saved runs again. A row saved before rows carried their
-    setting takes it from the command line."""
+    setting takes it from the command line, and one saved before the
+    layer's shape was recorded ran with the old twenty-line layer."""
     cases = {c["id"]: c for c in load_cases(args.cases, None)}
-    fallback = setting_of(args)
+    fallback = {**setting_of(args), "layer": OLD_LAYER}
     groups: dict[tuple, list[dict]] = {}
     for path in args.rescore:
         for line in path.read_text().splitlines():
