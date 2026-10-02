@@ -153,7 +153,7 @@ shared by the web UI's servers panel and the REPL's `/mcp` commands so
 both stay in step by construction:
 
 ```
-/mcp                          # list: name (transport) [down] · saved — target — N tool(s)
+/mcp                          # list: name (transport) [down] · saved · from the package — target — N tool(s)
 /mcp off tiny   /mcp on tiny  # soft toggle: whole toolset, process stays warm
 /mcp add tiny python srv.py   # connect NOW (asks whether to remember)
 /mcp remove tiny              # kill child, unregister tools, forget saved entry
@@ -267,7 +267,10 @@ refused before anything spawns, with the parser's own complaint
 * **remember is ticked by default.** Leave it on for a test server and
   it lands in `.yantra/mcp.json` and reconnects on every future
   launch; the row grows a **saved** badge when that has happened.
-  Removing forgets it again.
+  Removing forgets it again. A server an agent package declares shows a
+  **package** badge instead, and one from a connected account **setu**:
+  removing those lasts until the next launch
+  ([notes/104](104-the-servers-it-came-with.md)).
 * **The transport radio defaults to stdio.** For a Streamable-HTTP
   server (`python examples/tiny_mcp_server.py --http 9731`, second
   terminal) pick *talks to a url* and give it

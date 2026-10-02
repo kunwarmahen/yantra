@@ -2246,6 +2246,17 @@ async function renderMCPRows(servers) {
   for (const s of servers) rows.append(mcpRow(s));
 }
 
+// A server the package or Setu brought comes back next launch, so the
+// row says where it came from (notes/104).
+const ORIGIN_BADGE = {
+  package: '<span class="t-ro">package</span>',
+  setu: '<span class="t-ro">setu</span>',
+};
+const ORIGIN_TITLE = {
+  package: " — declared by this agent's package; removing it lasts until the next launch",
+  setu: " — a connected account; removing it lasts until the next launch",
+};
+
 function mcpRow(s) {
   const row = document.createElement("div");
   row.className = "mcp-row" + (s.enabled === false ? " off" : "");
@@ -2258,8 +2269,9 @@ function mcpRow(s) {
   const name = document.createElement("div");
   name.innerHTML = `<span class="t-name">${esc(s.name)}</span>`
     + `<span class="t-badge">${esc(s.transport)}</span>`
-    + (s.remembered ? '<span class="t-ro">saved</span>' : "");
-  name.title = s.target;
+    + (s.remembered ? '<span class="t-ro">saved</span>' : "")
+    + (ORIGIN_BADGE[s.origin] || "");
+  name.title = s.target + (ORIGIN_TITLE[s.origin] || "");
   row.append(name);
 
   const count = document.createElement("div");
@@ -2317,7 +2329,8 @@ function mcpRow(s) {
     const out = await post("/api/mcp/remove", { name: s.name });
     if (!out) return;
     applyHeader(out);
-    toast(`removed ${s.name} — ${out.removed} tool(s) gone`);
+    toast(`removed ${s.name} — ${out.removed} tool(s) gone`
+      + (s.origin ? " until the next launch" : ""));
     refreshMCPRows();
   };
   row.append(rm);

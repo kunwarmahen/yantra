@@ -1129,15 +1129,21 @@ class Repl:
             if len(parts) != 2:
                 self.console.print("[red]usage: /mcp remove NAME[/red]")
                 return
+            origin = self.mcp.origins.get(parts[1])
             try:
                 removed = self.mcp.disconnect(parts[1])
             except Exception as exc:
                 self.console.print(f"[red]{exc}[/red]")
                 return
-            # disconnect() also drops any saved entry; say so plainly.
+            # disconnect() also drops any saved entry; say so plainly. A
+            # server the package or Setu brought is not yours to forget:
+            # it is back next launch, and the line says where from.
+            tail = {"package": "back next launch -- the package declares it",
+                    "setu": "back next launch -- it's a connected account "
+                            "(setu disconnect to drop it)"}.get(
+                origin, "saved entry forgotten")
             self.console.print(f"[green]disconnected '{parts[1]}' -- "
-                               f"{removed} tool(s) removed, saved entry "
-                               "forgotten[/green]")
+                               f"{removed} tool(s) removed, {tail}[/green]")
         elif verb == "add":
             self._mcp_add_command(parts[1:])
         else:
@@ -1150,9 +1156,11 @@ class Repl:
                 health = "" if info["healthy"] else \
                     r" [red]\[down][/red]"  # \[ escapes rich markup
                 remembered = " · saved" if info["remembered"] else ""
+                origin = {"package": " · from the package",
+                          "setu": " · from Setu"}.get(info.get("origin"), "")
                 self.console.print(
                     f"[bold]{info['name']}[/bold] [dim]({info['transport']})[/"
-                    f"dim]{health}{remembered} — {info['target']} — "
+                    f"dim]{health}{remembered}{origin} — {info['target']} — "
                     f"{info['tools']} tool(s)"
                     + (f", {info['disabled']} off" if info["disabled"] else ""))
 

@@ -102,10 +102,21 @@ doesn't name; and `--mcp-login` finds a package's server.
 
 ## What was deliberately not built
 
-* **Marking a package's servers in `/mcp` and the page's panel.** The
+* ~~**Marking a package's servers in `/mcp` and the page's panel.** The
   startup line says `(agent.toml)`, and the listing shows them like any
   other server. Removing one in a session removes it for that session;
-  it comes back next launch, since it's in the package.
+  it comes back next launch, since it's in the package.~~ Marked now.
+  `/mcp` says `· from the package` (or `· from Setu` for a connected
+  account), the page's row carries a **package** or **setu** badge, and
+  removing one says it's back next launch instead of "saved entry
+  forgotten":
+
+  ```
+  > /mcp
+  tiny (stdio) · from the package — …/python …/examples/tiny_mcp_server.py — 2 tool(s)
+  > /mcp remove tiny
+  disconnected 'tiny' -- 2 tool(s) removed, back next launch -- the package declares it
+  ```
 * **Asking before starting a package's stdio server.** Declaring a
   `command` means running it, the same as the package's own `tools/`
   code runs. Choosing to run a package is when that trust is given. A

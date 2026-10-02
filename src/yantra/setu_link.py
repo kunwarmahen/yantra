@@ -404,7 +404,7 @@ class Setu:
                 continue
             if existing is None:
                 try:
-                    manager.connect(cfg)
+                    manager.connect(cfg, origin="setu")
                 except MCPError as exc:
                     done.notes.append(f"{row['ref']} unavailable: {exc}")
                     continue

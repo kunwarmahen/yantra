@@ -953,11 +953,15 @@ class MCPManager:
         self.sessions: dict[str, Any] = {}
         self.tool_names: dict[str, list[str]] = {}
         self.pinned: set[str] = set()  # names with an entry in memory_path
+        #: Where a server came from when it wasn't you: "package" for an
+        #: agent.toml [[mcp]], "setu" for a connected account. Listings
+        #: say so, because removing one lasts only until the next launch.
+        self.origins: dict[str, str] = {}
 
     # ---- lifecycle ---------------------------------------------------------
 
     def connect(self, config: MCPServerConfig, *, timeout: float = 30.0,
-                remember: bool = False) -> list[str]:
+                remember: bool = False, origin: str | None = None) -> list[str]:
         """Start one server and register its tools. Connection failures
         raise MCPError AFTER cleanup -- half-registered sessions must not
         linger."""
@@ -979,6 +983,8 @@ class MCPManager:
             raise
         self.sessions[config.name] = session
         self.tool_names[config.name] = names
+        if origin:
+            self.origins[config.name] = origin
         if remember and self.memory_path is not None:
             remember_server(config, self.memory_path)
         if self.memory_path is not None and \
@@ -1000,6 +1006,7 @@ class MCPManager:
         for tool_name in removed:
             self.registry.unregister(tool_name)
         self.pinned.discard(name)
+        self.origins.pop(name, None)
         if self.memory_path is not None:
             forget_server(name, self.memory_path)
         self._refresh_catalog()
@@ -1044,6 +1051,7 @@ class MCPManager:
                 "disabled": sum(1 for n in names
                                 if self.registry.is_disabled(n)),
                 "remembered": name in self.pinned,
+                "origin": self.origins.get(name),
             })
         return out
 

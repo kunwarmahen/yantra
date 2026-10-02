@@ -1091,6 +1091,36 @@ class TestPackageServersInASession:
         assert "mcp__docs__echo" in manager.registry.names()
         manager.shutdown()
 
+    def test_a_packages_server_says_where_it_came_from(self):
+        manager, _, _ = self._start([_cfg("docs")], already=["mine"])
+        origins = {s["name"]: s["origin"] for s in manager.servers()}
+        assert origins == {"docs": "package", "mine": None}
+        manager.disconnect("docs")
+        assert "docs" not in manager.origins
+        manager.shutdown()
+
+    def test_mcp_lists_it_and_removing_it_says_it_comes_back(self):
+        import io
+        from rich.console import Console
+        from conftest import ScriptedProvider
+        from yantra.agent import Agent
+        from yantra.cli.repl import Repl
+
+        manager, _, _ = self._start([_cfg("docs")], already=["mine"])
+        out = io.StringIO()
+        agent = Agent(ScriptedProvider([]), model="m", tools=manager.registry)
+        repl = Repl(agent, Console(file=out, width=200),
+                    input_fn=lambda prompt: "", mcp=manager)
+        repl._command("/mcp")
+        listing = out.getvalue().splitlines()
+        assert any("docs" in line and "from the package" in line for line in listing)
+        assert not any("mine" in line and "from the" in line for line in listing)
+        repl._command("/mcp remove docs")
+        assert "back next launch -- the package declares it" in out.getvalue()
+        repl._command("/mcp remove mine")
+        assert "saved entry forgotten" in out.getvalue()
+        manager.shutdown()
+
     def test_the_packages_admission_policy_still_applies(self):
         registry = ToolRegistry()
         registry.admit_only(allow=["read_file"])

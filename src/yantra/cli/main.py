@@ -1985,7 +1985,7 @@ def _connect_package_mcp(configs, mcp_manager, console: Console) -> None:
                           f"connected from your own setup; using that[/dim]")
             continue
         try:
-            names = mcp_manager.connect(cfg)
+            names = mcp_manager.connect(cfg, origin="package")
         except (MCPError, ValueError) as exc:
             console.print(f"[yellow]mcp '{cfg.name}' (agent.toml) "
                           f"unavailable: {exc}[/yellow]")

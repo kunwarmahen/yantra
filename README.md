@@ -1121,7 +1121,8 @@ A package may also declare the MCP servers it needs. Every session
 starts them — the terminal, the page and `--eval` alike — after your own
 `--mcp-config`, remembered and Setu servers, so a name you already
 connected wins. One that won't start is a yellow line in a session and a
-red suite under `--eval`
+red suite under `--eval`. `/mcp` and the page mark them as the package's,
+since removing one lasts only until the next launch
 ([notes/104](notes/104-the-servers-it-came-with.md)):
 
 ```toml
@@ -2093,7 +2094,8 @@ src/yantra/
 │                   removes/toggles servers mid-session, .yantra/mcp.json
 │                   remembers them ([notes/09](notes/09-mcp.md)); a
 │                   package's [[mcp]] connects in every session, last, so
-│                   the person's own server of the same name wins
+│                   the person's own server of the same name wins, and
+│                   listings say which servers the package or Setu brought
 │                   ([notes/104](notes/104-the-servers-it-came-with.md))
 ├── mcp_oauth.py    OAuth 2.1 for authenticated HTTP servers, by hand:
 │                   RFC 9728/8414 discovery, RFC 7591 dynamic

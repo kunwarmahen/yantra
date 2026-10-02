@@ -128,6 +128,13 @@ class TestTheManifestDecides:
         finally:
             manager.shutdown()
 
+    def test_a_connected_account_says_it_came_from_setu(self, fake_setu, tmp_path):
+        _, _, manager, _ = start(fake_setu[0], tmp_path)
+        try:
+            assert manager.origins == {"gmail-personal": "setu"}
+        finally:
+            manager.shutdown()
+
     def test_spend_is_asked_every_time(self, fake_setu, tmp_path):
         code, agent, manager, _ = start(fake_setu[0], tmp_path)
         try:
