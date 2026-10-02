@@ -106,13 +106,24 @@ classes as read. `write` adds writes, and `spend` everything. With
 `gmail:read`, the package above sees `mcp__gmail__search_threads` and no
 way to send.
 
-**NOBODY TO ASK MEANS NOT YET.** Without a terminal (stdin is not a
-TTY), nothing is asked and nothing is granted:
+**NOBODY AT THE TERMINAL MEANS THE PAGE ASKS.** Without a terminal
+(stdin is not a TTY, as when the page is started by a script), nothing
+is granted at launch. The question waits on the Connections panel
+instead, with **allow** and **not now**:
 
 ```
-setu: mail-helper wants to read your Gmail (…). Allow? -- not answered yet; start it once in a terminal to say yes
+setu: mail-helper wants to read your Gmail (…). Allow? -- not answered yet; say yes in a terminal, or on the page's Connections panel
 setu: none of your connections for this agent
 ```
+
+A yes there is kept exactly like one in the terminal, and the tools
+arrive without a restart. "Not now" clears the question for the session
+and keeps nothing.
+
+**A YES CAN BE TAKEN BACK.** The panel lists what the package was
+allowed, each with **forget**: its tools go at once, and the next
+launch asks again. From a terminal, `yantra --agent DIR
+--forget-connections` takes back everything that package had.
 
 **YOUR OWN SESSIONS ARE UNCHANGED.** Running `yantra` without
 `--agent` still sees every account you connected. They're yours.
@@ -144,6 +155,22 @@ setu: gmail-personal (1 tool(s)), gmail-work (1 tool(s)) -- via ./setu
 
 Only the read tool reached it, one per account, merged into one.
 
+Then the page, against a real Gmail account signed in through Setu: the
+same package started with `--web` and no terminal, driven through the
+panel's own API:
+
+```
+GET     asks: ['gmail:read'] | granted: []             | gmail:personal 0 tools
+allow   asks: []             | granted: ['gmail:read'] | gmail:personal 5 tools
+forget  asks: []             | granted: []             | gmail:personal 0 tools
+```
+
+Five tools, Gmail's read ones: `search_threads`, `get_thread`,
+`get_message`, `list_labels` and `list_drafts`. No drafting, no
+sending. That run caught the panel's count showing all seven of the
+server's tools while the registry rightly held five. The count is now
+what the package got.
+
 `tests/test_setu_link.py` pins both halves. Two accounts merge, and a
 read without `account` asks both. A write without one fails, and its
 approval names the account. Dropping back to one account restores the
@@ -153,14 +180,14 @@ that isn't connected is reported, not asked about.
 
 ## What was deliberately not built
 
-* **Asking on the page.** A package started with `--web` asks in the
-  terminal it was launched from, before the page opens. A question in
-  the page itself is a later step.
+* ~~**Asking on the page.**~~ Built: unanswered questions wait on the
+  Connections panel.
 * **Asking mid-session.** An account you connect from the page while a
   package is running isn't offered to it until the next launch, when
-  it's asked about. A package's access shouldn't widen while it runs.
-* **Forgetting a yes from inside Yantra.** Delete the line from
-  `connections-approved.json` for now.
+  it's asked about. A package's access shouldn't widen while it runs
+  without a question, and the question is asked at launch.
+* ~~**Forgetting a yes from inside Yantra.**~~ Built: **forget** on the
+  panel, `--forget-connections` in the terminal.
 * **Tool names by connector for one account.** Renaming
   `mcp__gmail-personal__…` to `mcp__gmail__…` even with one account
   would keep names stable when a second arrives. It would also rename

@@ -139,7 +139,11 @@ The panel also rendered as a bottom sheet at phone width, in dark mode.
 A full sign-in against Google needs a real Desktop client file, which
 this run didn't have. The rest of the loop — sign in, tools appear;
 disconnect, tools go — ran against a fake `setu` program that speaks
-the same JSON (`tests/test_connections_page.py`).
+the same JSON (`tests/test_connections_page.py`). With a real Gmail
+account signed in through Setu since, Yantra on `qwen3.8:latest`
+searched it through `mcp__gmail-personal__search_threads`, and Gmail's
+API answered `200 OK` without the model ever seeing a token
+([note 106](106-what-the-recipe-leaves-out.md) has the recipe run).
 
 `2328 passed, 1 skipped` (was 2313). The tests check that:
 

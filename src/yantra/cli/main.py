@@ -257,6 +257,10 @@ def build_parser() -> argparse.ArgumentParser:
                         default=None,
                         help="show a shared recipe's every file, ask, and install it "
                              "into your learned skills. No model needed")
+    parser.add_argument("--forget-connections", action="store_true",
+                        dest="forget_connections",
+                        help="with --agent DIR: take back every Setu account you "
+                             "allowed that package; its next launch asks again")
     parser.add_argument("--mcp-login", metavar="NAME", dest="mcp_login",
                         default=None,
                         help="one-time LOGIN for an authenticated MCP server: "
@@ -1979,7 +1983,7 @@ def _connect_setu(args, mcp_manager, agent, console: Console, spec=None,
     if setu.link is None:
         return None
     if spec is not None and spec.root is not None:
-        setu.allow = _package_connections(spec, setu.link, console, ask)
+        setu.allow = _package_connections(spec, setu, console, ask)
     done = setu.sync(mcp_manager, agent)
     for note in done.notes:
         console.print(f"[yellow]setu: {note}[/yellow]")
@@ -1991,7 +1995,7 @@ def _ask_yes(question: str) -> bool:
     return Prompt.ask(question, choices=["y", "N"], default="N").strip().lower() == "y"
 
 
-def _package_connections(spec, link, console: Console, ask) -> dict[str, str]:
+def _package_connections(spec, setu, console: Console, ask) -> dict[str, str]:
     """What a package may use of the person's accounts: its
     ``[connections] needs``, each allowed once, here or before.
 
@@ -2001,13 +2005,16 @@ def _package_connections(spec, link, console: Console, ask) -> dict[str, str]:
     """
     from yantra import setu_link
 
+    link = setu.link
+    setu.package = spec.name
+    setu.package_key = setu_link.package_key(spec.name, spec.root)
     if not spec.connections:
         if link.connections:
             console.print(f"[dim]setu: {spec.name} asks for none of your connected "
                           f"accounts, so it gets none ([connections] needs in "
                           f"agent.toml)[/dim]")
         return {}
-    key = setu_link.package_key(spec.name, spec.root)
+    key = setu.package_key
     approved = setu_link.load_approved(key)
     granted = []
     for need in spec.connections:
@@ -2025,14 +2032,17 @@ def _package_connections(spec, link, console: Console, ask) -> dict[str, str]:
         question = (f"{spec.name} wants to {setu_link.CLASS_WORDS[klass]} your {name} "
                     f"({who}). Allow?")
         if ask is None:
-            console.print(f"[yellow]setu: {question} -- not answered yet; start it once "
-                          f"in a terminal to say yes[/yellow]")
+            setu.asks.append({"need": need, "connector": cid, "name": name,
+                              "level": klass, "question": question})
+            console.print(f"[yellow]setu: {question} -- not answered yet; say yes in a "
+                          f"terminal, or on the page's Connections panel[/yellow]")
             continue
         if ask(question):
             setu_link.save_approved(key, need)
             granted.append(need)
         else:
             console.print(f"[dim]setu: not allowed; {spec.name} won't see {name}[/dim]")
+    setu.granted = list(granted)
     return setu_link.needs_allow(granted)
 
 
@@ -2057,6 +2067,25 @@ def _connect_package_mcp(configs, mcp_manager, console: Console) -> None:
             continue
         console.print(f"[dim]mcp '{cfg.name}' (agent.toml): {len(names)} "
                       f"tool(s) -- {', '.join(names)}[/dim]")
+
+
+def _forget_connections(args, console: Console) -> int:
+    """--forget-connections: every yes a package was given, taken back."""
+    from yantra import setu_link
+
+    try:
+        spec = _resolve_spec(args)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if spec.root is None:
+        print("error: --forget-connections needs --agent DIR: your own sessions "
+              "were never asked", file=sys.stderr)
+        return 2
+    gone = setu_link.forget_approved(setu_link.package_key(spec.name, spec.root))
+    console.print(f"forgot {', '.join(gone)} for {spec.name}; its next launch asks again"
+                  if gone else f"{spec.name} had nothing allowed")
+    return 0
 
 
 def _skill_share_mode(args, console: Console) -> int:
@@ -2351,6 +2380,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.browse_login is not None:
         _load_dotenv()  # the knob usually lives in .env
         return _browse_login(args.browse_login, console)
+
+    # Taking back what a package was allowed is a file edit; no model.
+    if args.forget_connections:
+        return _forget_connections(args, console)
 
     # Sharing or installing a recipe reads files and asks; no model.
     if args.skill_share is not None or args.skill_install is not None:

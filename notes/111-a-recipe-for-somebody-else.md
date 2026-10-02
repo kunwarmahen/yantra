@@ -123,11 +123,13 @@ no-op, and refuses a different one with the same name.
 
 ## What was deliberately not built
 
-* **The catalog's side.** Recipes listed under the connector they need
-  on the Connections page, *by Setu* or *community* labels, anonymous
+* **The catalog's side.** *By Setu* or *community* labels, anonymous
   install counts and a review queue all belong to the Setu catalog and
   its signed index, which don't exist yet. This writes the folder that
-  catalog will take.
+  catalog will take. What can be shown without it is: each connector's
+  card on the Connections page lists the recipes on this computer that
+  need it, learned or installed (*"2 recipe(s): inbox-count, home-fan
+  (shared)"*).
 * **Running the recipe's test before it leaves.** The test command
   lives in the draft while saving and isn't kept in the folder.
   Re-running a recipe against a fake connector is the catalog's CI,

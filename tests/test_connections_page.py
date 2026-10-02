@@ -354,3 +354,94 @@ class TestPage:
         client = TestClient(make_app(session))
         assert client.get("/api/connections").json()["mode"] == "off"
         assert client.post("/api/connections/refresh").status_code == 400
+
+
+# ---- a package's question, on the page (notes/110) --------------------------------
+
+
+def served_package(tmp_path, program, monkeypatch):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from yantra.web.server import WebSession, make_app
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry())
+    manager = MCPManager(agent.registry, agent=agent)
+    spec = SimpleNamespace(name="helper", root=tmp_path / "helper",
+                           connections=("gmail:read",))
+    _connect_setu(SimpleNamespace(setu=str(program)), manager, agent,
+                  Console(file=io.StringIO(), width=200), spec, None)
+    session = WebSession()
+    session.attach(agent, None, mcp=manager)
+    return agent, manager, TestClient(make_app(session), client=("127.0.0.1", 51000))
+
+
+def gmail_tools(agent):
+    return sorted(n for n in agent.registry.names() if n.startswith("mcp__gmail"))
+
+
+class TestPackageOnThePage:
+    def test_the_question_waits_on_the_page_and_a_yes_brings_the_tools(
+            self, setu, tmp_path, monkeypatch):
+        agent, manager, client = served_package(tmp_path, setu.path, monkeypatch)
+        try:
+            state = client.get("/api/connections").json()
+            assert state["package"] == "helper" and state["granted"] == []
+            assert [a["need"] for a in state["asks"]] == ["gmail:read"]
+            assert gmail_tools(agent) == []
+            out = client.post("/api/connections/answer",
+                              json={"need": "gmail:read", "allow": True}).json()
+            assert out["asks"] == [] and out["granted"] == ["gmail:read"]
+            assert gmail_tools(agent) == ["mcp__gmail-personal__search_threads"]
+            assert setu_link.load_approved(agent.setu.package_key) == {"gmail:read"}
+        finally:
+            manager.shutdown()
+
+    def test_not_now_clears_the_question_and_keeps_nothing(self, setu, tmp_path,
+                                                          monkeypatch):
+        agent, manager, client = served_package(tmp_path, setu.path, monkeypatch)
+        try:
+            out = client.post("/api/connections/answer",
+                              json={"need": "gmail:read", "allow": False}).json()
+            assert out["asks"] == [] and gmail_tools(agent) == []
+            assert not setu_link.approvals_path().exists()
+            res = client.post("/api/connections/answer",
+                              json={"need": "gmail:read", "allow": True})
+            assert res.status_code == 404
+        finally:
+            manager.shutdown()
+
+    def test_forget_takes_the_tools_now_and_the_yes_for_good(self, setu, tmp_path,
+                                                            monkeypatch):
+        agent, manager, client = served_package(tmp_path, setu.path, monkeypatch)
+        try:
+            client.post("/api/connections/answer", json={"need": "gmail:read", "allow": True})
+            out = client.post("/api/connections/forget", json={"need": "gmail:read"}).json()
+            assert out["forgot"] == ["gmail:read"] and out["granted"] == []
+            assert gmail_tools(agent) == []
+            assert setu_link.load_approved(agent.setu.package_key) == set()
+        finally:
+            manager.shutdown()
+
+    def test_your_own_session_has_nothing_to_forget(self, setu, tmp_path):
+        session, agent, manager, client = served(tmp_path, setu.path)
+        try:
+            assert client.post("/api/connections/forget", json={}).status_code == 409
+        finally:
+            manager.shutdown()
+
+
+def test_forget_connections_from_the_terminal(tmp_path, monkeypatch, capsys):
+    from yantra.cli.main import main
+
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    pkg = tmp_path / "helper"
+    pkg.mkdir()
+    (pkg / "agent.toml").write_text('[agent]\nname = "helper"\n'
+                                    '[connections]\nneeds = ["gmail"]\n')
+    key = setu_link.package_key("helper", pkg)
+    setu_link.save_approved(key, "gmail:read")
+    assert main(["--agent", str(pkg), "--forget-connections"]) == 0
+    assert "forgot gmail:read for helper" in capsys.readouterr().out
+    assert setu_link.load_approved(key) == set()

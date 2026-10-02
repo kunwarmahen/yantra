@@ -717,6 +717,8 @@ class WebSession:
                  "setup": {}, "problems": [], "error": ""}
                 if setu is None else setu.describe(self.mcp))
         signin = self.signin
+        from yantra.setu_link import recipes_by_connector
+        base["recipes"] = recipes_by_connector(getattr(self.agent, "skills", None))
         return {**base, "local": local,
                 "signin": ({"ref": signin.ref, "running": signin.running,
                             **{k: v for k, v in signin.last.items()
@@ -1612,6 +1614,39 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(502, said or "setu disconnect failed")
         sync = await run_in_threadpool(session.setu_sync)
         return {**session.connections_state(local=is_local(req)), "said": said,
+                "sync": sync}
+
+    @app.post("/api/connections/answer")
+    async def connections_answer(req: Request) -> dict[str, Any]:
+        """A package's question, answered on the page (notes/110): a yes is
+        kept and its tools arrive; "not now" only clears the question.
+        require_idle, since a yes changes the tool list."""
+        require_idle()
+        setu = require_setu()
+        body = await req.json()
+        need, yes = str(body.get("need", "")), bool(body.get("allow"))
+        from yantra.setu_link import SetuLinkError
+        try:
+            setu.answer(need, yes)
+        except SetuLinkError as exc:
+            raise HTTPException(404, str(exc)) from None
+        sync = await run_in_threadpool(session.setu_sync) if yes else None
+        return {**session.connections_state(local=is_local(req)), "sync": sync}
+
+    @app.post("/api/connections/forget")
+    async def connections_forget(req: Request) -> dict[str, Any]:
+        """Take back what this package was allowed -- one need, or all when
+        none is named. Its tools go now, and the next launch asks again."""
+        require_idle()
+        setu = require_setu()
+        need = (await req.json()).get("need") or None
+        from yantra.setu_link import SetuLinkError
+        try:
+            gone = setu.forget(str(need) if need else None)
+        except SetuLinkError as exc:
+            raise HTTPException(409, str(exc)) from None
+        sync = await run_in_threadpool(session.setu_sync)
+        return {**session.connections_state(local=is_local(req)), "forgot": gone,
                 "sync": sync}
 
     @app.post("/api/connections/client-file")

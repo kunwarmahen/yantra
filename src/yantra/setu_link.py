@@ -391,6 +391,20 @@ def need_lines(needs: list[Need]) -> list[str]:
     return lines
 
 
+def recipes_by_connector(skills: Any) -> dict[str, list[dict[str, Any]]]:
+    """The recipes on this computer that need each connector -- learned
+    for you or installed from somebody (skills/share.py) -- for the
+    Connections page to list under it."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for skill in (skills or ()):
+        if not getattr(skill, "is_learned", False):
+            continue
+        for cid in dict.fromkeys(m.lower() for m in NEED_RE.findall(skill.needs or "")):
+            out.setdefault(cid, []).append({"name": skill.name,
+                                            "shared": bool(getattr(skill, "shared", ""))})
+    return out
+
+
 def connectors_hint(link: Link | None) -> str:
     """For a skill's write-up: the ids a NEEDS line may name. Empty when
     Setu reports no connectors, so the prompt says nothing about Setu."""
@@ -463,6 +477,29 @@ def save_approved(key: str, need: str, path: Path | None = None) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2) + "\n")
     tmp.replace(path)
+
+
+def forget_approved(key: str, need: str | None = None,
+                    path: Path | None = None) -> list[str]:
+    """Take back a yes: one need, or every one this package had. Returns
+    what was removed; the next launch asks again."""
+    path = path or approvals_path()
+    try:
+        data = json.loads(path.read_text())
+        data = data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return []
+    had = list(data.get(key) or [])
+    gone = [n for n in had if need is None or n == need]
+    kept = [n for n in had if n not in gone]
+    if kept:
+        data[key] = kept
+    else:
+        data.pop(key, None)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.replace(path)
+    return gone
 
 
 # ---- several accounts, one set of tools ---------------------------------------
@@ -577,6 +614,13 @@ class Setu:
     allow: dict[str, str] | None = None
     #: The merged tools of connectors with several accounts, by name.
     merged: dict[str, AccountTool] = field(default_factory=dict)
+    #: A package's session: its name, the key its yes is kept under, the
+    #: needs granted, and the questions nobody has answered yet -- the
+    #: page puts those as Allow / Not now.
+    package: str | None = None
+    package_key: str | None = None
+    granted: list[str] = field(default_factory=list)
+    asks: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def program(self) -> str | None:
@@ -632,11 +676,12 @@ class Setu:
             ceiling = None if self.allow is None else self.allow[row["connector"]]
             kept, removed = apply_verbs(agent.registry, cfg.name,
                                         link.verbs(row["connector"]), ceiling)
-            if removed and cfg.name in getattr(manager, "tool_names", {}):
+            if cfg.name in getattr(manager, "tool_names", {}):
                 # the manager's count is what the page shows: tools the
-                # manifest refused are not the agent's, so not counted
+                # manifest refused, or above a package's level, are not
+                # the agent's, so not counted
                 manager.tool_names[cfg.name] = [
-                    n for n in manager.tool_names[cfg.name] if n not in removed]
+                    n for n in manager.tool_names[cfg.name] if n in kept]
             if removed:
                 done.notes.append(f"{cfg.name} offered tool(s) its manifest does not list, "
                                   f"not registered: {', '.join(removed)}")
@@ -655,6 +700,29 @@ class Setu:
                    if link is not None else None)
         prompt.apply()
         return done
+
+    def answer(self, need: str, yes: bool) -> None:
+        """The person answered a package's question. A yes is kept, as in
+        the terminal; a no only clears the question for this session.
+        The caller syncs, so the tools follow."""
+        ask = next((a for a in self.asks if a["need"] == need), None)
+        if ask is None or self.package_key is None:
+            raise SetuLinkError(f"nothing is asking for {need!r}")
+        self.asks.remove(ask)
+        if yes:
+            save_approved(self.package_key, need)
+            self.granted.append(need)
+            self.allow = needs_allow(self.granted)
+
+    def forget(self, need: str | None = None) -> list[str]:
+        """Take back a yes (one need, or all) -- for good, and for this
+        session too: the caller syncs and the tools go."""
+        if self.package_key is None:
+            raise SetuLinkError("this is your own session; nothing was allowed to forget")
+        gone = forget_approved(self.package_key, need)
+        self.granted = [g for g in self.granted if need is not None and g != need]
+        self.allow = needs_allow(self.granted)
+        return gone
 
     def _unmerge(self, registry: Any, manager: Any) -> None:
         """Put each account's own tools back, so a sync starts from what
@@ -716,6 +784,7 @@ class Setu:
         which carries no secret by contract, plus what this session runs."""
         link = self.link
         live = {s["name"]: s for s in (manager.servers() if manager is not None else [])}
+        merged = {t.connector for t in self.merged.values()}
         rows = []
         for row in (link.connections if link is not None else []):
             name = (row.get("mcp") or {}).get("name", "")
@@ -723,11 +792,16 @@ class Setu:
             rows.append({**{k: row.get(k) for k in (
                 "ref", "connector", "account", "email", "level", "level_label",
                 "last_used")}, "server": name,
+                "tools_as": f"mcp__{row.get('connector')}__"
+                            if row.get("connector") in merged else f"mcp__{name}__",
                 "tools": server["tools"] if server else 0,
                 "running": bool(server and server["healthy"])})
         return {
             "mode": self.mode,
             "allow": dict(self.allow) if self.allow is not None else None,
+            "package": self.package,
+            "granted": list(self.granted),
+            "asks": [dict(a) for a in self.asks],
             "found": link is not None,
             "road": link.road if link is not None else None,
             "error": self.error,

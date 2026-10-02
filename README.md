@@ -605,7 +605,10 @@ and a tool the manifest does not list is not registered at all
 one service share one set of tools with an `account` argument, which
 anything that sends must fill. An agent package gets none of your
 accounts unless its `agent.toml` asks (`[connections] needs =
-["gmail:read"]`) and you say yes once
+["gmail:read"]`) and you say yes once, in the terminal or on the
+Connections panel. The panel's **forget** (or `--forget-connections`)
+takes it back. Each connector's card also lists the recipes on this
+computer that need it
 ([notes/110](notes/110-which-account-and-who-may-use-it.md)).
 
 In the browser UI, the **connections** chip opens a panel of cards: the
@@ -2138,7 +2141,8 @@ src/yantra/
 │                   report ([notes/106](notes/106-what-the-recipe-leaves-out.md)).
 │                   AccountTool: several accounts, one tool set with
 │                   `account` (no default for writes); a package's
-│                   [connections] needs, allowed once, as a level ceiling
+│                   [connections] needs, allowed once (terminal or page),
+│                   as a level ceiling, forgotten with one click
 │                   ([notes/110](notes/110-which-account-and-who-may-use-it.md))
 ├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
 │                   over passes/attempts (it does not collapse at 3/3, where

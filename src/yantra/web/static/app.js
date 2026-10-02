@@ -1707,6 +1707,7 @@ function renderConnections() {
     return;
   }
   body.append(signinBox());
+  if (d.package) packageBox(body, d);
   const setupBox = clientFileBox(d);
   if (setupBox) body.append(setupBox);
 
@@ -1736,6 +1737,62 @@ function renderConnections() {
   foot.textContent = `Setu ${d.version || ""} · signed in on this computer · `
     + "keys stay with Setu · nothing is sent to us";
   body.append(foot);
+}
+
+// A package's session: what it asked for, answered here or in the
+// terminal, and what it was allowed -- taken back with one click (notes/110).
+function packageBox(body, d) {
+  const asks = d.asks || [], granted = d.granted || [];
+  section(body, `${d.package}`, asks.length || granted.length
+    ? "an agent someone else wrote; it sees only the accounts you allow"
+    : "an agent someone else wrote; it asked for none of your accounts");
+  for (const a of asks) {
+    const box = document.createElement("div");
+    box.className = "conn-box";
+    box.innerHTML = `<span>${esc(a.question)}</span>`;
+    const yes = document.createElement("button");
+    yes.className = "m-btn primary"; yes.textContent = "allow";
+    yes.onclick = () => answerAsk(a.need, true);
+    const no = document.createElement("button");
+    no.className = "m-btn"; no.textContent = "not now";
+    no.onclick = () => answerAsk(a.need, false);
+    box.append(yes, no);
+    body.append(box);
+  }
+  for (const need of granted) {
+    const [id, level] = need.split(":");
+    const row = document.createElement("div");
+    row.className = "mcp-row";
+    row.innerHTML = `<div><span class="t-name">${esc(id)}</span>`
+      + `<span class="t-badge">${esc(level)}</span></div>`
+      + `<div class="t-desc">allowed for ${esc(d.package)}</div>`;
+    const forget = document.createElement("button");
+    forget.className = "m-btn"; forget.textContent = "forget";
+    forget.title = "take it back: the tools go now, and the next launch asks again";
+    forget.onclick = () => forgetNeed(need);
+    row.append(forget);
+    body.append(row);
+  }
+}
+
+async function answerAsk(need, allow) {
+  const res = await fetch("/api/connections/answer", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ need, allow }) });
+  const out = await res.json();
+  if (!res.ok) { addBanner(`not answered: ${out.detail}`, true); return; }
+  applyConnections(out);
+  toast(allow ? `allowed ${need}` : "not now");
+}
+
+async function forgetNeed(need) {
+  const res = await fetch("/api/connections/forget", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ need }) });
+  const out = await res.json();
+  if (!res.ok) { addBanner(`not forgotten: ${out.detail}`, true); return; }
+  applyConnections(out);
+  toast(`forgot ${need} — asked again next launch`);
 }
 
 function section(body, title, note) {
@@ -1830,7 +1887,7 @@ function connectedCard(row, c) {
   main.innerHTML = `<div class="conn-title">${esc(c?.name || row.connector)}
       <span class="t-badge">${esc(row.account)}</span></div>
     <div class="conn-sub">${row.email ? esc(row.email) + " · " : ""}<b>${esc(row.level_label || row.level)}</b>
-      · ${row.tools} tool(s) as <code>mcp__${esc(row.server)}__…</code>
+      · ${row.tools} tool(s) as <code>${esc(row.tools_as || `mcp__${row.server}__`)}…</code>
       ${row.last_used ? " · last used " + esc(String(row.last_used).slice(0, 10)) : ""}</div>`;
   const actions = document.createElement("div");
   actions.className = "conn-actions";
@@ -1858,6 +1915,13 @@ function connectedCard(row, c) {
   return card;
 }
 
+// The recipes on this computer that need this connector (notes/111).
+function recipeLine(recipes) {
+  if (!recipes || !recipes.length) return "";
+  const names = recipes.map((r) => esc(r.name) + (r.shared ? " <i>(shared)</i>" : ""));
+  return `<div class="conn-sub">${recipes.length} recipe(s): ${names.join(", ")}</div>`;
+}
+
 function connectorCard(c, d) {
   const card = document.createElement("div");
   card.className = "conn-card";
@@ -1866,7 +1930,8 @@ function connectorCard(c, d) {
   const main = document.createElement("div");
   main.innerHTML = `<div class="conn-title">${esc(c.name)}
       ${c.connected ? '<span class="t-badge">connected</span>' : ""}</div>
-    <div class="conn-sub">${esc(c.summary || "")}</div>`;
+    <div class="conn-sub">${esc(c.summary || "")}</div>`
+    + recipeLine((d.recipes || {})[c.id]);
   card.append(dot, main, document.createElement("div"));
 
   const form = document.createElement("div");

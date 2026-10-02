@@ -426,6 +426,8 @@ class TestPackageNeeds:
             assert asked == ["helper wants to read your Gmail (me@example.com). Allow?"]
             assert mcp_names(agent) == ["mcp__gmail-personal__search_threads"]
             assert "This agent may use only these" in agent.prompt.get("connections")
+            # the count the page shows is what the package got, not the server's
+            assert manager.servers()[0]["tools"] == 1
             assert "Outlook" not in agent.prompt.get("connections")
         finally:
             manager.shutdown()
@@ -477,3 +479,25 @@ def test_a_need_reads_as_connector_and_level():
     with pytest.raises(ValueError, match="level"):
         setu_link.parse_need("gmail:everything")
     assert setu_link.needs_allow(["gmail:read", "gmail:spend"]) == {"gmail": "spend"}
+
+
+def test_recipes_are_listed_under_the_connector_they_need():
+    def skill(name, needs, learned=True, shared=""):
+        return SimpleNamespace(name=name, needs=needs, is_learned=learned, shared=shared)
+    found = setu_link.recipes_by_connector([
+        skill("inbox-count", "setu:gmail"),
+        skill("fan", "setu:homeassistant and setu:gmail", shared="sha256:x"),
+        skill("notes", "setu:gmail", learned=False)])          # a person's skill
+    assert found == {"gmail": [{"name": "inbox-count", "shared": False},
+                               {"name": "fan", "shared": True}],
+                     "homeassistant": [{"name": "fan", "shared": True}]}
+
+
+def test_a_merged_account_card_names_the_shared_prefix(tmp_path, monkeypatch):
+    program, _ = two_accounts(tmp_path, monkeypatch)
+    _, agent, manager, _ = start(program, tmp_path)
+    try:
+        rows = agent.setu.describe(manager)["connections"]
+        assert {r["tools_as"] for r in rows} == {"mcp__gmail__"}
+    finally:
+        manager.shutdown()

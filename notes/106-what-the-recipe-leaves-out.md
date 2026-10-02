@@ -174,11 +174,23 @@ path, `grep` over folders it can't read) is a failed call. Three such
 uses in a row would set a working recipe aside. Fixed afterwards: see
 the next section.
 
-**Setu's half** has no live receipt: there's no Home Assistant connector
-in Setu yet, and the Gmail connector's recipes need a real inbox. It's
-covered by tests against a Setu status report (connected, not connected,
-unknown connector, no Setu at all), through `load_skill`, the write-up's
-prompt, the terminal question and the page's.
+**Setu's half**, against a real Gmail account signed in through Setu,
+on `qwen3.8:latest`. A recipe `inbox-count` with `needs: setu:gmail`
+and the question *"How busy has my inbox been this past week?"*:
+
+```
+→ load_skill()        Needs Gmail (setu:gmail): connected -- use its tools (mcp__gmail-personal__*).
+→ mcp__gmail-personal__search_threads()
+GET https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=50&q=in%3Ainbox+newer_than%3A7d "HTTP/1.1 200 OK"
+```
+
+The model followed the recipe's own query. A need for a connector Setu
+doesn't have reads *"Needs outlook (setu:outlook), which is NOT
+connected: do not work around it."* There's still no Home Assistant
+connector in Setu. The rest is covered by tests against a Setu status
+report (connected, not connected, unknown connector, no Setu at all),
+through `load_skill`, the write-up's prompt, the terminal question and
+the page's.
 
 `2452 passed, 1 skipped` (was 2434). The new tests are in
 `tests/test_learned_skills.py`. They check that:
