@@ -230,5 +230,6 @@ its recipe's inputs reach it another way: through its description
   one after enough uses. It isn't. A script that sets a fan today is a
   script that could do anything tomorrow, if an update changed it.
 * **Sharing a tool.** `tool.json` holds no data, and the test arguments
-  are never stored in it. But sharing learned skills at all needs its
-  own checks first ([note 96](96-solve-it-once.md)).
+  are never stored in it. A shared recipe leaves its `tool:` line
+  behind: whoever installs it decides on the promotion
+  ([note 111](111-a-recipe-for-somebody-else.md)).

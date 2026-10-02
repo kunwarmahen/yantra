@@ -249,6 +249,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "refuse robots are checking for. "
                              "Every later headless session on that profile "
                              "starts logged-in. No model, no API key needed")
+    parser.add_argument("--skill-share", metavar="NAME", dest="skill_share", default=None,
+                        help="check a learned skill for anything of yours (secrets, "
+                             "addresses, values from memory, your paths) and write it "
+                             "to ./recipes/NAME/ for someone else. No model needed")
+    parser.add_argument("--skill-install", metavar="PATH", dest="skill_install",
+                        default=None,
+                        help="show a shared recipe's every file, ask, and install it "
+                             "into your learned skills. No model needed")
     parser.add_argument("--mcp-login", metavar="NAME", dest="mcp_login",
                         default=None,
                         help="one-time LOGIN for an authenticated MCP server: "
@@ -2051,6 +2059,20 @@ def _connect_package_mcp(configs, mcp_manager, console: Console) -> None:
                       f"tool(s) -- {', '.join(names)}[/dim]")
 
 
+def _skill_share_mode(args, console: Console) -> int:
+    """--skill-share NAME / --skill-install PATH (cli/share.py)."""
+    from yantra.cli.share import install_recipe, person_context, share_skill
+    from yantra.skills.loader import discover
+
+    if args.skill_install is not None:
+        return install_recipe(Path(args.skill_install), console,
+                              _ask_yes if sys.stdin.isatty() else None)
+    cwd = Path(args.cwd).resolve() if args.cwd else Path.cwd()
+    memories, link, redact = person_context(args, console)
+    return share_skill(args.skill_share, discover(cwd), None, console, cwd,
+                       memories=memories, link=link, redact=redact)
+
+
 def _mcp_login(name: str, args, console: Console) -> int:
     """--mcp-login NAME: the OAuth walk, then a token on disk.
 
@@ -2129,6 +2151,14 @@ def main(argv: list[str] | None = None) -> int:
               "positional PROMPT); interactive image input is not "
               "supported yet", file=sys.stderr)
         return 2
+    for flag, value in (("--skill-share", args.skill_share),
+                        ("--skill-install", args.skill_install)):
+        if value is not None and (args.build or args.prompt or args.prompt_positional
+                                  or args.web or args.mcp_login or args.browse_login
+                                  or (args.skill_share and args.skill_install)):
+            print(f"error: {flag} is its own mode: drop --build/--prompt/PROMPT/"
+                  f"--web and the other login and skill flags", file=sys.stderr)
+            return 2
     if args.mcp_login is not None and (args.build or args.prompt
                                        or args.prompt_positional
                                        or args.web or args.browse_login):
@@ -2321,6 +2351,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.browse_login is not None:
         _load_dotenv()  # the knob usually lives in .env
         return _browse_login(args.browse_login, console)
+
+    # Sharing or installing a recipe reads files and asks; no model.
+    if args.skill_share is not None or args.skill_install is not None:
+        _load_dotenv()
+        return _skill_share_mode(args, console)
 
     # Authenticating a server says nothing about which model you meant to
     # use, so this runs before provider resolution too.

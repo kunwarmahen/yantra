@@ -293,8 +293,11 @@ small models do well. Rediscovering an API is something they do badly.
   values it left out to memory, `load_skill` brings them back, and
   `needs: setu:<id>` is checked against Setu
   ([note 106](106-what-the-recipe-leaves-out.md)).
-* **Sharing.** A learned recipe holds no data, so it could be shared.
-  But that needs its own checks before anything leaves the machine.
+* ~~**Sharing.** A learned recipe holds no data, so it could be shared.
+  But that needs its own checks before anything leaves the machine.~~
+  Built: `--skill-share` reads every file for secrets, addresses, your
+  paths and values from memory, and stops on any; `--skill-install`
+  shows every file and asks ([note 111](111-a-recipe-for-somebody-else.md)).
 * **Choosing which learned skills to show.** Every learned skill's
   description is in the roster, like a hand-written one. At two
   hundred skills, that's about 5,000 tokens a session. Picking learned

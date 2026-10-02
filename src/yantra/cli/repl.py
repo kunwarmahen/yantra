@@ -63,6 +63,8 @@ HELP = """[bold]commands[/bold]
   /skills off|on NAME
                      pull or restore skills MID-SESSION (globs ok: deploy-*)
                      — same switch as /tools, applied to the roster
+  /skills share NAME check a learned skill for anything of yours and write
+                     it to ./recipes/NAME/ for someone else
   /skills tool NAME  make a learned skill's script a tool of its own (one
                      call next time; tested and shown to you first)
   /NAME ...          run a skill directly: /pr-review the auth branch
@@ -864,6 +866,14 @@ class Repl:
         if parts and parts[0] in ("off", "on"):
             self._skills_toggle(skills, parts[0], parts[1:])
             return
+        if parts and parts[0] == "share":
+            if len(parts) != 2:
+                self.console.print("[red]usage: /skills share NAME[/red]")
+                return
+            from yantra.cli.share import share_skill
+            share_skill(parts[1], skills, self.agent, self.console,
+                        Path(self.agent.ctx.cwd))
+            return
         if parts and parts[0] == "tool":
             if len(parts) != 2:
                 self.console.print("[red]usage: /skills tool NAME[/red]")
@@ -933,6 +943,7 @@ class Repl:
             off += " [stale]" if skill.is_stale else ""
             kind = " [delegated]" if skill.delegated else ""
             kind += f" [tool: {skill.tool_name}]" if skill.tool_name else ""
+            kind += " [shared]" if skill.shared else ""
             lines.append(f" {mark} {skill.name} [{skill.source}]{kind}{off} "
                          f"-- {skill.description}")
             if skill.learned is not None:

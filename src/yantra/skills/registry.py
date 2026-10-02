@@ -555,6 +555,7 @@ class SkillRegistry:
                  "missing_tools": self.missing_tools(s),
                  "mode": s.mode,
                  "learned": s.is_learned,
+                 "shared": s.shared,
                  "needs": s.needs,
                  "inputs": s.inputs,
                  "counters": (None if s.learned is None else {

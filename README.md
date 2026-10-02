@@ -288,6 +288,15 @@ whether that account is connected, and if it isn't, the model tells you
 to connect it instead of working around it
 ([notes/106](notes/106-what-the-recipe-leaves-out.md)).
 
+A recipe can be handed to someone else. `yantra --skill-share home-fan`
+(or `/skills share home-fan`) reads every file in it again for anything
+of yours: a token, an email address, your home folder or login, a value
+you told memory (*fan.office_ceiling_2*). Any finding stops it and names
+the line. A clean one is written to `./recipes/home-fan/`, without your
+counters, with a hash. `yantra --skill-install PATH` prints every file
+of a recipe someone shared, asks, and installs it with fresh counters,
+marked `[shared]` ([notes/111](notes/111-a-recipe-for-somebody-else.md)).
+
 ### It remembers you across conversations
 
 Tell it once, in passing, that you live near RDU. Next week, in a new
@@ -2071,6 +2080,11 @@ src/yantra/
 │                   load_skill, so its recipe's remembered inputs ride in
 │                   its description, looked up with each new conversation
 │                   ([notes/108](notes/108-where-the-model-reads.md))
+│                   share.py: a recipe read again before it leaves (secrets,
+│                   addresses, your paths, values from memory, unknown needs;
+│                   any finding stops it), written to recipes/NAME/ with a
+│                   hash; installing shows every file and asks, never
+│                   overwrites ([notes/111](notes/111-a-recipe-for-somebody-else.md))
 ├── package.py      an agent as a DIRECTORY: agent.toml + prompt.md +
 │                   skills/ + tools/ + evals/, parsed with tomllib, unknown keys
 │                   refused so a typo can never quietly leave a tool armed.

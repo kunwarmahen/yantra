@@ -243,6 +243,7 @@ class Skill:
     inputs: str = ""                        # what it asks for each time
     tool: str = ""                          # "<tool name> scripts/<file>"
     learned: LearnedRecord | None = None    # counters, learned skills only
+    shared: str = ""                        # installed from a shared recipe: its hash
 
     @property
     def is_stale(self) -> bool:
@@ -501,6 +502,7 @@ def validate_text(text: str, path: Path, *, source: str = "project") -> Skill:
         inputs=" ".join(fields.get("inputs", "").split()),
         tool=tool,
         learned=parse_learned(learned) if learned else None,
+        shared=fields.get("shared", "").strip(),
     )
 
 
