@@ -12,6 +12,7 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.markup import escape
+from rich.prompt import Prompt
 
 from yantra.agent import Agent
 from yantra.budget import Budget
@@ -1936,8 +1937,13 @@ def _find_mcp_config(name: str, config_paths: list[str], cwd: str,
     return None
 
 
-def _connect_setu(args, mcp_manager, agent, console: Console) -> int | None:
+def _connect_setu(args, mcp_manager, agent, console: Console, spec=None,
+                  ask=None) -> int | None:
     """Connect every Setu connection as an MCP server (setu_link.py).
+
+    A package's session (``spec.root`` set) gets only what its
+    ``[connections] needs`` asks for and the person allowed; ``ask`` puts
+    the question (None where nobody can answer, and the need waits).
 
     Returns an exit code only when Setu was ASKED for (--setu, or
     YANTRA_SETU=on|PATH) and could not be used; in auto mode a missing
@@ -1964,11 +1970,62 @@ def _connect_setu(args, mcp_manager, agent, console: Console) -> int | None:
         return None
     if setu.link is None:
         return None
+    if spec is not None and spec.root is not None:
+        setu.allow = _package_connections(spec, setu.link, console, ask)
     done = setu.sync(mcp_manager, agent)
     for note in done.notes:
         console.print(f"[yellow]setu: {note}[/yellow]")
-    console.print(f"[dim]{setu_link.announce(setu.link, done.connected)}[/dim]")
+    console.print(f"[dim]{setu_link.announce(setu.link, done.connected, setu.allow)}[/dim]")
     return None
+
+
+def _ask_yes(question: str) -> bool:
+    return Prompt.ask(question, choices=["y", "N"], default="N").strip().lower() == "y"
+
+
+def _package_connections(spec, link, console: Console, ask) -> dict[str, str]:
+    """What a package may use of the person's accounts: its
+    ``[connections] needs``, each allowed once, here or before.
+
+    A need whose account is not connected is said and not asked -- there
+    is nothing to allow yet. A no is not remembered: the next launch asks
+    again, which is the cheap mistake. A yes is, per package and level.
+    """
+    from yantra import setu_link
+
+    if not spec.connections:
+        if link.connections:
+            console.print(f"[dim]setu: {spec.name} asks for none of your connected "
+                          f"accounts, so it gets none ([connections] needs in "
+                          f"agent.toml)[/dim]")
+        return {}
+    key = setu_link.package_key(spec.name, spec.root)
+    approved = setu_link.load_approved(key)
+    granted = []
+    for need in spec.connections:
+        cid, _, klass = need.partition(":")
+        name = (link.connectors.get(cid) or {}).get("name", cid)
+        if need in approved:
+            granted.append(need)
+            continue
+        rows = [r for r in link.connections if r.get("connector") == cid]
+        if not rows:
+            console.print(f"[yellow]setu: {spec.name} needs {name} ({klass}), which is "
+                          f"not connected -- `setu connect {cid}`[/yellow]")
+            continue
+        who = ", ".join(r.get("email") or r.get("ref", cid) for r in rows)
+        question = (f"{spec.name} wants to {setu_link.CLASS_WORDS[klass]} your {name} "
+                    f"({who}). Allow?")
+        if ask is None:
+            console.print(f"[yellow]setu: {question} -- not answered yet; start it once "
+                          f"in a terminal to say yes[/yellow]")
+            continue
+        if ask(question):
+            setu_link.save_approved(key, need)
+            granted.append(need)
+        else:
+            console.print(f"[dim]setu: not allowed; {spec.name} won't see {name}[/dim]")
+    return setu_link.needs_allow(granted)
 
 
 def _connect_package_mcp(configs, mcp_manager, console: Console) -> None:
@@ -2547,7 +2604,8 @@ def main(argv: list[str] | None = None) -> int:
 
         # The person's connected accounts, through Setu -- after explicit
         # and remembered servers, so a name they configured by hand wins.
-        if _connect_setu(args, mcp_manager, agent, console) is not None:
+        if _connect_setu(args, mcp_manager, agent, console, spec,
+                         _ask_yes if sys.stdin.isatty() else None) is not None:
             return 2
 
         _connect_package_mcp(spec.mcp, mcp_manager, console)

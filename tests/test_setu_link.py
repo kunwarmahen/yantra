@@ -50,6 +50,7 @@ CONNECTOR = """\
     # Every hint here is wrong on purpose, and "sneaky" is in no manifest.
     TOOLS = [tool("search_threads", False), tool("send_message", True),
              tool("buy_thing", True), tool("sneaky", True)]
+    ACCOUNT = sys.argv[1] if len(sys.argv) > 1 else "personal"
     for line in sys.stdin:
         msg = json.loads(line)
         method, mid = msg.get("method"), msg.get("id")
@@ -61,7 +62,8 @@ CONNECTOR = """\
             send({"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS}})
         elif method == "tools/call":
             send({"jsonrpc": "2.0", "id": mid, "result": {
-                "content": [{"type": "text", "text": "ran " + msg["params"]["name"]}]}})
+                "content": [{"type": "text",
+                            "text": "ran " + msg["params"]["name"] + " as " + ACCOUNT}]}})
         elif mid is not None:
             send({"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "no"}})
 """
@@ -267,3 +269,211 @@ class TestNoBlanketYesForSpending:
         results = [b for m in agent.history if m.role == "user" for b in m.content
                    if type(b).__name__ == "ToolResult"]
         assert results and results[0].is_error and "needs a person" in results[0].content
+
+
+# ---- several accounts, one set of tools -----------------------------------------
+
+
+def two_accounts(tmp_path, monkeypatch):
+    """Setu reporting gmail:personal AND gmail:work, each its own process."""
+    connector = tmp_path / "connector.py"
+    connector.write_text(textwrap.dedent(CONNECTOR))
+    data = status([sys.executable, str(connector), "personal"])
+    work = json.loads(json.dumps(data["connections"][0]))
+    work.update(ref="gmail:work", account="work", email="me@work.example",
+                mcp={"name": "gmail-work", "command": sys.executable,
+                     "args": [str(connector), "work"]})
+    data["connections"].append(work)
+    program = tmp_path / "setu"
+    program.write_text(f"#!{sys.executable}\nimport sys\n"
+                       f"print({json.dumps(json.dumps(data))})\n")
+    program.chmod(0o755)
+    monkeypatch.setitem(sys.modules, "setu.status", None)
+    monkeypatch.setattr(setu_link.shutil, "which", lambda _name: None)
+    monkeypatch.delenv(setu_link.ENV, raising=False)
+    return program, data
+
+
+CTX = SimpleNamespace(cwd=Path("."))
+
+
+class TestSeveralAccounts:
+    """The bias: SENDING FROM THE WRONG ADDRESS. Two accounts share one
+    set of tools, and nothing that writes may pick an account by itself."""
+
+    def test_two_accounts_share_one_set_of_tools(self, tmp_path, monkeypatch):
+        program, _ = two_accounts(tmp_path, monkeypatch)
+        _, agent, manager, out = start(program, tmp_path)
+        try:
+            names = sorted(n for n in agent.registry.names() if n.startswith("mcp__"))
+            assert names == ["mcp__gmail__buy_thing", "mcp__gmail__search_threads",
+                             "mcp__gmail__send_message"]
+            search = agent.registry.get("mcp__gmail__search_threads")
+            send = agent.registry.get("mcp__gmail__send_message")
+            assert search.parameters["properties"]["account"]["enum"] == [
+                "personal", "work", "all"]
+            assert send.parameters["properties"]["account"]["enum"] == ["personal", "work"]
+            assert "account" in send.parameters["required"]
+            assert search.read_only and not send.read_only
+            assert agent.registry.get("mcp__gmail__buy_thing").always_ask
+            # each account is still its own server
+            assert sorted(manager.sessions) == ["gmail-personal", "gmail-work"]
+        finally:
+            manager.shutdown()
+
+    def test_a_read_without_an_account_asks_every_one(self, tmp_path, monkeypatch):
+        program, _ = two_accounts(tmp_path, monkeypatch)
+        _, agent, manager, _ = start(program, tmp_path)
+        try:
+            out = agent.registry.get("mcp__gmail__search_threads").run({}, CTX)
+            assert "## personal (me@example.com)\nran search_threads as personal" in out
+            assert "## work (me@work.example)\nran search_threads as work" in out
+        finally:
+            manager.shutdown()
+
+    def test_a_write_has_no_default_and_says_which_account(self, tmp_path, monkeypatch):
+        from yantra.errors import ToolError
+
+        program, _ = two_accounts(tmp_path, monkeypatch)
+        _, agent, manager, _ = start(program, tmp_path)
+        try:
+            send = agent.registry.get("mcp__gmail__send_message")
+            with pytest.raises(ToolError, match="say which account"):
+                send.run({"to": "x"}, CTX)
+            assert send.run({"account": "work", "to": "x"}, CTX) == \
+                "ran send_message as work"
+            assert send.summary({"account": "work"}, CTX).startswith(
+                "From: work (me@work.example) -- ")
+            with pytest.raises(ToolError, match="no account 'home'"):
+                send.run({"account": "home"}, CTX)
+        finally:
+            manager.shutdown()
+
+    def test_the_prompt_names_each_account(self, tmp_path, monkeypatch):
+        program, _ = two_accounts(tmp_path, monkeypatch)
+        _, agent, manager, _ = start(program, tmp_path)
+        try:
+            layer = agent.prompt.get("connections")
+            assert "Gmail, 2 accounts" in layer and "`mcp__gmail__*`" in layer
+            assert "`personal` as me@example.com" in layer
+            assert "`work` as me@work.example" in layer
+        finally:
+            manager.shutdown()
+
+    def test_back_to_one_account_the_tools_come_back_unmerged(self, tmp_path, monkeypatch):
+        program, data = two_accounts(tmp_path, monkeypatch)
+        _, agent, manager, _ = start(program, tmp_path)
+        try:
+            agent.setu.link.data["connections"] = data["connections"][:1]
+            agent.setu.sync(manager, agent)
+            names = sorted(n for n in agent.registry.names() if n.startswith("mcp__"))
+            assert names == ["mcp__gmail-personal__buy_thing",
+                             "mcp__gmail-personal__search_threads",
+                             "mcp__gmail-personal__send_message"]
+            assert agent.setu.merged == {}
+        finally:
+            manager.shutdown()
+
+    def test_a_recipe_needing_it_is_told_to_name_the_account(self, tmp_path, monkeypatch):
+        program, _ = two_accounts(tmp_path, monkeypatch)
+        _, agent, manager, _ = start(program, tmp_path)
+        try:
+            needs = setu_link.resolve_needs("needs: setu:gmail", agent.setu.link)
+            line = setu_link.need_lines(needs)[0]
+            assert "2 accounts" in line and "mcp__gmail__*" in line and "`account`" in line
+        finally:
+            manager.shutdown()
+
+
+# ---- a package gets what it asked for -------------------------------------------
+
+
+def start_package(program, tmp_path, monkeypatch, needs=(), ask=None, name="helper"):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    agent, manager, console = session(tmp_path)
+    args = SimpleNamespace(setu=str(program))
+    spec = SimpleNamespace(name=name, root=tmp_path / name,
+                           connections=tuple(setu_link.parse_need(n) for n in needs))
+    code = _connect_setu(args, manager, agent, console, spec, ask)
+    return code, agent, manager, console.file.getvalue()
+
+
+def mcp_names(agent):
+    return sorted(n for n in agent.registry.names() if n.startswith("mcp__"))
+
+
+class TestPackageNeeds:
+    """The bias: AN AGENT SOMEBODY ELSE WROTE READING YOUR MAIL because it
+    happened to run on a machine where you had signed in."""
+
+    def test_a_package_that_asks_for_nothing_gets_nothing(self, fake_setu, tmp_path,
+                                                          monkeypatch):
+        code, agent, manager, out = start_package(fake_setu[0], tmp_path, monkeypatch)
+        try:
+            assert code is None and mcp_names(agent) == []
+            assert "asks for none of your connected accounts" in out
+            assert "setu: none of your connections for this agent" in out
+            assert agent.prompt.get("connections") is None
+        finally:
+            manager.shutdown()
+
+    def test_read_allowed_means_read_tools_only(self, fake_setu, tmp_path, monkeypatch):
+        asked = []
+        _, agent, manager, _ = start_package(
+            fake_setu[0], tmp_path, monkeypatch, needs=["gmail:read"],
+            ask=lambda q: asked.append(q) or True)
+        try:
+            assert asked == ["helper wants to read your Gmail (me@example.com). Allow?"]
+            assert mcp_names(agent) == ["mcp__gmail-personal__search_threads"]
+            assert "This agent may use only these" in agent.prompt.get("connections")
+            assert "Outlook" not in agent.prompt.get("connections")
+        finally:
+            manager.shutdown()
+
+    def test_a_yes_is_remembered_for_that_package_and_level(self, fake_setu, tmp_path,
+                                                            monkeypatch):
+        start_package(fake_setu[0], tmp_path, monkeypatch, needs=["gmail:write"],
+                      ask=lambda q: True)[2].shutdown()
+        _, agent, manager, _ = start_package(fake_setu[0], tmp_path, monkeypatch,
+                                             needs=["gmail:write"], ask=None)
+        try:
+            assert mcp_names(agent) == ["mcp__gmail-personal__search_threads",
+                                        "mcp__gmail-personal__send_message"]
+        finally:
+            manager.shutdown()
+        # the same name somewhere else on disk is a different package
+        _, other, manager, out = start_package(fake_setu[0], tmp_path / "elsewhere",
+                                               monkeypatch, needs=["gmail:write"])
+        try:
+            assert mcp_names(other) == []
+            assert "not answered yet" in out
+        finally:
+            manager.shutdown()
+
+    def test_a_no_is_not_remembered_and_nothing_connects(self, fake_setu, tmp_path,
+                                                        monkeypatch):
+        _, agent, manager, out = start_package(fake_setu[0], tmp_path, monkeypatch,
+                                               needs=["gmail"], ask=lambda q: False)
+        try:
+            assert mcp_names(agent) == [] and "won't see Gmail" in out
+            assert not setu_link.approvals_path().exists()
+        finally:
+            manager.shutdown()
+
+    def test_an_account_that_is_not_connected_is_said_not_asked(self, fake_setu, tmp_path,
+                                                                monkeypatch):
+        asked = []
+        _, _, manager, out = start_package(fake_setu[0], tmp_path, monkeypatch,
+                                           needs=["outlook:read"], ask=asked.append)
+        try:
+            assert asked == [] and "needs Outlook (read), which is not connected" in out
+        finally:
+            manager.shutdown()
+
+
+def test_a_need_reads_as_connector_and_level():
+    assert setu_link.parse_need("gmail") == "gmail:read"
+    assert setu_link.parse_need("Gmail:Write") == "gmail:write"
+    with pytest.raises(ValueError, match="level"):
+        setu_link.parse_need("gmail:everything")
+    assert setu_link.needs_allow(["gmail:read", "gmail:spend"]) == {"gmail": "spend"}

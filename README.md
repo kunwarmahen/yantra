@@ -592,7 +592,12 @@ which accounts are connected and at what level, and which are not. Each
 tool is classed by Setu's manifest, not by the server's own hint: reads
 run, writes ask, anything that spends asks every time even under `--yolo`,
 and a tool the manifest does not list is not registered at all
-([notes/95](notes/95-the-accounts-you-connected.md)).
+([notes/95](notes/95-the-accounts-you-connected.md)). Two accounts on
+one service share one set of tools with an `account` argument, which
+anything that sends must fill. An agent package gets none of your
+accounts unless its `agent.toml` asks (`[connections] needs =
+["gmail:read"]`) and you say yes once
+([notes/110](notes/110-which-account-and-who-may-use-it.md)).
 
 In the browser UI, the **connections** chip opens a panel of cards: the
 accounts you connected (address, level, tool count, *change access*,
@@ -1115,6 +1120,11 @@ via = "local"                   # local | off | an [[mcp]] server's name -- the
                                 # nothing gets off (notes/100, notes/102)
 verbs = { list = "all_memories" }   # only for a server: its tool per verb,
                                 # when not remember/recall/forget/list_memories
+
+[connections]
+needs = ["gmail:read"]          # your Setu accounts it may use: connector,
+                                # then read | write | spend; asked once, and
+                                # none at all without this (notes/110)
 ```
 
 A package may also declare the MCP servers it needs. Every session
@@ -2111,7 +2121,11 @@ src/yantra/
 │                   for the page's Connections panel -- same computer only,
 │                   never under a running turn ([notes/99](notes/99-the-connections-page.md)).
 │                   resolve_needs: a learned skill's `setu:<id>` against the
-│                   report ([notes/106](notes/106-what-the-recipe-leaves-out.md))
+│                   report ([notes/106](notes/106-what-the-recipe-leaves-out.md)).
+│                   AccountTool: several accounts, one tool set with
+│                   `account` (no default for writes); a package's
+│                   [connections] needs, allowed once, as a level ceiling
+│                   ([notes/110](notes/110-which-account-and-who-may-use-it.md))
 ├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
 │                   over passes/attempts (it does not collapse at 3/3, where
 │                   the textbook one claims certainty from three coin

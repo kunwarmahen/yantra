@@ -124,13 +124,17 @@ it's not connected and the person has to connect it
   disconnecting stay in Setu's own commands for now.~~ Built: the page
   asks Setu to sign in and relays its address, and the tools follow
   without a restart ([note 99](99-the-connections-page.md)).
-* **One tool set for several accounts.** Two Gmail accounts are two
+* ~~**One tool set for several accounts.** Two Gmail accounts are two
   servers with their own tools (`mcp__gmail-personal__…`,
   `mcp__gmail-work__…`). Merging them behind an `account` argument keeps
-  the tool list short for local models, and is its own change.
-* **An agent package asking for a connection.** A package that needs
+  the tool list short for local models, and is its own change.~~ Built:
+  one `mcp__gmail__…` set with `account`, required for anything that
+  writes ([note 110](110-which-account-and-who-may-use-it.md)).
+* ~~**An agent package asking for a connection.** A package that needs
   Gmail cannot yet say so in `agent.toml`; it gets whatever the person
-  has connected, like any session.
+  has connected, like any session.~~ Built: `[connections] needs`,
+  allowed once per package, and nothing for a package that didn't ask
+  ([note 110](110-which-account-and-who-may-use-it.md)).
 * **A way for spend to be pre-approved.** Not even a separate flag.
   When a connector that can pay exists, whether that should ever be
   possible is a decision for then.

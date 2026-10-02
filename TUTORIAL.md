@@ -551,6 +551,15 @@ Google's console. The page asks for its path the first time, and Setu
 remembers it. ([notes/95](notes/95-the-accounts-you-connected.md),
 [notes/99](notes/99-the-connections-page.md))
 
+Connect two Gmail accounts, say `personal` and `work`, and the agent
+still has one set of mail tools, not two. It says which account each
+time ("my work mail" means `work`). Reading may look in both. Sending
+always has to name one, and the approval shows which address it's
+from. An agent someone else wrote (a package) gets none of your
+accounts unless its `agent.toml` asks for them. The first time it asks,
+you're asked once: *"mail-helper wants to read your Gmail. Allow?"*
+([notes/110](notes/110-which-account-and-who-may-use-it.md))
+
 ## 9 · The tools that make it finish rather than answer
 
 Sixteen built-ins cover the whole autonomy loop, and four more appear if
@@ -2733,7 +2742,7 @@ Most carry a live receipt from a real run.
 | [07](notes/07-reliability-and-scale.md) | retry, parallel tools, persistence, compaction |
 | [08](notes/08-sub-agents.md) | sub-agents: agent-as-tool |
 | [09](notes/09-mcp.md) | MCP by hand, both transports, OAuth 2.1 |
-| [95](notes/95-the-accounts-you-connected.md) [99](notes/99-the-connections-page.md) | your own accounts, through Setu; and a page to connect them |
+| [95](notes/95-the-accounts-you-connected.md) [99](notes/99-the-connections-page.md) [110](notes/110-which-account-and-who-may-use-it.md) | your own accounts, through Setu; a page to connect them; several accounts, and which agents may use them |
 | [10](notes/10-evals.md) | evals: measuring right behaviour, not just working code |
 | [11](notes/11-async.md) | one event loop, many conversations |
 | [12](notes/12-builder.md) [18](notes/18-builder-mode.md) | an agent that builds a project, and verification that does not trust it |

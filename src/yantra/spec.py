@@ -164,6 +164,10 @@ class AgentSpec:
     #: ``[memory] verbs``: (verb, tool) pairs naming the MCP server's tool
     #: for each verb it calls something else. Only read for a server store.
     memory_verbs: tuple[tuple[str, str], ...] = ()
+    #: ``[connections] needs``: the connected accounts a package asks for,
+    #: as ``connector:level`` (setu_link.parse_need). Only a package's
+    #: session (``root`` set) is held to it; your own sees everything.
+    connections: tuple[str, ...] = ()
 
     #: Sandbox root for file tools and bash's working directory.
     cwd: Path | None = None

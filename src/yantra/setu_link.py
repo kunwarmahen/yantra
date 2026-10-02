@@ -57,6 +57,24 @@ it -- rather than a recipe followed four steps into a missing account.
 The skill's write-up is handed the connector ids to name, and the save
 question says whether each is connected (``resolve_needs``).
 
+SEVERAL ACCOUNTS, ONE SET OF TOOLS. Each connection still runs as its
+own server, so one process only ever holds one account's token. When a
+connector has two or more, their tools are merged into one set named
+for the connector (``mcp__gmail__search_threads``) with an ``account``
+argument listing them. A read may leave it out, or say ``all``, and
+gets every account's answer, labelled; a write or a spend has no
+default, because sending from the wrong address is a real mistake, and
+its approval says which account (``AccountTool``). One account: nothing
+is merged and nothing changes.
+
+A PACKAGE GETS WHAT IT ASKED FOR, AND WHAT YOU ALLOWED. An agent
+somebody else wrote sees none of your accounts unless its agent.toml
+says ``[connections] needs = ["gmail:read"]``, and you said yes once to
+that package at that level (``load_approved``). The level is a ceiling:
+``read`` keeps only the manifest's read tools, ``write`` adds writes,
+``spend`` everything. Your own sessions see every connection, as
+before.
+
 LIVE, NOT ONLY AT STARTUP. ``Setu`` is the session's handle on all of
 this (``agent.setu``). ``sync`` makes the MCP servers match what Setu
 reports -- a new connection gets its server and tools, a gone one loses
@@ -69,6 +87,7 @@ address; Yantra never sees a key, a code, or a client secret.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -76,14 +95,22 @@ import shutil
 import subprocess
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+from yantra.errors import ToolError
 from yantra.mcp import MCPServerConfig
+from yantra.tools.base import Tool, ToolContext
 
 ENV = "YANTRA_SETU"
 FORMAT = "setu.status.v1"
 MODES = ("auto", "on", "off")
 VERB_CLASSES = ("read", "write", "spend")
+#: How far a level reaches: a package allowed to write may also read.
+CLASS_RANK = {klass: n for n, klass in enumerate(VERB_CLASSES)}
+#: What a level lets a package do, in the words its question uses.
+CLASS_WORDS = {"read": "read", "write": "read and change things in",
+               "spend": "read, change and spend money through"}
 #: How long ``setu status --json`` may take before startup gives up on it.
 STATUS_TIMEOUT = 15.0
 
@@ -210,11 +237,14 @@ def same_server(a: MCPServerConfig, b: MCPServerConfig) -> bool:
     return (a.command, list(a.args or [])) == (b.command, list(b.args or []))
 
 
-def apply_verbs(registry: Any, server: str, verbs: dict[str, str]) -> tuple[list[str], list[str]]:
+def apply_verbs(registry: Any, server: str, verbs: dict[str, str],
+                ceiling: str | None = None) -> tuple[list[str], list[str]]:
     """Classify one server's registered tools by the manifest's verbs.
 
     Returns (tool names kept, tool names removed because the manifest
-    does not list them)."""
+    does not list them). A ``ceiling`` -- the level a package was allowed
+    -- also unregisters every tool above it, without counting it as
+    removed: the manifest lists it, the package just did not ask."""
     prefix = f"mcp__{server}__"
     kept, removed = [], []
     for name in list(registry.names()):
@@ -225,6 +255,9 @@ def apply_verbs(registry: Any, server: str, verbs: dict[str, str]) -> tuple[list
             registry.unregister(name)
             removed.append(name)
             continue
+        if ceiling is not None and CLASS_RANK[klass] > CLASS_RANK[ceiling]:
+            registry.unregister(name)
+            continue
         tool = registry.get(name)
         tool.read_only = klass == "read"
         tool.always_ask = klass == "spend"
@@ -232,21 +265,46 @@ def apply_verbs(registry: Any, server: str, verbs: dict[str, str]) -> tuple[list
     return kept, removed
 
 
-def prompt_text(link: Link) -> str | None:
-    """The ``connections`` layer: what is connected, and what could be."""
-    rows = link.connections
+def account_of(row: dict[str, Any]) -> str:
+    """A connection's account label: ``personal`` in ``gmail:personal``."""
+    return row.get("account") or str(row.get("ref", "")).partition(":")[2] or "default"
+
+
+def prompt_text(link: Link, allow: dict[str, str] | None = None,
+                merged: frozenset[str] = frozenset()) -> str | None:
+    """The ``connections`` layer: what is connected, and what could be.
+    ``allow`` narrows it to what a package may use; ``merged`` names the
+    connectors whose accounts share one set of tools."""
     connectors = link.connectors
-    idle = [c for c in connectors.values() if not c.get("connected")]
+    rows = [r for r in link.connections if allow is None or r.get("connector") in allow]
+    idle = [c for c in connectors.values() if not c.get("connected")
+            and (allow is None or c["id"] in allow)]
     if not rows and not idle:
         return None
     lines = ["# Connected accounts (through Setu)",
              "The person has signed in to these; their tools are prefixed "
              "`mcp__<name>__`. You never see or need a password or key."]
+    done: set[str] = set()
     for row in rows:
-        name = (connectors.get(row.get("connector", "")) or {}).get("name", row.get("connector"))
+        cid = row.get("connector", "")
+        name = (connectors.get(cid) or {}).get("name", cid)
+        if cid in merged:
+            if cid in done:
+                continue
+            done.add(cid)
+            accounts = [r for r in rows if r.get("connector") == cid]
+            each = "; ".join(
+                f"`{account_of(r)}`" + (f" as {r['email']}" if r.get("email") else "")
+                + f": {r.get('level_label') or r.get('level')}" for r in accounts)
+            lines.append(f"- {name}, {len(accounts)} accounts ({each}). Its tools are "
+                         f"`mcp__{cid}__*` and take `account`: name it for anything that "
+                         f"sends or changes; a read may leave it out to use every account.")
+            continue
         who = f" as {row['email']}" if row.get("email") else ""
         level = row.get("level_label") or row.get("level")
         lines.append(f"- {name} `{row['mcp']['name']}`{who}: {level}")
+    if allow is not None:
+        lines.append("This agent may use only these, at the level the person allowed.")
     if idle:
         lines.append("Installed but not connected (the person can connect one with "
                      "`setu connect <id>`; you cannot):")
@@ -256,8 +314,11 @@ def prompt_text(link: Link) -> str | None:
     return "\n".join(lines)
 
 
-def announce(link: Link, connected: dict[str, int]) -> str:
+def announce(link: Link, connected: dict[str, int],
+             allow: dict[str, str] | None = None) -> str:
     """The one startup line: which connections, how many tools each."""
+    if not connected and allow is not None and link.connections:
+        return f"setu: none of your connections for this agent ({link.road})"
     if not connected:
         return f"setu: no connections yet ({link.road})"
     parts = [f"{name} ({count} tool(s))" for name, count in connected.items()]
@@ -313,7 +374,11 @@ def need_lines(needs: list[Need]) -> list[str]:
     fix is the person's (``setu connect``), never the model's."""
     lines = []
     for need in needs:
-        if need.connected:
+        if len(need.servers) > 1:
+            lines.append(f"Needs {need.name} (setu:{need.connector}): connected, "
+                         f"{len(need.servers)} accounts -- use its tools "
+                         f"(mcp__{need.connector}__*) and say which `account`.")
+        elif need.connected:
             tools = ", ".join(f"mcp__{s}__*" for s in need.servers)
             lines.append(f"Needs {need.name} (setu:{need.connector}): connected -- "
                          f"use its tools ({tools}).")
@@ -336,6 +401,152 @@ def connectors_hint(link: Link | None) -> str:
                       for cid, c in sorted(connectors.items()))
     return (f"When the steps used one of these connected accounts, name it in "
             f"NEEDS exactly as written here: {names}.\n")
+
+
+# ---- what a package asks for -------------------------------------------------
+
+#: One ``[connections] needs`` entry: a connector id, then the level.
+NEED_SPEC_RE = re.compile(r"^([a-z0-9][a-z0-9_-]*)(?::([a-z]+))?$")
+
+
+def parse_need(text: str) -> str:
+    """``gmail`` or ``gmail:write`` -> ``gmail:write``; read when no level
+    is said, since a package asking for less is the safe misreading."""
+    found = NEED_SPEC_RE.match(str(text).strip().lower())
+    if not found or (found.group(2) or "read") not in VERB_CLASSES:
+        raise ValueError(f"{text!r}: expected a connector id, optionally with a level "
+                         f"({', '.join(VERB_CLASSES)}), like \"gmail:read\"")
+    return f"{found.group(1)}:{found.group(2) or 'read'}"
+
+
+def needs_allow(needs: list[str] | tuple[str, ...]) -> dict[str, str]:
+    """Granted needs -> connector: the highest level granted for it."""
+    allow: dict[str, str] = {}
+    for need in needs:
+        cid, _, klass = need.partition(":")
+        if cid not in allow or CLASS_RANK[klass] > CLASS_RANK[allow[cid]]:
+            allow[cid] = klass
+    return allow
+
+
+def approvals_path() -> Path:
+    """Where the yes you gave each package is kept: beside memory, under
+    the state home, not in any project -- it is yours, not the package's."""
+    state = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(state) / "yantra" / "connections-approved.json"
+
+
+def package_key(name: str, root: Path | str | None) -> str:
+    """A package by name AND place: another package borrowing a trusted
+    one's name, somewhere else on disk, is asked again."""
+    return f"{name} @ {Path(root).resolve() if root else '?'}"
+
+
+def load_approved(key: str, path: Path | None = None) -> set[str]:
+    path = path or approvals_path()
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return set()
+    return {str(n) for n in (data.get(key) or [])} if isinstance(data, dict) else set()
+
+
+def save_approved(key: str, need: str, path: Path | None = None) -> None:
+    path = path or approvals_path()
+    try:
+        data = json.loads(path.read_text())
+        data = data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        data = {}
+    data[key] = sorted({*data.get(key, []), need})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    tmp.replace(path)
+
+
+# ---- several accounts, one set of tools ---------------------------------------
+
+
+class AccountTool(Tool):
+    """One connector's tool across several accounts, with ``account`` added.
+
+    Each account's own MCP tool stays as it was -- its own process, its
+    own token -- and is called through this one. The model sees one
+    ``search_threads`` instead of one per account, and picks by name.
+    """
+
+    name = ""
+    description = ""
+    parameters: dict[str, Any] = {}
+
+    def __init__(self, connector: str, raw: str, accounts: dict[str, Tool],
+                 emails: dict[str, str], live: Any) -> None:
+        first = next(iter(accounts.values()))
+        self.connector, self.raw = connector, raw
+        self.accounts, self.emails, self.live = accounts, emails, live
+        self.name = f"mcp__{connector}__{raw}"
+        self.read_only = first.read_only
+        self.always_ask = first.always_ask
+        schema = copy.deepcopy(first.parameters) or {"type": "object"}
+        schema.setdefault("type", "object")
+        listed = ", ".join(f"{a} = {emails[a]}" if emails.get(a) else a for a in accounts)
+        schema.setdefault("properties", {})["account"] = {
+            "type": "string",
+            "enum": [*accounts, *(["all"] if self.read_only else [])],
+            "description": f"Which account: {listed}."
+                           + (" Leave out, or \"all\", for every account." if self.read_only
+                              else " Required: there is no default."),
+        }
+        if not self.read_only:
+            schema["required"] = [*dict.fromkeys([*schema.get("required", []), "account"])]
+        self.parameters = schema
+        self.description = (f"{first.description} [{len(accounts)} accounts: {listed}; "
+                            f"pick one with `account`]")
+
+    def _pick(self, args: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+        rest = dict(args)
+        account = rest.pop("account", None)
+        if account in (None, "", "all"):
+            if self.read_only:
+                return list(self.accounts), rest
+            raise ToolError(f"say which account to use ({', '.join(self.accounts)}); "
+                            f"one that sends or changes things has no default")
+        if account not in self.accounts:
+            raise ToolError(f"no account {account!r}; choose one of "
+                            f"{', '.join(self.accounts)}")
+        return [account], rest
+
+    def _who(self, account: str) -> str:
+        email = self.emails.get(account)
+        return f"{account} ({email})" if email else account
+
+    def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
+        try:
+            names, rest = self._pick(args)
+        except ToolError as exc:
+            return f"{self.name}: {exc}"
+        who = ", ".join(self._who(a) for a in names)
+        return f"From: {who} -- {self.accounts[names[0]].summary(rest, ctx)}"
+
+    def _one(self, account: str, args: dict[str, Any], ctx: ToolContext) -> str:
+        tool = self.accounts[account]
+        if not self.live(tool):
+            raise ToolError(f"the {account} account's server is not running in this session")
+        out = tool.run(args, ctx)
+        return out if isinstance(out, str) else out.text
+
+    def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
+        names, rest = self._pick(args)
+        if len(names) == 1:
+            return self._one(names[0], rest, ctx)
+        parts = []
+        for account in names:
+            try:
+                parts.append(f"## {self._who(account)}\n{self._one(account, rest, ctx)}")
+            except ToolError as exc:
+                parts.append(f"## {self._who(account)}\nfailed: {exc}")
+        return "\n\n".join(parts)
 
 
 # ---- the live handle --------------------------------------------------------
@@ -361,6 +572,11 @@ class Setu:
     #: Why the last look failed, when it did -- the page says it.
     error: str = ""
     servers: set[str] = field(default_factory=set)
+    #: What a package may use, connector -> highest level; None for a
+    #: session of your own, which may use everything.
+    allow: dict[str, str] | None = None
+    #: The merged tools of connectors with several accounts, by name.
+    merged: dict[str, AccountTool] = field(default_factory=dict)
 
     @property
     def program(self) -> str | None:
@@ -387,7 +603,9 @@ class Setu:
 
         done = Synced()
         link = self.link
-        wanted = mcp_configs(link) if link is not None else []
+        self._unmerge(agent.registry, manager)
+        wanted = [(row, cfg) for row, cfg in (mcp_configs(link) if link is not None else [])
+                  if self.allow is None or row.get("connector") in self.allow]
         names = {cfg.name for _, cfg in wanted}
         for name in sorted(self.servers - names):
             try:
@@ -411,7 +629,9 @@ class Setu:
                 self.servers.add(cfg.name)
             elif cfg.name not in self.servers and same_server(existing.config, cfg):
                 self.servers.add(cfg.name)   # configured by hand as this very command
-            kept, removed = apply_verbs(agent.registry, cfg.name, link.verbs(row["connector"]))
+            ceiling = None if self.allow is None else self.allow[row["connector"]]
+            kept, removed = apply_verbs(agent.registry, cfg.name,
+                                        link.verbs(row["connector"]), ceiling)
             if removed and cfg.name in getattr(manager, "tool_names", {}):
                 # the manager's count is what the page shows: tools the
                 # manifest refused are not the agent's, so not counted
@@ -423,10 +643,73 @@ class Setu:
             done.connected[cfg.name] = len(kept)
         if link is not None:
             done.notes += [p for p in link.problems]
+            self._merge(agent.registry, manager,
+                        [(row, cfg.name) for row, cfg in wanted if cfg.name in done.connected],
+                        done)
+        refresh = getattr(manager, "_refresh_catalog", None)
+        if self.merged and callable(refresh):
+            refresh()
         prompt = attach_prompt(agent)
-        prompt.set("connections", prompt_text(link) if link is not None else None)
+        merged = frozenset(t.connector for t in self.merged.values())
+        prompt.set("connections", prompt_text(link, self.allow, merged)
+                   if link is not None else None)
         prompt.apply()
         return done
+
+    def _unmerge(self, registry: Any, manager: Any) -> None:
+        """Put each account's own tools back, so a sync starts from what
+        the servers offer. Only tools whose server is still the same live
+        session return; a reconnected server registered fresh ones."""
+        for name, tool in self.merged.items():
+            registry.unregister(name)
+            for original in tool.accounts.values():
+                session = getattr(original, "session", None)
+                server = session.config.name if session is not None else None
+                if manager.sessions.get(server) is session and original.name not in registry:
+                    registry.register(original)
+        self.merged.clear()
+
+    def _merge(self, registry: Any, manager: Any,
+               pairs: list[tuple[dict[str, Any], str]], done: Synced) -> None:
+        """Connectors with two or more connected accounts: one tool each,
+        with ``account``, in place of one per account."""
+        by_connector: dict[str, list[tuple[dict[str, Any], str]]] = {}
+        for row, server in pairs:
+            by_connector.setdefault(row.get("connector", ""), []).append((row, server))
+
+        def live(tool: Any) -> bool:
+            session = getattr(tool, "session", None)
+            return session is not None and \
+                manager.sessions.get(session.config.name) is session
+
+        for cid, group in by_connector.items():
+            if len(group) < 2:
+                continue
+            raws: dict[str, None] = {}
+            for _, server in group:
+                prefix = f"mcp__{server}__"
+                raws.update((n[len(prefix):], None) for n in registry.names()
+                            if n.startswith(prefix))
+            for raw in raws:
+                accounts, emails = {}, {}
+                for row, server in group:
+                    name = f"mcp__{server}__{raw}"
+                    if name in registry:
+                        accounts[account_of(row)] = registry.get(name)
+                        emails[account_of(row)] = row.get("email") or ""
+                tool = AccountTool(cid, raw, accounts, emails, live)
+                if tool.name in registry:
+                    done.notes.append(f"'{tool.name}' is already a tool; {cid}'s accounts "
+                                      f"keep their own {raw} tools")
+                    continue
+                for original in accounts.values():
+                    registry.unregister(original.name)
+                registry.register(tool)
+                if tool.name in registry:
+                    self.merged[tool.name] = tool
+                else:                      # refused by a package's allow list
+                    for original in accounts.values():
+                        registry.register(original)
 
     def describe(self, manager: Any = None) -> dict[str, Any]:
         """The Connections panel's data. Built from Setu's own report,
@@ -444,6 +727,7 @@ class Setu:
                 "running": bool(server and server["healthy"])})
         return {
             "mode": self.mode,
+            "allow": dict(self.allow) if self.allow is not None else None,
             "found": link is not None,
             "road": link.road if link is not None else None,
             "error": self.error,

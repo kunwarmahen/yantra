@@ -94,6 +94,7 @@ SCHEMA: dict[str, frozenset[str]] = {
     "permissions": frozenset({"mode"}),
     "env": frozenset({"context"}),
     "memory": frozenset({"via", "verbs"}),
+    "connections": frozenset({"needs"}),
 }
 
 
@@ -231,6 +232,21 @@ def _pack_prefixes(tools: dict[str, Any], packs: tuple[str, ...],
                         f"letter")
         pairs.append((pack, prefix))
     return tuple(pairs)
+
+
+def _needs(connections: dict[str, Any], path: Path) -> tuple[str, ...]:
+    """``[connections] needs`` -> ``("gmail:read", ...)``, each checked
+    here so a typo'd level fails at load, not as an account that never
+    shows up."""
+    from yantra.setu_link import parse_need
+
+    out = []
+    for raw in _str_list(connections, "needs", path, "connections") or ():
+        try:
+            out.append(parse_need(raw))
+        except ValueError as exc:
+            _fail(path, f"connections.needs: {exc}")
+    return tuple(dict.fromkeys(out))
 
 
 def _verbs(memory: dict[str, Any], path: Path) -> tuple[tuple[str, str], ...]:
@@ -471,6 +487,7 @@ def load_package(where: Path) -> AgentSpec:
     permissions = _table(data, "permissions", manifest)
     env = _table(data, "env", manifest)
     memory = _table(data, "memory", manifest)
+    connections = _table(data, "connections", manifest)
 
     # The prompt: a declared path is required to exist (you asked for that
     # file); the conventional prompt.md is used only if it happens to be
@@ -556,6 +573,9 @@ def load_package(where: Path) -> AgentSpec:
         # reach an agent somebody else wrote only when it asks for them.
         memory=_str(memory, "via", manifest, "memory") or "off",
         memory_verbs=_verbs(memory, manifest),
+        # Likewise connected accounts: none unless asked for here, and
+        # then only once the person says yes (setu_link.py).
+        connections=_needs(connections, manifest),
         root=root,
     )
     # A package that ships skills and then excludes the tool that loads

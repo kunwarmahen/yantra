@@ -367,3 +367,19 @@ class TestCliAgentFlag:
             '[permissions]\nmode = "yolo"\n',
         )
         assert rc == 0 and agent.permissions.mode == "yolo"
+
+
+class TestConnectionNeeds:
+    def test_a_package_says_nothing_and_needs_nothing(self, tmp_path):
+        (tmp_path / "agent.toml").write_text('[agent]\nname = "x"\n')
+        assert load_package(tmp_path).connections == ()
+
+    def test_needs_read_as_connector_and_level(self, tmp_path):
+        (tmp_path / "agent.toml").write_text(
+            '[connections]\nneeds = ["gmail", "outlook:write", "gmail"]\n')
+        assert load_package(tmp_path).connections == ("gmail:read", "outlook:write")
+
+    def test_a_typod_level_fails_at_load(self, tmp_path):
+        (tmp_path / "agent.toml").write_text('[connections]\nneeds = ["gmail:all"]\n')
+        with pytest.raises(ConfigError, match="connections.needs"):
+            load_package(tmp_path)

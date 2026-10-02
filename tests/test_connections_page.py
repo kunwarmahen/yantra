@@ -193,8 +193,10 @@ class TestSync:
             agent.setu.refresh()
             done = agent.setu.sync(manager, agent)
             assert set(done.connected) == {"gmail-personal", "gmail-work"}
-            assert "mcp__gmail-work__search_threads" in agent.registry
-            assert "gmail-work" in agent.system
+            # two Gmail accounts: one set of tools, with `account`
+            assert "mcp__gmail__search_threads" in agent.registry
+            assert "mcp__gmail-work__search_threads" not in agent.registry
+            assert "`mcp__gmail__*`" in agent.system and "`work`" in agent.system
         finally:
             manager.shutdown()
 
@@ -275,7 +277,7 @@ class TestPage:
                 seen = until(ws, "connections")
             events = [e.get("event") for e in seen if e["type"] == "setu_signin"]
             assert events[:3] == ["started", "url", "connected"]
-            assert "mcp__gmail-work__send_message" in agent.registry
+            assert "mcp__gmail__send_message" in agent.registry
             assert seen[-1]["sync"]["connected"]["gmail-work"] == 3
             assert ["connect", "gmail", "--as", "work", "--level", "send", "--json"] \
                 in setu.get()["calls"]
@@ -322,10 +324,10 @@ class TestPage:
             session.turn_active = True
             session.start_signin("gmail", "work", "read")
             session.signin.thread.join(10)
-            assert "mcp__gmail-work__search_threads" not in agent.registry
+            assert "mcp__gmail__search_threads" not in agent.registry
             session.turn_active = False
             session._setu_settle()
-            assert "mcp__gmail-work__search_threads" in agent.registry
+            assert "mcp__gmail__search_threads" in agent.registry
         finally:
             manager.shutdown()
 
