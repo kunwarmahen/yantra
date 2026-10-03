@@ -186,6 +186,24 @@ class TestSync:
         finally:
             manager.shutdown()
 
+    def test_a_level_changed_in_setu_restarts_its_connector(self, setu, tmp_path):
+        """A connector reads its level once, at start: without a restart the
+        model keeps the old level's tools after "change access"."""
+        agent, manager = build(tmp_path, setu.path)
+        try:
+            before = manager.sessions["gmail-personal"]
+            agent.setu.refresh()
+            assert agent.setu.sync(manager, agent).notes == []     # nothing changed
+            assert manager.sessions["gmail-personal"] is before
+            setu.set(connections={"gmail:personal": "send"})
+            agent.setu.refresh()
+            done = agent.setu.sync(manager, agent)
+            assert "gmail:personal restarted at Send" in done.notes
+            assert manager.sessions["gmail-personal"] is not before
+            assert "mcp__gmail-personal__search_threads" in agent.registry
+        finally:
+            manager.shutdown()
+
     def test_a_connection_made_elsewhere_arrives_on_refresh(self, setu, tmp_path):
         agent, manager = build(tmp_path, setu.path)
         try:

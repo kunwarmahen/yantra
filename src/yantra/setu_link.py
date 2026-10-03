@@ -623,6 +623,10 @@ class Setu:
     #: Why the last look failed, when it did -- the page says it.
     error: str = ""
     servers: set[str] = field(default_factory=set)
+    #: What each started server was started for -- level and account --
+    #: so a level changed in Setu restarts it: a connector reads its level
+    #: once, when it starts, and offers that level's tools for its life.
+    started: dict[str, tuple[str, str]] = field(default_factory=dict)
     #: What a package may use, connector -> highest level; None for a
     #: session of your own, which may use everything.
     allow: dict[str, str] | None = None
@@ -684,9 +688,23 @@ class Setu:
             except MCPError:
                 pass
             self.servers.discard(name)
+            self.started.pop(name, None)
             done.dropped.append(name)
         for row, cfg in wanted:
             existing = manager.sessions.get(cfg.name)
+            stamp = (str(row.get("level") or ""), str(row.get("email") or ""))
+            if (existing is not None and cfg.name in self.servers
+                    and self.started.get(cfg.name, stamp) != stamp):
+                # signed in again at another level: the running connector
+                # still offers the old level's tools until it restarts
+                try:
+                    manager.disconnect(cfg.name)
+                except MCPError:
+                    pass
+                self.servers.discard(cfg.name)
+                existing = None
+                done.notes.append(f"{row['ref']} restarted at "
+                                  f"{row.get('level_label') or row.get('level')}")
             if existing is not None and not same_server(existing.config, cfg):
                 done.notes.append(f"'{cfg.name}' is already an mcp server with a different "
                                   f"command; leaving it, and {row['ref']} unconnected")
@@ -700,6 +718,7 @@ class Setu:
                 self.servers.add(cfg.name)
             elif cfg.name not in self.servers and same_server(existing.config, cfg):
                 self.servers.add(cfg.name)   # configured by hand as this very command
+            self.started[cfg.name] = stamp
             ceiling = None if self.allow is None else self.allow[row["connector"]]
             kept, removed = apply_verbs(agent.registry, cfg.name,
                                         link.verbs(row["connector"]), ceiling)
