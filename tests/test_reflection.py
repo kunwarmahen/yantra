@@ -375,29 +375,33 @@ class TestWeb:
         return TestClient(make_app(session)), agent
 
     def test_the_button_looks_and_nothing_is_kept_until_asked(self, setup, store):
+        """What it finds waits in the tray (notes/113), not in a question."""
         client, _ = setup
         got = client.post("/api/memory/reflect", json={}).json()
-        assert got["candidates"] == [
+        waiting = client.get("/api/kept").json()["memories"]
+        assert got["found"] == 1 and waiting == [
             {"statement": "Lives near RDU (Raleigh-Durham airport).",
              "kind": "fact"}]
         assert store.list("asha", 5) == []
         kept = client.post("/api/memory/keep",
-                           json={"keep": got["candidates"], "drop": []}).json()
+                           json={"keep": waiting, "drop": []}).json()
         assert kept["kept"] == 1 and len(kept["items"]) == 1
+        assert client.get("/api/kept").json()["memories"] == []
 
     def test_ending_follows_the_mode(self, setup, store):
         client, agent = setup
         agent.memory.reflect = "off"
         assert client.post("/api/memory/reflect",
-                           json={"ending": True}).json()["candidates"] == []
+                           json={"ending": True}).json()["found"] == 0
         agent.memory.reflect = "auto"
         got = client.post("/api/memory/reflect", json={"ending": True}).json()
         assert got["kept"] == 1 and len(store.list("asha", 5)) == 1
 
     def test_a_dropped_one_is_declined(self, setup):
         client, agent = setup
-        got = client.post("/api/memory/reflect", json={}).json()
-        client.post("/api/memory/keep", json={"keep": [], "drop": got["candidates"]})
+        client.post("/api/memory/reflect", json={})
+        waiting = client.get("/api/kept").json()["memories"]
+        client.post("/api/memory/keep", json={"keep": [], "drop": waiting})
         assert "lives near rdu (raleigh-durham airport)." in agent.memory.declined
 
 

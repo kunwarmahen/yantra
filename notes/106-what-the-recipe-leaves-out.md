@@ -41,7 +41,9 @@ steps where the id was found.
 same checks as a look back's:
 
 * The look back's own mode decides. `ask` offers them when the turn
-  ends, after the skill's question. `auto` keeps them. `off` drops them.
+  ends, after the skill's question (on the page, in the *to keep* tray
+  beside the recipe: [note 113](113-after-the-answer.md)). `auto` keeps
+  them. `off` drops them.
 * A fact that's already remembered, or that you dropped earlier in the
   session, isn't offered again.
 * A fact containing a value that was scrubbed from the steps as a secret

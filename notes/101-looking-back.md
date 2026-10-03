@@ -79,7 +79,8 @@ keep [a]ll, numbers (1 3), or [N]one >
 ```
 
 A bare Enter keeps nothing. A candidate you drop isn't offered again in
-the same session. On the page the same list comes up as a dialog with
+the same session. On the page the same list waits in the *to keep*
+tray ([note 113](113-after-the-answer.md)) with
 every box unticked.
 
 That default earns its place. In a first try at the receipt below, the

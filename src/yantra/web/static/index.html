@@ -91,6 +91,12 @@
       <span id="mem-count">—</span>
     </button>
 
+    <button class="chip hidden" id="chip-kept" title="worth keeping — what the agent noticed after your turns; look whenever you like">
+      <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-check"/></svg>
+      <span id="kept-count">—</span>
+    </button>
+
     <span class="chip chip-static" id="chip-cost" title="session cost — unknown slugs show no figure, never a guess"></span>
 
     <span class="chip chip-static hidden" id="chip-ctxbar">
@@ -362,6 +368,24 @@
       </button>
     </div>
     <div id="mem-body"></div>
+  </div>
+</div>
+
+<!-- worth keeping: what the look after a turn found -- recipes to save,
+     facts to remember -- waiting for whenever the person looks. -->
+<div id="kept-backdrop" class="hidden">
+  <div id="kept-panel" role="dialog" aria-modal="true" aria-labelledby="kept-title">
+    <div class="tools-head">
+      <div>
+        <h3 id="kept-title">worth keeping</h3>
+        <span class="tools-note">what the agent noticed after your turns. Nothing here is kept until you say so, and nothing waits on it — keep chatting.</span>
+      </div>
+      <button class="ghost icon-only" id="kept-close" title="close" aria-label="close">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div id="kept-body"></div>
   </div>
 </div>
 

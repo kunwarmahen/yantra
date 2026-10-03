@@ -70,6 +70,16 @@ offered as an update -- a diff, same name, same folder, the record kept
 and the streak cleared. Three failures in a row with nothing to repair
 from set a recipe aside (loader.STALE_AFTER); the next fresh solve is
 told its name, and replaces it.
+
+BEHIND THE PERSON'S BACK, OR NOT AT ALL. A page looks at the turn after
+it has handed the input back, not before: the write-up is a whole model
+call, and on a local model it can take longer than the answer did. Run
+that way (``consider(stop=...)``) the look gives way the moment the
+person sends something -- the model call is closed mid-stream, so a
+local model is not left finishing a write-up nobody waits for -- and it
+never asks a question. A test that would need a yes is not run; the
+offer waits with ``waiting`` set, and the person runs it from where
+the offer waits ([notes/113](../../notes/113-after-the-answer.md)).
 """
 
 from __future__ import annotations
@@ -101,6 +111,8 @@ from yantra.skills.loader import (
     render_skill_md,
     validate_text,
 )
+from yantra.permissions import REFUSED_UNATTENDED
+from yantra.providers.base import collect
 from yantra.setu_link import connectors_hint, resolve_needs
 from yantra.skills.registry import write_atomic
 from yantra.trace import REDACT_PRESETS
@@ -130,6 +142,10 @@ DISTIL_MAX_TOKENS = 8192
 #: One run, plus one retry after a repair. Then stop.
 MAX_TEST_RUNS = 2
 TEST_TIMEOUT = 60
+
+#: What a test's output starts with when it was not run because the look
+#: ran in the background and the test needed a yes nobody was asked for.
+WAITING = "[waiting]"
 
 #: Where drafts are staged for their test, under the workspace so a
 #: sandboxed bash can reach them. Gitignored with the rest of .yantra/.
@@ -165,6 +181,10 @@ _SECRET_PATTERNS = (
 #: Not the whole scrubber -- a script that reads ``Authorization`` from
 #: a variable is exactly right, and must not look like a leak.
 _TOKEN_SHAPES = re.compile(REDACT_PRESETS["token"])
+
+
+class Stopped(Exception):
+    """A look in the background gave way: the person wants the agent."""
 
 
 class LearnError(RuntimeError):
@@ -647,6 +667,9 @@ class Offer:
     #: Each ``setu:<id>`` the draft needs, against what Setu reports now
     #: (setu_link.Need) -- the save question says which are connected.
     connections: list[Any] = field(default_factory=list)
+    #: The test needs a yes and the look ran with nobody asked: not run
+    #: yet, and not saveable until it is (Learner.test_waiting).
+    waiting: bool = False
 
     def diff(self) -> str:
         """The update as a person reads one: saved version against proposed.
@@ -688,7 +711,7 @@ class Offer:
             "script": (self._staged(draft.script_name, draft.script)
                        if draft.script_name else ""),
             "test": {"command": draft.test, "passed": self.tested,
-                     "runs": self.test_runs,
+                     "runs": self.test_runs, "waiting": self.waiting,
                      "output": _clip(self.test_output, 1500)},
             "spent": {"input": self.spent.input_tokens,
                       "output": self.spent.output_tokens},
@@ -752,6 +775,9 @@ class Learner:
         self.last_reason = ""
         #: How many facts the last write-up handed to memory.
         self.facts_found = 0
+        #: Set while a look runs in the background: says the person wants
+        #: the agent back. None when the person is waiting on the look.
+        self._stop: Callable[[], bool] | None = None
 
     @property
     def cwd(self) -> Path:
@@ -799,11 +825,32 @@ class Learner:
     # ---- notice, distil, test ------------------------------------------------
 
     def consider(self, *, forced: bool = False,
-                 progress: Callable[[str], None] | None = None) -> Offer | None:
+                 progress: Callable[[str], None] | None = None,
+                 stop: Callable[[], bool] | None = None) -> Offer | None:
         """Look at the last turn; return an Offer, or None with ``last_skip``
         saying why not. ``forced`` is the person asking (``/learn``): the
         effort count and the will-it-recur question are theirs to waive.
+
+        ``stop`` runs the look in the background: polled through the
+        write-up's stream and between steps, and true means give way --
+        None comes back, nothing staged is left. Nothing is asked: a test
+        that needs a yes comes back as an offer with ``waiting`` set.
         """
+        self._stop = stop
+        try:
+            return self._consider(forced, progress)
+        except Stopped:
+            self.last_skip = "stopped: a new message came first"
+            return None
+        finally:
+            self._stop = None
+
+    def _stopped(self) -> None:
+        if self._stop is not None and self._stop():
+            raise Stopped
+
+    def _consider(self, forced: bool,
+                  progress: Callable[[str], None] | None) -> Offer | None:
         say = progress or (lambda text: None)
         self.last_skip = None
         turn = read_turn(self.agent.history)
@@ -869,13 +916,19 @@ class Learner:
         if repairs is not None and repairs.tool_name:
             offer.tool = repairs.tool_name
         if draft.script:
-            self._test(offer, say)
-            if not offer.tested and offer.test_output.startswith("[not run]"):
+            try:
+                self._test(offer, say)
+            except Stopped:
+                self.discard(offer)
+                raise
+            if offer.test_output.startswith(WAITING):
+                offer.tested, offer.waiting = None, True
+            elif not offer.tested and offer.test_output.startswith("[not run]"):
                 self.last_skip = ("its test did not run, so it was not "
                                   "offered: " + offer.test_output[10:])
                 self.discard(offer)
                 return None
-            if not offer.tested:
+            elif not offer.tested:
                 self.discard(offer)
                 self.last_skip = (f"its script failed its test "
                                   f"{offer.test_runs} time(s), so it was not "
@@ -988,15 +1041,32 @@ class Learner:
         """One plain completion, fresh context, no tools -- and its cost on
         the session's meter, because it was spent on the person's behalf."""
         agent = self.agent
-        response = agent.provider.complete(
-            messages=[Message("user", [TextBlock(prompt)])],
-            system=None, tools=[], model=agent.model,
-            max_tokens=DISTIL_MAX_TOKENS)
+        request = dict(messages=[Message("user", [TextBlock(prompt)])],
+                       system=None, tools=[], model=agent.model,
+                       max_tokens=DISTIL_MAX_TOKENS)
+        if self._stop is None:
+            response = agent.provider.complete(**request)
+        else:
+            # Streamed so it can be closed mid-answer: a local model stops
+            # generating when the connection goes, and the person's next
+            # turn does not queue behind a write-up nobody will read.
+            events = agent.provider.stream(**request)
+            try:
+                response = collect(self._until_stopped(events))
+            finally:
+                close = getattr(events, "close", None)
+                if close is not None:
+                    close()
         spent.add(response.usage)
         agent.total_usage.add(response.usage)
         agent.usage_by_model.setdefault(
             response.model or agent.model, Usage()).add(response.usage)
         return response.message.text()
+
+    def _until_stopped(self, events: Any) -> Any:
+        for event in events:
+            self._stopped()
+            yield event
 
     def _stage(self, draft: Draft) -> Path:
         """Write the draft where a sandboxed bash can run it."""
@@ -1037,11 +1107,13 @@ class Learner:
             offer.tested, offer.test_output = False, "the write-up gave no test command"
             return
         for attempt in range(1, MAX_TEST_RUNS + 1):
+            self._stopped()
             say(f"testing {draft.script_name} ({attempt} of {MAX_TEST_RUNS})")
             offer.test_runs = attempt
             ok, output = self.run_test(draft, offer.staging)
             offer.tested, offer.test_output = ok, output
-            if ok or attempt == MAX_TEST_RUNS or output.startswith("[not run]"):
+            if (ok or attempt == MAX_TEST_RUNS
+                    or output.startswith(("[not run]", WAITING))):
                 return
             say("the test failed; asking for one fix")
             reply = self._complete(FIX_SCRIPT_PROMPT.format(
@@ -1079,11 +1151,24 @@ class Learner:
         if call.id in agent.turn_refusals:
             # Refused at the gate: the script was never run, so there is
             # nothing for a repair to fix.
-            del agent.turn_refusals[call.id]
+            code = agent.turn_refusals.pop(call.id)
+            if code == REFUSED_UNATTENDED and self._stop is not None:
+                # The background look asked nobody: it waits for a yes.
+                return False, f"{WAITING} {result.content}"
             return False, f"[not run] {result.content}"
         if result.is_error:
             return False, result.content
         return _exit_code(result.content) == 0, result.content
+
+    def test_waiting(self, offer: Offer, *,
+                     progress: Callable[[str], None] | None = None) -> bool:
+        """Run the test a background look left waiting, now that the
+        person is here to say yes to it. True when it passed; a refusal
+        at the gate leaves it waiting, a failure leaves it failed."""
+        self._test(offer, progress or (lambda text: None))
+        offer.waiting = offer.test_output.startswith(("[not run]", WAITING))
+        offer.tested = None if offer.waiting else offer.tested
+        return bool(offer.tested)
 
     # ---- promotion to a tool (notes/98) -----------------------------------------
 

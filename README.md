@@ -242,8 +242,11 @@ Save this as a skill?
 [s]ave  [e]dit first  [c]hange scope to project  [N]o >
 ```
 
-Nothing is saved without a yes, and the default is no. The web page asks
-the same question in a dialog where both files are editable. A saved
+Nothing is saved without a yes, and the default is no. The web page
+doesn't ask at all. It hands the input back first and looks behind the
+answer. What it finds waits under a **to keep** chip, with both files
+editable when you review it, and a message you send meanwhile stops the
+look ([notes/113](notes/113-after-the-answer.md)). A saved
 skill never holds a secret or a personal fact: the token and the fan's
 id are **inputs**, and the model never saw the token in the first place.
 Next session the skill is in the roster like any other, and a small
@@ -323,8 +326,9 @@ keep [a]ll, numbers (1 3), or [N]one > a
 ```
 
 Nothing is kept without a yes, and a dropped one isn't asked again.
-`/remember` (or *remember from this conversation* on the page) looks
-back on demand. `--reflect auto` keeps them without asking, and
+On the page they wait under the **to keep** chip instead of asking
+([notes/113](notes/113-after-the-answer.md)). `/remember` (or *remember
+from this conversation* on the page) looks back on demand. `--reflect auto` keeps them without asking, and
 `--reflect off` never looks by itself (`YANTRA_REFLECT`). The
 conversation is scrubbed of secrets and your `--trace-redact` patterns
 first. On Ollama it's the same local model, with no second one needed
@@ -2084,6 +2088,11 @@ src/yantra/
 │                   tested through the session's own bash and gate (<= 2
 │                   runs), then the save question; learned/ roots, counters
 │                   Yantra keeps ([notes/96](notes/96-solve-it-once.md)).
+│                   consider(stop=...) is the page's look BEHIND the
+│                   answer: the write-up streamed so a new message closes
+│                   it, and a test that needs a yes waits for one
+│                   (Offer.waiting) instead of asking
+│                   ([notes/113](notes/113-after-the-answer.md)).
 │                   A recipe that failed but was finished another way is
 │                   offered as an UPDATE (a diff); three failures in a row
 │                   set it aside ([notes/97](notes/97-when-the-recipe-breaks.md)).
@@ -2508,7 +2517,12 @@ src/yantra/
 │                   reset at start_turn, prompt withdrawn on expiry
 │                   ([notes/78](notes/78-a-clock-on-the-page.md)), and
 │                   the same clock tells the model what is left
-│                   ([notes/80](notes/80-the-time-left-told.md))
+│                   ([notes/80](notes/80-the-time-left-told.md)).
+│                   turn_done goes out BEFORE the look at the turn: it
+│                   runs on its own thread, a new message stops it, its
+│                   gate never asks, and what it finds (recipes, facts)
+│                   waits in a tray -- /api/kept, the "to keep" chip
+│                   ([notes/113](notes/113-after-the-answer.md))
 └── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per

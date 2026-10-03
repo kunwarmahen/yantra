@@ -104,8 +104,9 @@ Save this as a skill?
 ```
 
 The default is no. *Edit first* opens both files in `$EDITOR`, then
-asks again. The web page asks the same question in a dialog where both
-files are editable text. An edit that breaks a rule (a renamed skill, a
+asks again. On the web page the offer waits in the *to keep* tray
+instead of asking ([note 113](113-after-the-answer.md)), and its review
+dialog has both files as editable text. An edit that breaks a rule (a renamed skill, a
 thin description) comes back as the same question, with the error on
 top and the edit kept.
 
@@ -260,9 +261,12 @@ tee log`) never offers, rather than stop and wait for an answer that
 can't come. *Auto* is for unattended runs only. It says so at start,
 because it writes files nobody read.
 
-The page has the same question, plus a **save last turn** button in
-its skills section. While the question is up, the input stays busy,
-and Stop means no.
+The page looks after it has handed the input back, not before. What
+it finds waits in the *to keep* tray, a message sent meanwhile stops
+the look, and a test that needs your yes waits for you to run it
+([note 113](113-after-the-answer.md)). Its **save last turn** button
+asks straight away, because you asked: while that question is up, the
+input stays busy, and Stop means no.
 
 Both roads work the same way. The write-up uses the session's own
 provider and model, and its tokens go on the session's meter, so

@@ -97,7 +97,8 @@ function route(env) {
     case "setu_signin":        onSignin(env); break;
     case "connections":        onConnections(env); break;
     case "memory_notice":      addBanner(env.text, false, true); break;
-    case "memory_offer":       offerMemories(env.candidates); break;
+    case "kept":               onKept(env); break;
+    case "look_status":        onLookStatus(env.text); break;
     case "promoted":           toast(`${env.skill} is now the tool ${env.tool}`);
                                addBanner(`${env.skill} is now the tool `
                                  + `${env.tool} — next time it is one call `
@@ -245,6 +246,7 @@ function applyHeader(s) {
     $("#chip-mem").title = `memory — ${mem.store} store, for ${mem.user}`
       + (mem.notice ? `\n\n${mem.notice}` : "");
   }
+  renderKeptChip(s.kept);
   renderPressure(s);
   renderBudget(s);
   renderRecording(s);
@@ -960,12 +962,15 @@ function diffLines(diff) {
    be written is on screen and editable; the default is no. Saving with an
    edit that breaks a rule comes back as the same question with the error
    on top, and the edit kept. */
-function showLearnModal(env) {
+function showLearnModal(env, answer = (reply) => send({ type: "answer", id: env.id, ...reply })) {
   ui.modalId = env.id;
   const test = env.test || {};
-  const tested = test.passed == null
+  const tested = test.waiting
+    ? `not run yet — it needs your yes — $ ${test.command}`
+    : test.passed == null
     ? "no script, so nothing to run"
     : `passed (${test.runs} run${test.runs > 1 ? "s" : ""}) — $ ${test.command}`;
+  const kept = !!env.kept;   // from the tray: "later" keeps it waiting
   const scopes = Object.entries(env.scopes || {}).map(([key, s]) => `
     <label class="choice-row" title="${esc(s.path)}">
       <input type="radio" name="learn-scope" value="${esc(key)}"
@@ -1005,15 +1010,18 @@ function showLearnModal(env) {
     ${test.output ? `<details><summary>test output</summary>
       <pre class="args">${esc(test.output)}</pre></details>` : ""}
     <div class="modal-actions">
-      <button class="m-btn" data-act="no">no</button>
-      <button class="m-btn primary" data-act="save">${update ? "update skill" : "save skill"}</button>
+      ${kept ? '<button class="m-btn" data-act="later">later</button>' : ""}
+      <button class="m-btn" data-act="no">${kept ? "drop" : "no"}</button>
+      ${test.waiting
+        ? '<button class="m-btn primary" data-act="test">run the test</button>'
+        : `<button class="m-btn primary" data-act="save">${update ? "update skill" : "save skill"}</button>`}
     </div>`);
   $("#modal").onclick = (e) => {
     const act = e.target?.closest?.("[data-act]")?.dataset?.act;
     if (!act) return;
-    if (act === "no") { send({ type: "answer", id: env.id, decision: "no" }); return; }
-    send({
-      type: "answer", id: env.id, decision: "save",
+    if (act !== "save") { answer({ decision: act }); return; }
+    answer({
+      decision: "save",
       scope: $("#modal input[name=learn-scope]:checked")?.value ?? env.scope,
       skill_md: $("#learn-md").value,
       script: $("#learn-script") ? $("#learn-script").value : null,
@@ -1552,7 +1560,8 @@ function renderMemory() {
    same model looks back over it for facts about the person said in
    passing. Each candidate is shown unticked: nothing is kept without a
    yes. `ending` follows --reflect (off: nothing, auto: kept without
-   asking); the panel's button always looks, and always asks. */
+   asking); the panel's button always looks, and always asks. What it
+   finds waits in the tray below, not in a question. */
 
 async function lookBack(ending) {
   if (!ui.lastState?.memory) return;
@@ -1565,49 +1574,9 @@ async function lookBack(ending) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { addBanner(data.detail || "looking back failed", false, true); return; }
   if (data.kept) toast(`remembered ${data.kept} about you`);
-  if (data.candidates?.length) await offerMemories(data.candidates);
+  if (data.found && ending) toast(`${data.found} worth remembering — waiting under “to keep”`);
+  else if (data.found) openKeptPanel();
   else if (!ending) toast("nothing new worth remembering in this conversation");
-}
-
-function offerMemories(candidates) {
-  return new Promise((resolve) => {
-    const box = $("#dialog");
-    box.innerHTML = `<h3>worth remembering about you?</h3>
-      <p class="dialog-body">From this conversation, for later ones. Tick
-        what is true and will stay true; the rest is dropped.</p>
-      <div class="mem-offer">${candidates.map((c, i) => `
-        <label><input type="checkbox" data-i="${i}">
-          <span>${esc(c.statement)} <span class="kind">${esc(c.kind)}</span></span>
-        </label>`).join("")}</div>
-      <div class="modal-actions">
-        <button class="m-btn" data-act="none">keep none</button>
-        <button class="m-btn primary" data-act="keep">keep ticked</button>
-      </div>`;
-    $("#dialog-backdrop").classList.remove("hidden");
-    const done = async (keepTicked) => {
-      const ticked = new Set([...box.querySelectorAll("input:checked")]
-        .map((el) => Number(el.dataset.i)));
-      const keep = keepTicked ? candidates.filter((_, i) => ticked.has(i)) : [];
-      const drop = candidates.filter((c) => !keep.includes(c));
-      closeDialog();
-      const d = await post("/api/memory/keep", { keep, drop });
-      if (d?.kept) toast(`remembered ${d.kept} — from the next conversation on`);
-      resolve();
-    };
-    box.onclick = (e) => {
-      const act = e.target.closest("[data-act]")?.dataset.act;
-      if (act === "keep") done(true);
-      else if (act === "none") done(false);
-    };
-    dialogEscape = (e) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      done(false);
-    };
-    document.addEventListener("keydown", dialogEscape, true);
-    $("#dialog-backdrop").onclick = null;
-  });
 }
 
 /* ---------- connections panel (notes/99) ----------
@@ -2685,3 +2654,188 @@ new MutationObserver(syncEmptyState).observe(transcript, { childList: true });
 syncEmptyState();
 
 connect();
+
+/* ---------- worth keeping (notes/113) ----------
+
+   What the look after a turn found -- a recipe worth saving as a skill,
+   facts about the person -- waits here instead of asking. The answer
+   comes back first and the input is free; the chip counts what waits,
+   pulses while the agent is still looking, and a toast says when
+   something new arrived. Nothing is kept until the person says so. */
+
+const keptPanel = { data: null, total: 0, seen: 0 };
+
+$("#chip-kept").onclick = openKeptPanel;
+$("#kept-close").onclick = closeKeptPanel;
+$("#kept-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#kept-backdrop")) closeKeptPanel();
+});
+
+function closeKeptPanel() {
+  $("#kept-backdrop").classList.add("hidden");
+}
+
+function renderKeptChip(k) {
+  if (!k) return;
+  keptPanel.total = k.count;
+  const chip = $("#chip-kept");
+  chip.classList.toggle("hidden", !k.count && !k.looking);
+  chip.classList.toggle("looking", !!k.looking);
+  if (!k.looking) chip.title = "worth keeping — what the agent noticed after "
+    + "your turns; look whenever you like";
+  chip.classList.toggle("chip-new", k.count > keptPanel.seen);
+  $("#kept-count").textContent = k.count ? `${k.count} to keep` : "looking…";
+}
+
+function onKept(env) {
+  const total = env.recipes.length + env.memories.length;
+  if (total > keptPanel.total) {
+    toast("found something worth keeping — it waits under “to keep”");
+  }
+  keptPanel.seen = Math.min(keptPanel.seen, total);
+  keptPanel.data = env;
+  renderKeptChip({ count: total, looking: env.looking });
+  if (!$("#kept-backdrop").classList.contains("hidden")) renderKept();
+}
+
+function onLookStatus(text) {
+  const chip = $("#chip-kept");
+  chip.title = `worth keeping — ${text}`;
+  renderKeptChip({ count: keptPanel.total, looking: true });
+  if (!$("#kept-backdrop").classList.contains("hidden") && keptPanel.data) {
+    keptPanel.data = { ...keptPanel.data, looking: true, status: text };
+    renderKept();
+  }
+}
+
+async function openKeptPanel() {
+  $("#kept-backdrop").classList.remove("hidden");
+  const res = await fetch("/api/kept");
+  if (res.ok) {
+    keptPanel.data = await res.json();
+    keptPanel.total = keptPanel.data.recipes.length + keptPanel.data.memories.length;
+  }
+  keptPanel.seen = keptPanel.total;
+  renderKeptChip({ count: keptPanel.total, looking: keptPanel.data?.looking });
+  renderKept();
+}
+
+async function keptPost(path, body = {}) {
+  const res = await fetch(path, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+function renderKept() {
+  const d = keptPanel.data;
+  const body = $("#kept-body");
+  body.textContent = "";
+  if (!d) { body.innerHTML = '<div class="panel-loading">loading…</div>'; return; }
+  const status = document.createElement("div");
+  status.className = "kept-status";
+  status.textContent = d.looking ? `looking now: ${d.status || "reading the last turn"}`
+    : d.last ? `last look: ${d.last}` : "";
+  if (status.textContent) body.append(status);
+
+  if (d.recipes.length) {
+    section(body, "ways that worked", "save one as a skill and next time the "
+      + "agent follows it instead of finding the way again");
+    for (const item of d.recipes) body.append(keptRecipeRow(item));
+  }
+  if (d.memories.length) {
+    section(body, "about you", "tick what is true and will stay true; "
+      + "the rest is dropped");
+    const list = document.createElement("div");
+    list.className = "mem-offer";
+    list.innerHTML = d.memories.map((c, i) => `
+      <label><input type="checkbox" data-i="${i}">
+        <span>${esc(c.statement)} <span class="kind">${esc(c.kind)}</span></span>
+      </label>`).join("");
+    const actions = document.createElement("div");
+    actions.className = "kept-mem-actions";
+    actions.innerHTML = `<button class="m-btn" data-act="none">drop all</button>
+      <button class="m-btn primary" data-act="keep">keep ticked</button>`;
+    actions.onclick = async (e) => {
+      const act = e.target.closest("[data-act]")?.dataset.act;
+      if (!act) return;
+      const ticked = new Set([...list.querySelectorAll("input:checked")]
+        .map((el) => Number(el.dataset.i)));
+      const keep = act === "keep" ? d.memories.filter((_, i) => ticked.has(i)) : [];
+      const drop = d.memories.filter((c) => !keep.includes(c));
+      const r = await keptPost("/api/memory/keep", { keep, drop });
+      if (!r.ok) { toast(r.data.detail || "memory did not answer"); return; }
+      if (r.data.kept) toast(`remembered ${r.data.kept} — from the next conversation on`);
+    };
+    body.append(list, actions);
+  }
+  if (!d.recipes.length && !d.memories.length) {
+    const p = document.createElement("div");
+    p.className = "conn-foot";
+    p.textContent = "nothing waiting. After a turn that took real work, the "
+      + "agent looks at whether the way it found is worth keeping; what it "
+      + "finds waits here, and nothing is kept without your yes.";
+    body.append(p);
+  }
+}
+
+function keptRecipeRow(item) {
+  const row = document.createElement("div");
+  row.className = "conn-card kept-row";
+  const test = item.test || {};
+  const tested = test.waiting ? "its test waits for your yes"
+    : test.passed ? "tested, passed" : "no script to test";
+  const main = document.createElement("div");
+  main.innerHTML = `<div class="conn-title">${esc(item.name)}</div>
+    <div class="conn-sub">${item.repairs ? "an update to a saved skill · " : ""}${esc(tested)}</div>
+    <div class="conn-cmd">${esc(item.description)}</div>`;
+  const actions = document.createElement("div");
+  actions.className = "conn-actions";
+  const button = (label, cls, fn) => {
+    const b = document.createElement("button");
+    b.className = `m-btn ${cls}`;
+    b.textContent = label;
+    b.onclick = fn;
+    actions.append(b);
+  };
+  button("drop", "", () => keptAnswer(item, { decision: "no" }));
+  if (test.waiting) button("run the test", "primary", () => keptAnswer(item, { decision: "test" }));
+  button("review", test.waiting ? "" : "primary", () => reviewKept(item));
+  row.append(main, actions);
+  return row;
+}
+
+function reviewKept(item, error = "") {
+  closeKeptPanel();
+  showLearnModal({ ...item, id: `kept-${item.id}`, kept: true, error },
+    (reply) => keptAnswer(item, reply));
+}
+
+/* One road for every answer to a waiting offer, from its row or its
+   review: later closes, drop discards, test runs it (the gate asks),
+   save writes it -- and a save that breaks a rule comes back as the
+   same review with the error on top and the edit kept. */
+async function keptAnswer(item, reply) {
+  const close = () => closeModalIf(`kept-${item.id}`);
+  if (reply.decision === "later") { close(); return; }
+  if (reply.decision === "no") {
+    close();
+    await keptPost(`/api/kept/${item.id}/drop`);
+    return;
+  }
+  if (reply.decision === "test") {
+    close();
+    closeKeptPanel();
+    const r = await keptPost(`/api/kept/${item.id}/test`);
+    if (!r.ok) toast(r.data.detail || "the test did not start");
+    return;
+  }
+  const r = await keptPost(`/api/kept/${item.id}/save`, reply);
+  if (r.ok) { close(); return; }
+  if (r.status === 409 || !reply.skill_md) { toast(r.data.detail); return; }
+  reviewKept({ ...item, skill_md: reply.skill_md,
+               script: reply.script ?? item.script, scope: reply.scope ?? item.scope },
+             r.data.detail || "not saved");
+}

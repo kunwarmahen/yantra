@@ -1145,7 +1145,7 @@ pre.output { color: var(--ink); }
    7. overlays — modal, dialog, tools panel
    ===================================================================== */
 
-#modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #mem-backdrop, #dialog-backdrop {
+#modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #mem-backdrop, #kept-backdrop, #dialog-backdrop {
   position: fixed;
   inset: 0;
   display: flex;
@@ -1157,7 +1157,7 @@ pre.output { color: var(--ink); }
   backdrop-filter: blur(4px);
   animation: fade-in var(--med) var(--ease);
 }
-#tools-backdrop, #turns-backdrop, #conn-backdrop, #mem-backdrop { z-index: 40; }  /* BELOW the approval modal on purpose */
+#tools-backdrop, #turns-backdrop, #conn-backdrop, #mem-backdrop, #kept-backdrop { z-index: 40; }  /* BELOW the approval modal on purpose */
 #dialog-backdrop { z-index: 45; }
 #modal-backdrop  { z-index: 50; }  /* approvals pop over everything */
 
@@ -1167,7 +1167,7 @@ pre.output { color: var(--ink); }
   to   { opacity: 1; transform: none; }
 }
 
-.sheet, #modal, #tools-panel, #turns-panel, #conn-panel, #mem-panel, #dialog {
+.sheet, #modal, #tools-panel, #turns-panel, #conn-panel, #mem-panel, #kept-panel, #dialog {
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--r-5);
@@ -1444,7 +1444,7 @@ pre.output { color: var(--ink); }
    8. tools panel
    ===================================================================== */
 
-#tools-panel, #turns-panel, #conn-panel, #mem-panel {
+#tools-panel, #turns-panel, #conn-panel, #mem-panel, #kept-panel {
   width: 100%;
   max-width: 780px;
   max-height: min(86vh, 860px);
@@ -1864,11 +1864,11 @@ pre.output { color: var(--ink); }
 }
 
 @media (max-width: 620px) {
-  #modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #mem-backdrop, #dialog-backdrop {
+  #modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #mem-backdrop, #kept-backdrop, #dialog-backdrop {
     padding: 0;
     align-items: flex-end;
   }
-  #modal, #tools-panel, #turns-panel, #conn-panel, #mem-panel, #dialog {
+  #modal, #tools-panel, #turns-panel, #conn-panel, #mem-panel, #kept-panel, #dialog {
     max-width: none;
     max-height: 92vh;
     border-radius: var(--r-5) var(--r-5) 0 0;
@@ -2080,6 +2080,25 @@ pre.output { color: var(--ink); }
   font-size: 13.5px; line-height: 1.5;
 }
 .mem-offer label:has(input:checked) { border-color: var(--accent); }
-#dialog .mem-offer input { width: auto; height: auto; margin: 3px 0 0; }
+.mem-offer input { width: auto; height: auto; margin: 3px 0 0; }
 .mem-offer .kind { color: var(--ink-3); font-size: 12px; }
 .mem-look { margin: 4px 0 0; }
+
+/* ---- worth keeping: what the look after a turn found ---- */
+#kept-body { overflow-y: auto; padding: 0 22px 20px; }
+#chip-kept { font-variant-numeric: tabular-nums; }
+#chip-kept.chip-new { border-color: var(--accent); color: var(--accent); }
+#chip-kept.looking #kept-count { animation: kept-pulse 1.6s ease-in-out infinite; }
+@keyframes kept-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  #chip-kept.looking #kept-count { animation: none; }
+}
+.kept-row { grid-template-columns: minmax(0, 1fr) auto; }
+.kept-row .conn-title { font-weight: 600; font-family: var(--mono); font-size: 13px; }
+.kept-row .conn-sub { margin-top: 2px; }
+.kept-status { margin: 12px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.kept-mem-actions { display: flex; gap: 8px; justify-content: flex-end; }
+@media (max-width: 640px) {
+  .kept-row { grid-template-columns: minmax(0, 1fr); }
+  .kept-row .conn-actions { grid-column: 1; }
+}

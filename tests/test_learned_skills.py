@@ -340,6 +340,40 @@ class TestConsider:
         assert "not now" in learner.last_skip
         assert not (tmp_path / ".yantra/learning/greet-someone").exists()
 
+    @staticmethod
+    def unattended(request):
+        from yantra.permissions import REFUSED_UNATTENDED
+        if "SKILL_DIR" in request.arguments["command"]:
+            return refuse(request, "nobody asked", code=REFUSED_UNATTENDED)
+        return True
+
+    def test_unasked_in_the_open_is_still_not_offered(self, tmp_path):
+        """Only a look in the background may leave a test waiting: under
+        auto with nobody there, an untested script must not be saved."""
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(reply())],
+                           permissions=self.unattended)
+        learner = learner_after(agent)
+        assert learner.consider() is None
+        assert learner.last_skip.startswith("its test did not run")
+
+    def test_unasked_behind_the_answer_waits_for_a_yes(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(reply())],
+                           permissions=self.unattended)
+        learner = learner_after(agent)
+        offer = learner.consider(stop=lambda: False)
+        assert offer.waiting and offer.tested is None and offer.test_runs == 1
+        agent.permissions = yolo
+        assert learner.test_waiting(offer) is True
+        assert not offer.waiting and offer.tested is True
+
+    def test_a_stopped_look_leaves_nothing_staged(self, tmp_path):
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(reply())])
+        learner = learner_after(agent)
+        assert learner.consider(stop=lambda: True) is None
+        assert learner.last_skip == "stopped: a new message came first"
+        assert not (tmp_path / ".yantra/learning").exists() or not any(
+            (tmp_path / ".yantra/learning").iterdir())
+
     def test_a_secret_in_the_draft_means_no_offer(self, tmp_path):
         leaky = reply(SCRIPT.replace('"greeted"', '"sk-abcdefghijklmnopqrstuv"'))
         agent = make_agent(tmp_path, [*solved_turn(), assistant_text(leaky)])
@@ -608,19 +642,22 @@ class TestTerminal:
 
 
 class TestPage:
-    """The same offer over the socket: after the turn's answer, before
-    turn_done, so the input stays busy while the question is up."""
+    """The same offer on the page, after the answer instead of before it.
+    The BIAS is against the look standing between an answer and the next
+    message: ``turn_done`` goes first, the look runs behind it, and what
+    it finds waits in the tray until the person looks -- nothing asked."""
 
-    def serve(self, tmp_path, script: list, mode="ask"):
+    def serve(self, tmp_path, script: list, mode="ask", permissions=yolo):
         pytest.importorskip("fastapi")
         from fastapi.testclient import TestClient
 
         from yantra.web.server import WebSession, make_app
 
         session = WebSession()
-        agent = make_agent(tmp_path, script)
+        agent = make_agent(tmp_path, script, permissions=permissions)
         session.attach(agent, None)
         enable_learning(agent, mode, home=tmp_path / "home")
+        self.session = session
         return agent, TestClient(make_app(session))
 
     @staticmethod
@@ -634,42 +671,142 @@ class TestPage:
                 raise AssertionError(f"turn ended without {kind}: {seen}")
         raise AssertionError(f"never got {kind}")
 
-    def test_offer_edit_and_save(self, tmp_path):
-        agent, client = self.serve(tmp_path, [*solved_turn(), assistant_text(reply())])
-        with client.websocket_connect("/ws") as ws:
-            ws.receive_json()
-            client.post("/api/message", json={"text": "greet world"})
-            seen = self.until(ws, "learn_offer")
-            offer = seen[-1]
-            assert "turn_done" not in [e["type"] for e in seen]
-            assert any(e["type"] == "learn_status" for e in seen)
-            assert offer["test"]["passed"] is True and offer["script"] == SCRIPT
-            ws.send_json({"type": "answer", "id": offer["id"], "decision": "save",
-                          "scope": "project",
-                          "skill_md": offer["skill_md"].replace("# Greet someone",
-                                                                "# Greet anyone"),
-                          "script": offer["script"]})
-            learned = self.until(ws, "learned")[-1]
-            self.until(ws, "turn_done")
-        skill = agent.skills.get("greet-someone")
-        assert learned["name"] == "greet-someone" and skill.source == "learned-local"
-        assert "# Greet anyone" in skill.body
+    @staticmethod
+    def settled(ws, limit: int = 60) -> list[dict]:
+        """Envelopes up to the tray as the finished look left it."""
+        seen = []
+        while len(seen) < limit:
+            seen.append(ws.receive_json())
+            if seen[-1]["type"] == "kept" and not seen[-1]["looking"]:
+                return seen
+        raise AssertionError(f"the look never finished: {seen}")
 
-    def test_a_broken_edit_is_asked_again_with_the_edit_kept(self, tmp_path):
+    def test_the_input_is_handed_back_before_the_look(self, tmp_path):
+        _, client = self.serve(tmp_path, [*solved_turn(), assistant_text(reply())])
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            client.post("/api/message", json={"text": "greet world"})
+            before = [e["type"] for e in self.until(ws, "turn_done")]
+            after = self.settled(ws)
+        assert "look_status" not in before and "learn_offer" not in before
+        assert any(e["type"] == "look_status" for e in after)
+        assert "learn_offer" not in [e["type"] for e in after]
+        tray = after[-1]
+        assert [r["name"] for r in tray["recipes"]] == ["greet-someone"]
+        assert tray["recipes"][0]["test"]["passed"] is True
+        assert tray["last"] == "found greet-someone"
+
+    def test_a_waiting_offer_is_saved_with_the_edit(self, tmp_path):
         agent, client = self.serve(tmp_path, [*solved_turn(), assistant_text(reply())])
         with client.websocket_connect("/ws") as ws:
             ws.receive_json()
             client.post("/api/message", json={"text": "greet world"})
-            offer = self.until(ws, "learn_offer")[-1]
-            broken = offer["skill_md"].replace("name: greet-someone", "name: nope")
-            ws.send_json({"type": "answer", "id": offer["id"], "decision": "save",
-                          "skill_md": broken, "script": offer["script"]})
-            again = self.until(ws, "learn_offer")[-1]
-            assert "does not match its folder" in again["error"]
-            assert again["skill_md"] == broken
-            ws.send_json({"type": "answer", "id": again["id"], "decision": "no"})
             self.until(ws, "turn_done")
+            offer = self.settled(ws)[-1]["recipes"][0]
+        assert client.get("/api/state").json()["kept"] == {"count": 1,
+                                                          "looking": False}
+        saved = client.post(f"/api/kept/{offer['id']}/save", json={
+            "scope": "project",
+            "skill_md": offer["skill_md"].replace("# Greet someone", "# Greet anyone"),
+            "script": offer["script"]})
+        assert saved.status_code == 200 and saved.json()["recipes"] == []
+        skill = agent.skills.get("greet-someone")
+        assert skill.source == "learned-local" and "# Greet anyone" in skill.body
+
+    def test_a_broken_edit_is_refused_and_the_offer_stays_with_it(self, tmp_path):
+        agent, client = self.serve(tmp_path, [*solved_turn(), assistant_text(reply())])
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            client.post("/api/message", json={"text": "greet world"})
+            self.until(ws, "turn_done")
+            offer = self.settled(ws)[-1]["recipes"][0]
+        broken = offer["skill_md"].replace("name: greet-someone", "name: nope")
+        refused = client.post(f"/api/kept/{offer['id']}/save",
+                              json={"skill_md": broken, "script": offer["script"]})
+        assert refused.status_code == 400
+        assert "does not match its folder" in refused.json()["detail"]
+        assert client.get("/api/kept").json()["recipes"][0]["skill_md"] == broken
+        assert client.post(f"/api/kept/{offer['id']}/drop").json()["recipes"] == []
         assert agent.skills.get("greet-someone") is None
+        assert not (tmp_path / ".yantra/learning/greet-someone").exists()
+
+    def test_a_new_message_stops_the_look(self, tmp_path):
+        import threading
+
+        agent, client = self.serve(tmp_path, [*solved_turn(), assistant_text(reply()),
+                                              assistant_text("Hello again.")])
+        provider, held = agent.provider, threading.Event()
+        streamed, closed = provider.stream, []
+
+        def slow_write_up(**kwargs):
+            # The write-up's stream waits mid-answer, as a local model
+            # thinking would; the conversation's own calls do not.
+            events = streamed(**kwargs)
+            if kwargs["tools"]:
+                yield from events
+                return
+            try:
+                yield next(events)
+                held.set()
+                for event in events:
+                    while not self.session._look_stop.is_set():
+                        threading.Event().wait(0.01)
+                    yield event
+            finally:
+                closed.append(True)
+
+        provider.stream = slow_write_up
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            client.post("/api/message", json={"text": "greet world"})
+            self.until(ws, "turn_done")
+            assert held.wait(5)
+            assert client.post("/api/message", json={"text": "hi"}).status_code == 200
+            second = self.until(ws, "turn_done")
+        assert closed == [True]
+        assert {"type": "learn_status",
+                "text": "stopping the look at what worked"} in second
+        assert agent.history[-1].text() == "Hello again."
+        assert self.session.kept_view()["recipes"] == []
+        assert not (tmp_path / ".yantra/learning/greet-someone").exists()
+
+    def test_a_test_that_needs_a_yes_waits_for_one(self, tmp_path):
+        """No question from behind: the page's own gate refuses the look's
+        test unasked, the offer waits, and running it later asks."""
+        agent, client = self.serve(tmp_path, [*solved_turn(), assistant_text(reply())])
+        gate = self.session.permission_gate()
+        # the turn's own echoes are allowed; anything else asks the page
+        agent.permissions = lambda request: (
+            request.arguments.get("command", "").startswith("echo ")
+            or gate(request))
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            client.post("/api/message", json={"text": "greet world"})
+            self.until(ws, "turn_done")
+            seen = self.settled(ws)
+            assert "permission_request" not in [e["type"] for e in seen]
+            offer = seen[-1]["recipes"][0]
+            assert offer["test"]["waiting"] is True and offer["test"]["passed"] is None
+            assert client.post(f"/api/kept/{offer['id']}/save", json={}).status_code == 409
+            assert client.post(f"/api/kept/{offer['id']}/test").status_code == 200
+            asked = self.until(ws, "permission_request")[-1]
+            ws.send_json({"type": "answer", "id": asked["id"], "decision": "approve"})
+            self.until(ws, "turn_done")
+        tested = client.get("/api/kept").json()["recipes"][0]
+        assert tested["test"] == {**tested["test"], "passed": True, "waiting": False}
+        assert client.post(f"/api/kept/{offer['id']}/save", json={}).status_code == 200
+        assert agent.skills.get("greet-someone") is not None
+
+    def test_auto_saves_behind_the_answer(self, tmp_path):
+        agent, client = self.serve(tmp_path, [*solved_turn(), assistant_text(reply())],
+                                   mode="auto")
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            client.post("/api/message", json={"text": "greet world"})
+            self.until(ws, "turn_done")
+            seen = self.settled(ws)
+        assert "learned" in [e["type"] for e in seen]
+        assert seen[-1]["recipes"] == [] and agent.skills.get("greet-someone")
 
     def test_save_last_turn_by_hand(self, tmp_path):
         agent, client = self.serve(tmp_path, [
@@ -912,7 +1049,7 @@ class TestFacts:
         assert [m.statement for m in memory.list()] == [  # ... yes to one fact
             "Their greeting server is greet.home.lan."]
 
-    def test_the_page_offers_facts_after_the_skill(self, tmp_path):
+    def test_the_page_puts_facts_in_the_tray_beside_the_skill(self, tmp_path):
         page = TestPage()
         agent, client = page.serve(tmp_path, [*solved_turn(),
                                               assistant_text(with_facts())])
@@ -920,13 +1057,17 @@ class TestFacts:
         with client.websocket_connect("/ws") as ws:
             ws.receive_json()
             client.post("/api/message", json={"text": "greet world"})
-            offer = page.until(ws, "learn_offer")[-1]
-            ws.send_json({"type": "answer", "id": offer["id"], "decision": "no"})
-            facts = page.until(ws, "memory_offer")[-1]
             page.until(ws, "turn_done")
-        assert [c["statement"] for c in facts["candidates"]] == [
+            tray = page.settled(ws)[-1]
+        assert [c["statement"] for c in tray["memories"]] == [
             "Their greeting server is greet.home.lan.",
             "Their usual greeting target is world."]
+        kept = client.post("/api/memory/keep", json={
+            "keep": tray["memories"][:1], "drop": tray["memories"][1:]})
+        assert kept.json()["kept"] == 1
+        assert client.get("/api/kept").json()["memories"] == []
+        assert [r["name"] for r in client.get("/api/kept").json()["recipes"]] == [
+            "greet-someone"]
 
 
 class TestInputsFromMemory:

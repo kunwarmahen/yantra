@@ -339,8 +339,15 @@ Three rules keep this safe:
 On a local model this is worth the most. The first solve can be slow
 and full of wrong guesses, and every later run follows a recipe that is
 known to work. `/learn` saves the last turn by hand, and `--learn off`
-stops the offers. On the web page, the same question comes up as a
-dialog. ([notes/96](notes/96-solve-it-once.md))
+stops the offers. ([notes/96](notes/96-solve-it-once.md))
+
+On the web page, nothing asks. The answer comes back and you can type
+straight away. The check runs behind it, and anything it finds waits
+under a **to keep** chip at the top, along with any facts about you it
+noticed. Open it whenever you like: *review* shows the recipe and
+*save skill* keeps it. If you send a new message first, the check
+stops, so it never slows you down.
+([notes/113](notes/113-after-the-answer.md))
 
 Recipes can go out of date. Say Home Assistant drops the service the
 recipe calls. The next run follows the recipe, fails, and finds

@@ -34,6 +34,14 @@ that a signal-less worker thread used to keep open.
 
 Mutating REST endpoints refuse to run mid-turn (409): the REPL serves its
 slash commands between turns too -- same single-operator assumption.
+
+WHAT HAPPENS AFTER THE ANSWER WAITS ITS TURN (notes/113). The look at
+whether a turn is worth keeping as a skill is a model call of its own,
+and the facts it finds are questions -- once both stood between the
+answer and the next message. Now ``turn_done`` goes out first, the look
+runs behind it on its own thread, and what it finds goes to a tray the
+page shows as one chip with a count: offered, never asked. A message
+sent while it looks stops it.
 """
 
 from __future__ import annotations
@@ -64,6 +72,7 @@ from yantra.permissions import (
     ON_TIMEOUT,
     REFUSED_OUT_OF_TIME,
     REFUSED_TIMEOUT,
+    REFUSED_UNATTENDED,
     REFUSED_USER,
     PermissionRequest,
     approval_notice,
@@ -224,6 +233,20 @@ class WebSession:
         self.signin: Any | None = None
         self._setu_sync_due = False
         self._setu_lock = threading.Lock()
+        #: What the look after a turn found, waiting for the person
+        #: (notes/113): recipe offers by id, as (learner, offer), and
+        #: facts about them. Held here rather than asked, so nothing
+        #: stands between an answer and the next message.
+        self.kept_recipes: dict[str, tuple[Any, Any]] = {}
+        self.kept_memories: list[Any] = []
+        self._kept_lock = threading.Lock()
+        #: The look running after the last turn, what stops it, what it
+        #: is doing, and how the last one ended.
+        self._look: threading.Thread | None = None
+        self.looking = False
+        self._look_stop = threading.Event()
+        self._look_status = ""
+        self._last_look = ""
 
     def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
         """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
@@ -370,6 +393,13 @@ class WebSession:
                 # Same contract as the terminal gate: a tool that declared
                 # itself side-effect-free has nothing to confirm.
                 return True
+            if threading.current_thread() is self._look:
+                # NOTHING IS ASKED FROM BEHIND: the look runs after the
+                # turn, and a question from it is the pop-up it exists
+                # to avoid. Its test waits for the person (notes/113).
+                return refuse(request, f"{request.tool_name} was not run: "
+                              f"nobody was asked, the turn is over.",
+                              code=REFUSED_UNATTENDED)
             edited = False
             while True:
                 if self._wait_left is not None and self._wait_left <= 0:
@@ -499,6 +529,7 @@ class WebSession:
                   resumes: str | None = None) -> None:
         """The REPL's run_turn, transplanted: pull the generator, forward
         envelopes, honor cancel at every yield boundary."""
+        self._stop_look()
         agent = self.agent
         stream = stream_of()
         if self.trace is not None:
@@ -535,69 +566,162 @@ class WebSession:
         if cancelled and not ended:
             self.broadcast({"type": "turn_cancelled"})
         if end is not None and not cancelled:
-            self._learn(end)
-            self._offer_pending_memories()
+            self._count(end)
+        self._keep_pending_memories()
         self.turn_active = False
         self._cancel.clear()
         self._setu_settle()
         self.broadcast({"type": "state", **self.state()})
         self.broadcast({"type": "turn_done"})
+        if end is not None and end.reason == "end_turn" and not cancelled:
+            self._start_look()
 
-    def _offer_pending_memories(self) -> None:
+    # ---- the tray: what the look found, waiting (notes/113) ----------------------
+
+    def kept_view(self) -> dict[str, Any]:
+        """The tray, for the page: recipes as their save question shows
+        them, facts as statements, and whether a look is running."""
+        cwd = self.agent.ctx.cwd
+        with self._kept_lock:
+            recipes = list(self.kept_recipes.items())
+            memories = list(self.kept_memories)
+        return {"recipes": [{"id": key, **offer.view(cwd, home=learner.home)}
+                            for key, (learner, offer) in recipes],
+                "memories": [{"statement": c.statement, "kind": c.kind}
+                             for c in memories],
+                "looking": self.looking, "status": self._look_status,
+                "last": self._last_look}
+
+    def _kept_changed(self) -> None:
+        self.broadcast({"type": "kept", **self.kept_view()})
+
+    def _keep_offer(self, learner: Any, offer: Any) -> None:
+        """An offer to the tray. An older one of the same name goes: the
+        two share a staging folder, and the new draft already holds it."""
+        with self._kept_lock:
+            for key, (_, old) in list(self.kept_recipes.items()):
+                if old.draft.name == offer.draft.name:
+                    del self.kept_recipes[key]
+            self.kept_recipes[uuid.uuid4().hex[:8]] = (learner, offer)
+        self._kept_changed()
+
+    def take_recipe(self, key: str) -> tuple[Any, Any]:
+        with self._kept_lock:
+            found = self.kept_recipes.pop(key, None)
+        if found is None:
+            raise KeyError(key)
+        return found
+
+    def _keep_pending_memories(self) -> None:
         """What was found mid-turn -- by a look back before compaction, or
-        by a skill's write-up -- goes to the page when the turn ends; the
-        page answers through /api/memory/keep, like the button's look
-        back. After the skill's question, in the order they were found."""
+        by a skill's write-up -- goes to the tray, in the order found; the
+        page answers through /api/memory/keep."""
         memory = getattr(self.agent, "memory", None)
         if memory is None or not memory.pending:
             return
         found, memory.pending = list(memory.pending), []
-        self.broadcast({"type": "memory_offer",
-                        "candidates": [{"statement": c.statement, "kind": c.kind}
-                                       for c in found]})
+        self.keep_memories(found)
 
-    # ---- learning (notes/96) ---------------------------------------------------
+    def keep_memories(self, found: list[Any]) -> None:
+        with self._kept_lock:
+            known = {c.statement for c in self.kept_memories}
+            self.kept_memories += [c for c in found if c.statement not in known]
+        self._kept_changed()
 
-    def _learn(self, end: TurnEnd | None, *, forced: bool = False) -> None:
-        """The terminal's after-turn offer, on the page: count learned
-        skills the turn used, then offer to save what it solved.
+    def settle_memories(self, statements: set[str]) -> None:
+        """Answered on the page, kept or dropped: out of the tray."""
+        with self._kept_lock:
+            self.kept_memories = [c for c in self.kept_memories
+                                  if c.statement not in statements]
+        self._kept_changed()
 
-        Runs on the turn's worker, before ``turn_done``, so the input stays
-        busy while the question is up -- the same order the terminal keeps.
-        Nothing here may cost the answer already on the page: a failure is
-        a banner, and Stop is a no.
-        """
-        if end is not None:
-            # Kept even with learning off: a save asked for later by hand
-            # needs to know this turn finished.
-            self._last_end = end.reason
+    # ---- the look after a turn ----------------------------------------------------
+
+    def _count(self, end: TurnEnd) -> None:
+        """Count the turn against the learned skills it followed -- cheap,
+        no model call, so it happens before the input is handed back."""
+        self._last_end = end.reason
         learner = getattr(self.agent, "learner", None)
-        if learner is None and forced:
-            from yantra.skills.learn import Learner
-            learner = Learner(self.agent, "ask")
-            learner.last_reason = self._last_end
         if learner is None:
             return
         try:
-            if end is not None:
-                for name, worked in learner.after_turn(end):
-                    self.broadcast({"type": "learn_counted", "name": name,
-                                    "worked": worked})
-                if end.reason != "end_turn":
-                    return
+            for name, worked in learner.after_turn(end):
+                self.broadcast({"type": "learn_counted", "name": name,
+                                "worked": worked})
+        except Exception as exc:
+            self.broadcast({"type": "learn_skipped",
+                            "reason": f"learning skipped: {exc}"})
+
+    def _start_look(self) -> None:
+        """Look at the turn that just ended, behind the person's back."""
+        learner = getattr(self.agent, "learner", None)
+        if learner is None or learner.mode == "off":
+            return
+        stop = self._look_stop = threading.Event()
+        self.looking = True
+
+        def says(text: str) -> None:
+            self._look_status = text
+            self.broadcast({"type": "look_status", "text": text})
+
+        def work() -> None:
+            try:
+                offer = learner.consider(progress=says, stop=stop.is_set)
+                if offer is None:
+                    self._last_look = learner.last_skip or ""
+                elif learner.mode == "auto" and not offer.waiting:
+                    skill = learner.save(offer)
+                    self._last_look = f"saved skill {skill.name}"
+                    self.broadcast({"type": "learned", "name": skill.name,
+                                    "path": str(skill.directory)})
+                else:
+                    self._last_look = f"found {offer.draft.name}"
+                    self._keep_offer(learner, offer)
+            except Exception as exc:
+                self._last_look = f"learning skipped: {exc}"
+            finally:
+                self._look_status = ""
+                self.looking = False
+                self._keep_pending_memories()
+                self._kept_changed()
+
+        self._look = threading.Thread(target=work, daemon=True,
+                                      name="yantra-look")
+        self._look.start()
+
+    def _stop_look(self) -> None:
+        """The person wants the agent: the look gives way, and is waited
+        for -- it may be mid-test, and the agent runs one call at a time."""
+        look = self._look
+        if look is None or not look.is_alive() or look is threading.current_thread():
+            return
+        self._look_stop.set()
+        self.broadcast({"type": "learn_status",
+                        "text": "stopping the look at what worked"})
+        look.join()
+
+    # ---- learning (notes/96) ---------------------------------------------------
+
+    def _learn(self) -> None:
+        """``/learn`` on the page: the person asked, so the offer is a
+        question, put now -- the input is busy until it is answered.
+        Nothing here may cost the answer already on the page: a failure
+        is a banner, and Stop is a no.
+        """
+        learner = getattr(self.agent, "learner", None)
+        if learner is None:
+            from yantra.skills.learn import Learner
+            learner = Learner(self.agent, "ask")
+            # A save asked for later by hand needs to know the turn finished.
+            learner.last_reason = self._last_end
+        try:
             offer = learner.consider(
-                forced=forced,
+                forced=True,
                 progress=lambda text: self.broadcast(
                     {"type": "learn_status", "text": text}))
             if offer is None:
-                if forced:
-                    self.broadcast({"type": "learn_skipped",
-                                    "reason": learner.last_skip})
-                return
-            if learner.mode == "auto" and not forced:
-                skill = learner.save(offer)
-                self.broadcast({"type": "learned", "name": skill.name,
-                                "path": str(skill.directory)})
+                self.broadcast({"type": "learn_skipped",
+                                "reason": learner.last_skip})
                 return
             self._ask_to_save(learner, offer)
         except KeyboardInterrupt:
@@ -649,9 +773,10 @@ class WebSession:
         self.broadcast({"type": "turn_started"})
 
         def work() -> None:
+            self._stop_look()
             try:
-                self._learn(None, forced=True)
-                self._offer_pending_memories()
+                self._learn()
+                self._keep_pending_memories()
             finally:
                 self.turn_active = False
                 self._cancel.clear()
@@ -660,6 +785,45 @@ class WebSession:
                 self.broadcast({"type": "turn_done"})
 
         threading.Thread(target=work, daemon=True, name="yantra-learn").start()
+
+    def start_kept_test(self, key: str) -> None:
+        """``POST /api/kept/{id}/test``: run the test a look left waiting,
+        now the person is here to say yes to it -- a turn of its own, so
+        the gate's question lands like any other."""
+        with self._kept_lock:
+            learner, offer = self.kept_recipes[key]
+        self._cancel.clear()
+        self.turn_active = True
+        self.broadcast({"type": "turn_started"})
+
+        def work() -> None:
+            self._stop_look()
+            try:
+                if learner.test_waiting(offer, progress=lambda text: self.broadcast(
+                        {"type": "learn_status", "text": text})):
+                    return
+                if offer.waiting:
+                    self.broadcast({"type": "learn_skipped", "reason":
+                                    f"{offer.draft.name}: its test was not run"})
+                    return
+                self.take_recipe(key)
+                learner.discard(offer)
+                self.broadcast({"type": "learn_skipped", "reason":
+                                f"{offer.draft.name} failed its test, so it was "
+                                f"dropped:\n{offer.test_output[:600]}"})
+            except KeyError:
+                pass    # dropped from another tab meanwhile
+            except Exception as exc:
+                self.broadcast({"type": "learn_skipped",
+                                "reason": f"test not run: {exc}"})
+            finally:
+                self.turn_active = False
+                self._cancel.clear()
+                self._kept_changed()
+                self.broadcast({"type": "state", **self.state()})
+                self.broadcast({"type": "turn_done"})
+
+        threading.Thread(target=work, daemon=True, name="yantra-test").start()
 
     def start_promote(self, name: str) -> None:
         """``POST /api/skills/{name}/tool``: the page's ``/skills tool``.
@@ -670,6 +834,7 @@ class WebSession:
         self.broadcast({"type": "turn_started"})
 
         def work() -> None:
+            self._stop_look()
             try:
                 self._promote(name)
             except KeyboardInterrupt:
@@ -992,6 +1157,10 @@ class WebSession:
             "context_window": agent.context_window,
             "cost_line": cost_line(agent),
             "turn_active": self.turn_active,
+            # The tray's count, for its chip (notes/113); its contents
+            # come from /api/kept.
+            "kept": {"count": len(self.kept_recipes) + len(self.kept_memories),
+                     "looking": self.looking},
         }
 
     def history_envelopes(self) -> list[dict[str, Any]]:
@@ -1396,6 +1565,69 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         session.start_learn()
         return {"ok": True}
 
+    # ---- the tray: what the look after a turn found (notes/113) ----------------
+
+    @app.get("/api/kept")
+    def kept() -> dict[str, Any]:
+        """Everything waiting: recipe offers and facts. No model turn."""
+        require_ready()
+        return session.kept_view()
+
+    def kept_recipe(key: str) -> tuple[Any, Any]:
+        found = session.kept_recipes.get(key)
+        if found is None:
+            raise HTTPException(404, "that offer is gone -- saved or dropped "
+                                     "already, or the server restarted")
+        return found
+
+    @app.post("/api/kept/{key}/save")
+    async def kept_save(key: str, req: Request) -> dict[str, Any]:
+        """Save a waiting recipe, with the person's edits. require_idle:
+        the roster is a prompt layer, as for /api/skills/reload. A save
+        that breaks a rule is a 400 and the offer stays, edits kept."""
+        from yantra.skills import SkillError
+        require_idle()
+        learner, offer = kept_recipe(key)
+        if offer.waiting:
+            raise HTTPException(409, "its test has not run yet -- run it first")
+        body = await req.json()
+        scope, text, script = (body.get("scope"), body.get("skill_md"),
+                               body.get("script"))
+        text = text if isinstance(text, str) else None
+        script = script if isinstance(script, str) else None
+        try:
+            skill = learner.save(
+                offer, scope=scope if scope in ("user", "project") else None,
+                skill_md=text, script=script)
+        except (SkillError, OSError, ValueError) as exc:
+            offer.keep_edits(text, script)
+            raise HTTPException(400, str(exc)) from None
+        session.take_recipe(key)
+        session.broadcast({"type": "learned", "name": skill.name,
+                           "path": str(skill.directory)})
+        session._kept_changed()
+        session.broadcast({"type": "state", **session.state()})
+        return session.kept_view()
+
+    @app.post("/api/kept/{key}/drop")
+    def kept_drop(key: str) -> dict[str, Any]:
+        """Not wanted: the staged draft goes, nothing is kept."""
+        require_ready()
+        learner, offer = kept_recipe(key)
+        session.take_recipe(key)
+        learner.discard(offer)
+        session._kept_changed()
+        session.broadcast({"type": "state", **session.state()})
+        return session.kept_view()
+
+    @app.post("/api/kept/{key}/test")
+    def kept_test(key: str) -> dict[str, Any]:
+        """Run a waiting offer's test; the gate asks over the socket."""
+        require_idle()
+        kept_recipe(key)
+        session.start_kept_test(key)
+        return {"ok": True}
+
     @app.post("/api/skills/{name}/tool")
     def skills_promote(name: str) -> dict[str, Any]:
         """Make a learned skill's script a tool of its own. The proposal
@@ -1485,15 +1717,15 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         ``ending`` is the page ending a conversation -- clear, or restoring
         another -- and follows --reflect: off looks at nothing, auto keeps
         what it finds. Without it this is the person's button, which looks
-        whatever the mode and always asks. The candidates come back to be
-        shown; nothing is kept until /api/memory/keep.
+        whatever the mode and always asks. The candidates go to the tray
+        (``found`` counts them); nothing is kept until /api/memory/keep.
         """
         from yantra.memory.reflect import keep, reflect
         require_idle()
         memory = require_memory()
         ending = bool((await req.json()).get("ending"))
         if ending and memory.reflect == "off":
-            return {**memory_view(memory), "candidates": [], "kept": 0}
+            return {**memory_view(memory), "found": 0, "kept": 0}
         found, memory.pending = list(memory.pending), []
         try:
             found += [c for c in await asyncio.to_thread(reflect, session.agent)
@@ -1502,15 +1734,18 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(503, f"looking back failed: {exc}") from None
         if ending and memory.reflect == "auto":
             kept = len(keep(memory, found))
-            return {**memory_view(memory), "candidates": [], "kept": kept}
-        return {**memory_view(memory), "kept": 0,
-                "candidates": [{"statement": c.statement, "kind": c.kind}
-                               for c in found]}
+            return {**memory_view(memory), "found": 0, "kept": kept}
+        # To the tray, not a question: answered whenever the person looks
+        # (notes/113), through /api/memory/keep like any other.
+        session.keep_memories(found)
+        session.broadcast({"type": "state", **session.state()})
+        return {**memory_view(memory), "kept": 0, "found": len(found)}
 
     @app.post("/api/memory/keep")
     async def memory_keep(req: Request) -> dict[str, Any]:
         """The person's answer to a look back: what to keep, what to drop.
-        Dropped ones are not offered again this session."""
+        Dropped ones are not offered again this session; both leave the
+        tray."""
         from yantra.memory.reflect import Candidate, decline, keep
         memory = require_memory()
         body = await req.json()
@@ -1524,6 +1759,9 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             kept = keep(memory, [c for c in candidates("keep") if c.statement])
         except Exception as exc:
             raise HTTPException(400, f"memory ({memory.store.name}): {exc}") from None
+        session.settle_memories({c.statement for c in
+                                 candidates("keep") + candidates("drop")})
+        session.broadcast({"type": "state", **session.state()})
         return {**memory_view(memory), "kept": len(kept)}
 
     # ---- connections, through Setu (notes/99) --------------------------------
