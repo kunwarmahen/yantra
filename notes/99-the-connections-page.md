@@ -173,14 +173,39 @@ Writing the tests caught one real bug. An MCP server's tool count still
 included a tool the manifest had refused. The card would have said 4
 tools where the agent had 3.
 
+## What the catalog says, on the card
+
+When Setu keeps a signed catalog (Setu's `setu catalog use`), each card
+says who wrote the connector: **by Setu**, **by someone · reviewed by
+Setu**, or **sideloaded** (installed, but not listed). It also shows how
+many people installed it. Recipes the catalog lists for that connector,
+but that aren't on this computer, appear under it as *in the catalog*.
+With no catalog the cards carry no label at all. Setu's own Gmail isn't
+called sideloaded just because nothing has been published yet.
+
+A version the catalog **withdrew** isn't started. Its card says why in
+amber, the start says so too, and the connection stays in Setu so an
+update brings it back:
+
+```
+homeassistant-mcp | partner priya 3 | forwarded calls without the level check
+problems: ['homeassistant-mcp: withdrawn by Setu -- forwarded calls without the level check']
+```
+
+That's the panel's own data, from a scratch Setu with a locally signed
+index. Change one byte of the index and Setu refuses all of it and keeps
+the copy it had.
+
 ## What was deliberately not built
 
 * **Signing in from another device.** It needs a web-type OAuth client
   and a public redirect. That belongs to Setu's own registered app, the
   day it exists, and not to Yantra.
 * **Turning a site on.** The plan's first switch installs a verified
-  connector from a signed index. There's no index yet, so the page
-  shows the connectors that are installed.
+  connector from a signed index. The index exists now and is checked,
+  but installing by hash waits on where the catalog is published, so
+  the page shows the connectors that are installed, with the catalog's
+  labels.
 * **Which agents may use an account.** A package asking for a
   connection is still the open item from note 95. Today every
   connection is available to the person's own chat.

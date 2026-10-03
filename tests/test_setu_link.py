@@ -231,6 +231,22 @@ class TestTheContract:
         assert setu_link.resolve_mode(None, "") == ("auto", None)
 
 
+def test_a_withdrawn_connector_is_not_started_and_says_why(fake_setu, tmp_path):
+    program, data = fake_setu
+    data["connectors"][0].update(label="by-setu", yanked="sent mail to an undeclared host")
+    data["catalog"] = {"source": "/x/index.json", "key": "abc", "recipes": []}
+    program.write_text(f"#!{sys.executable}\nprint({json.dumps(json.dumps(data))})\n")
+    code, agent, manager, out = start(program, tmp_path)
+    try:
+        assert code is None
+        assert not [n for n in agent.registry.names() if n.startswith("mcp__gmail")]
+        assert "gmail:personal not started: its connector was withdrawn by Setu" in out
+        assert "undeclared host" in out
+        assert agent.setu.describe(manager)["catalog"]["source"] == "/x/index.json"
+    finally:
+        manager.shutdown()
+
+
 class Named(Tool):
     parameters = {"type": "object", "properties": {}}
 

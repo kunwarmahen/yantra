@@ -1943,6 +1943,30 @@ function recipeLine(recipes) {
   return `<div class="conn-sub">${recipes.length} recipe(s): ${names.join(", ")}</div>`;
 }
 
+// Who wrote a connector, from Setu's signed catalog (none without one).
+function labelBadge(c) {
+  if (!c.label) return "";
+  const text = c.label === "by-setu" ? "by Setu"
+    : c.label === "partner" ? `by ${c.author || "a partner"} · reviewed by Setu`
+    : "sideloaded";
+  const title = c.label === "sideloaded"
+    ? "not in Setu's catalog: installed from somewhere else, and not reviewed"
+    : "listed in Setu's signed catalog";
+  return `<span class="t-badge" title="${esc(title)}">${esc(text)}</span>`
+    + (c.installs != null ? ` <span class="conn-count">${esc(String(c.installs))} installs</span>` : "");
+}
+
+// Recipes the catalog lists for this connector that aren't on this computer.
+function catalogRecipeLine(c, d) {
+  const local = new Set(((d.recipes || {})[c.id] || []).map((r) => r.name));
+  const listed = ((d.catalog || {}).recipes || []).filter(
+    (r) => (r.needs || []).includes(c.id) && !local.has(r.name));
+  if (!listed.length) return "";
+  const names = listed.map((r) => `${esc(r.name)} <i>(${esc(r.author || "?")}${
+    r.installs != null ? ", " + esc(String(r.installs)) + " installs" : ""})</i>`);
+  return `<div class="conn-sub">in the catalog: ${names.join(", ")}</div>`;
+}
+
 function connectorCard(c, d) {
   const card = document.createElement("div");
   card.className = "conn-card";
@@ -1950,9 +1974,11 @@ function connectorCard(c, d) {
   dot.className = "dot dead";
   const main = document.createElement("div");
   main.innerHTML = `<div class="conn-title">${esc(c.name)}
-      ${c.connected ? '<span class="t-badge">connected</span>' : ""}</div>
+      ${c.connected ? '<span class="t-badge">connected</span>' : ""} ${labelBadge(c)}</div>
     <div class="conn-sub">${esc(c.summary || "")}</div>`
-    + recipeLine((d.recipes || {})[c.id]);
+    + (c.yanked ? `<div class="conn-sub conn-warn">withdrawn by Setu: ${esc(c.yanked)}
+        — its accounts stay connected, but it is not started until you update it</div>` : "")
+    + recipeLine((d.recipes || {})[c.id]) + catalogRecipeLine(c, d);
   card.append(dot, main, document.createElement("div"));
 
   const form = document.createElement("div");

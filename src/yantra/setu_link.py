@@ -78,6 +78,11 @@ before. A need whose account is not connected yet waits on the session
 (``Setu.offer``) -- sign in on the page mid-session and the question
 follows, rather than the next launch.
 
+WITHDRAWN MEANS NOT STARTED. When Setu keeps a signed catalog and it
+says the installed version of a connector was withdrawn, ``sync`` starts
+none of that connector's connections and says why. The connection
+itself stays in Setu, so an update brings it back.
+
 LIVE, NOT ONLY AT STARTUP. ``Setu`` is the session's handle on all of
 this (``agent.setu``). ``sync`` makes the MCP servers match what Setu
 reports -- a new connection gets its server and tools, a gone one loses
@@ -663,6 +668,15 @@ class Setu:
         self._unmerge(agent.registry, manager)
         wanted = [(row, cfg) for row, cfg in (mcp_configs(link) if link is not None else [])
                   if self.allow is None or row.get("connector") in self.allow]
+        # a version Setu's catalog withdrew is not started, whoever allowed it;
+        # the connection stays in Setu, so an update can use it again
+        for row, _ in wanted:
+            reason = (link.connectors.get(row.get("connector")) or {}).get("yanked")
+            if reason:
+                done.notes.append(f"{row['ref']} not started: its connector was withdrawn "
+                                  f"by Setu -- {reason}")
+        wanted = [(row, cfg) for row, cfg in wanted
+                  if not (link.connectors.get(row.get("connector")) or {}).get("yanked")]
         names = {cfg.name for _, cfg in wanted}
         for name in sorted(self.servers - names):
             try:
@@ -860,6 +874,9 @@ class Setu:
             "connectors": list(link.connectors.values()) if link is not None else [],
             "setup": dict((link.data.get("setup") or {}) if link is not None else {}),
             "problems": list(link.problems) if link is not None else [],
+            # the signed catalog's word, when Setu keeps one: recipes listed
+            # there, and where it came from (labels ride on each connector)
+            "catalog": (link.data.get("catalog") if link is not None else None),
         }
 
 
