@@ -1925,9 +1925,12 @@ function labelBadge(c) {
   if (!c.label) return "";
   const text = c.label === "by-setu" ? "by Setu"
     : c.label === "partner" ? `by ${c.author || "a partner"} · reviewed by Setu`
+    : c.label === "local" ? "added on this computer"
     : "sideloaded";
   const title = c.label === "sideloaded"
     ? "not in Setu's catalog: installed from somewhere else, and not reviewed"
+    : c.label === "local"
+    ? "a site you added by hand in Setu's sites folder: no catalog has reviewed it"
     : "listed in Setu's signed catalog";
   return `<span class="t-badge" title="${esc(title)}">${esc(text)}</span>`
     + (c.installs != null ? ` <span class="conn-count">${esc(String(c.installs))} installs</span>` : "");

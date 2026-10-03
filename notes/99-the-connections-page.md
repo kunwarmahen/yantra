@@ -181,7 +181,9 @@ Setu**, or **sideloaded** (installed, but not listed). It also shows how
 many people installed it. Recipes the catalog lists for that connector,
 but that aren't on this computer, appear under it as *in the catalog*.
 With no catalog the cards carry no label at all. Setu's own Gmail isn't
-called sideloaded just because nothing has been published yet.
+called sideloaded just because nothing has been published yet. A site you
+added by hand in Setu's `sites/` folder says **added on this computer**,
+catalog or not ([notes/112](112-a-site-with-no-api.md)).
 
 A version the catalog **withdrew** isn't started. Its card says why in
 amber, the start says so too, and the connection stays in Setu so an

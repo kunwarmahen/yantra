@@ -618,7 +618,8 @@ accounts unless its `agent.toml` asks (`[connections] needs =
 Connections panel. An account it needs that you connect while it runs
 is asked about then, on the panel. The panel's **forget** (or `--forget-connections`)
 takes it back. With a signed Setu catalog, each card also says who wrote
-the connector (by Setu, a reviewed partner, or sideloaded) and how many
+the connector (by Setu, a reviewed partner, or sideloaded; a site you added
+by hand says *added on this computer*) and how many
 installed it, and a withdrawn version isn't started. Each connector's card also lists the recipes on this
 computer that need it
 ([notes/110](notes/110-which-account-and-who-may-use-it.md)).

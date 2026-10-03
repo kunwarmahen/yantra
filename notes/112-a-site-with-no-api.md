@@ -196,6 +196,27 @@ Signed in for real (amazon.com and X, both at the write level, each
 through one `setu connect` window), the same tools read the real account
 on both sites.
 
+## A site of your own
+
+Nothing above is written for Amazon or X in particular. The tools, the
+guards, the handoff and the pace all read the manifest, and the manifest
+is a file of rules with no code in it. So a site can also be added by
+hand: write its manifest into Setu's `sites/` folder
+(`~/.local/state/setu/sites/example.toml`; Setu's README has an
+example), and `setu connect example` works as it does for Amazon. The
+Connections page marks such a card **added on this computer**.
+
+Only sites reached through the browser can be added this way. A file
+that names a program is refused, because otherwise dropping a file would
+be enough to run one. If an installed connector has the same name, the
+installed one is used. A file Setu can't read is skipped and reported,
+and the rest still load.
+
+What a hand-written file still needs is the name of the cookie that
+means "signed in", and that takes the developer tools to find. Working
+that out for the person, by comparing the cookies before and after they
+sign in and then looking at the page, is the next step.
+
 ## What was deliberately not built
 
 * **No spend level.** A browser-road manifest offers *read* and *write*
