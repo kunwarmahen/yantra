@@ -192,6 +192,10 @@ hand you the login page for a moment — sign in, close the window, and I'll car
 The model found the site's tools by itself, read the signed-out note,
 didn't touch the password box, and reached for the handoff.
 
+Signed in for real (amazon.com and X, both at the write level, each
+through one `setu connect` window), the same tools read the real account
+on both sites.
+
 ## What was deliberately not built
 
 * **No spend level.** A browser-road manifest offers *read* and *write*
