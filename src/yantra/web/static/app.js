@@ -1616,7 +1616,8 @@ function offerMemories(candidates) {
    their tools, Change access and Disconnect), then connectors installed
    but not connected (pick a level, name the account, Connect). A sign-in
    is Setu's: the server runs `setu connect --json`, and this page only
-   shows the address Google's sign-in lives at. It works when this page is
+   shows the address the site's own sign-in lives at (Google's, or your
+   Home Assistant's login page). It works when this page is
    open on the computer running Yantra; anywhere else the card shows the
    command to run there instead. */
 
@@ -1709,8 +1710,7 @@ function renderConnections() {
   }
   body.append(signinBox());
   if (d.package) packageBox(body, d);
-  const setupBox = clientFileBox(d);
-  if (setupBox) body.append(setupBox);
+  for (const box of setupBoxes(d)) body.append(box);
 
   const names = Object.fromEntries(d.connectors.map((c) => [c.id, c]));
   section(body, "connected", d.connections.length
@@ -1833,37 +1833,57 @@ function signinBox() {
   return box;
 }
 
-function clientFileBox(d) {
-  const needs = d.connectors.filter((c) => !c.ready);
-  if (!needs.length) return null;
-  const box = document.createElement("div");
-  box.className = "conn-box warn";
-  box.innerHTML = `<span>${esc(needs.map((c) => c.name).join(", "))}: signing in to Google
-    needs your "Desktop app" OAuth client file for now. Setu remembers where it is
-    (never its contents) — the Setu README shows how to make one.</span>`;
-  const row = document.createElement("div");
-  row.className = "conn-setup";
-  const input = document.createElement("input");
-  input.placeholder = "/path/to/client_secret_….json";
-  input.spellcheck = false;
-  const save = document.createElement("button");
-  save.className = "m-btn primary";
-  save.textContent = "use this file";
-  save.onclick = async () => {
-    save.disabled = true;
-    try {
-      const res = await fetch("/api/connections/client-file", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: input.value }) });
-      const out = await res.json();
-      if (!res.ok) { addBanner(`not used: ${out.detail}`, true); return; }
-      applyConnections(out);
-      toast("Setu will use that client file");
-    } finally { save.disabled = false; }
-  };
-  row.append(input, save);
-  box.append(row);
-  return box;
+// What a sign-in needs before it can start, one box per kind: Google's
+// client file, or where your Home Assistant is (Setu's needs_setup).
+const SETUP = {
+  google_client_file: {
+    text: (names) => `${names}: signing in to Google needs your "Desktop app" OAuth
+      client file for now. Setu remembers where it is (never its contents) — the Setu
+      README shows how to make one.`,
+    placeholder: "/path/to/client_secret_….json", button: "use this file",
+    done: "Setu will use that client file" },
+  homeassistant_url: {
+    text: (names) => `${names}: where is your Home Assistant? Setu remembers the
+      address; you sign in on its own login page next.`,
+    placeholder: "http://homeassistant.local:8123", button: "use this address",
+    done: "Setu will sign in to that Home Assistant" },
+};
+
+function setupBoxes(d) {
+  const byKey = {};
+  for (const c of d.connectors.filter((c) => !c.ready)) {
+    const key = c.needs_setup || "google_client_file";
+    (byKey[key] = byKey[key] || []).push(c);
+  }
+  return Object.entries(byKey).filter(([key]) => SETUP[key]).map(([key, cs]) => {
+    const kind = SETUP[key];
+    const box = document.createElement("div");
+    box.className = "conn-box warn";
+    box.innerHTML = `<span>${esc(kind.text(cs.map((c) => c.name).join(", ")))}</span>`;
+    const row = document.createElement("div");
+    row.className = "conn-setup";
+    const input = document.createElement("input");
+    input.placeholder = kind.placeholder;
+    input.spellcheck = false;
+    const save = document.createElement("button");
+    save.className = "m-btn primary";
+    save.textContent = kind.button;
+    save.onclick = async () => {
+      save.disabled = true;
+      try {
+        const res = await fetch("/api/connections/setup", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, value: input.value }) });
+        const out = await res.json();
+        if (!res.ok) { addBanner(`not used: ${out.detail}`, true); return; }
+        applyConnections(out);
+        toast(kind.done);
+      } finally { save.disabled = false; }
+    };
+    row.append(input, save);
+    box.append(row);
+    return box;
+  });
 }
 
 function levelSelect(c, current) {

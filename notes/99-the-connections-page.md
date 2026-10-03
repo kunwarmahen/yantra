@@ -73,8 +73,14 @@ only the path, beside the vault and never inside it. The file holds a
 client secret, so it is read at connect time and copied nowhere.
 
 Setu's report now says whether each connector is ready (`ready`,
-`not_ready`). The panel shows one amber box with a field for the path,
-and after that the Connect buttons turn on.
+`not_ready`, and `needs_setup` naming the setting that's missing). The
+panel shows one amber box per missing setting, with a field for it, and
+after that the Connect buttons turn on. There are two kinds so far: the
+Google client file's path, and the address of your Home Assistant, which
+is your own server and has no client file at all. You sign in to it on
+its own login page, and the page shows that address the same way it
+shows Google's. Either goes through `POST /api/connections/setup` to
+`setu config`, which checks it. Yantra keeps neither.
 
 ## The tools follow, but never under a running turn
 

@@ -231,6 +231,41 @@ class TestTheContract:
         assert setu_link.resolve_mode(None, "") == ("auto", None)
 
 
+class Named(Tool):
+    parameters = {"type": "object", "properties": {}}
+
+    def __init__(self, name):
+        self.name, self.description = name, name
+
+    def summary(self, args, ctx):
+        return f"{self.name}()"
+
+    def run(self, args, ctx):
+        return "ran"
+
+
+def test_a_star_classes_what_the_manifest_does_not_name_and_never_as_read():
+    """A bridge to Home Assistant's own MCP server: its tool names are
+    its own, so the manifest's "*" makes an unnamed one asked about."""
+    reg = ToolRegistry()
+    for raw in ("GetLiveContext", "HassTurnOn"):
+        reg.register(Named(f"mcp__ha-home__{raw}"))
+    kept, removed = setu_link.apply_verbs(reg, "ha-home",
+                                          {"GetLiveContext": "read", "*": "write"})
+    assert sorted(kept) == ["mcp__ha-home__GetLiveContext", "mcp__ha-home__HassTurnOn"]
+    assert removed == [] and reg.get("mcp__ha-home__HassTurnOn").read_only is False
+    assert reg.get("mcp__ha-home__GetLiveContext").read_only is True
+    # a package allowed read gets only the named read tool
+    reg.register(Named("mcp__ha-home__HassTurnOff"))
+    kept, _ = setu_link.apply_verbs(reg, "ha-home", {"GetLiveContext": "read", "*": "write"},
+                                    "read")
+    assert kept == ["mcp__ha-home__GetLiveContext"]
+    # "*" = read is not honoured: unnamed tools are dropped, as without it
+    reg.register(Named("mcp__ha-home__HassTurnOn"))
+    _, removed = setu_link.apply_verbs(reg, "ha-home", {"GetLiveContext": "read", "*": "read"})
+    assert removed == ["mcp__ha-home__HassTurnOn"]
+
+
 class Spend(Tool):
     name = "buy"
     description = "buy a thing"

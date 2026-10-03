@@ -318,6 +318,24 @@ class TestPage:
         finally:
             manager.shutdown()
 
+    def test_the_setup_a_connector_names_is_passed_to_setu_and_nothing_else(self, setu,
+                                                                            tmp_path):
+        setu.set(client_file=None)
+        _, _, manager, client = served(tmp_path, setu.path)
+        try:
+            res = client.post("/api/connections/setup", json={"key": "vault_path",
+                                                              "value": "/x"})
+            assert res.status_code == 400 and "unknown setup" in res.json()["detail"]
+            res = client.post("/api/connections/setup", json={"key": "google_client_file",
+                                                              "value": "--evil"})
+            assert res.status_code == 400
+            res = client.post("/api/connections/setup", json={"key": "google_client_file",
+                                                              "value": "/k/c.json"})
+            assert res.status_code == 200 and res.json()["connectors"][0]["ready"]
+            assert ["config", "client-file", "/k/c.json"] in setu.get()["calls"]
+        finally:
+            manager.shutdown()
+
     def test_a_sign_in_that_ends_mid_turn_waits_for_the_turn(self, setu, tmp_path):
         session, agent, manager, client = served(tmp_path, setu.path)
         try:

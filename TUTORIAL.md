@@ -542,7 +542,8 @@ same with health dots and a paste-JSON box.
 ([notes/09](notes/09-mcp.md))
 
 **Your own accounts.** [Setu](https://github.com/kunwarmahen/setu) is a
-separate small program that keeps your sign-ins (Gmail first) so the
+separate small program that keeps your sign-ins (Gmail and Home
+Assistant so far) so the
 agent can use them without ever seeing a password or key. With it
 installed, Yantra connects your accounts when it starts. In the browser
 UI, the **connections** chip opens a page of cards:
@@ -560,7 +561,10 @@ the page is open on the computer running Yantra. From a phone, the card
 shows the command to run on that computer instead. For now, Google
 sign-in also needs a "Desktop app" client file you make once in
 Google's console. The page asks for its path the first time, and Setu
-remembers it. ([notes/95](notes/95-the-accounts-you-connected.md),
+remembers it. Home Assistant is simpler: the page asks once where your
+Home Assistant is, and the sign-in is its own login page. Start it at
+*See only*, and the agent can tell you which lights are on but can't
+switch any. ([notes/95](notes/95-the-accounts-you-connected.md),
 [notes/99](notes/99-the-connections-page.md))
 
 Connect two Gmail accounts, say `personal` and `work`, and the agent

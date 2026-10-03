@@ -1670,6 +1670,32 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         await run_in_threadpool(session.setu_sync)
         return session.connections_state(local=is_local(req))
 
+    #: What the page may tell Setu to remember: the setup key a connector's
+    #: ``needs_setup`` names -> the ``setu config`` setting that holds it.
+    setup_keys = {"google_client_file": "client-file", "homeassistant_url": "homeassistant-url"}
+
+    @app.post("/api/connections/setup")
+    async def connections_setup(req: Request) -> dict[str, Any]:
+        """Tell Setu one thing a sign-in needs first -- the Google client
+        file's path, or where the person's Home Assistant is. Setu checks
+        it and remembers it; neither is a key."""
+        require_idle()
+        setu = require_setu()
+        body = await req.json()
+        key, value = str(body.get("key", "")), str(body.get("value", "")).strip()
+        setting = setup_keys.get(key)
+        if setting is None:
+            raise HTTPException(400, f"unknown setup {key!r} (known: {', '.join(setup_keys)})")
+        if not value or value.startswith("-"):
+            raise HTTPException(400, "give a value")
+        from yantra.setu_link import run_setu
+        ok, said = await run_in_threadpool(run_setu, setu_program(setu), "config",
+                                           setting, value)
+        if not ok:
+            raise HTTPException(400, said.splitlines()[-1] if said else "setu refused it")
+        await run_in_threadpool(session.setu_sync)
+        return session.connections_state(local=is_local(req))
+
     # ---- MCP server management ----------------------------------------------
 
     def require_mcp() -> Any:

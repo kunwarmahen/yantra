@@ -84,6 +84,16 @@ goes by:
 * a tool the manifest does not list **is not registered at all**, and
   the start names it. Nobody agreed to it.
 
+One exception, and it is the manifest's to make, not the server's. A
+bridge to a server whose tool names are its own — Home Assistant's MCP
+server renames its Assist tools between versions, `GetDateTime` becoming
+`llm__GetDateTime` — may say `"*" = "write"`. Every tool it doesn't
+name then counts as write: asked about, never dropped, never run unasked.
+A `"*"` of read is ignored, because "anything else only reads" is a claim
+nobody can check. Against a real Home Assistant, the bridge's manifest
+named three read tools of the twenty-eight it offered; the other
+twenty-five arrived as writes.
+
 Spend needed something new, because "asked about every time" was not a
 thing a tool could say. `Tool.always_ask` is that: the agent copies it
 onto the permission request, the `yolo` gate refuses such a call with

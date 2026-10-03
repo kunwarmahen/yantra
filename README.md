@@ -603,7 +603,9 @@ setu: gmail-personal (7 tool(s)) -- via /home/you/setu/.venv/bin/setu
 which accounts are connected and at what level, and which are not. Each
 tool is classed by Setu's manifest, not by the server's own hint: reads
 run, writes ask, anything that spends asks every time even under `--yolo`,
-and a tool the manifest does not list is not registered at all
+and a tool the manifest does not list is not registered at all, unless
+the manifest says `"*" = "write"` for a server whose tool names are its
+own (Home Assistant's), and then it is asked about
 ([notes/95](notes/95-the-accounts-you-connected.md)). Two accounts on
 one service share one set of tools with an `account` argument, which
 anything that sends must fill. An agent package gets none of your
@@ -619,13 +621,15 @@ In the browser UI, the **connections** chip opens a panel of cards: the
 accounts you connected (address, level, tool count, *change access*,
 *disconnect*) and the connectors installed but not connected (name the
 account, pick a level, *connect*). Connect asks Setu to sign in
-(`setu connect --json`) and shows Google's sign-in as a button. Yantra
+(`setu connect --json`) and shows the site's sign-in as a button —
+Google's, or your Home Assistant's own login page. Yantra
 never holds a code or a key. The tools arrive without a restart, or
 when the running turn ends if one is running. Signing in works from a
 page on the computer running Yantra, because Google's reply comes back
 to a port there. Anywhere else, the card shows the command to run. Until
 Setu has its own Google app, the panel asks once for your Desktop OAuth
-client file, and Setu remembers the path
+client file, and Setu remembers the path. For Home Assistant it asks once
+for your server's address instead
 ([notes/99](notes/99-the-connections-page.md)).
 
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
@@ -2135,7 +2139,8 @@ src/yantra/
 ├── setu_link.py    the person's Setu connections at startup: found by import
 │                   or `setu status --json`, one MCP server each, tools
 │                   classed by the connector's manifest (read/write/spend,
-│                   unlisted = unregistered), a `connections` prompt layer
+│                   unlisted = unregistered unless `"*"` classes them),
+│                   a `connections` prompt layer
 │                   ([notes/95](notes/95-the-accounts-you-connected.md)).
 │                   Live, not only at startup: `Setu.sync` makes the servers
 │                   match Setu's report, SignIn relays `setu connect --json`

@@ -247,13 +247,19 @@ def apply_verbs(registry: Any, server: str, verbs: dict[str, str],
     Returns (tool names kept, tool names removed because the manifest
     does not list them). A ``ceiling`` -- the level a package was allowed
     -- also unregisters every tool above it, without counting it as
-    removed: the manifest lists it, the package just did not ask."""
+    removed: the manifest lists it, the package just did not ask.
+
+    A manifest's ``"*"`` classes every tool it does not name -- a bridge
+    to a server whose tool names are its own (Home Assistant's MCP
+    server). Setu allows only write or spend there, and so does this: a
+    ``"*"`` of read is ignored, and unnamed tools are dropped as before."""
     prefix = f"mcp__{server}__"
     kept, removed = [], []
+    default = verbs.get("*") if verbs.get("*") in ("write", "spend") else None
     for name in list(registry.names()):
         if not name.startswith(prefix):
             continue
-        klass = verbs.get(name[len(prefix):])
+        klass = verbs.get(name[len(prefix):]) or default
         if klass not in VERB_CLASSES:
             registry.unregister(name)
             removed.append(name)
@@ -886,7 +892,8 @@ class SignIn:
     as Setu prints them -- started, url, connected, error -- and
     ``on_event`` gets each dict, then a final ``{"event": "done"}``.
 
-    The address in the ``url`` event is Google's sign-in page; its
+    The address in the ``url`` event is the site's sign-in page (Google's,
+    or a Home Assistant's own login); its
     redirect comes back to a port Setu opened on THIS computer, which is
     why a page may start one only when it is open on this computer too.
     """
