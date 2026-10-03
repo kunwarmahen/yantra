@@ -73,7 +73,10 @@ says ``[connections] needs = ["gmail:read"]``, and you said yes once to
 that package at that level (``load_approved``). The level is a ceiling:
 ``read`` keeps only the manifest's read tools, ``write`` adds writes,
 ``spend`` everything. Your own sessions see every connection, as
-before.
+before. A need whose account is not connected yet waits on the session
+(``Setu.needs``), and the first look that finds it connected asks then
+(``Setu.offer``) -- sign in on the page mid-session and the question
+follows, rather than the next launch.
 
 LIVE, NOT ONLY AT STARTUP. ``Setu`` is the session's handle on all of
 this (``agent.setu``). ``sync`` makes the MCP servers match what Setu
@@ -621,6 +624,10 @@ class Setu:
     package_key: str | None = None
     granted: list[str] = field(default_factory=list)
     asks: list[dict[str, str]] = field(default_factory=list)
+    #: Everything the package asked for, and what was said no to this
+    #: session -- a no is not asked twice in one sitting, nor kept.
+    needs: list[str] = field(default_factory=list)
+    declined: set[str] = field(default_factory=set)
 
     @property
     def program(self) -> str | None:
@@ -701,6 +708,39 @@ class Setu:
         prompt.apply()
         return done
 
+    def question(self, need: str) -> dict[str, str] | None:
+        """The question a need puts, naming the accounts it would reach;
+        None while its connector has no account connected."""
+        link = self.link
+        if link is None:
+            return None
+        cid, _, klass = need.partition(":")
+        rows = [r for r in link.connections if r.get("connector") == cid]
+        if not rows:
+            return None
+        name = (link.connectors.get(cid) or {}).get("name", cid)
+        who = ", ".join(r.get("email") or r.get("ref", cid) for r in rows)
+        return {"need": need, "connector": cid, "name": name, "level": klass,
+                "question": f"{self.package} wants to {CLASS_WORDS[klass]} your "
+                            f"{name} ({who}). Allow?"}
+
+    def offer(self) -> list[dict[str, str]]:
+        """A package's needs that became askable since the last look --
+        an account connected mid-session -- added to ``asks`` and
+        returned. Granted, declined and already-asked needs are skipped."""
+        if self.package_key is None:
+            return []
+        asked = {a["need"] for a in self.asks}
+        new = []
+        for need in self.needs:
+            if need in self.granted or need in self.declined or need in asked:
+                continue
+            ask = self.question(need)
+            if ask is not None:
+                new.append(ask)
+        self.asks += new
+        return new
+
     def answer(self, need: str, yes: bool) -> None:
         """The person answered a package's question. A yes is kept, as in
         the terminal; a no only clears the question for this session.
@@ -713,6 +753,8 @@ class Setu:
             save_approved(self.package_key, need)
             self.granted.append(need)
             self.allow = needs_allow(self.granted)
+        else:
+            self.declined.add(need)
 
     def forget(self, need: str | None = None) -> list[str]:
         """Take back a yes (one need, or all) -- for good, and for this
@@ -722,6 +764,8 @@ class Setu:
         gone = forget_approved(self.package_key, need)
         self.granted = [g for g in self.granted if need is not None and g != need]
         self.allow = needs_allow(self.granted)
+        # taken back means not asked again this sitting; the next launch asks
+        self.declined.update(gone)
         return gone
 
     def _unmerge(self, registry: Any, manager: Any) -> None:

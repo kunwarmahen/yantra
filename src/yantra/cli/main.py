@@ -2000,7 +2000,8 @@ def _package_connections(spec, setu, console: Console, ask) -> dict[str, str]:
     ``[connections] needs``, each allowed once, here or before.
 
     A need whose account is not connected is said and not asked -- there
-    is nothing to allow yet. A no is not remembered: the next launch asks
+    is nothing to allow yet; it waits on ``setu.needs``, and the page asks
+    once the account is connected (``Setu.offer``). A no is not remembered: the next launch asks
     again, which is the cheap mistake. A yes is, per package and level.
     """
     from yantra import setu_link
@@ -2016,6 +2017,7 @@ def _package_connections(spec, setu, console: Console, ask) -> dict[str, str]:
         return {}
     key = setu.package_key
     approved = setu_link.load_approved(key)
+    setu.needs = list(spec.connections)
     granted = []
     for need in spec.connections:
         cid, _, klass = need.partition(":")
@@ -2023,24 +2025,22 @@ def _package_connections(spec, setu, console: Console, ask) -> dict[str, str]:
         if need in approved:
             granted.append(need)
             continue
-        rows = [r for r in link.connections if r.get("connector") == cid]
-        if not rows:
+        q = setu.question(need)
+        if q is None:
             console.print(f"[yellow]setu: {spec.name} needs {name} ({klass}), which is "
-                          f"not connected -- `setu connect {cid}`[/yellow]")
+                          f"not connected -- `setu connect {cid}`, or sign in on the "
+                          f"page's Connections panel, and it is asked then[/yellow]")
             continue
-        who = ", ".join(r.get("email") or r.get("ref", cid) for r in rows)
-        question = (f"{spec.name} wants to {setu_link.CLASS_WORDS[klass]} your {name} "
-                    f"({who}). Allow?")
         if ask is None:
-            setu.asks.append({"need": need, "connector": cid, "name": name,
-                              "level": klass, "question": question})
-            console.print(f"[yellow]setu: {question} -- not answered yet; say yes in a "
+            setu.asks.append(q)
+            console.print(f"[yellow]setu: {q['question']} -- not answered yet; say yes in a "
                           f"terminal, or on the page's Connections panel[/yellow]")
             continue
-        if ask(question):
+        if ask(q["question"]):
             setu_link.save_approved(key, need)
             granted.append(need)
         else:
+            setu.declined.add(need)
             console.print(f"[dim]setu: not allowed; {spec.name} won't see {name}[/dim]")
     setu.granted = list(granted)
     return setu_link.needs_allow(granted)

@@ -1661,6 +1661,7 @@ function onConnections(env) {
   const added = Object.entries(sync.connected || {});
   if (sync.dropped?.length) toast(`${sync.dropped.join(", ")} disconnected — its tools are gone`);
   for (const note of sync.notes || []) addBanner(`setu: ${note}`, false, true);
+  for (const q of sync.asked || []) addBanner(`${q} — answer on the Connections panel`, false);
   if (added.length && conn.justConnected) {
     const [name, count] = added.find(([n]) => n === conn.justConnected) || added[0];
     addBanner(`${name} is connected — ${count} tool(s) from the next message on`, false);

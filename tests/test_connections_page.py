@@ -424,6 +424,41 @@ class TestPackageOnThePage:
         finally:
             manager.shutdown()
 
+    def test_an_account_connected_mid_session_is_asked_then(self, setu, tmp_path,
+                                                             monkeypatch):
+        setu.set(connections={})
+        agent, manager, client = served_package(tmp_path, setu.path, monkeypatch)
+        try:
+            assert client.get("/api/connections").json()["asks"] == []
+            setu.set(connections={"gmail:personal": "read"})
+            out = client.post("/api/connections/refresh").json()["sync"]
+            assert out["asked"] == ["helper wants to read your Gmail "
+                                    "(personal@example.com). Allow?"]
+            state = client.get("/api/connections").json()
+            assert [a["need"] for a in state["asks"]] == ["gmail:read"]
+            assert gmail_tools(agent) == []          # asked, not yet allowed
+            # another look does not ask twice
+            assert client.post("/api/connections/refresh").json()["sync"]["asked"] == []
+            client.post("/api/connections/answer", json={"need": "gmail:read", "allow": True})
+            assert gmail_tools(agent) == ["mcp__gmail-personal__search_threads"]
+        finally:
+            manager.shutdown()
+
+    def test_not_now_and_forget_are_not_asked_again_this_sitting(self, setu, tmp_path,
+                                                                 monkeypatch):
+        agent, manager, client = served_package(tmp_path, setu.path, monkeypatch)
+        try:
+            client.post("/api/connections/answer", json={"need": "gmail:read", "allow": False})
+            assert client.post("/api/connections/refresh").json()["sync"]["asked"] == []
+            agent.setu.declined.clear()
+            client.post("/api/connections/refresh")
+            client.post("/api/connections/answer", json={"need": "gmail:read", "allow": True})
+            client.post("/api/connections/forget", json={"need": "gmail:read"})
+            assert client.post("/api/connections/refresh").json()["sync"]["asked"] == []
+            assert client.get("/api/connections").json()["asks"] == []
+        finally:
+            manager.shutdown()
+
     def test_your_own_session_has_nothing_to_forget(self, setu, tmp_path):
         session, agent, manager, client = served(tmp_path, setu.path)
         try:

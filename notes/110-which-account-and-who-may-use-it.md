@@ -120,6 +120,26 @@ A yes there is kept exactly like one in the terminal, and the tools
 arrive without a restart. "Not now" clears the question for the session
 and keeps nothing.
 
+**AN ACCOUNT CONNECTED LATER IS ASKED ABOUT THEN.** If the account a
+package needs isn't connected when it starts, the launch says so and
+the need waits. Sign in from the page (or connect in a terminal and
+press **look again**), and the question arrives on the panel then, with
+a line in the chat pointing at it. It's asked once per sitting: "not
+now" or **forget** isn't put again until the next launch. Nothing
+widens without a question; the question just comes when there's
+something to allow.
+
+```
+setu: mail-helper needs Gmail (read), which is not connected -- `setu connect gmail`, or sign in on the page's Connections panel, and it is asked then
+launch  asks: []           | connections: []
+refresh asked: ['mail-helper wants to read your Gmail (personal@example.com). Allow?']
+again   asked: []
+allow   granted: ['gmail:read'] | tools: [('gmail:personal', 1)]
+```
+
+That's a scratch Setu with no accounts, the package started with
+`--web` and `qwen3.8:latest`, and the stub's account added while it ran.
+
 **A YES CAN BE TAKEN BACK.** The panel lists what the package was
 allowed, each with **forget**: its tools go at once, and the next
 launch asks again. From a terminal, `yantra --agent DIR
@@ -176,16 +196,17 @@ read without `account` asks both. A write without one fails, and its
 approval names the account. Dropping back to one account restores the
 plain tools. A package that asked for nothing gets nothing, a yes is
 remembered for that package and place only, a no isn't, and an account
-that isn't connected is reported, not asked about.
+that isn't connected is reported, not asked about -- until it's
+connected, and the next look asks once.
 
 ## What was deliberately not built
 
 * ~~**Asking on the page.**~~ Built: unanswered questions wait on the
   Connections panel.
-* **Asking mid-session.** An account you connect from the page while a
-  package is running isn't offered to it until the next launch, when
-  it's asked about. A package's access shouldn't widen while it runs
-  without a question, and the question is asked at launch.
+* ~~**Asking mid-session.**~~ Built: an account connected while a
+  package runs is asked about on the panel at the next look, once per
+  sitting. A terminal-only session still asks at the next launch, since
+  nothing there looks at Setu again mid-session.
 * ~~**Forgetting a yes from inside Yantra.**~~ Built: **forget** on the
   panel, `--forget-connections` in the terminal.
 * **Tool names by connector for one account.** Renaming

@@ -735,10 +735,14 @@ class WebSession:
         with self._setu_lock:
             self._setu_sync_due = False
             setu.refresh()
+            # an account connected since launch may be one a package asked
+            # for: its question is put now, not at the next launch
+            asked = [a["question"] for a in setu.offer()]
             done = setu.sync(self.mcp, self.agent) if self.mcp is not None else None
         result = ({"connected": done.connected, "dropped": done.dropped,
                    "notes": done.notes} if done is not None
                   else {"connected": {}, "dropped": [], "notes": []})
+        result["asked"] = asked
         self.broadcast({"type": "connections", **self.connections_state(), "sync": result})
         self.broadcast({"type": "state", **self.state()})
         return result

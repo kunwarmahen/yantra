@@ -571,7 +571,9 @@ from. An agent someone else wrote (a package) gets none of your
 accounts unless its `agent.toml` asks for them. The first time it asks,
 you're asked once: *"mail-helper wants to read your Gmail. Allow?"*
 That question shows up in the terminal, or on the Connections panel if
-nobody is at a terminal. Changed your mind? **forget** on the panel
+nobody is at a terminal. If it needs an account you haven't connected
+yet, sign in on the panel and the question comes right then. No
+restart. Changed your mind? **forget** on the panel
 takes it back. ([notes/110](notes/110-which-account-and-who-may-use-it.md))
 
 ## 9 · The tools that make it finish rather than answer
