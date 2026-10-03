@@ -374,7 +374,10 @@ buried gemma went from 16 to 28 of 35 on Smritikosh
 ([notes/107](notes/107-a-fact-that-says-what-it-is.md)). A habit said in
 passing counts too: *"It's 31 degrees Celsius here"* used to be read as
 part of the question, and now both models keep *"Measures temperature
-in Celsius"* 5 times in 5. The layer stays at twenty lines. Eight lines
+in Celsius"* 5 times in 5. A fact also says what it implies (*"Lives in
+Chennai, India (Indian Standard Time)"*), which took that fact from 18th
+to 2nd in a meaning search for *"what time is that for me?"*. The layer
+stays at twenty lines. Eight lines
 crowded the right fact less, but dropped the ones a store ranks low:
 buried gemma on Smritikosh fell from 31 to 25 of 35
 ([notes/109](notes/109-fewer-lines-fewer-facts.md)).

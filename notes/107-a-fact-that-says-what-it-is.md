@@ -169,6 +169,80 @@ wording. Note 105's rows weren't saved, so the old wording can't be
 checked. This is the `local` store's known limit (below), not a fact
 that was lost.
 
+## What a fact implies
+
+Saying what a fact *is* wasn't enough for one case.
+[Note 109](109-fewer-lines-fewer-facts.md) found gemma keeping the time
+zone as *"Lives in Chennai."*. That's a place, correctly labelled. But
+the later question is *"My team standup is at 10am Eastern. What time is
+that for me?"*, and meaning search ranked the fact **eighteenth** of
+thirty-one, in all five repeats. *"Wakes up around 6am"* sounds more
+like a question about time. qwen kept *"Lives in Chennai, India (IST,
+UTC+5:30)"*, which ranked second.
+
+So the rule now asks for what a fact plainly implies, if a later
+question might turn on it:
+
+```
+Word each one so someone asking about it later finds it: say what the
+thing IS, and what it plainly implies that a later question might turn
+on. … "Lives in Lisbon, Portugal (Western European Time)", not "Lives
+in Lisbon".
+```
+
+The example is Lisbon, not Chennai, so the trial still measures the rule
+and not a copied answer. The `remember` tool's description says the
+same.
+
+### The first run lost facts, and the cause was the token budget
+
+The first trial of this wording kept *fewer* facts: gemma 28 of 35
+against 32. Seven look backs kept nothing at all. That's the symptom
+from the first version above, so this time the replies were read. The
+same session-1 transcripts were sent to the look back twice, once with
+each wording, and the raw replies printed:
+
+| | old wording | new wording |
+|---|---|---|
+| empty replies, 9 tries | 1 | 4 |
+
+The empty ones weren't a format slip. They were **empty**: gemma had
+spent its whole allowance thinking (`stop=max_tokens` at 4,096) or
+stopped with nothing after reasoning. Asking what a fact implies makes
+it deliberate longer, often 3,000–7,700 tokens. The old wording hit the
+same ceiling, just less often. The look back's budget is now 8,192
+tokens. The reasoning is still never read, only the answer after it.
+With that, the same three cases kept their fact 10 times in 12 instead
+of 5 in 9.
+
+### Receipt
+
+The recall trial, each fact buried under 30 others, 5 repeats, before
+(the old wording, 4,096 tokens) and after (the new wording, 8,192):
+
+| buried | gemma4:12b on Smritikosh | qwen3.8:latest on `local` |
+|---|---|---|
+| kept by session 1 | 32 → 33 of 35 | 35 → 35 |
+| found by the store's search | 32 → 33 | **14 → 22** |
+| **answered from memory** | **31 → 33** | **16 → 20** |
+| `timezone`: where search ranked it | **18, 18, 18, 18, 18 → 2, 2, 8, 2, 2** | not found → found 2 of 5 |
+| `packages` found by search | 4 → 4 | **1 → 5** |
+| kept "flying to SFO Tuesday" | 0/5 → 0/5 | 0/5 → 0/5 |
+
+gemma now keeps *"Located in Chennai, India (Indian Standard Time)."*.
+On the word-overlap store, the facts gained words a later question
+uses. *"… their local time zone for interpreting 'what time is it for
+me'"* matches *"what time is that for me"*. A packages fact that now
+says what `uv` is for matches *"add requests as a dependency"* every
+time, where it used to miss 4 times in 5. A look back with more words
+helps a store that searches by words.
+
+The cost is spent when a conversation ends. A look back on gemma now
+reasons for up to about 8,000 tokens: a few GPU seconds on a local
+model. On a cloud model, reasoning tokens are billed, and the look back
+goes on the session's meter like any call. The budget is a ceiling,
+not a target, and most look backs stop well short of it.
+
 ## What was deliberately not built
 
 * **Accepting lines without a kind.** The parser could take bare
@@ -182,4 +256,11 @@ that was lost.
 * **The `local` store.** Word-overlap search gains little from wording.
   *"format-on-save for Python"* shares no word with *"Uses Neovim as
   their text editor"* either. The prompt's recent top-up is what carries
-  a fact there ([note 103](103-said-once-found-later.md)).
+  a fact there ([note 103](103-said-once-found-later.md)). (Asking what a
+  fact implies did help it after all, 14 to 22 of 35 found, because the
+  fact gains a later question's words. See "What a fact implies".)
+* **Reading the reasoning when the answer is empty.** An empty reply
+  after long thinking could be rescued from the thinking itself. The
+  look back never reads reasoning, since that's where a username once
+  leaked ([note 105](105-a-rate-not-a-picture.md)). A bigger budget
+  fixes the cause instead.

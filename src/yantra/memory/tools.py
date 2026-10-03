@@ -38,8 +38,10 @@ class Remember(Tool):
         "in passing, like the currency or units they talk in. One short "
         "sentence, in the "
         "third person ('Lives near RDU (Raleigh-Durham airport)'), that "
-        "says what the thing IS: 'Uses Fish as their command-line shell', "
-        "not 'Uses Fish'. Not the task at hand, not plans for next week."
+        "says what the thing IS and what it plainly implies: 'Uses Fish as "
+        "their command-line shell', not 'Uses Fish'; 'Lives in Lisbon, "
+        "Portugal (Western European Time)', not 'Lives in Lisbon'. Not the "
+        "task at hand, not plans for next week."
     )
     parameters: ClassVar[dict] = {
         "type": "object",

@@ -45,7 +45,9 @@ other facts for "format-on-save for Python", while "Uses Neovim as their
 text editor" was found every time (notes/105). The prompt asks for the
 kind of thing as well as the value -- with examples the recall trial
 does not use, so the trial still measures the rule and not a copied
-answer.
+answer. And what it plainly implies: "Lives in Chennai." ranked
+eighteenth for "what time is that for me?", while the same fact with
+its time zone ranked second (notes/109).
 
 WHAT WAS SAID, NOT WHAT WAS THOUGHT. The model's reasoning and the
 arguments of its tool calls are left out of the transcript. Both are the
@@ -82,8 +84,11 @@ MAX_CANDIDATES = 5
 #: opening says who the person is and what they came for, the end is
 #: where corrections land.
 TRANSCRIPT_CHARS = 16_000
-#: Room for a local model's reasoning before its answer.
-REFLECT_MAX_TOKENS = 4096
+#: Room for a local model's reasoning before its answer. 4096 was too
+#: little: gemma4:12b sometimes thought for all of it and answered with
+#: nothing, and asking what a fact implies made that 4 times in 9
+#: (notes/107). The reasoning is never read, only the answer after it.
+REFLECT_MAX_TOKENS = 8192
 REDACTED = "[redacted]"
 KINDS = ("fact", "preference", "correction")
 
@@ -114,8 +119,10 @@ Already remembered:
 {remembered}
 
 Word each one so someone asking about it later finds it: say what the \
-thing IS. "Uses Fish as their command-line shell", not "Uses Fish"; \
-"Their dog is named Biscuit", not "Biscuit".
+thing IS, and what it plainly implies that a later question might turn \
+on. "Uses Fish as their command-line shell", not "Uses Fish"; "Their \
+dog is named Biscuit", not "Biscuit"; "Lives in Lisbon, Portugal \
+(Western European Time)", not "Lives in Lisbon".
 
 Reply with one line per fact, at most {limit}. Start every line with its \
 kind -- fact:, preference: or correction: -- then one short \

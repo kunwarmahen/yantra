@@ -140,8 +140,11 @@ Alone, the same case passed with the fact ranked first.
   real test is a trial run
   ([note 107](107-a-fact-that-says-what-it-is.md)), so it doesn't ship
   untested.
-* **Rewording the time zone fact.** *"Lives in Chennai."* ranks
+* ~~**Rewording the time zone fact.** *"Lives in Chennai."* ranks
   eighteenth, and *"Lives in Chennai, India (IST, UTC+5:30)"* ranks
   second. That's note 107's rule (a fact says what it is about) applied
   to what a fact implies, a time zone. It's the better lever, and the
-  look back's job, not the layer's.
+  look back's job, not the layer's.~~ Built: the look back asks what a
+  fact implies. gemma's time zone went from eighteenth to second, and
+  buried gemma on Smritikosh answered 33 of 35
+  ([note 107](107-a-fact-that-says-what-it-is.md#what-a-fact-implies)).

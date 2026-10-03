@@ -476,6 +476,9 @@ that took `gemma4:12b` from 16 to 28 of 35 answers that came from a
 buried fact ([notes/107](notes/107-a-fact-that-says-what-it-is.md)).
 How you say things counts as well. Mention *"31 degrees Celsius"* while
 asking about something else, and it keeps that you measure in Celsius.
+A fact also carries what it implies: *"Lives in Chennai, India (Indian
+Standard Time)"*, so a later *"what time is 10am Eastern for me?"*
+finds it.
 ([notes/101](notes/101-looking-back.md))
 
 ## 7 · Sub-agents — a fresh context window on demand
