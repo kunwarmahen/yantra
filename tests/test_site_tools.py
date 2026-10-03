@@ -146,6 +146,18 @@ class TestReadingPressesNothing:
         with pytest.raises(ToolError, match="keep to Shop"):
             s._open("https://evil.test/")
 
+    def test_a_path_opens_on_the_site_wherever_it_lives(self):
+        s = session()
+        s._open("/account/orders")
+        assert s._page.gotos[-1] == "https://www.shop.test/account/orders"
+        local = session(Page(url="http://shop.localhost:18794/"),
+                        rules=SiteRules(name="Shop", hosts=("shop.localhost",),
+                                        home="http://shop.localhost:18794/", pace=0.0))
+        local._open("/account/orders")
+        assert local._page.gotos[-1] == "http://shop.localhost:18794/account/orders"
+        with pytest.raises(ToolError, match="keep to Shop"):
+            s._open("//evil.test/x")
+
     def test_follow_loads_the_address_and_clicks_nothing(self):
         s = session()
         s._follow("e1")

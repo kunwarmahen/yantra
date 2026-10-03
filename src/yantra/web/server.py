@@ -239,6 +239,8 @@ class WebSession:
         #: stands between an answer and the next message.
         self.kept_recipes: dict[str, tuple[Any, Any]] = {}
         self.kept_memories: list[Any] = []
+        #: New guides for sites added on this computer, by key (site_guide.py).
+        self.kept_guides: dict[str, Any] = {}
         self._kept_lock = threading.Lock()
         #: The look running after the last turn, what stops it, what it
         #: is doing, and how the last one ended.
@@ -585,10 +587,13 @@ class WebSession:
         with self._kept_lock:
             recipes = list(self.kept_recipes.items())
             memories = list(self.kept_memories)
+            guides = list(self.kept_guides.items())
         return {"recipes": [{"id": key, **offer.view(cwd, home=learner.home)}
                             for key, (learner, offer) in recipes],
                 "memories": [{"statement": c.statement, "kind": c.kind}
                              for c in memories],
+                "guides": [{"id": key, "site": g.site, "name": g.name, "old": g.old,
+                            "new": g.new, "calls": g.calls} for key, g in guides],
                 "looking": self.looking, "status": self._look_status,
                 "last": self._last_look}
 
@@ -604,6 +609,23 @@ class WebSession:
                     del self.kept_recipes[key]
             self.kept_recipes[uuid.uuid4().hex[:8]] = (learner, offer)
         self._kept_changed()
+
+    def _keep_guide(self, offer: Any) -> None:
+        """A new guide to the tray; an older offer for the same site goes,
+        since the new one was written from the old guide too."""
+        with self._kept_lock:
+            for key, old in list(self.kept_guides.items()):
+                if old.site == offer.site:
+                    del self.kept_guides[key]
+            self.kept_guides[uuid.uuid4().hex[:8]] = offer
+        self._kept_changed()
+
+    def take_guide(self, key: str) -> Any:
+        with self._kept_lock:
+            found = self.kept_guides.pop(key, None)
+        if found is None:
+            raise KeyError(key)
+        return found
 
     def take_recipe(self, key: str) -> tuple[Any, Any]:
         with self._kept_lock:
@@ -655,7 +677,10 @@ class WebSession:
     def _start_look(self) -> None:
         """Look at the turn that just ended, behind the person's back."""
         learner = getattr(self.agent, "learner", None)
-        if learner is None or learner.mode == "off":
+        learning = learner is not None and learner.mode != "off"
+        from yantra import site_guide
+        sites = bool(site_guide.local_sites(getattr(self.agent, "setu", None)))
+        if not learning and not sites:
             return
         stop = self._look_stop = threading.Event()
         self.looking = True
@@ -664,8 +689,24 @@ class WebSession:
             self._look_status = text
             self.broadcast({"type": "look_status", "text": text})
 
+        def guides() -> None:
+            # a site added here, used this turn: what would its guide say?
+            # Its own failure is a line, never the recipe's look's.
+            if not sites or stop.is_set():
+                return
+            says("looking at what the sites showed")
+            try:
+                for offer in site_guide.look(self.agent, stop=stop.is_set):
+                    self._keep_guide(offer)
+                    self._last_look = f"a guide to {offer.name}"
+            except Exception as exc:
+                self._last_look = f"site guide skipped: {exc}"
+
         def work() -> None:
             try:
+                guides()
+                if not learning or stop.is_set():
+                    return
                 offer = learner.consider(progress=says, stop=stop.is_set)
                 if offer is None:
                     self._last_look = learner.last_skip or ""
@@ -1161,8 +1202,8 @@ class WebSession:
             "turn_active": self.turn_active,
             # The tray's count, for its chip (notes/113); its contents
             # come from /api/kept.
-            "kept": {"count": len(self.kept_recipes) + len(self.kept_memories),
-                     "looking": self.looking},
+            "kept": {"count": len(self.kept_recipes) + len(self.kept_memories)
+                     + len(self.kept_guides), "looking": self.looking},
         }
 
     def history_envelopes(self) -> list[dict[str, Any]]:
@@ -1618,6 +1659,42 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         learner, offer = kept_recipe(key)
         session.take_recipe(key)
         learner.discard(offer)
+        session._kept_changed()
+        session.broadcast({"type": "state", **session.state()})
+        return session.kept_view()
+
+    @app.post("/api/kept/guide/{key}/save")
+    async def kept_guide_save(key: str, req: Request) -> dict[str, Any]:
+        """Keep a site's new guide, as the person edited it: Setu writes it
+        into the site's file, and the prompt layer carries it from the next
+        turn. require_idle, since the layer changes."""
+        require_idle()
+        setu = require_setu()
+        offer = session.kept_guides.get(key)
+        if offer is None:
+            raise HTTPException(404, "that guide is gone -- kept or dropped already, "
+                                     "or the server restarted")
+        text = str((await req.json()).get("guide") or offer.new).strip()
+        if not text:
+            raise HTTPException(400, "an empty guide -- drop it instead")
+        from yantra.setu_link import run_setu
+        ok, said = await run_in_threadpool(run_setu, setu_program(setu), "site", "guide",
+                                           offer.site, "--set", text)
+        if not ok:
+            raise HTTPException(502, said or "setu did not save the guide")
+        session.take_guide(key)
+        await run_in_threadpool(session.setu_sync)
+        session._kept_changed()
+        session.broadcast({"type": "state", **session.state()})
+        return {**session.kept_view(), "said": said}
+
+    @app.post("/api/kept/guide/{key}/drop")
+    def kept_guide_drop(key: str) -> dict[str, Any]:
+        require_ready()
+        try:
+            session.take_guide(key)
+        except KeyError:
+            raise HTTPException(404, "that guide is gone") from None
         session._kept_changed()
         session.broadcast({"type": "state", **session.state()})
         return session.kept_view()

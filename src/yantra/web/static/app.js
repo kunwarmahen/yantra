@@ -2754,8 +2754,12 @@ function renderKeptChip(k) {
   $("#kept-count").textContent = k.count ? `${k.count} to keep` : "looking…";
 }
 
+function keptTotal(d) {
+  return d.recipes.length + d.memories.length + (d.guides || []).length;
+}
+
 function onKept(env) {
-  const total = env.recipes.length + env.memories.length;
+  const total = keptTotal(env);
   if (total > keptPanel.total) {
     toast("found something worth keeping — it waits under “to keep”");
   }
@@ -2780,7 +2784,7 @@ async function openKeptPanel() {
   const res = await fetch("/api/kept");
   if (res.ok) {
     keptPanel.data = await res.json();
-    keptPanel.total = keptPanel.data.recipes.length + keptPanel.data.memories.length;
+    keptPanel.total = keptTotal(keptPanel.data);
   }
   keptPanel.seen = keptPanel.total;
   renderKeptChip({ count: keptPanel.total, looking: keptPanel.data?.looking });
@@ -2838,7 +2842,12 @@ function renderKept() {
     };
     body.append(list, actions);
   }
-  if (!d.recipes.length && !d.memories.length) {
+  if ((d.guides || []).length) {
+    section(body, "site guides", "where things are on a site you added, as this "
+      + "turn found them; kept, the agent reads it before using the site");
+    for (const g of d.guides) body.append(keptGuideRow(g));
+  }
+  if (!keptTotal(d)) {
     const p = document.createElement("div");
     p.className = "conn-foot";
     p.textContent = "nothing waiting. After a turn that took real work, the "
@@ -2846,6 +2855,38 @@ function renderKept() {
       + "finds waits here, and nothing is kept without your yes.";
     body.append(p);
   }
+}
+
+function keptGuideRow(g) {
+  const row = document.createElement("div");
+  row.className = "conn-card kept-row kept-guide";
+  const main = document.createElement("div");
+  main.innerHTML = `<div class="conn-title">${esc(g.name)}</div>
+    <div class="conn-sub">${g.old ? "an update to its guide" : "its first guide"}
+      · from ${esc(String(g.calls))} page(s) this turn · edit before keeping</div>`;
+  const text = document.createElement("textarea");
+  text.className = "kept-guide-text";
+  text.rows = Math.min(10, g.new.split("\n").length + 1);
+  text.value = g.new;
+  text.spellcheck = false;
+  main.append(text);
+  const actions = document.createElement("div");
+  actions.className = "conn-actions";
+  const drop = document.createElement("button");
+  drop.className = "m-btn"; drop.textContent = "drop";
+  drop.onclick = () => keptPost(`/api/kept/guide/${g.id}/drop`);
+  const keep = document.createElement("button");
+  keep.className = "m-btn primary"; keep.textContent = "keep";
+  keep.onclick = async () => {
+    keep.disabled = true;
+    const r = await keptPost(`/api/kept/guide/${g.id}/save`, { guide: text.value });
+    keep.disabled = false;
+    if (!r.ok) { toast(r.data.detail || "not kept"); return; }
+    toast(`kept — the agent reads it before using ${g.name}`);
+  };
+  actions.append(drop, keep);
+  row.append(main, actions);
+  return row;
 }
 
 function keptRecipeRow(item) {

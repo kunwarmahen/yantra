@@ -80,7 +80,7 @@ never save a script whose test didn't run.
 ## The tray
 
 The chip shows only when something is waiting or a look is running.
-Its panel has two lists:
+Its panel has three lists:
 
 * **ways that worked**: each recipe with its name, whether its test
   passed, and what it's for. *review* opens the same save dialog as
@@ -92,6 +92,11 @@ Its panel has two lists:
   ticked ones and drops the rest, and *drop all* drops everything.
   These follow the same rules as before: a dropped fact isn't offered
   again this session.
+* **site guides**: for a site you added by its address, where things
+  are on it, as a turn that used it found them, in a box you can edit.
+  *keep* has Setu save it as the site's guide, and the agent reads it
+  before using the site from the next turn on. *drop* writes nothing
+  ([note 112](112-a-site-with-no-api.md)).
 
 Offers stay until you answer them. A recipe found three turns ago can
 still be saved. If a newer look drafts a recipe with the same name,

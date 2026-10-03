@@ -46,7 +46,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from yantra.config import browser_handoff, browser_headed
 from yantra.errors import ToolError
@@ -208,6 +208,10 @@ class SiteSession(BrowserSession):
     def _open(self, url: str) -> str:
         if not url and self._page is None:
             url = self.rules.home          # open() alone starts at home
+        if url and url.startswith("/") and not url.startswith("//"):
+            # a path, as a guide writes it: on this site, wherever it lives
+            # (a port included), never a host the model guessed
+            url = urljoin(self.rules.home, url)
         if url:
             self._check_address(url)
             self._pace()
@@ -317,7 +321,8 @@ VERBS: dict[str, tuple[str, dict[str, Any]]] = {
              "No url: their {site} home. Only {site}'s own addresses. Returns the page "
              "as text plus numbered elements [e1], [e2]...",
              {"url": {"type": "string",
-                      "description": "An address on {site}. Omit for its home page, or to "
+                      "description": "An address on {site}, or a path on it like "
+                                     "/account/orders. Omit for its home page, or to "
                                      "re-read the page already open."}}),
     "follow": ("Go to a link on the open {site} page by its [eN] ref -- the way to page "
                "through orders, posts and results. Loads the link's address; presses "

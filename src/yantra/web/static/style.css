@@ -2096,6 +2096,12 @@ pre.output { color: var(--ink); }
 .kept-row { grid-template-columns: minmax(0, 1fr) auto; }
 .kept-row .conn-title { font-weight: 600; font-family: var(--mono); font-size: 13px; }
 .kept-row .conn-sub { margin-top: 2px; }
+.kept-guide-text {
+  width: 100%; margin-top: 8px; padding: 8px 10px; box-sizing: border-box;
+  font: 12.5px/1.5 var(--mono); color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 8px;
+  resize: vertical;
+}
 .kept-status { margin: 12px 0 0; font-size: 12.5px; color: var(--ink-3); }
 .kept-mem-actions { display: flex; gap: 8px; justify-content: flex-end; }
 @media (max-width: 640px) {

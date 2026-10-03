@@ -112,6 +112,11 @@ FAKE_SETU = """\
         save(s)
         emit(event="connected", ref=ref, email=ref.split(":")[1] + "@example.com",
              level=level, level_label=level.title(), asked_level=level)
+    elif args[:2] == ["site", "guide"]:
+        if s.get("refuse_guide"):
+            print("error: the guide in sites/x.toml is written by hand", file=sys.stderr)
+            sys.exit(2)
+        print(args[2] + ": guide saved")
     elif args[0] == "disconnect":
         s["connections"].pop(args[1], None)
         save(s)
@@ -353,6 +358,50 @@ class TestAddingASite:
             res = client.post("/api/connections/add-site", json={"site": "example.com"})
             assert res.status_code == 403
             assert "setu connect --site example.com --as personal" in res.json()["detail"]
+        finally:
+            manager.shutdown()
+
+
+class TestKeepingAGuide:
+    def offer(self, session):
+        from yantra.site_guide import GuideOffer
+        session._keep_guide(GuideOffer(site="example", name="Example", old="",
+                                       new="Orders: /orders", calls=3))
+        return next(iter(session.kept_guides))
+
+    def test_kept_as_edited_through_setu(self, setu, tmp_path):
+        session, _, manager, client = served(tmp_path, setu.path)
+        try:
+            key = self.offer(session)
+            tray = client.get("/api/kept").json()
+            assert tray["guides"][0]["new"] == "Orders: /orders"
+            assert session.state()["kept"]["count"] == 1
+            res = client.post(f"/api/kept/guide/{key}/save",
+                              json={"guide": "Orders: /account/orders"})
+            assert res.status_code == 200, res.text
+            assert ["site", "guide", "example", "--set", "Orders: /account/orders"] \
+                in setu.get()["calls"]
+            assert res.json()["guides"] == [] and session.state()["kept"]["count"] == 0
+        finally:
+            manager.shutdown()
+
+    def test_a_refusal_keeps_the_offer_and_says_why(self, setu, tmp_path):
+        setu.set(refuse_guide=True)
+        session, _, manager, client = served(tmp_path, setu.path)
+        try:
+            key = self.offer(session)
+            res = client.post(f"/api/kept/guide/{key}/save", json={})
+            assert res.status_code == 502 and "written by hand" in res.json()["detail"]
+            assert key in session.kept_guides
+        finally:
+            manager.shutdown()
+
+    def test_dropped_writes_nothing(self, setu, tmp_path):
+        session, _, manager, client = served(tmp_path, setu.path)
+        try:
+            key = self.offer(session)
+            assert client.post(f"/api/kept/guide/{key}/drop").json()["guides"] == []
+            assert not any(c[:1] == ["site"] for c in setu.get()["calls"])
         finally:
             manager.shutdown()
 

@@ -270,6 +270,54 @@ deliberate way past that. Signing in again never rewrites the file, so
 a person's edits stay. An address Setu already has a connector for
 (`amazon.in`) is pointed at that connector instead.
 
+### The guide grows from use
+
+A site added by its address starts with no guide, so the first time the
+agent clicks its way around: home, then "Your account", then "Your
+orders". Then the next conversation does the same again.
+
+So after a turn that used such a site's tools at least twice, the look
+that runs behind the answer ([note 113](113-after-the-answer.md)) asks
+the model one more short question: from the pages this turn reached,
+what would a guide to this site say? It sees each call and where it
+landed (the address and the page's title), never the pages' text. A
+guide says where things are, and a page's words are the site's, not
+advice to follow. Whatever it writes waits in the **to keep** tray as
+an editable box. On **keep**, Setu saves it (`setu site guide ID --set`)
+and the connections layer carries it from the next turn. Only sites
+added on this computer are looked at; an installed connector's guide
+belongs to its author.
+
+The first try wrote a guide full of `ref e1`. Those are numbers for one
+page's links and change on every visit, and the model had seen only
+page titles, not where each link led. Showing it the address each call
+landed on fixed that. On `qwen3.8:latest`, against a small local shop
+connected with `--site`:
+
+```
+> What is the status of my orders on the Tea & Kettles shop (teashop)?
+  → teashop_open, teashop_follow, teashop_follow …        (123 s)
+to keep: a guide to Teashop (from 3 pages)
+  Your orders: /account/orders
+  Order detail: /account/orders/{order_id} (e.g. /account/orders/1042)
+  Order list page has links to individual orders
+```
+
+Kept, then a new conversation:
+
+```
+> On teashop, which of my orders has not been delivered yet?
+  → teashop_open(url="/account/orders")                  (one call)
+Your undelivered order is Order 1043 – Tea sampler, expected 5 Oct.
+```
+
+The first version of that second run found a real bug. The model
+opened `/account/orders`, a bare path, and the site tools refused it as
+"not Teashop", because a path names no host. It then guessed full
+addresses and lost the shop's port. Now `open` takes a path and resolves
+it against the connection's home, port included. Guides write paths, so
+the tools have to read them.
+
 ## What was deliberately not built
 
 * **No spend level.** A browser-road manifest offers *read* and *write*

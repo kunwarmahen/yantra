@@ -620,7 +620,8 @@ is asked about then, on the panel. The panel's **forget** (or `--forget-connecti
 takes it back. With a signed Setu catalog, each card also says who wrote
 the connector (by Setu, a reviewed partner, or sideloaded; a site you added
 by hand says *added on this computer*; **Another site?** at the foot signs
-in to any site by its address and Setu writes cautious rules for it,
+in to any site by its address and Setu writes cautious rules for it; a
+turn on such a site can leave a guide to it in the *to keep* tray,
 [notes/112](notes/112-a-site-with-no-api.md)) and how many
 installed it, and a withdrawn version isn't started. Each connector's card also lists the recipes on this
 computer that need it
@@ -2182,6 +2183,12 @@ src/yantra/
 │                   ([notes/110](notes/110-which-account-and-who-may-use-it.md)).
 │                   A browser-road connection (no `mcp`, a profile) gets
 │                   its own site tools instead of a server
+│                   ([notes/112](notes/112-a-site-with-no-api.md)).
+│                   SignIn also runs `setu connect --site` and answers
+│                   Setu's "did you sign in?" from the page
+├── site_guide.py   after a turn on a site added by its address: where
+│                   each call landed (address and title, never page text)
+│                   becomes a guide offer in the tray; kept, Setu saves it
 │                   ([notes/112](notes/112-a-site-with-no-api.md))
 ├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
 │                   over passes/attempts (it does not collapse at 3/3, where
