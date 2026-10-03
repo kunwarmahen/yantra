@@ -922,8 +922,10 @@ class WebSession:
                                 "message": f"connected, but the tools did not "
                                            f"update: {exc}"})
 
-    def start_signin(self, connector: str, account: str, level: str) -> None:
-        """Run ``setu connect --json`` and relay it to the page."""
+    def start_signin(self, connector: str, account: str, level: str,
+                     site: str | None = None) -> None:
+        """Run ``setu connect --json`` -- or ``--site`` for a site Setu has
+        no connector for -- and relay it to the page."""
         from yantra.setu_link import SignIn
 
         setu = self.agent.setu
@@ -935,7 +937,7 @@ class WebSession:
                 if not self.turn_active:
                     self._setu_settle()
 
-        self.signin = SignIn(setu.program, connector, account, level, relay)
+        self.signin = SignIn(setu.program, connector, account, level, relay, site=site)
 
     def _record(self, trajectory) -> None:
         """The recorder's sink: write the line, then tell the page its id.
@@ -1833,6 +1835,48 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         except SetuLinkError as exc:
             raise HTTPException(400, str(exc)) from None
         return {"ok": True, "ref": session.signin.ref}
+
+    @app.post("/api/connections/add-site")
+    async def connections_add_site(req: Request) -> dict[str, Any]:
+        """Sign in to a site Setu has no connector for; Setu writes its
+        rules once the person has signed in. Only from a page on this
+        computer -- the window opens here."""
+        setu = require_setu()
+        body = await req.json()
+        site = str(body.get("site", "")).strip()
+        account = str(body.get("account", "") or "personal").strip()
+        level = str(body.get("level", "") or "")
+        if level not in ("", "read", "write"):
+            raise HTTPException(400, f"a site's levels are read and write, not {level!r}")
+        command = f"setu connect --site {site} --as {account}"
+        if not is_local(req):
+            raise HTTPException(403, "signing in only works from a page on the computer "
+                                     f"running Yantra -- there, run: {command}")
+        if session.signin is not None and session.signin.running:
+            raise HTTPException(409, f"a sign-in to {session.signin.ref} is already "
+                                     "waiting -- finish or cancel it first")
+        setu_program(setu)
+        from yantra.setu_link import SetuLinkError
+        try:
+            session.start_signin("", account, level, site=site)
+        except SetuLinkError as exc:
+            raise HTTPException(400, str(exc)) from None
+        return {"ok": True, "ref": session.signin.ref}
+
+    @app.post("/api/connections/signin-answer")
+    async def connections_signin_answer(req: Request) -> dict[str, Any]:
+        """The person's answer when Setu could not tell from the page
+        whether they signed in."""
+        require_ready()
+        yes = bool((await req.json()).get("yes"))
+        if session.signin is None:
+            raise HTTPException(409, "no sign-in is waiting")
+        from yantra.setu_link import SetuLinkError
+        try:
+            session.signin.answer(yes)
+        except SetuLinkError as exc:
+            raise HTTPException(409, str(exc)) from None
+        return {"ok": True}
 
     @app.post("/api/connections/cancel")
     def connections_cancel() -> dict[str, Any]:

@@ -212,10 +212,63 @@ be enough to run one. If an installed connector has the same name, the
 installed one is used. A file Setu can't read is skipped and reported,
 and the rest still load.
 
-What a hand-written file still needs is the name of the cookie that
-means "signed in", and that takes the developer tools to find. Working
-that out for the person, by comparing the cookies before and after they
-sign in and then looking at the page, is the next step.
+A hand-written file needs the name of the cookie that means "signed
+in", and finding it takes a browser's developer tools. So Setu can also
+write the file itself:
+
+```
+setu connect --site news.ycombinator.com --as personal
+```
+
+or **Another site?** at the foot of the Connections page. Setu first
+visits the site twice with no one signed in, on a throwaway profile,
+and notes which cookies any visitor gets. Then the usual window opens.
+When the person closes it, Setu loads the site's front page once more,
+on the new profile, and reads it the way a person would. A sign-out
+link with no password box means signed in. A password box or a "Sign
+in" link means not, and nothing is saved: no file, no profile. A page
+that shows neither goes to the person, who has just closed the window:
+*did you sign in?* On the page that is a yes/no in the sign-in box.
+
+### Why the page, not the cookies
+
+Before building this, I tried both on real sites. The cookies that
+appear after a sign-in do include the real one: from X's sign-in,
+`auth_token` was one of two session-like names, and Amazon's `at-main`
+turned up too. But the real one never came alone. X's came with
+`__cuid`, and a second visit to eBay, still signed out, added nine more
+cookie names. Since a manifest's rule is "signed in if *any* of these
+is set", saving that list would let a window closed without signing in
+pass. So the cookie names are kept in the file as evidence, and the page
+decides.
+
+On twelve real sites visited signed out, the page check never once said
+"signed in". It gave the right answer on seven. The rest came back
+*unknown*: X shows a headless browser an empty page, Amazon, Instagram
+and eBay put up robot checks, and Reddit and YouTube draw their sign-in
+button where a page dump can't see it. *Unknown* is exactly when the
+person is asked. A test site that keeps its sign-in only in the
+browser's storage, with no cookie at all, was proved by its page
+alone. The page's own scripts have to be stripped first: on that site,
+the script contained both "Log in" and "Log out" as text.
+
+### The rules it writes
+
+Nobody has read this site's pages, so the rules are fixed and cautious,
+not guessed:
+
+- Read only to start, at two seconds a page and ten actions a session;
+- a real window on an unseen screen, the setting more sites accept;
+- no spending pages, since none are known;
+- a long list of button words that spend or can't be undone (buy, pay,
+  checkout, subscribe, delete, transfer, withdraw…).
+
+A site whose address or title reads like a bank or a payment service is
+connected Read only, whatever was asked: with no spending pages known,
+only words on buttons would stand guard. Editing the file is the
+deliberate way past that. Signing in again never rewrites the file, so
+a person's edits stay. An address Setu already has a connector for
+(`amazon.in`) is pointed at that connector instead.
 
 ## What was deliberately not built
 

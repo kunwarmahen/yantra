@@ -1015,6 +1015,9 @@ class Setu:
 
 #: An account name as a page may pass it: it becomes one argv word, so it
 #: may not look like an option; Setu has its own rules on top.
+#: An address for ``setu connect --site``: a host, maybe a scheme and a
+#: port. Setu checks it properly; this keeps flags and spaces out of argv.
+SITE_RE = re.compile(r"^(https?://)?[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z0-9.-]+(:\d+)?/?$")
 ACCOUNT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
 
 #: How long ``setu disconnect`` / ``setu config`` may take (a revoke is
@@ -1044,20 +1047,33 @@ class SignIn:
     or a Home Assistant's own login); its
     redirect comes back to a port Setu opened on THIS computer, which is
     why a page may start one only when it is open on this computer too.
+
+    With ``site``, it is ``setu connect --site``: a site Setu has no
+    connector for, whose rules Setu writes once the person has signed in.
+    Setu may then send ``ask`` -- its look at the page could not tell
+    whether the person signed in -- and waits for ``answer``. The ref is
+    the address until ``connected`` names the site's new id.
     """
 
     def __init__(self, program: str, connector: str, account: str, level: str,
-                 on_event: Any) -> None:
+                 on_event: Any, site: str | None = None) -> None:
         if not ACCOUNT_RE.match(account):
             raise SetuLinkError(f"account name {account!r}: letters, digits, '.', '_' "
                                 f"and '-', starting with a letter or digit")
-        self.ref = f"{connector}:{account}"
+        if site is not None and not SITE_RE.match(site):
+            raise SetuLinkError(f"{site!r} is not a site's address (try: example.com)")
+        self.ref = f"{site or connector}:{account}"
         self.on_event = on_event
         self.last: dict[str, Any] = {}
         self.cancelled = False
+        if site is not None:
+            argv = [program, "connect", "--site", site, "--as", account, "--json"]
+            argv += ["--level", level] if level else []
+        else:
+            argv = [program, "connect", connector, "--as", account, "--level", level, "--json"]
         self.process = subprocess.Popen(
-            [program, "connect", connector, "--as", account, "--level", level, "--json"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True)
         self.thread = threading.Thread(
             target=self._read, daemon=True, name="yantra-setu-signin")
         self.thread.start()
@@ -1070,11 +1086,13 @@ class SignIn:
             except json.JSONDecodeError:
                 continue            # not a line of the contract; never guessed at
             if isinstance(event, dict) and event.get("event"):
+                if event.get("event") == "connected" and event.get("ref"):
+                    self.ref = str(event["ref"])
                 self.last = event
                 self.on_event(event)
         self.process.wait()
         why = (self.process.stderr.read() if self.process.stderr else "").strip()
-        for pipe in (self.process.stdout, self.process.stderr):
+        for pipe in (self.process.stdin, self.process.stdout, self.process.stderr):
             if pipe is not None:
                 pipe.close()
         if self.cancelled:
@@ -1089,6 +1107,15 @@ class SignIn:
     @property
     def running(self) -> bool:
         return self.process.poll() is None
+
+    def answer(self, yes: bool) -> None:
+        """The person's answer to Setu's ``ask``: one line on its stdin."""
+        if self.last.get("event") != "ask" or not self.running:
+            raise SetuLinkError("Setu is not waiting for an answer")
+        assert self.process.stdin is not None
+        self.last = {**self.last, "event": "answered"}
+        self.process.stdin.write("yes\n" if yes else "no\n")
+        self.process.stdin.flush()
 
     def cancel(self) -> None:
         """Stop waiting for the person. Setu's port closes with it, and

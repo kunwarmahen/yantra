@@ -619,7 +619,9 @@ Connections panel. An account it needs that you connect while it runs
 is asked about then, on the panel. The panel's **forget** (or `--forget-connections`)
 takes it back. With a signed Setu catalog, each card also says who wrote
 the connector (by Setu, a reviewed partner, or sideloaded; a site you added
-by hand says *added on this computer*) and how many
+by hand says *added on this computer*; **Another site?** at the foot signs
+in to any site by its address and Setu writes cautious rules for it,
+[notes/112](notes/112-a-site-with-no-api.md)) and how many
 installed it, and a withdrawn version isn't started. Each connector's card also lists the recipes on this
 computer that need it
 ([notes/110](notes/110-which-account-and-who-may-use-it.md)).

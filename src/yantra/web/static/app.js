@@ -1640,6 +1640,9 @@ function onConnections(env) {
 }
 
 function onSignin(env) {
+  // a field Setu sends as null (a site's "started" has no ref yet) never
+  // overwrites what the box already knows
+  env = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== null));
   // "done" only closes the sign-in: the outcome before it (connected,
   // error, cancelled) is what the box keeps saying.
   conn.signin = env.event === "done"
@@ -1649,6 +1652,7 @@ function onSignin(env) {
   if (env.event === "connected") {
     conn.justConnected = env.ref.replace(":", "-");
     toast(`signed in: ${env.ref}${env.email ? ` as ${env.email}` : ""}`);
+    if (env.note) addBanner(env.note);
   }
   if (env.event === "error") addBanner(`sign-in failed: ${env.message}`, true);
   if (!$("#conn-backdrop").classList.contains("hidden")) renderConnections();
@@ -1695,6 +1699,7 @@ function renderConnections() {
     body.append(none);
   }
   for (const c of d.connectors) body.append(connectorCard(c, d));
+  body.append(addSiteBox(d));
 
   for (const problem of d.problems || []) {
     const p = document.createElement("div");
@@ -1779,9 +1784,21 @@ function signinBox() {
   if (s.running) {
     box.className = "conn-box";
     box.innerHTML = `<span>Waiting for you to sign in to <b>${esc(s.ref)}</b>.
-      ${s.event === "window"
+      ${s.event === "ask" ? esc(s.question || "")
+        : s.event === "answered" ? "Thanks — finishing…"
+        : s.event === "window"
         ? "A browser window opened on this computer: sign in there, then close the window."
-        : s.url ? "Open the sign-in, allow access, then come back here." : "Starting…"}</span>`;
+        : s.url ? "Open the sign-in, allow access, then come back here."
+        : s.site ? "Taking a quick look at the site signed out first…" : "Starting…"}</span>`;
+    if (s.event === "ask") {
+      for (const [label, yes] of [["yes, I signed in", true], ["no", false]]) {
+        const b = document.createElement("button");
+        b.className = "m-btn" + (yes ? " primary" : "");
+        b.textContent = label;
+        b.onclick = () => answerSignin(yes);
+        box.append(b);
+      }
+    }
     if (s.url) {
       const a = document.createElement("a");
       a.className = "m-btn primary";
@@ -1800,6 +1817,53 @@ function signinBox() {
       ? `Sign-in to ${esc(s.ref || "")} failed: ${esc(s.message || "")}`
       : `Sign-in to ${esc(s.ref || "")} cancelled — nothing was saved.`}</span>`;
   }
+  return box;
+}
+
+async function answerSignin(yes) {
+  const res = await fetch("/api/connections/signin-answer", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ yes }) });
+  if (!res.ok) addBanner(`not answered: ${(await res.json()).detail}`, true);
+}
+
+// A site Setu has no connector for: sign in, and Setu writes cautious
+// rules for it (Read only, slow, buying handed to you).
+function addSiteBox(d) {
+  const box = document.createElement("div");
+  box.className = "conn-box";
+  box.innerHTML = `<span><b>Another site?</b> Type its address. A window opens to
+    sign in; Setu then writes cautious rules for it: Read only, slow, and buying,
+    paying or deleting always handed to you.</span>`;
+  if (!d.local) {
+    const cmd = document.createElement("code");
+    cmd.textContent = "setu connect --site example.com --as personal";
+    box.append(cmd);
+    return box;
+  }
+  const row = document.createElement("div");
+  row.className = "conn-setup";
+  const site = document.createElement("input");
+  site.placeholder = "example.com"; site.spellcheck = false;
+  const account = document.createElement("input");
+  account.placeholder = "personal"; account.spellcheck = false; account.size = 10;
+  const go = document.createElement("button");
+  go.className = "m-btn primary"; go.textContent = "sign in";
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      const res = await fetch("/api/connections/add-site", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ site: site.value.trim(),
+                               account: account.value.trim() || "personal" }) });
+      const out = await res.json();
+      if (!res.ok) { addBanner(`not started: ${out.detail}`, true); return; }
+      conn.signin = { ref: out.ref, site: site.value.trim(), running: true, event: "started" };
+      renderConnections();
+    } finally { go.disabled = false; }
+  };
+  row.append(site, account, go);
+  box.append(row);
   return box;
 }
 

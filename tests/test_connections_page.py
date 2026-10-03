@@ -82,6 +82,21 @@ FAKE_SETU = """\
                             "ready": ready,
                             "not_ready": "" if ready else "needs a client file"}}],
             "setup": {{"google_client_file": s.get("client_file")}}}}))
+    elif args[0] == "connect" and "--site" in args:
+        site = args[args.index("--site") + 1]
+        ref = site.split(".")[0] + ":" + args[args.index("--as") + 1]
+        emit(event="started", ref=None, site=site, level="read", scopes=[])
+        emit(event="window", browser="chrome", url=None, login_url=None)
+        emit(event="ask", question="Setu could not tell. Did you sign in?")
+        if sys.stdin.readline().strip() != "yes":
+            emit(event="error", message="could not tell whether you signed in")
+            sys.exit(2)
+        s = load()
+        s["connections"][ref] = "read"
+        save(s)
+        emit(event="connected", ref=ref, email=site, level="read",
+             level_label="Read only", asked_level="read", note="",
+             manifest_path="/tmp/sites/x.toml")
     elif args[0] == "connect":
         ref = "gmail:" + args[args.index("--as") + 1]
         level = args[args.index("--level") + 1]
@@ -268,6 +283,78 @@ class TestSignIn:
         with pytest.raises(setu_link.SetuLinkError, match="account name"):
             setu_link.SignIn(str(setu.path), "gmail", "--client-file=/etc/x", "read",
                              lambda e: None)
+
+
+
+def wait_for(events, kind, timeout=10.0):
+    deadline = time.time() + timeout
+    while not any(e.get("event") == kind for e in events) and time.time() < deadline:
+        time.sleep(0.02)
+    assert any(e.get("event") == kind for e in events), events
+
+
+class TestAddingASite:
+    def test_setu_asks_and_the_answer_goes_back(self, setu):
+        events = []
+        signin = setu_link.SignIn(str(setu.path), "", "work", "", events.append,
+                                  site="example.com")
+        assert signin.ref == "example.com:work"
+        wait_for(events, "ask")
+        signin.answer(True)
+        signin.thread.join(10)
+        assert [e["event"] for e in events] == ["started", "window", "ask", "connected",
+                                                "done"]
+        assert signin.ref == "example:work" and events[-1]["ref"] == "example:work"
+        assert ["connect", "--site", "example.com", "--as", "work", "--json"] \
+            in setu.get()["calls"]
+
+    def test_no_saves_nothing(self, setu):
+        events = []
+        signin = setu_link.SignIn(str(setu.path), "", "work", "", events.append,
+                                  site="example.com")
+        wait_for(events, "ask")
+        signin.answer(False)
+        signin.thread.join(10)
+        assert events[-2]["event"] == "error" and "example:work" not in setu.get()["connections"]
+
+    def test_an_answer_nobody_asked_for_is_refused(self, setu):
+        signin = setu_link.SignIn(str(setu.path), "gmail", "work", "read", lambda e: None)
+        signin.thread.join(10)
+        with pytest.raises(setu_link.SetuLinkError, match="not waiting"):
+            signin.answer(True)
+
+    def test_an_address_cannot_be_an_option(self, setu):
+        for bad in ("--browser=/bin/sh", "example com", "localhost"):
+            with pytest.raises(setu_link.SetuLinkError, match="not a site"):
+                setu_link.SignIn(str(setu.path), "", "work", "", lambda e: None, site=bad)
+
+    def test_from_the_page_the_question_and_the_answer(self, setu, tmp_path):
+        session, agent, manager, client = served(tmp_path, setu.path)
+        try:
+            with client.websocket_connect("/ws") as ws:
+                ws.receive_json()
+                res = client.post("/api/connections/add-site", json={
+                    "site": "example.com", "account": "work"})
+                assert res.status_code == 200, res.text
+                seen = until(ws, "setu_signin", "ask")
+                assert seen[-1]["question"].endswith("Did you sign in?")
+                assert client.post("/api/connections/signin-answer",
+                                   json={"yes": True}).status_code == 200
+                seen = until(ws, "connections")
+            events = [e.get("event") for e in seen if e["type"] == "setu_signin"]
+            assert "connected" in events
+            assert "example:work" in setu.get()["connections"]
+        finally:
+            manager.shutdown()
+
+    def test_a_page_on_another_device_is_given_the_command(self, setu, tmp_path):
+        _, _, manager, client = served(tmp_path, setu.path, local=False)
+        try:
+            res = client.post("/api/connections/add-site", json={"site": "example.com"})
+            assert res.status_code == 403
+            assert "setu connect --site example.com --as personal" in res.json()["detail"]
+        finally:
+            manager.shutdown()
 
 
 # ---- the page -------------------------------------------------------------------------
