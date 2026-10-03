@@ -542,8 +542,8 @@ same with health dots and a paste-JSON box.
 ([notes/09](notes/09-mcp.md))
 
 **Your own accounts.** [Setu](https://github.com/kunwarmahen/setu) is a
-separate small program that keeps your sign-ins (Gmail and Home
-Assistant so far) so the
+separate small program that keeps your sign-ins (Gmail, Home
+Assistant, Amazon and X so far) so the
 agent can use them without ever seeing a password or key. With it
 installed, Yantra connects your accounts when it starts. In the browser
 UI, the **connections** chip opens a page of cards:
@@ -566,6 +566,28 @@ Home Assistant is, and the sign-in is its own login page. Start it at
 *See only*, and the agent can tell you which lights are on but can't
 switch any. ([notes/95](notes/95-the-accounts-you-connected.md),
 [notes/99](notes/99-the-connections-page.md))
+
+**Sites with no API.** Amazon won't show a shopper's own orders to any
+program, and X charges money to read through its API. For those, Setu
+uses your browser instead:
+
+```
+setu connect amazon --as personal
+setu connect x --as personal
+```
+
+Each opens a window of your own Chrome on that site's sign-in page. Sign
+in, then close the window. The sign-in is kept in a browser profile made
+just for that connection. Now ask *"where's my kettle order?"* or *"what
+are people saying in my mentions?"* and the agent reads the site the way
+you would. At *Read only* it can open pages, follow links, scroll and
+search, but it can't click a button or type anywhere except a search
+box. At the next level it can click and type (add to cart, post a
+reply), and it asks you each time. At no level will it buy, pay, cancel
+or return: on those pages it stops and hands the page to you. On X it
+also goes slowly on purpose, because X locks accounts that look
+automated, and that would be your account.
+([notes/112](notes/112-a-site-with-no-api.md))
 
 Connect two Gmail accounts, say `personal` and `work`, and the agent
 still has one set of mail tools, not two. It says which account each
@@ -2762,7 +2784,7 @@ Most carry a live receipt from a real run.
 | [07](notes/07-reliability-and-scale.md) | retry, parallel tools, persistence, compaction |
 | [08](notes/08-sub-agents.md) | sub-agents: agent-as-tool |
 | [09](notes/09-mcp.md) | MCP by hand, both transports, OAuth 2.1 |
-| [95](notes/95-the-accounts-you-connected.md) [99](notes/99-the-connections-page.md) [110](notes/110-which-account-and-who-may-use-it.md) | your own accounts, through Setu; a page to connect them; several accounts, and which agents may use them |
+| [95](notes/95-the-accounts-you-connected.md) [99](notes/99-the-connections-page.md) [110](notes/110-which-account-and-who-may-use-it.md) [112](notes/112-a-site-with-no-api.md) | your own accounts, through Setu; a page to connect them; several accounts, and which agents may use them; sites with no API, through your own signed-in browser |
 | [10](notes/10-evals.md) | evals: measuring right behaviour, not just working code |
 | [11](notes/11-async.md) | one event loop, many conversations |
 | [12](notes/12-builder.md) [18](notes/18-builder-mode.md) | an agent that builds a project, and verification that does not trust it |

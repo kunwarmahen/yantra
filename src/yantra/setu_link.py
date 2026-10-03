@@ -83,6 +83,15 @@ says the installed version of a connector was withdrawn, ``sync`` starts
 none of that connector's connections and says why. The connection
 itself stays in Setu, so an update brings it back.
 
+A SITE WITH NO API IS A PROFILE, NOT A SERVER. A connection on Setu's
+browser road (Amazon, X) has no ``mcp``: Setu reports the browser
+profile the person signed in to, and the manifest's rules for the site.
+``sync`` gives it a set of tools of its own -- ``amazon_open``,
+``amazon_follow``... -- on a browser session that keeps to those rules
+(tools/site.py). The level decides which: Read only gets the verbs that
+cannot press anything; the write level adds click and fill, asked about
+every time. Nothing on that road spends: those pages go to the person.
+
 LIVE, NOT ONLY AT STARTUP. ``Setu`` is the session's handle on all of
 this (``agent.setu``). ``sync`` makes the MCP servers match what Setu
 reports -- a new connection gets its server and tools, a gone one loses
@@ -285,10 +294,13 @@ def account_of(row: dict[str, Any]) -> str:
 
 
 def prompt_text(link: Link, allow: dict[str, str] | None = None,
-                merged: frozenset[str] = frozenset()) -> str | None:
+                merged: frozenset[str] = frozenset(),
+                sites: dict[str, str] | None = None) -> str | None:
     """The ``connections`` layer: what is connected, and what could be.
     ``allow`` narrows it to what a package may use; ``merged`` names the
-    connectors whose accounts share one set of tools."""
+    connectors whose accounts share one set of tools; ``sites`` maps a
+    browser-road connection to its tools' prefix."""
+    sites = sites or {}
     connectors = link.connectors
     rows = [r for r in link.connections if allow is None or r.get("connector") in allow]
     idle = [c for c in connectors.values() if not c.get("connected")
@@ -314,8 +326,21 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
                          f"`mcp__{cid}__*` and take `account`: name it for anything that "
                          f"sends or changes; a read may leave it out to use every account.")
             continue
-        who = f" as {row['email']}" if row.get("email") else ""
         level = row.get("level_label") or row.get("level")
+        if row.get("browser"):
+            prefix = sites.get(row.get("ref", ""))
+            if prefix is None:
+                continue                   # not started (withdrawn, refused)
+            lines.append(f"- {name} through the person's own signed-in browser: tools "
+                         f"`{prefix}_*` (not `mcp__`): {level}. Buying, paying and what "
+                         f"cannot be undone are never yours: hand that page over with "
+                         f"`{prefix}_handoff`.")
+            guide = ((connectors.get(cid) or {}).get("browser") or {}).get("guide") or ""
+            home = ((row.get("browser") or {}).get("home") or "").rstrip("/")
+            lines += [f"  {line.strip().replace('{home}', home)}"
+                      for line in guide.splitlines() if line.strip()]
+            continue
+        who = f" as {row['email']}" if row.get("email") else ""
         lines.append(f"- {name} `{row['mcp']['name']}`{who}: {level}")
     if allow is not None:
         lines.append("This agent may use only these, at the level the person allowed.")
@@ -613,6 +638,17 @@ class Synced:
 
 
 @dataclass(slots=True)
+class SiteLink:
+    """One browser-road connection in this session: its tools' prefix, the
+    tools registered, its browser session, and what it was started for."""
+
+    prefix: str
+    names: list[str]
+    session: Any
+    stamp: tuple[str, ...]
+
+
+@dataclass(slots=True)
 class Setu:
     """One session's link to Setu: how it was found, what it said last,
     and which MCP servers it started (the only ones ``sync`` may stop)."""
@@ -643,6 +679,8 @@ class Setu:
     #: session -- a no is not asked twice in one sitting, nor kept.
     needs: list[str] = field(default_factory=list)
     declined: set[str] = field(default_factory=set)
+    #: Browser-road connections' tool sets, by ref (tools/site.py).
+    sites: dict[str, SiteLink] = field(default_factory=dict)
 
     @property
     def program(self) -> str | None:
@@ -732,6 +770,7 @@ class Setu:
                 done.notes.append(f"{cfg.name} offered tool(s) its manifest does not list, "
                                   f"not registered: {', '.join(removed)}")
             done.connected[cfg.name] = len(kept)
+        self._sync_sites(agent.registry, link, done)
         if link is not None:
             done.notes += [p for p in link.problems]
             self._merge(agent.registry, manager,
@@ -742,10 +781,74 @@ class Setu:
             refresh()
         prompt = attach_prompt(agent)
         merged = frozenset(t.connector for t in self.merged.values())
-        prompt.set("connections", prompt_text(link, self.allow, merged)
+        prompt.set("connections", prompt_text(
+            link, self.allow, merged, {ref: site.prefix for ref, site in self.sites.items()})
                    if link is not None else None)
         prompt.apply()
         return done
+
+    def _sync_sites(self, registry: Any, link: Link | None, done: Synced) -> None:
+        """Make the browser-road tool sets match the report: one per
+        connection, at its level, under a package's ceiling. A level or
+        profile changed in Setu rebuilds that set; a gone one closes."""
+        from yantra.tools.site import SiteSession, prefix_for, rules_from, site_tools
+
+        rows = [r for r in (link.connections if link is not None else [])
+                if r.get("browser") and (self.allow is None or r.get("connector") in self.allow)
+                and not (link.connectors.get(r.get("connector")) or {}).get("yanked")]
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[row.get("connector", "")] = counts.get(row.get("connector", ""), 0) + 1
+        wanted: dict[str, tuple[dict[str, Any], tuple[str, ...]]] = {}
+        for row in rows:
+            where = row.get("browser") or {}
+            wanted[row["ref"]] = (row, (
+                str(row.get("level") or ""), str(where.get("profile") or ""),
+                str(where.get("executable") or ""),
+                str(None if self.allow is None else self.allow.get(row.get("connector"))),
+                str(counts[row.get("connector", "")] > 1)))
+        for ref in list(self.sites):
+            if ref not in wanted or wanted[ref][1] != self.sites[ref].stamp:
+                site = self.sites.pop(ref)
+                for name in site.names:
+                    registry.unregister(name)
+                try:
+                    site.session.close()
+                except Exception:
+                    pass                    # a session that never launched
+                if ref not in wanted:
+                    done.dropped.append(site.prefix)
+                else:
+                    done.notes.append(f"{ref} restarted at "
+                                      f"{wanted[ref][0].get('level_label') or 'a new level'}")
+        for ref, (row, stamp) in wanted.items():
+            if ref in self.sites:
+                done.connected[self.sites[ref].prefix] = len(self.sites[ref].names)
+                continue
+            card = link.connectors.get(row.get("connector")) or {}
+            where = row.get("browser") or {}
+            if not where.get("profile"):
+                done.notes.append(f"{ref} has no browser profile; sign in again")
+                continue
+            prefix = prefix_for(row.get("connector", ""), account_of(row),
+                                counts[row.get("connector", "")] > 1)
+            session = SiteSession(rules_from(card, row), Path(where["profile"]),
+                                  where.get("executable") or None)
+            ceiling = None if self.allow is None else self.allow.get(row.get("connector"))
+            tools = site_tools(prefix, session, dict(card.get("verbs") or {}),
+                               str(row.get("level") or "read"), ceiling)
+            taken = [t.name for t in tools if t.name in registry]
+            if taken:
+                done.notes.append(f"{ref}: {', '.join(taken)} already a tool; not connected")
+                continue
+            names = []
+            for tool in tools:
+                registry.register(tool)
+                if tool.name in registry:     # a package's allow list may refuse it
+                    names.append(tool.name)
+            self.sites[ref] = SiteLink(prefix=prefix, names=names, session=session,
+                                       stamp=stamp)
+            done.connected[prefix] = len(names)
 
     def question(self, need: str) -> dict[str, str] | None:
         """The question a need puts, naming the accounts it would reach;
@@ -870,6 +973,15 @@ class Setu:
         merged = {t.connector for t in self.merged.values()}
         rows = []
         for row in (link.connections if link is not None else []):
+            site = self.sites.get(row.get("ref", ""))
+            if row.get("browser"):
+                rows.append({**{k: row.get(k) for k in (
+                    "ref", "connector", "account", "email", "level", "level_label",
+                    "last_used")}, "server": "", "road": "browser",
+                    "tools_as": f"{site.prefix}_" if site else "",
+                    "tools": len(site.names) if site else 0,
+                    "running": site is not None})
+                continue
             name = (row.get("mcp") or {}).get("name", "")
             server = live.get(name)
             rows.append({**{k: row.get(k) for k in (

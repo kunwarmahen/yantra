@@ -126,6 +126,10 @@ profile, browser-use's storage-state/user_data_dir pair, Browserbase
 "Contexts", Steel "Profiles") minus the parts that only make sense
 for cloud fleets: no cookie JSON files to leak, nothing to load back.
 
+A site with no API for a person (Amazon, X) gets a profile of its own
+per Setu connection, and tools that keep to that site, rather than this
+one shared profile ([note 112](112-a-site-with-no-api.md)).
+
 ## One thread for one browser
 
 Playwright's sync API binds its objects to the thread that started

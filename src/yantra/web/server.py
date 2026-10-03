@@ -1672,13 +1672,15 @@ def make_app(session: WebSession, static_dir: Path | None = None,
 
     #: What the page may tell Setu to remember: the setup key a connector's
     #: ``needs_setup`` names -> the ``setu config`` setting that holds it.
-    setup_keys = {"google_client_file": "client-file", "homeassistant_url": "homeassistant-url"}
+    setup_keys = {"google_client_file": "client-file", "homeassistant_url": "homeassistant-url",
+                  "browser": "browser"}
 
     @app.post("/api/connections/setup")
     async def connections_setup(req: Request) -> dict[str, Any]:
         """Tell Setu one thing a sign-in needs first -- the Google client
-        file's path, or where the person's Home Assistant is. Setu checks
-        it and remembers it; neither is a key."""
+        file's path, where the person's Home Assistant is, or which browser
+        signs in to a site with no API. Setu checks it and remembers it;
+        none is a key."""
         require_idle()
         setu = require_setu()
         body = await req.json()

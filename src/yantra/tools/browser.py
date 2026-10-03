@@ -169,7 +169,8 @@ _BROWSER_EXTRA_HINT = (
 #: <li role="option">, and a snapshot without them left a model typing
 #: "Detroit" into an airport box with nothing to pick (notes/94).
 _SNAPSHOT_JS = """
-() => {
+(opts) => {
+  opts = opts || {};
   const sel = [
     'a[href]', 'button', 'input', 'textarea', 'select', 'summary',
     '[role="button"]', '[role="link"]', '[role="textbox"]',
@@ -224,7 +225,18 @@ _SNAPSHOT_JS = """
   const dialogs = [...document.querySelectorAll(
     'dialog[open], [role="dialog"], [aria-modal="true"]')].filter(shown);
   const dialog = dialogs.length ? dialogs[dialogs.length - 1] : null;
-  const found = [...document.querySelectorAll(sel)].filter(shown);
+  let found = [...document.querySelectorAll(sel)].filter(shown);
+  if (opts.from_view) {
+    // after a scroll: what is above the screen was listed last time
+    found = found.filter((el) => el.getBoundingClientRect().bottom > 0);
+  }
+  if (opts.chrome_last) {
+    // a site's own header, menus and footer go after its content, so
+    // the cap is spent on the orders and posts, not on the menu bar
+    const chrome = (el) => el.closest('header, nav, footer, [role="banner"], '
+      + '[role="navigation"], [role="contentinfo"]') !== null;
+    found = [...found.filter((el) => !chrome(el)), ...found.filter(chrome)];
+  }
   const ordered = dialog
     ? [...found.filter((el) => dialog.contains(el)),
        ...found.filter((el) => !dialog.contains(el))]
@@ -237,10 +249,24 @@ _SNAPSHOT_JS = """
     elements.push({ref, kind: kindOf(el), label: labelOf(el),
                    in_dialog: dialog !== null && dialog.contains(el)});
   }
+  let text = document.body ? document.body.innerText : '';
+  let skipped = 0;
+  if (opts.from_view && text) {
+    // start the text where the screen starts: the nearest block at the
+    // top of the view with enough words to find again in the page text
+    let node = document.elementFromPoint(innerWidth / 2, 60);
+    while (node && node !== document.body
+           && clean(node.innerText).length < 60) node = node.parentElement;
+    if (node && node !== document.body) {
+      const at = text.indexOf((node.innerText || '').trim().slice(0, 80));
+      if (at > 0) { skipped = at; text = text.slice(at); }
+    }
+  }
   return {
-    text: document.body ? document.body.innerText : '',
+    text,
     elements,
     dialog: dialog !== null,
+    skipped,
   };
 }
 """
@@ -651,12 +677,16 @@ class BrowserSession:
 
     # -- bodies (all on the worker thread) ---------------------------------
 
-    def _snapshot(self) -> str:
+    def _snapshot(self, **opts: bool) -> str:
         self._url = self._page.url
-        data = self._page.evaluate(_SNAPSHOT_JS)
+        data = (self._page.evaluate(_SNAPSHOT_JS, opts) if opts
+                else self._page.evaluate(_SNAPSHOT_JS))
         title = (self._page.title() or "").strip()
         header = (f"title: {title}\nsource: {self._page.url}\n\n" if title
                   else f"source: {self._page.url}\n\n")
+        if data.get("skipped"):
+            header += (f"(scrolled: the {data['skipped']} characters above the "
+                       "screen are not repeated)\n\n")
         text = (data.get("text") or "").strip() or "[no text content]"
 
         elements = data.get("elements") or []

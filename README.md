@@ -619,6 +619,18 @@ installed it, and a withdrawn version isn't started. Each connector's card also 
 computer that need it
 ([notes/110](notes/110-which-account-and-who-may-use-it.md)).
 
+A site with no API for a person (Amazon's orders, X's timeline) is Setu's
+browser road: `setu connect amazon` opens a window of your own Chrome on a
+profile kept for that connection, you sign in and close it, and the agent
+gets `amazon_open`, `amazon_follow`, `amazon_scroll` and `amazon_search`.
+None of them press anything, so they run unasked; the write level adds
+`click` and `fill`, asked every time. The tools keep to the site's own
+hosts, refuse anything that buys, pays or can't be undone (that page is
+handed to you), never type a password or card number, and keep the
+manifest's pace (X: 3 seconds a page, 10 actions a session, a real window
+on an invisible screen)
+([notes/112](notes/112-a-site-with-no-api.md)).
+
 In the browser UI, the **connections** chip opens a panel of cards: the
 accounts you connected (address, level, tool count, *change access*,
 *disconnect*) and the connectors installed but not connected (name the
@@ -2155,7 +2167,10 @@ src/yantra/
 │                   [connections] needs, allowed once (terminal or page,
 │                   or the panel when the account arrives mid-session),
 │                   as a level ceiling, forgotten with one click
-│                   ([notes/110](notes/110-which-account-and-who-may-use-it.md))
+│                   ([notes/110](notes/110-which-account-and-who-may-use-it.md)).
+│                   A browser-road connection (no `mcp`, a profile) gets
+│                   its own site tools instead of a server
+│                   ([notes/112](notes/112-a-site-with-no-api.md))
 ├── confidence.py   what a pass COUNT is evidence of: the Wilson interval
 │                   over passes/attempts (it does not collapse at 3/3, where
 │                   the textbook one claims certainty from three coin
@@ -2416,6 +2431,12 @@ src/yantra/
 │   │               child's aria-label; a click on a covered element falls
 │   │               back to el.click() and says so
 │   │               ([notes/94](notes/94-a-form-the-way-a-person-fills-it.md))
+│   ├── site.py     a Setu browser-road connection as tools: <site>_open/
+│   │               follow/scroll/search (press nothing, run unasked) and,
+│   │               at the write level, click/fill (asked) on that
+│   │               connection's own profile -- kept to the site's hosts,
+│   │               spending pages and buttons refused, no password typed,
+│   │               the manifest's pace and action limit ([notes/112](notes/112-a-site-with-no-api.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,

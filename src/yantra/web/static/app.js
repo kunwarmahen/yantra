@@ -1810,8 +1810,9 @@ function signinBox() {
   if (s.running) {
     box.className = "conn-box";
     box.innerHTML = `<span>Waiting for you to sign in to <b>${esc(s.ref)}</b>.
-      ${s.url ? "Open the sign-in, allow access, then come back here."
-              : "Starting…"}</span>`;
+      ${s.event === "window"
+        ? "A browser window opened on this computer: sign in there, then close the window."
+        : s.url ? "Open the sign-in, allow access, then come back here." : "Starting…"}</span>`;
     if (s.url) {
       const a = document.createElement("a");
       a.className = "m-btn primary";
@@ -1847,6 +1848,11 @@ const SETUP = {
       address; you sign in on its own login page next.`,
     placeholder: "http://homeassistant.local:8123", button: "use this address",
     done: "Setu will sign in to that Home Assistant" },
+  browser: {
+    text: (names) => `${names}: these sites are signed in to in a window of your own browser.
+      No Chrome, Chromium, Brave or Edge was found — where is yours?`,
+    placeholder: "/usr/bin/google-chrome", button: "use this browser",
+    done: "Setu will sign in with that browser" },
 };
 
 function setupBoxes(d) {
@@ -1903,7 +1909,9 @@ function connectedCard(row, c) {
   card.className = "conn-card";
   const dot = document.createElement("span");
   dot.className = "dot" + (row.running ? "" : " dead");
-  dot.title = row.running ? "its server is running this session" : "its server is not running";
+  dot.title = row.road === "browser"
+    ? (row.running ? "its tools use this account's own browser profile" : "not started")
+    : row.running ? "its server is running this session" : "its server is not running";
   const main = document.createElement("div");
   main.innerHTML = `<div class="conn-title">${esc(c?.name || row.connector)}
       <span class="t-badge">${esc(row.account)}</span></div>
@@ -1974,7 +1982,10 @@ function connectorCard(c, d) {
   dot.className = "dot dead";
   const main = document.createElement("div");
   main.innerHTML = `<div class="conn-title">${esc(c.name)}
-      ${c.connected ? '<span class="t-badge">connected</span>' : ""} ${labelBadge(c)}</div>
+      ${c.connected ? '<span class="t-badge">connected</span>' : ""} ${labelBadge(c)}
+      ${c.road === "browser" ? '<span class="t-badge" title="no API for this: the agent '
+        + 'uses the site in a browser you signed in to, and hands buying to you">via browser</span>'
+        : ""}</div>
     <div class="conn-sub">${esc(c.summary || "")}</div>`
     + (c.yanked ? `<div class="conn-sub conn-warn">withdrawn by Setu: ${esc(c.yanked)}
         — its accounts stay connected, but it is not started until you update it</div>` : "")
