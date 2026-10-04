@@ -965,12 +965,28 @@ class WebSession:
         signin = self.signin
         from yantra.setu_link import recipes_by_connector
         base["recipes"] = recipes_by_connector(getattr(self.agent, "skills", None))
+        base["scripts"] = self.scripts_contained()
         return {**base, "local": local,
                 "signin": ({"ref": signin.ref, "running": signin.running,
                             **{k: v for k, v in signin.last.items()
                                if k in ("event", "url", "message", "email",
                                         "level_label")}}
                            if signin is not None else None)}
+
+    def scripts_contained(self) -> dict[str, Any]:
+        """Where a recipe's scripts run in THIS session: confined only when
+        bash runs in bubblewrap with the network off. Said as it is."""
+        from yantra.sandbox import BwrapSandbox
+        registry = getattr(self.agent, "registry", None)
+        bash = registry.get("bash") if registry is not None and "bash" in registry else None
+        box = getattr(bash, "sandbox", None)
+        confined = isinstance(box, BwrapSandbox) and not box.allow_network
+        return {"contained": confined,
+                "line": ("scripts run here in bubblewrap: no network, the host read-only"
+                         if confined else
+                         "scripts run here UNCONFINED (network and files reachable); start "
+                         "Yantra with its bubblewrap sandbox to contain them"),
+                "sandbox": str(box.describe) if box is not None else "no bash tool"}
 
     def setu_sync(self) -> dict[str, Any]:
         """Ask Setu again and make the tools match. Called when no turn is

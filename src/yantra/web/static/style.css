@@ -2120,3 +2120,4 @@ pre.output { color: var(--ink); }
 .conn-card.catalog-card { grid-template-columns: minmax(0, 1fr) auto; }
 .dialog-body { overflow-wrap: anywhere; }
 .conn-cert { color: var(--ok, #2f7d4f); }
+.conn-contained { color: var(--ink-3); font-size: 12px; }

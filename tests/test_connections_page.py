@@ -465,6 +465,8 @@ class TestInstallingFromTheCatalog:
             assert set(body["files"]) == {"SKILL.md", "scripts/fan.py"}
             assert body["digest"].startswith("sha256:")
             assert body["certified"] == "certified by 1 you trust (Acme Labs)"
+            scripts = client.get("/api/connections").json()["scripts"]
+            assert scripts["contained"] is False and "UNCONFINED" in scripts["line"]
             assert not (tmp_path / "home" / ".yantra").exists()       # shown, not installed
             done = client.post("/api/catalog/recipe/install", json={"key": body["key"]})
             assert done.status_code == 200, done.text
@@ -775,3 +777,18 @@ def test_forget_connections_from_the_terminal(tmp_path, monkeypatch, capsys):
     assert main(["--agent", str(pkg), "--forget-connections"]) == 0
     assert "forgot gmail:read for helper" in capsys.readouterr().out
     assert setu_link.load_approved(key) == set()
+
+
+def test_scripts_are_said_confined_only_when_they_are(tmp_path):
+    pytest.importorskip("fastapi")
+    from yantra.sandbox import BwrapSandbox
+    from yantra.tools import default_registry
+    from yantra.web.server import WebSession
+
+    for box, confined in ((BwrapSandbox(), True), (BwrapSandbox(allow_network=True), False)):
+        agent = Agent(ScriptedProvider([]), model="m", tools=default_registry(sandbox=box))
+        session = WebSession()
+        session.attach(agent, None)
+        said = session.scripts_contained()
+        assert said["contained"] is confined
+        assert ("no network" in said["line"]) is confined

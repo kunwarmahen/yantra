@@ -2030,6 +2030,11 @@ function labelBadge(c) {
     + (c.installs != null ? ` <span class="conn-count">${esc(String(c.installs))} installs</span>` : "");
 }
 
+// What it can reach if something was missed, as it is (Setu's contained).
+function containedLine(text) {
+  return text ? `<div class="conn-sub conn-contained">${esc(text)}</div>` : "";
+}
+
 // Whether the author signed what they submitted, and since which version
 // with the same key (Setu's catalog author_line).
 function authorLine(text) {
@@ -2073,8 +2078,8 @@ async function installCatalogRecipe(name) {
     title: `install ${out.name}?`,
     body: `${out.certified ? out.certified + ". " : "No independent certification yet. "}`
       + `${out.description}${out.needs ? " — needs " + out.needs : ""}. Checked by Setu `
-      + "against the signed catalog. Its script runs in your sessions, in the sandbox, "
-      + `when a task calls for it. ${out.digest}`,
+      + `against the signed catalog. Its ${(conn.data.scripts || {}).line || "scripts run "
+        + "when a task calls for it"}. ${out.digest}`,
     files: out.files, confirm: "install" });
   if (!ok) return;
   const done = await fetch("/api/catalog/recipe/install", {
@@ -2095,7 +2100,8 @@ function catalogConnectorCard(c, d) {
   main.innerHTML = `<div class="conn-title">${esc(c.name || c.id)} ${labelBadge(c)}</div>
     <div class="conn-sub">${esc(c.summary || "")}${c.version ? " · " + esc(c.version) : ""}</div>`
     + authorLine(c.author_signed)
-    + (certifiedLine(c.certified) || '<div class="conn-sub">no independent certification yet</div>');
+    + (certifiedLine(c.certified) || '<div class="conn-sub">no independent certification yet</div>')
+    + containedLine(c.contained);
   const actions = document.createElement("div");
   actions.className = "conn-actions";
   if (d.local) {
@@ -2137,7 +2143,7 @@ function connectorCard(c, d) {
     <div class="conn-sub">${esc(c.summary || "")}</div>`
     + (c.yanked ? `<div class="conn-sub conn-warn">withdrawn by Setu: ${esc(c.yanked)}
         — its accounts stay connected, but it is not started until you update it</div>` : "")
-    + authorLine(c.author_signed) + certifiedLine(c.certified)
+    + authorLine(c.author_signed) + certifiedLine(c.certified) + containedLine(c.contained)
     + recipeLine((d.recipes || {})[c.id]) + catalogRecipeLine(c, d);
   card.append(dot, main, document.createElement("div"));
 
