@@ -296,9 +296,13 @@ A recipe can be handed to someone else. `yantra --skill-share home-fan`
 of yours: a token, an email address, your home folder or login, a value
 you told memory (*fan.office_ceiling_2*). Any finding stops it and names
 the line. A clean one is written to `./recipes/home-fan/`, without your
-counters, with a hash. `yantra --skill-install PATH` prints every file
-of a recipe someone shared, asks, and installs it with fresh counters,
-marked `[shared]` ([notes/111](notes/111-a-recipe-for-somebody-else.md)).
+counters, with a hash; add `--submit` to offer it to the Setu catalog
+for review. `yantra --skill-install PATH` prints every file of a recipe
+someone shared, asks, and installs it with fresh counters, marked
+`[shared]`. `--skill-install catalog:NAME` takes one the catalog lists,
+checked by hash, and the Connections page has an **install** button
+for listed recipes and connectors
+([notes/111](notes/111-a-recipe-for-somebody-else.md)).
 
 ### It remembers you across conversations
 

@@ -185,6 +185,14 @@ called sideloaded just because nothing has been published yet. A site you
 added by hand in Setu's `sites/` folder says **added on this computer**,
 catalog or not ([notes/112](112-a-site-with-no-api.md)).
 
+Connectors the catalog lists but this computer doesn't have appear
+under **in the catalog**, each with an **install** button. Setu
+downloads the connector and checks it against the signed hash before
+installing, and the card can then be connected. A listed recipe gets
+its own small **install** next to its name, which shows every file
+before asking. Both work only from a page on this computer; elsewhere,
+the card gives the command to run.
+
 A version the catalog **withdrew** isn't started. Its card says why in
 amber, the start says so too, and the connection stays in Setu so an
 update brings it back:

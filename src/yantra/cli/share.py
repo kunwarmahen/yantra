@@ -62,6 +62,62 @@ def share_skill(name: str, skills: Any, agent: Any, console: Console, cwd: Path,
     return 0
 
 
+def setu_program(link: Any) -> str | None:
+    import shutil
+
+    reported = (link.data.get("command") if link is not None else None) or None
+    return reported or shutil.which("setu")
+
+
+def catalog_address(link: Any) -> str:
+    """The catalog server Setu keeps its index from, or ''."""
+    source = str(((link.data.get("catalog") or {}) if link is not None else {})
+                 .get("source") or "")
+    return source if source.startswith(("https://", "http://")) else ""
+
+
+def fetch_from_catalog(name: str, link: Any, console: Console, into: Path) -> Path | None:
+    """``catalog:NAME``: Setu fetches the recipe, checks it against the
+    signed catalog, and writes it to ``into`` -- then it installs like
+    any shared recipe: every file shown, asked."""
+    from yantra.setu_link import run_setu
+
+    program = setu_program(link)
+    if program is None:
+        console.print("[red]setu was not found: a catalog recipe comes through Setu[/red]")
+        return None
+    ok, said = run_setu(program, "catalog", "recipe", name, "--into", str(into),
+                        timeout=120)
+    if not ok:
+        console.print(f"[red]{escape(said or 'setu could not fetch it')}[/red]")
+        return None
+    console.print(f"[dim]{escape(said)}[/dim]")
+    return into / name
+
+
+def submit_to_catalog(folder: Path, link: Any, console: Console, author: str) -> int:
+    """``--skill-share NAME --submit``: the checked recipe goes to the
+    catalog's review queue. Only when asked: sharing writes a folder."""
+    from yantra.setu_link import run_setu
+
+    address = catalog_address(link)
+    program = setu_program(link)
+    if not address or program is None:
+        console.print("[yellow]not submitted: Setu keeps no catalog from a server "
+                      "(setu catalog use https://...); the folder above is yours to "
+                      "hand on[/yellow]")
+        return 1
+    if not author:
+        console.print("[yellow]not submitted: say who you are with --author NAME (it "
+                      "is how the listing will name you)[/yellow]")
+        return 1
+    ok, said = run_setu(program, "catalog", "submit", str(folder), "--to", address,
+                        "--author", author, timeout=60)
+    style = "green" if ok else "red"
+    console.print(f"[{style}]{escape(said)}[/{style}]")
+    return 0 if ok else 1
+
+
 def install_recipe(source: Path, console: Console,
                    ask: Callable[[str], bool] | None) -> int:
     """Show every file of a shared recipe, ask, and install it."""

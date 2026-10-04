@@ -17,8 +17,8 @@ ONLY WHAT THE TURN SHOWED. The model sees each call and where it landed
 -- the address and the page's title from the snapshot's header -- not
 the pages' text: a guide says where things are, and a page's words are
 the site's, not advice to follow. Addresses, because the refs a call
-names (``e4``) mean nothing on the next visit. A turn of fewer than two calls on the site taught nothing
-worth a model call.
+names (``e4``) mean nothing on the next visit. A turn of fewer than two
+calls on the site taught nothing worth a model call.
 
 THE WHOLE GUIDE, NOT A LINE. The old guide goes in and the new one
 comes out, so a place found again is not written twice, and a place
@@ -59,9 +59,9 @@ using {name} -- where things are (paths or address patterns, like
 "Your orders: /account/orders" or "Search: /search?q=WORDS") and what
 worked to get something done. Write addresses, not refs: e1, e4 and
 the like are numbers for one page's links and change every time. Keep
-what the old guide said unless this turn showed it wrong. Only what these calls showed: no guesses, nothing
-about the person, nothing from the pages' own text. At most {lines}
-lines.
+what the old guide said unless this turn showed it wrong. Only what
+these calls showed: no guesses, nothing about the person, nothing from
+the pages' own text. At most {lines} lines.
 
 If this turn added nothing to the guide, reply with exactly: NOTHING"""
 

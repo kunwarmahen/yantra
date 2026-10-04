@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import fnmatch
+import subprocess
 import sys
 import time
 from dataclasses import replace
@@ -256,7 +257,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skill-install", metavar="PATH", dest="skill_install",
                         default=None,
                         help="show a shared recipe's every file, ask, and install it "
-                             "into your learned skills. No model needed")
+                             "into your learned skills; catalog:NAME takes one the "
+                             "Setu catalog lists, checked by hash. No model needed")
+    parser.add_argument("--submit", action="store_true", dest="skill_submit",
+                        help="with --skill-share: also send the checked recipe to the "
+                             "Setu catalog's review queue (never without this)")
+    parser.add_argument("--author", dest="skill_author", default=None,
+                        help="with --skill-share --submit: your name, as a listing "
+                             "would show it (default: git's user.name)")
     parser.add_argument("--forget-connections", action="store_true",
                         dest="forget_connections",
                         help="with --agent DIR: take back every Setu account you "
@@ -2088,18 +2096,42 @@ def _forget_connections(args, console: Console) -> int:
     return 0
 
 
+def _git_user() -> str:
+    try:
+        done = subprocess.run(["git", "config", "user.name"], capture_output=True,
+                              text=True, timeout=5)
+        return done.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
 def _skill_share_mode(args, console: Console) -> int:
     """--skill-share NAME / --skill-install PATH (cli/share.py)."""
     from yantra.cli.share import install_recipe, person_context, share_skill
     from yantra.skills.loader import discover
 
+    ask = _ask_yes if sys.stdin.isatty() else None
     if args.skill_install is not None:
-        return install_recipe(Path(args.skill_install), console,
-                              _ask_yes if sys.stdin.isatty() else None)
+        if args.skill_install.startswith("catalog:"):
+            import tempfile
+
+            from yantra.cli.share import fetch_from_catalog
+            _, link, _ = person_context(args, console)
+            with tempfile.TemporaryDirectory() as tmp:
+                source = fetch_from_catalog(args.skill_install.split(":", 1)[1], link,
+                                            console, Path(tmp))
+                return 1 if source is None else install_recipe(source, console, ask)
+        return install_recipe(Path(args.skill_install), console, ask)
     cwd = Path(args.cwd).resolve() if args.cwd else Path.cwd()
     memories, link, redact = person_context(args, console)
-    return share_skill(args.skill_share, discover(cwd), None, console, cwd,
+    done = share_skill(args.skill_share, discover(cwd), None, console, cwd,
                        memories=memories, link=link, redact=redact)
+    if done != 0 or not args.skill_submit:
+        return done
+    from yantra.cli.share import submit_to_catalog
+    from yantra.skills.share import RECIPES_DIR
+    return submit_to_catalog(cwd / RECIPES_DIR / args.skill_share, link, console,
+                             args.skill_author or _git_user())
 
 
 def _mcp_login(name: str, args, console: Console) -> int:
@@ -2179,6 +2211,9 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --image needs a prompt to attach to (--prompt or a "
               "positional PROMPT); interactive image input is not "
               "supported yet", file=sys.stderr)
+        return 2
+    if (args.skill_submit or args.skill_author) and args.skill_share is None:
+        print("error: --submit and --author go with --skill-share NAME", file=sys.stderr)
         return 2
     for flag, value in (("--skill-share", args.skill_share),
                         ("--skill-install", args.skill_install)):

@@ -82,7 +82,7 @@ FAKE_SETU = """\
                             "ready": ready,
                             "not_ready": "" if ready else "needs a client file"}}],
             "setup": {{"google_client_file": s.get("client_file")}},
-            "watch": [STATE, None]}}))
+            "watch": [STATE, None], "catalog": s.get("catalog")}}))
     elif args[0] == "connect" and "--site" in args:
         site = args[args.index("--site") + 1]
         ref = site.split(".")[0] + ":" + args[args.index("--as") + 1]
@@ -113,6 +113,20 @@ FAKE_SETU = """\
         save(s)
         emit(event="connected", ref=ref, email=ref.split(":")[1] + "@example.com",
              level=level, level_label=level.title(), asked_level=level)
+    elif args[0] == "install":
+        print("installed " + args[1] + " 1.0.0, its wheel checked against the signed catalog")
+    elif args[:2] == ["catalog", "recipe"]:
+        if s.get("refuse_recipe"):
+            print("error: the bundle is not the one the signed catalog names", file=sys.stderr)
+            sys.exit(2)
+        target = os.path.join(args[args.index("--into") + 1], args[2])
+        os.makedirs(os.path.join(target, "scripts"), exist_ok=True)
+        open(os.path.join(target, "SKILL.md"), "w").write(
+            "---\\nname: " + args[2] + "\\ndescription: Set a Home Assistant fan's "
+            "speed. Use when the person asks for a fan faster or slower.\\n"
+            "origin: learned\\nneeds: setu:homeassistant\\n---\\n\\n1. Run the script.\\n")
+        open(os.path.join(target, "scripts", "fan.py"), "w").write("print('fan')\\n")
+        print(args[2] + ": checked against the signed catalog")
     elif args[:2] == ["site", "guide"]:
         if s.get("refuse_guide"):
             print("error: the guide in sites/x.toml is written by hand", file=sys.stderr)
@@ -401,6 +415,69 @@ class TestATerminalCatchesUp:
             setu.set(connections={})
             repl._setu_catch_up()
             assert "gmail-personal -- gone from this session" in out.getvalue()
+        finally:
+            manager.shutdown()
+
+
+CATALOG = {"source": "https://catalog.test", "key": "k", "issued": "2026-10-04",
+           "connectors": [{"id": "notion", "name": "Notion", "label": "partner",
+                           "author": "you", "installs": 3, "version": "1.0.0"}],
+           "recipes": [{"name": "ha-fan-speed", "needs": ["homeassistant"],
+                        "author": "priya", "label": "partner",
+                        "bundle": {"url": "https://catalog.test/files/x.json",
+                                   "sha256": "0" * 64}}]}
+
+
+class TestInstallingFromTheCatalog:
+    def test_a_listed_connector_is_installed_through_setu(self, setu, tmp_path):
+        setu.set(catalog=CATALOG)
+        _, _, manager, client = served(tmp_path, setu.path)
+        try:
+            res = client.post("/api/catalog/install", json={"id": "notion"})
+            assert res.status_code == 200, res.text
+            assert ["install", "notion"] in setu.get()["calls"]
+            assert client.post("/api/catalog/install",
+                               json={"id": "evil"}).status_code == 404
+        finally:
+            manager.shutdown()
+
+    def test_a_page_elsewhere_gets_the_command(self, setu, tmp_path):
+        setu.set(catalog=CATALOG)
+        _, _, manager, client = served(tmp_path, setu.path, local=False)
+        try:
+            res = client.post("/api/catalog/install", json={"id": "notion"})
+            assert res.status_code == 403 and "setu install notion" in res.json()["detail"]
+            res = client.post("/api/catalog/recipe/preview", json={"name": "ha-fan-speed"})
+            assert res.status_code == 403
+        finally:
+            manager.shutdown()
+
+    def test_a_recipe_is_shown_whole_then_installed(self, setu, tmp_path, monkeypatch):
+        setu.set(catalog=CATALOG)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        _, _, manager, client = served(tmp_path, setu.path)
+        try:
+            seen = client.post("/api/catalog/recipe/preview", json={"name": "ha-fan-speed"})
+            assert seen.status_code == 200, seen.text
+            body = seen.json()
+            assert set(body["files"]) == {"SKILL.md", "scripts/fan.py"}
+            assert body["digest"].startswith("sha256:")
+            assert not (tmp_path / "home" / ".yantra").exists()       # shown, not installed
+            done = client.post("/api/catalog/recipe/install", json={"key": body["key"]})
+            assert done.status_code == 200, done.text
+            assert (tmp_path / "home" / ".yantra" / "skills" / "learned" /
+                    "ha-fan-speed" / "scripts" / "fan.py").is_file()
+            again = client.post("/api/catalog/recipe/install", json={"key": body["key"]})
+            assert again.status_code == 404                           # one preview, one use
+        finally:
+            manager.shutdown()
+
+    def test_a_refused_bundle_shows_nothing(self, setu, tmp_path):
+        setu.set(catalog=CATALOG, refuse_recipe=True)
+        _, _, manager, client = served(tmp_path, setu.path)
+        try:
+            res = client.post("/api/catalog/recipe/preview", json={"name": "ha-fan-speed"})
+            assert res.status_code == 502 and "signed catalog" in res.json()["detail"]
         finally:
             manager.shutdown()
 

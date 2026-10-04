@@ -199,3 +199,100 @@ def test_share_from_the_terminal_writes_under_recipes(tmp_path, monkeypatch):
     assert code == 0, out.getvalue()
     assert (tmp_path / "recipes" / "home-fan" / "SKILL.md").is_file()
     assert "sha256:" in out.getvalue() and "--skill-install" in out.getvalue()
+
+
+# ---- through the Setu catalog ---------------------------------------------------------
+
+
+FAKE_SETU = """\
+import json, os, sys
+from pathlib import Path
+args = sys.argv[1:]
+with open(os.environ["FAKE_SETU_LOG"], "a") as log:
+    log.write(json.dumps(args) + "\\n")
+if args[:2] == ["catalog", "recipe"]:
+    if os.environ.get("FAKE_SETU_REFUSE"):
+        print("error: home-fan: the bundle is not the one the signed catalog names",
+              file=sys.stderr)
+        sys.exit(2)
+    target = Path(args[args.index("--into") + 1]) / args[2]
+    source = Path(os.environ["FAKE_SETU_RECIPE"])
+    for p in source.rglob("*"):
+        if p.is_file():
+            dest = target / p.relative_to(source)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(p.read_text())
+    print(f"{args[2]}: checked against the signed catalog, written to {target}")
+elif args[:2] == ["catalog", "submit"]:
+    print("submitted: abc123def456 (open)")
+"""
+
+
+class TestThroughTheCatalog:
+    def setu(self, tmp_path, monkeypatch, recipe=None, refuse=False):
+        import sys
+        program = tmp_path / "setu"
+        program.write_text(f"#!{sys.executable}\n" + FAKE_SETU)
+        program.chmod(0o755)
+        log = tmp_path / "setu.log"
+        monkeypatch.setenv("FAKE_SETU_LOG", str(log))
+        if recipe is not None:
+            monkeypatch.setenv("FAKE_SETU_RECIPE", str(recipe))
+        if refuse:
+            monkeypatch.setenv("FAKE_SETU_REFUSE", "1")
+        link = SimpleNamespace(data={"command": str(program),
+                                     "catalog": {"source": "https://catalog.test"}})
+        return link, log
+
+    def calls(self, log):
+        import json
+        return [json.loads(line) for line in log.read_text().splitlines()]
+
+    def test_catalog_install_is_fetched_by_setu_then_shown_and_asked(self, tmp_path,
+                                                                     monkeypatch):
+        import yantra.cli.share as share_cli
+        recipe = write(check(learned_skill(tmp_path / "author")), tmp_path / "author")
+        link, log = self.setu(tmp_path, monkeypatch, recipe=recipe)
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        out = io.StringIO()
+        console = Console(file=out, width=200)
+        source = share_cli.fetch_from_catalog("home-fan", link, console, tmp_path / "got")
+        assert self.calls(log)[0][:3] == ["catalog", "recipe", "home-fan"]
+        assert install_recipe(source, console, lambda q: True) == 0
+        assert "── scripts/fan.py" in out.getvalue()        # shown before it is asked
+        assert (tmp_path / "home" / ".yantra" / "skills" / "learned" / "home-fan").is_dir()
+
+    def test_a_refused_bundle_installs_nothing(self, tmp_path, monkeypatch):
+        import yantra.cli.share as share_cli
+        link, _ = self.setu(tmp_path, monkeypatch, refuse=True)
+        out = io.StringIO()
+        assert share_cli.fetch_from_catalog("home-fan", link, Console(file=out, width=200),
+                                            tmp_path / "got") is None
+        assert "not the one the signed catalog names" in out.getvalue()
+
+    def test_submit_only_when_asked_and_only_the_checked_folder(self, tmp_path, monkeypatch):
+        import yantra.cli.share as share_cli
+        link, log = self.setu(tmp_path, monkeypatch)
+        folder = write(check(learned_skill(tmp_path)), tmp_path)
+        out = io.StringIO()
+        assert share_cli.submit_to_catalog(folder, link, Console(file=out, width=200),
+                                           "priya") == 0
+        assert self.calls(log) == [["catalog", "submit", str(folder), "--to",
+                                    "https://catalog.test", "--author", "priya"]]
+        assert "submitted: abc123def456" in out.getvalue()
+
+    def test_no_catalog_server_or_no_author_submits_nothing(self, tmp_path, monkeypatch):
+        import yantra.cli.share as share_cli
+        link, log = self.setu(tmp_path, monkeypatch)
+        out = io.StringIO()
+        console = Console(file=out, width=200)
+        assert share_cli.submit_to_catalog(tmp_path, link, console, "") == 1
+        link.data["catalog"] = {"source": "/home/me/index.json"}
+        assert share_cli.submit_to_catalog(tmp_path, link, console, "priya") == 1
+        assert not log.exists()
+        assert "--author" in out.getvalue() and "keeps no catalog from a server" in out.getvalue()
+
+    def test_submit_without_share_is_an_error(self, capsys):
+        from yantra.cli.main import main
+        assert main(["--submit"]) == 2
+        assert "go with --skill-share" in capsys.readouterr().err

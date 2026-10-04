@@ -69,9 +69,31 @@ written to ./recipes/home-fan
   sha256:db0bc1ae674dd27dc00d8ab5f4628d64d9532441660b796653bf848a4722749b
 ```
 
-That's the layout of the Setu catalog. Run it from a checkout of the
-catalog and the recipe lands where a pull request wants it. Or zip the
-folder and send it.
+Zip the folder and send it, or offer it to the Setu catalog:
+
+```
+yantra --skill-share home-fan --submit --author priya
+```
+
+`--submit` runs the same checks, writes the same folder, and then hands
+it to Setu's catalog server for review (`setu catalog submit`). That
+only happens when you ask: sharing alone never sends anything anywhere.
+If you don't give `--author`, git's `user.name` is used.
+
+## From the catalog
+
+A recipe the catalog lists is installed by name:
+
+```
+yantra --skill-install catalog:ha-fan-speed
+```
+
+Setu fetches it, checks it against the hash in the signed catalog, and
+writes it to a temporary folder. From there it's the install below:
+every file shown, then the question. On the Connections page, a listed
+recipe has an **install** button under the connector it needs. It opens
+the same thing as a dialog, with every file, and installs only on your
+click.
 
 ## Installing one somebody shared
 
@@ -123,13 +145,11 @@ no-op, and refuses a different one with the same name.
 
 ## What was deliberately not built
 
-* **The catalog's side.** *By Setu* or *community* labels, anonymous
-  install counts and a review queue all belong to the Setu catalog and
-  its signed index, which don't exist yet. This writes the folder that
-  catalog will take. What can be shown without it is: each connector's
-  card on the Connections page lists the recipes on this computer that
-  need it, learned or installed (*"2 recipe(s): inbox-count, home-fan
-  (shared)"*).
+* ~~**The catalog's side.**~~ Built: `--submit` sends a checked recipe
+  for review, and `--skill-install catalog:NAME` and the page's
+  **install** button take a listed one, checked by hash and counted
+  anonymously. See *From the catalog* above, and the Setu README's
+  catalog server.
 * **Running the recipe's test before it leaves.** The test command
   lives in the draft while saving and isn't kept in the folder.
   Re-running a recipe against a fake connector is the catalog's CI,

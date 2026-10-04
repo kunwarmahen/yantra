@@ -1082,11 +1082,15 @@ function closeDialog() {
    the operator backs out -- cancel means cancel. */
 function openDialog({ title, body, value, placeholder,
                       confirm: confirmText = "ok", tone = "primary",
-                      input: wantsInput = true }) {
+                      input: wantsInput = true, files = null }) {
   return new Promise((resolve) => {
     const box = $("#dialog");
     box.innerHTML = `<h3>${esc(title)}</h3>`
       + (body ? `<p class="dialog-body">${esc(body)}</p>` : "")
+      // every file, whole, before a yes -- what an install will put here
+      + (files ? Object.entries(files).map(([name, text]) =>
+          `<div class="dialog-file"><div class="dialog-file-name">${esc(name)}</div>`
+          + `<pre>${esc(text)}</pre></div>`).join("") : "")
       + (wantsInput ? `<input id="dialog-input" spellcheck="false">` : "")
       + `<div class="modal-actions">`
       + `<button class="m-btn" data-act="cancel">cancel</button>`
@@ -1699,6 +1703,18 @@ function renderConnections() {
     body.append(none);
   }
   for (const c of d.connectors) body.append(connectorCard(c, d));
+  const offered = (d.catalog || {}).connectors || [];
+  if (offered.length) {
+    section(body, "in the catalog", "listed and signed; not installed on this computer");
+    for (const c of offered) body.append(catalogConnectorCard(c, d));
+  }
+  if (!body.dataset.recipeClicks) {        // the panel is redrawn; listen once
+    body.dataset.recipeClicks = "1";
+    body.addEventListener("click", (e) => {
+      const name = e.target.closest("[data-recipe]")?.dataset.recipe;
+      if (name) installCatalogRecipe(name);
+    });
+  }
   body.append(addSiteBox(d));
 
   for (const problem of d.problems || []) {
@@ -2014,15 +2030,75 @@ function labelBadge(c) {
     + (c.installs != null ? ` <span class="conn-count">${esc(String(c.installs))} installs</span>` : "");
 }
 
-// Recipes the catalog lists for this connector that aren't on this computer.
+// Recipes the catalog lists for this connector that aren't on this computer;
+// one with a bundle can be installed from here (every file shown first).
 function catalogRecipeLine(c, d) {
   const local = new Set(((d.recipes || {})[c.id] || []).map((r) => r.name));
   const listed = ((d.catalog || {}).recipes || []).filter(
     (r) => (r.needs || []).includes(c.id) && !local.has(r.name));
   if (!listed.length) return "";
   const names = listed.map((r) => `${esc(r.name)} <i>(${esc(r.author || "?")}${
-    r.installs != null ? ", " + esc(String(r.installs)) + " installs" : ""})</i>`);
+    r.installs != null ? ", " + esc(String(r.installs)) + " installs" : ""})</i>`
+    + (r.bundle && d.local ? ` <button class="m-btn tiny" data-recipe="${esc(r.name)}">`
+      + "install</button>" : ""));
   return `<div class="conn-sub">in the catalog: ${names.join(", ")}</div>`;
+}
+
+async function installCatalogRecipe(name) {
+  const res = await fetch("/api/catalog/recipe/preview", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }) });
+  const out = await res.json();
+  if (!res.ok) { addBanner(`not fetched: ${out.detail}`, true); return; }
+  const ok = await confirmDialog({
+    title: `install ${out.name}?`,
+    body: `${out.description}${out.needs ? " — needs " + out.needs : ""}. Checked by Setu `
+      + "against the signed catalog. Its script runs in your sessions, in the sandbox, "
+      + `when a task calls for it. ${out.digest}`,
+    files: out.files, confirm: "install" });
+  if (!ok) return;
+  const done = await fetch("/api/catalog/recipe/install", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: out.key }) });
+  const got = await done.json();
+  if (!done.ok) { addBanner(`not installed: ${got.detail}`, true); return; }
+  toast(`installed ${got.installed} — the agent can follow it from the next turn`);
+  await loadConnections();
+  renderConnections();
+}
+
+// Connectors the catalog lists that aren't installed here.
+function catalogConnectorCard(c, d) {
+  const card = document.createElement("div");
+  card.className = "conn-card catalog-card";
+  const main = document.createElement("div");
+  main.innerHTML = `<div class="conn-title">${esc(c.name || c.id)} ${labelBadge(c)}</div>
+    <div class="conn-sub">${esc(c.summary || "")}${c.version ? " · " + esc(c.version) : ""}</div>`;
+  const actions = document.createElement("div");
+  actions.className = "conn-actions";
+  if (d.local) {
+    const go = document.createElement("button");
+    go.className = "m-btn primary";
+    go.textContent = "install";
+    go.title = "Setu downloads it and checks it against the signed catalog's hash";
+    go.onclick = async () => {
+      go.disabled = true; go.textContent = "installing…";
+      try {
+        const res = await fetch("/api/catalog/install", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: c.id }) });
+        const out = await res.json();
+        if (!res.ok) { addBanner(`not installed: ${out.detail}`, true); return; }
+        applyConnections(out);
+        toast(`installed ${c.name || c.id} — connect it below`);
+      } finally { go.disabled = false; go.textContent = "install"; }
+    };
+    actions.append(go);
+  } else {
+    actions.innerHTML = `<code>setu install ${esc(c.id)}</code>`;
+  }
+  card.append(main, actions);
+  return card;
 }
 
 function connectorCard(c, d) {

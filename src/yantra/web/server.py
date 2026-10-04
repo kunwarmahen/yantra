@@ -52,6 +52,7 @@ import json
 import queue
 import threading
 import time
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -241,6 +242,9 @@ class WebSession:
         self.kept_memories: list[Any] = []
         #: New guides for sites added on this computer, by key (site_guide.py).
         self.kept_guides: dict[str, Any] = {}
+        #: Catalog recipes fetched and shown, waiting for the person's
+        #: install, by key -> their folder (a temporary one).
+        self.recipe_previews: dict[str, Path] = {}
         self._kept_lock = threading.Lock()
         #: The look running after the last turn, what stops it, what it
         #: is doing, and how the last one ended.
@@ -1990,6 +1994,87 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         except SetuLinkError as exc:
             raise HTTPException(409, str(exc)) from None
         return {"ok": True}
+
+    # ---- the catalog: install what it lists (setu f4f047f) -----------------------
+
+    @app.post("/api/catalog/install")
+    async def catalog_install(req: Request) -> dict[str, Any]:
+        """A connector the catalog lists: Setu installs its wheel, checked by
+        hash against the signed index; then the card can connect it. Only
+        from a page on this computer -- it installs software here."""
+        setu = require_setu()
+        connector = str((await req.json()).get("id", ""))
+        offered = {c.get("id") for c in ((setu.link.data.get("catalog") or {})
+                                         .get("connectors") or [])} if setu.link else set()
+        if connector not in offered:
+            raise HTTPException(404, f"the catalog offers no connector {connector!r} "
+                                     "to install")
+        if not is_local(req):
+            raise HTTPException(403, "installing only works from a page on the computer "
+                                     f"running Yantra -- there, run: setu install {connector}")
+        require_idle()
+        from yantra.setu_link import run_setu
+        ok, said = await run_in_threadpool(run_setu, setu_program(setu), "install", connector,
+                                           timeout=300)
+        if not ok:
+            raise HTTPException(502, said or "setu install failed")
+        sync = await run_in_threadpool(session.setu_sync)
+        return {**session.connections_state(local=True), "said": said, "sync": sync}
+
+    @app.post("/api/catalog/recipe/preview")
+    async def catalog_recipe_preview(req: Request) -> dict[str, Any]:
+        """A listed recipe, fetched and checked by Setu, shown whole before
+        any install: every file, as the terminal shows them."""
+        setu = require_setu()
+        name = str((await req.json()).get("name", ""))
+        if not is_local(req):
+            raise HTTPException(403, "installing only works from a page on the computer "
+                                     f"running Yantra -- there, run: yantra --skill-install "
+                                     f"catalog:{name}")
+        import tempfile
+
+        from yantra.setu_link import run_setu
+        from yantra.skills.loader import SkillError
+        from yantra.skills.share import read_recipe, recipe_hash
+        tmp = Path(tempfile.mkdtemp(prefix="yantra-recipe-"))
+        ok, said = await run_in_threadpool(run_setu, setu_program(setu), "catalog", "recipe",
+                                           name, "--into", str(tmp), timeout=120)
+        if not ok:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise HTTPException(502, said or "setu could not fetch it")
+        try:
+            skill, files = read_recipe(tmp / name)
+        except (OSError, SkillError) as exc:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise HTTPException(400, str(exc)) from None
+        key = uuid.uuid4().hex[:12]
+        session.recipe_previews[key] = tmp / name
+        return {"key": key, "name": skill.name, "description": skill.description,
+                "needs": skill.needs, "files": files, "digest": recipe_hash(files)}
+
+    @app.post("/api/catalog/recipe/install")
+    async def catalog_recipe_install(req: Request) -> dict[str, Any]:
+        """The person saw every file and said install."""
+        from yantra.skills.loader import SkillError
+        from yantra.skills.share import install
+        key = str((await req.json()).get("key", ""))
+        source = session.recipe_previews.pop(key, None)
+        if source is None:
+            raise HTTPException(404, "that preview is gone -- open it again")
+        if not is_local(req):
+            raise HTTPException(403, "installing only works from a page on this computer")
+        require_idle()
+        try:
+            skill = install(source)
+        except (OSError, SkillError) as exc:
+            raise HTTPException(400, str(exc)) from None
+        finally:
+            shutil.rmtree(source.parent, ignore_errors=True)
+        skills = getattr(session.agent, "skills", None)
+        if skills is not None:
+            skills.reload()
+        session.broadcast({"type": "state", **session.state()})
+        return {"installed": skill.name, "path": str(skill.path.parent)}
 
     @app.post("/api/connections/cancel")
     def connections_cancel() -> dict[str, Any]:
