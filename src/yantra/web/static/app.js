@@ -2056,6 +2056,7 @@ function catalogRecipeLine(c, d) {
   if (!listed.length) return "";
   const names = listed.map((r) => `${esc(r.name)} <i>(${esc(r.author || "?")}${
     r.installs != null ? ", " + esc(String(r.installs)) + " installs" : ""})</i>`
+    + (r.works_line ? ` · ${esc(r.works_line)}` : "")
     + (r.certified && r.certified.line ? ` <span class="conn-cert">· ${esc(r.certified.line)}</span>` : "")
     + (r.bundle && d.local ? ` <button class="m-btn tiny" data-recipe="${esc(r.name)}">`
       + "install</button>" : ""));

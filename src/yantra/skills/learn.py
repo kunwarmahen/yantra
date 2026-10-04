@@ -887,8 +887,32 @@ class Learner:
             counted.append((skill.name, worked))
         if counted:
             skills.reload()
+            self._report_uses(counted)
         self.last_counted = counted
         return counted
+
+    def _report_uses(self, counted: list[tuple[str, bool]]) -> None:
+        """A recipe that came from the Setu catalog: tell the catalog whether
+        this use worked -- through Setu, anonymously, under its
+        share-installs switch -- on a thread of its own, never in the way."""
+        import shutil
+        import threading
+
+        from yantra.setu_link import run_setu
+        from yantra.skills.share import catalog_origin
+
+        link = self._setu_link()
+        program = ((link.data.get("command") if link is not None else None)
+                   or shutil.which("setu"))
+        if not program:
+            return
+        for name, worked in counted:
+            origin = catalog_origin(name, self.home)
+            if origin is None or not origin.get("version"):
+                continue
+            threading.Thread(target=run_setu, daemon=True, name="yantra-catalog-use", args=(
+                program, "catalog", "worked", origin["item"], "--version",
+                origin["version"], "--outcome", "ok" if worked else "failed")).start()
 
     # ---- notice, distil, test ------------------------------------------------
 

@@ -2120,10 +2120,17 @@ def _skill_share_mode(args, console: Console) -> int:
 
             from yantra.cli.share import fetch_from_catalog
             _, link, _ = person_context(args, console)
+            from yantra.skills.share import catalog_version, read_recipe, remember_catalog
+            item = args.skill_install.split(":", 1)[1]
             with tempfile.TemporaryDirectory() as tmp:
-                source = fetch_from_catalog(args.skill_install.split(":", 1)[1], link,
-                                            console, Path(tmp))
-                return 1 if source is None else install_recipe(source, console, ask)
+                source = fetch_from_catalog(item, link, console, Path(tmp))
+                if source is None:
+                    return 1
+                done = install_recipe(source, console, ask)
+                if done == 0:
+                    remember_catalog(read_recipe(source)[0].name, item,
+                                     catalog_version(link, item))
+                return done
         return install_recipe(Path(args.skill_install), console, ask)
     cwd = Path(args.cwd).resolve() if args.cwd else Path.cwd()
     memories, link, redact = person_context(args, console)

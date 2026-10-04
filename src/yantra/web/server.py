@@ -2073,6 +2073,10 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(400, str(exc)) from None
         finally:
             shutil.rmtree(source.parent, ignore_errors=True)
+        from yantra.skills.share import catalog_version, remember_catalog
+        setu = getattr(session.agent, "setu", None)
+        link = getattr(setu, "link", None)
+        remember_catalog(skill.name, source.name, catalog_version(link, source.name))
         skills = getattr(session.agent, "skills", None)
         if skills is not None:
             skills.reload()

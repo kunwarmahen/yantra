@@ -41,6 +41,8 @@ aside when it goes stale, and deleted exactly like one.
 
 from __future__ import annotations
 
+import json
+
 import getpass
 import hashlib
 import re
@@ -324,5 +326,48 @@ def _shared_hash(folder: Path) -> str:
     return ""
 
 
-__all__ = ["Finding", "Prepared", "RECIPES_DIR", "install", "memory_values",
+# ---- what came from the catalog ------------------------------------------------------
+#
+# A recipe installed from the Setu catalog is remembered with its catalog
+# name and version, so that when its counter moves (worked / failed) the
+# catalog can be told -- anonymously, under Setu's share-installs switch.
+# A recipe installed from a folder someone handed over is not in here and
+# is never reported.
+
+CATALOG_MAP = "catalog.json"
+
+
+def _catalog_map_path(home: Path | None) -> Path:
+    return (home or Path.home()) / ".yantra" / "skills" / CATALOG_MAP
+
+
+def remember_catalog(skill: str, item: str, version: str, home: Path | None = None) -> None:
+    path = _catalog_map_path(home)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        data = {}
+    data[skill] = {"item": item, "version": version}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def catalog_origin(skill: str, home: Path | None = None) -> dict[str, str] | None:
+    try:
+        data = json.loads(_catalog_map_path(home).read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return None
+    found = data.get(skill)
+    return found if isinstance(found, dict) and found.get("item") else None
+
+
+def catalog_version(link: Any, item: str) -> str:
+    """The version Setu's catalog lists for a recipe: its bundle's hash, short."""
+    recipes = ((link.data.get("catalog") or {}).get("recipes") or []) if link else []
+    entry = next((r for r in recipes if r.get("name") == item), {})
+    return str((entry.get("bundle") or {}).get("sha256") or "")[:12]
+
+
+__all__ = ["Finding", "Prepared", "RECIPES_DIR", "catalog_origin", "catalog_version",
+           "install", "memory_values", "remember_catalog",
            "prepare", "read_recipe", "recipe_hash", "without_keys", "write"]

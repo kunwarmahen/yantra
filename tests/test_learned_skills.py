@@ -1260,3 +1260,44 @@ class TestJudgedOnItsOwnSteps:
     def test_a_recipe_never_run_is_judged_on_every_call(self, tmp_path):
         learner, _ = self.turn(tmp_path, "ls missing.env", "echo greeted mars")
         assert learner.last_counted == [("greet-someone", False)]
+
+
+class TestCatalogUses:
+    """A recipe from the Setu catalog: each counted use is told to the
+    catalog through Setu (worked or failed); one from anywhere else is not."""
+
+    def test_a_counted_use_of_a_catalog_recipe_reaches_setu(self, tmp_path):
+        import json
+        import sys
+        import time
+        from types import SimpleNamespace
+
+        from yantra.skills.share import catalog_origin, remember_catalog
+
+        log = tmp_path / "setu.log"
+        program = tmp_path / "setu"
+        program.write_text(f"#!{sys.executable}\nimport json, sys\n"
+                           f"open({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+        program.chmod(0o755)
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(reply()),
+                                      assistant_tool_call("l", "load_skill",
+                                                          {"name": "greet-someone"}),
+                                      assistant_tool_call("g", "bash",
+                                                          {"command": "echo greeted mars"}),
+                                      assistant_text("Greeted mars.")])
+        learner = learner_after(agent)
+        learner.save(learner.consider())
+        agent.setu = SimpleNamespace(link=SimpleNamespace(data={"command": str(program)}))
+        remember_catalog("greet-someone", "greet-someone", "a85f406ed3d6", home=learner.home)
+        assert catalog_origin("greet-someone", learner.home)["version"] == "a85f406ed3d6"
+        assert learner.after_turn(run(agent, "greet mars")) == [("greet-someone", True)]
+        deadline = time.monotonic() + 5
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert json.loads(log.read_text().splitlines()[0]) == [
+            "catalog", "worked", "greet-someone", "--version", "a85f406ed3d6",
+            "--outcome", "ok"]
+
+    def test_a_recipe_from_elsewhere_is_never_reported(self, tmp_path):
+        from yantra.skills.share import catalog_origin
+        assert catalog_origin("greet-someone", tmp_path) is None
