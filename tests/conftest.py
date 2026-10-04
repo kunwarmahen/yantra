@@ -85,6 +85,15 @@ def private_state_home(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("state")))
 
 
+@pytest.fixture(autouse=True)
+def private_home(tmp_path_factory, monkeypatch):
+    """Skills you wrote or learned live under ~/.yantra/skills/, and the
+    loader scans them in every session -- so a test that turns skills on
+    would otherwise count the skills on the machine running it, and pass
+    only on a machine with none. HOME is an empty directory instead."""
+    monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))
+
+
 class Recorder:
     """MockTransport handler wrapper that records every request it sees.
 
