@@ -262,6 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--submit", action="store_true", dest="skill_submit",
                         help="with --skill-share: also send the checked recipe to the "
                              "Setu catalog's review queue (never without this)")
+    parser.add_argument("--sign-with", dest="skill_sign", default=None, metavar="KEY",
+                        help="with --skill-share --submit: sign the recipe with your own "
+                             "key (optional for a recipe; `setu catalog keygen` makes one)")
     parser.add_argument("--author", dest="skill_author", default=None,
                         help="with --skill-share --submit: your name, as a listing "
                              "would show it (default: git's user.name)")
@@ -2131,7 +2134,7 @@ def _skill_share_mode(args, console: Console) -> int:
     from yantra.cli.share import submit_to_catalog
     from yantra.skills.share import RECIPES_DIR
     return submit_to_catalog(cwd / RECIPES_DIR / args.skill_share, link, console,
-                             args.skill_author or _git_user())
+                             args.skill_author or _git_user(), args.skill_sign)
 
 
 def _mcp_login(name: str, args, console: Console) -> int:
@@ -2212,8 +2215,10 @@ def main(argv: list[str] | None = None) -> int:
               "positional PROMPT); interactive image input is not "
               "supported yet", file=sys.stderr)
         return 2
-    if (args.skill_submit or args.skill_author) and args.skill_share is None:
-        print("error: --submit and --author go with --skill-share NAME", file=sys.stderr)
+    if (args.skill_submit or args.skill_author or args.skill_sign) \
+            and args.skill_share is None:
+        print("error: --submit, --author and --sign-with go with --skill-share NAME",
+              file=sys.stderr)
         return 2
     for flag, value in (("--skill-share", args.skill_share),
                         ("--skill-install", args.skill_install)):

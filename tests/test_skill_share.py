@@ -280,6 +280,9 @@ class TestThroughTheCatalog:
         assert self.calls(log) == [["catalog", "submit", str(folder), "--to",
                                     "https://catalog.test", "--author", "priya"]]
         assert "submitted: abc123def456" in out.getvalue()
+        share_cli.submit_to_catalog(folder, link, Console(file=out, width=200), "priya",
+                                    key="/keys/me.key")
+        assert self.calls(log)[-1][-2:] == ["--sign", "/keys/me.key"]
 
     def test_no_catalog_server_or_no_author_submits_nothing(self, tmp_path, monkeypatch):
         import yantra.cli.share as share_cli

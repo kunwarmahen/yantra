@@ -2030,6 +2030,14 @@ function labelBadge(c) {
     + (c.installs != null ? ` <span class="conn-count">${esc(String(c.installs))} installs</span>` : "");
 }
 
+// Whether the author signed what they submitted, and since which version
+// with the same key (Setu's catalog author_line).
+function authorLine(text) {
+  if (!text) return "";
+  const cls = text.includes("NEW key") ? "conn-sub conn-warn" : "conn-sub";
+  return `<div class="${cls}">${esc(text)}</div>`;
+}
+
 // What independent certifiers said of this exact version (Setu's
 // certify.py): those you trust named, others counted, withdrawals said.
 function certifiedLine(cert) {
@@ -2085,6 +2093,7 @@ function catalogConnectorCard(c, d) {
   const main = document.createElement("div");
   main.innerHTML = `<div class="conn-title">${esc(c.name || c.id)} ${labelBadge(c)}</div>
     <div class="conn-sub">${esc(c.summary || "")}${c.version ? " · " + esc(c.version) : ""}</div>`
+    + authorLine(c.author_signed)
     + (certifiedLine(c.certified) || '<div class="conn-sub">no independent certification yet</div>');
   const actions = document.createElement("div");
   actions.className = "conn-actions";
@@ -2127,7 +2136,7 @@ function connectorCard(c, d) {
     <div class="conn-sub">${esc(c.summary || "")}</div>`
     + (c.yanked ? `<div class="conn-sub conn-warn">withdrawn by Setu: ${esc(c.yanked)}
         — its accounts stay connected, but it is not started until you update it</div>` : "")
-    + certifiedLine(c.certified)
+    + authorLine(c.author_signed) + certifiedLine(c.certified)
     + recipeLine((d.recipes || {})[c.id]) + catalogRecipeLine(c, d);
   card.append(dot, main, document.createElement("div"));
 

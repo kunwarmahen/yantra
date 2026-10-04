@@ -95,7 +95,8 @@ def fetch_from_catalog(name: str, link: Any, console: Console, into: Path) -> Pa
     return into / name
 
 
-def submit_to_catalog(folder: Path, link: Any, console: Console, author: str) -> int:
+def submit_to_catalog(folder: Path, link: Any, console: Console, author: str,
+                      key: str | None = None) -> int:
     """``--skill-share NAME --submit``: the checked recipe goes to the
     catalog's review queue. Only when asked: sharing writes a folder."""
     from yantra.setu_link import run_setu
@@ -111,8 +112,9 @@ def submit_to_catalog(folder: Path, link: Any, console: Console, author: str) ->
         console.print("[yellow]not submitted: say who you are with --author NAME (it "
                       "is how the listing will name you)[/yellow]")
         return 1
+    signing = ["--sign", key] if key else []
     ok, said = run_setu(program, "catalog", "submit", str(folder), "--to", address,
-                        "--author", author, timeout=60)
+                        "--author", author, *signing, timeout=60)
     style = "green" if ok else "red"
     console.print(f"[{style}]{escape(said)}[/{style}]")
     return 0 if ok else 1
