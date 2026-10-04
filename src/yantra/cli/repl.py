@@ -362,6 +362,7 @@ class Repl:
         ``learn=False`` counts the turn against any learned skill it used
         but never offers to save it -- a turn that ran a skill by name
         already had its recipe."""
+        self._setu_catch_up()
         stream = self.agent.run_streaming(user_input, images=images)
         if self.trace is not None:
             # A TEE, not a consumer: the renderer still sees every event
@@ -422,6 +423,45 @@ class Repl:
         self._offer_pending_memories()
         if end.reason == "end_turn":
             self._offer_site_guides()
+
+    # ---- Setu, between turns (notes/110) ---------------------------------------
+
+    def _setu_catch_up(self) -> None:
+        """An account connected in another terminal, a level changed, a
+        guide kept: the next turn has it. Only file times are read unless
+        one moved; then Setu is asked again, a package's new question is
+        put here, and the tools and the prompt are made to match. Never
+        costs the turn it comes before."""
+        setu = getattr(self.agent, "setu", None)
+        if setu is None or self.mcp is None:
+            return
+        try:
+            if not setu.moved():
+                return
+            setu.refresh()
+            for ask in setu.offer():
+                try:
+                    answer = self._input(f"{ask['question']} [y/N] ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    answer = ""
+                setu.answer(ask["need"], answer in ("y", "yes"))
+            before = set(setu.servers) | {site.prefix for site in setu.sites.values()}
+            done = setu.sync(self.mcp, self.agent)
+        except Exception as exc:
+            self.console.print(f"[yellow]setu: not updated ({exc})[/yellow]")
+            return
+        # sync reports everything it keeps; only what changed is news
+        for name, count in done.connected.items():
+            if name not in before:
+                self.console.print(f"setu: {name} ({count} tool(s)) -- now in this session",
+                                   markup=False, style="dim")
+        for name in done.dropped:
+            self.console.print(f"setu: {name} -- gone from this session",
+                               markup=False, style="dim")
+        standing = set(setu.link.problems) if setu.link is not None else set()
+        for note in done.notes:
+            if note not in standing:
+                self.console.print(f"setu: {note}", markup=False, style="dim")
 
     # ---- a site's guide, from use (notes/112) ---------------------------------
 

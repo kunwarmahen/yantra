@@ -681,6 +681,9 @@ class Setu:
     declined: set[str] = field(default_factory=set)
     #: Browser-road connections' tool sets, by ref (tools/site.py).
     sites: dict[str, SiteLink] = field(default_factory=dict)
+    #: The times of what Setu's report says to watch, at the last look
+    #: (``moved``). None until the first look.
+    watched: tuple | None = None
 
     @property
     def program(self) -> str | None:
@@ -689,12 +692,44 @@ class Setu:
         reported = (self.link.data.get("command") if self.link else None) or None
         return reported or self.path or shutil.which("setu")
 
+    def _stamp(self) -> tuple | None:
+        """The times of the vault and of each added site's file: any
+        connect, disconnect, level, new site or kept guide moves one."""
+        paths = (self.link.data.get("watch") or []) if self.link is not None else []
+        if not paths:
+            return None         # a Setu that says nothing to watch: never moved
+        stamp = []
+        for raw in paths:
+            if not raw:
+                continue
+            where = Path(raw)
+            try:
+                if where.is_dir():
+                    stamp.append(tuple(sorted((p.name, p.stat().st_mtime_ns)
+                                              for p in where.glob("*.toml"))))
+                else:
+                    stamp.append(where.stat().st_mtime_ns)
+            except OSError:
+                stamp.append(None)
+        return tuple(stamp)
+
+    def moved(self) -> bool:
+        """Whether Setu would say something new -- an account connected in
+        another terminal, a level changed, a guide kept -- since the last
+        look. Only file times are read; ``refresh`` is the real look."""
+        now = self._stamp()
+        if self.watched is None:
+            self.watched = now
+            return False
+        return now != self.watched
+
     def refresh(self) -> Link | None:
         """Ask Setu again. A page asking is the person asking, so a Setu
         that cannot be found is an error here even in ``auto``."""
         try:
             self.link = load("on" if self.mode == "auto" else self.mode, self.path)
             self.error = ""
+            self.watched = self._stamp()
         except SetuLinkError as exc:
             self.link, self.error = None, str(exc)
         return self.link

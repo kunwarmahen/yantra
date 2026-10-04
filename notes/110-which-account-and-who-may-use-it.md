@@ -205,8 +205,11 @@ connected, and the next look asks once.
   Connections panel.
 * ~~**Asking mid-session.**~~ Built: an account connected while a
   package runs is asked about on the panel at the next look, once per
-  sitting. A terminal-only session still asks at the next launch, since
-  nothing there looks at Setu again mid-session.
+  sitting. The terminal catches up too: before each turn it compares
+  the times of Setu's vault and sites folder (which Setu's report names
+  as `watch`), and only when one has moved does it ask Setu again. Then
+  a package's new question is put right there (Enter is no), the tools
+  are made to match, and one line says what arrived or went.
 * ~~**Forgetting a yes from inside Yantra.**~~ Built: **forget** on the
   panel, `--forget-connections` in the terminal.
 * **Tool names by connector for one account.** Renaming

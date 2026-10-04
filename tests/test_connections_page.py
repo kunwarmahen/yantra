@@ -81,7 +81,8 @@ FAKE_SETU = """\
                                         "description": "", "scopes": []}}],
                             "ready": ready,
                             "not_ready": "" if ready else "needs a client file"}}],
-            "setup": {{"google_client_file": s.get("client_file")}}}}))
+            "setup": {{"google_client_file": s.get("client_file")}},
+            "watch": [STATE, None]}}))
     elif args[0] == "connect" and "--site" in args:
         site = args[args.index("--site") + 1]
         ref = site.split(".")[0] + ":" + args[args.index("--as") + 1]
@@ -358,6 +359,48 @@ class TestAddingASite:
             res = client.post("/api/connections/add-site", json={"site": "example.com"})
             assert res.status_code == 403
             assert "setu connect --site example.com --as personal" in res.json()["detail"]
+        finally:
+            manager.shutdown()
+
+
+class TestATerminalCatchesUp:
+    def repl(self, setu, tmp_path):
+        from yantra.cli.repl import Repl
+        agent, manager = build(tmp_path, setu.path)
+        out = io.StringIO()
+        repl = Repl(agent, Console(file=out, width=200), mcp=manager,
+                    input_fn=lambda prompt: "")
+        return agent, manager, repl, out
+
+    def test_an_account_connected_elsewhere_arrives_before_the_next_turn(self, setu,
+                                                                         tmp_path):
+        agent, manager, repl, out = self.repl(setu, tmp_path)
+        try:
+            repl._setu_catch_up()                       # nothing moved
+            assert out.getvalue() == ""
+            time.sleep(0.01)
+            state = setu.get()
+            state["connections"]["gmail:work"] = "read"
+            setu.set(connections=state["connections"])  # `setu connect` in another terminal
+            repl._setu_catch_up()
+            assert "setu: gmail-work (" in out.getvalue()
+            assert "gmail-personal" not in out.getvalue()   # only what is new
+            assert any(n.startswith("mcp__gmail-work__") or "gmail" in n
+                       for n in agent.registry.names())
+            before = out.getvalue()
+            repl._setu_catch_up()                       # and only once
+            assert out.getvalue() == before
+        finally:
+            manager.shutdown()
+
+    def test_a_disconnect_elsewhere_takes_the_tools(self, setu, tmp_path):
+        agent, manager, repl, out = self.repl(setu, tmp_path)
+        try:
+            repl._setu_catch_up()
+            time.sleep(0.01)
+            setu.set(connections={})
+            repl._setu_catch_up()
+            assert "gmail-personal -- gone from this session" in out.getvalue()
         finally:
             manager.shutdown()
 
