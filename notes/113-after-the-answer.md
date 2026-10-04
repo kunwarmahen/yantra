@@ -109,6 +109,28 @@ place for a question to wait. Text printed while you type would end
 up in the middle of your next prompt. The REPL asks once, and Enter
 means no.
 
+## The tray, on disk
+
+Waiting offers used to live only in the server's memory, so restarting
+`--web` lost them all, while a recipe's staged files sat in
+`.yantra/learning/` with nothing pointing at them. Now the tray is
+written to a file on every change and read back when the page's session
+starts.
+
+The file sits in Yantra's state directory, beside memory
+(`~/.local/state/yantra/tray/`), not in the project folder, because
+facts about you wait there too. Each project folder has its own tray, as
+it has its own staged drafts. An offer can't come back if it can no
+longer be saved: if its staged folder is gone, or the skill it would
+update is gone, it's dropped, and the panel's *last look* line says so.
+A recipe's Setu needs are checked again, since what's connected may
+have changed. A file that can't be read is renamed `.bad`, and the tray
+starts empty.
+
+The offers were about turns that no longer exist, which is why this was
+left out at first. But an offer stands on its own: the recipe, its
+test, its output. Nothing in it points back at the turn.
+
 ## A turn cut in two
 
 On a small context window, compaction can run in the middle of a turn.
@@ -188,10 +210,8 @@ about a specific file's contents*. That reason went to the panel's
 
 ## What was deliberately not built
 
-* **A tray that outlives the server.** Waiting offers are kept in the
-  server's memory. Restart it and they're gone, though their staged
-  files stay under `.yantra/learning/` as before. A tray on disk would
-  need its own rules for offers about turns that no longer exist.
+* ~~**A tray that outlives the server.**~~ Built: see *The tray, on
+  disk* above.
 * **Waiting in the terminal.** See above. A terminal tray would be a
   `/kept` command, and it can be added the day someone wants one.
 * **Looking at every turn in a fast exchange.** A look stopped by your

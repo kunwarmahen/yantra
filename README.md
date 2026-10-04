@@ -2532,7 +2532,11 @@ src/yantra/
 │                   runs on its own thread, a new message stops it, its
 │                   gate never asks, and what it finds (recipes, facts)
 │                   waits in a tray -- /api/kept, the "to keep" chip
-│                   ([notes/113](notes/113-after-the-answer.md))
+│                   ([notes/113](notes/113-after-the-answer.md)).
+│                   tray.py keeps that tray on disk, in the state
+│                   directory (facts about you wait there too), per
+│                   workspace: a restart brings back what still can be
+│                   saved, and says what was dropped
 └── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per

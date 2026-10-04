@@ -292,6 +292,10 @@ class WebSession:
         if getattr(agent, "memory", None) is not None:
             agent.memory.on_notice = lambda text: self.broadcast(
                 {"type": "memory_notice", "text": text})
+        try:
+            self._load_tray()
+        except Exception as exc:     # a tray that will not load costs nothing else
+            self._last_look = f"the to-keep tray was not restored: {exc}"
 
     @property
     def channel(self) -> WebSession:
@@ -598,7 +602,39 @@ class WebSession:
                 "last": self._last_look}
 
     def _kept_changed(self) -> None:
+        self._save_tray()
         self.broadcast({"type": "kept", **self.kept_view()})
+
+    def _save_tray(self) -> None:
+        """The tray to disk on every change, so a restart keeps it (tray.py).
+        A tray that cannot be written is a banner, never a lost answer."""
+        if self.agent is None:
+            return
+        from yantra.web import tray
+        with self._kept_lock:
+            recipes, memories = dict(self.kept_recipes), list(self.kept_memories)
+            guides = dict(self.kept_guides)
+        try:
+            tray.save(self.agent.ctx.cwd, recipes, memories, guides)
+        except OSError as exc:
+            self.broadcast({"type": "learn_skipped",
+                            "reason": f"the to-keep tray was not saved: {exc}"})
+
+    def _load_tray(self) -> None:
+        """What waited when the server last stopped, back in the tray."""
+        from yantra.web import tray
+        learner = getattr(self.agent, "learner", None)
+        if learner is None:
+            from yantra.skills.learn import Learner
+            learner = Learner(self.agent, "ask")
+        recipes, memories, guides, notes = tray.load(self.agent.ctx.cwd, self.agent,
+                                                     learner)
+        with self._kept_lock:
+            self.kept_recipes.update(recipes)
+            self.kept_memories += [c for c in memories if c not in self.kept_memories]
+            self.kept_guides.update(guides)
+        if notes:
+            self._last_look = "; ".join(notes)
 
     def _keep_offer(self, learner: Any, offer: Any) -> None:
         """An offer to the tray. An older one of the same name goes: the
