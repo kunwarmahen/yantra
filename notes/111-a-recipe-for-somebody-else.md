@@ -95,6 +95,29 @@ recipe has an **install** button under the connector it needs. It opens
 the same thing as a dialog, with every file, and installs only on your
 click.
 
+## Who vouches for it
+
+A catalog recipe arrives with what can be known about that exact
+version, and the install dialog puts it first:
+
+- **Signed by its author.** Optional for a recipe: `--skill-share NAME
+  --submit --sign-with KEY`.
+- **Certified.** Independent people ran this version on their own
+  servers and signed for it, each with their own key. You choose whose
+  word counts (`setu certify trust THEIR.pub`), and a card reads
+  *"certified by 1 you trust (Acme Labs) + 2 others"*. A withdrawal
+  shows in amber: *"withdrawn by Acme Labs"*.
+- **Worked.** How often this version did its job elsewhere. Each time a
+  recipe you installed from the catalog is counted, worked or failed,
+  that's reported anonymously, under Setu's `share-installs` switch.
+- **Where its scripts run here.** Said as it is: *"scripts run here in
+  bubblewrap: no network, the host read-only"*, or *"UNCONFINED… start
+  Yantra with its bubblewrap sandbox to contain them"*.
+
+None of these proves the absence of an attack, and the dialog doesn't
+claim to. Every file is still shown before the question. How to become
+a certifier is in Setu's README, under "Who vouches for it".
+
 ## Installing one somebody shared
 
 ```
