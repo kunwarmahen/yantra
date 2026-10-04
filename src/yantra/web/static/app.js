@@ -2030,6 +2030,15 @@ function labelBadge(c) {
     + (c.installs != null ? ` <span class="conn-count">${esc(String(c.installs))} installs</span>` : "");
 }
 
+// What independent certifiers said of this exact version (Setu's
+// certify.py): those you trust named, others counted, withdrawals said.
+function certifiedLine(cert) {
+  if (!cert || !cert.line) return "";
+  const cls = (cert.revoked || []).length ? "conn-sub conn-warn" : "conn-sub conn-cert";
+  return `<div class="${cls}" title="independent people who ran this version and signed
+    for it; trust a certifier with: setu certify trust THEIR.pub">${esc(cert.line)}</div>`;
+}
+
 // Recipes the catalog lists for this connector that aren't on this computer;
 // one with a bundle can be installed from here (every file shown first).
 function catalogRecipeLine(c, d) {
@@ -2039,6 +2048,7 @@ function catalogRecipeLine(c, d) {
   if (!listed.length) return "";
   const names = listed.map((r) => `${esc(r.name)} <i>(${esc(r.author || "?")}${
     r.installs != null ? ", " + esc(String(r.installs)) + " installs" : ""})</i>`
+    + (r.certified && r.certified.line ? ` <span class="conn-cert">· ${esc(r.certified.line)}</span>` : "")
     + (r.bundle && d.local ? ` <button class="m-btn tiny" data-recipe="${esc(r.name)}">`
       + "install</button>" : ""));
   return `<div class="conn-sub">in the catalog: ${names.join(", ")}</div>`;
@@ -2052,7 +2062,8 @@ async function installCatalogRecipe(name) {
   if (!res.ok) { addBanner(`not fetched: ${out.detail}`, true); return; }
   const ok = await confirmDialog({
     title: `install ${out.name}?`,
-    body: `${out.description}${out.needs ? " — needs " + out.needs : ""}. Checked by Setu `
+    body: `${out.certified ? out.certified + ". " : "No independent certification yet. "}`
+      + `${out.description}${out.needs ? " — needs " + out.needs : ""}. Checked by Setu `
       + "against the signed catalog. Its script runs in your sessions, in the sandbox, "
       + `when a task calls for it. ${out.digest}`,
     files: out.files, confirm: "install" });
@@ -2073,7 +2084,8 @@ function catalogConnectorCard(c, d) {
   card.className = "conn-card catalog-card";
   const main = document.createElement("div");
   main.innerHTML = `<div class="conn-title">${esc(c.name || c.id)} ${labelBadge(c)}</div>
-    <div class="conn-sub">${esc(c.summary || "")}${c.version ? " · " + esc(c.version) : ""}</div>`;
+    <div class="conn-sub">${esc(c.summary || "")}${c.version ? " · " + esc(c.version) : ""}</div>`
+    + (certifiedLine(c.certified) || '<div class="conn-sub">no independent certification yet</div>');
   const actions = document.createElement("div");
   actions.className = "conn-actions";
   if (d.local) {
@@ -2115,6 +2127,7 @@ function connectorCard(c, d) {
     <div class="conn-sub">${esc(c.summary || "")}</div>`
     + (c.yanked ? `<div class="conn-sub conn-warn">withdrawn by Setu: ${esc(c.yanked)}
         — its accounts stay connected, but it is not started until you update it</div>` : "")
+    + certifiedLine(c.certified)
     + recipeLine((d.recipes || {})[c.id]) + catalogRecipeLine(c, d);
   card.append(dot, main, document.createElement("div"));
 

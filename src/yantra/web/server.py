@@ -2049,8 +2049,11 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(400, str(exc)) from None
         key = uuid.uuid4().hex[:12]
         session.recipe_previews[key] = tmp / name
+        listed = next((r for r in ((setu.link.data.get("catalog") or {}).get("recipes")
+                                   or []) if r.get("name") == name), {}) if setu.link else {}
         return {"key": key, "name": skill.name, "description": skill.description,
-                "needs": skill.needs, "files": files, "digest": recipe_hash(files)}
+                "needs": skill.needs, "files": files, "digest": recipe_hash(files),
+                "certified": (listed.get("certified") or {}).get("line", "")}
 
     @app.post("/api/catalog/recipe/install")
     async def catalog_recipe_install(req: Request) -> dict[str, Any]:

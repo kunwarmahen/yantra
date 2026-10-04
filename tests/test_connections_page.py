@@ -424,6 +424,8 @@ CATALOG = {"source": "https://catalog.test", "key": "k", "issued": "2026-10-04",
                            "author": "you", "installs": 3, "version": "1.0.0"}],
            "recipes": [{"name": "ha-fan-speed", "needs": ["homeassistant"],
                         "author": "priya", "label": "partner",
+                        "certified": {"trusted": ["Acme Labs"], "others": 0, "revoked": [],
+                                      "line": "certified by 1 you trust (Acme Labs)"},
                         "bundle": {"url": "https://catalog.test/files/x.json",
                                    "sha256": "0" * 64}}]}
 
@@ -462,6 +464,7 @@ class TestInstallingFromTheCatalog:
             body = seen.json()
             assert set(body["files"]) == {"SKILL.md", "scripts/fan.py"}
             assert body["digest"].startswith("sha256:")
+            assert body["certified"] == "certified by 1 you trust (Acme Labs)"
             assert not (tmp_path / "home" / ".yantra").exists()       # shown, not installed
             done = client.post("/api/catalog/recipe/install", json={"key": body["key"]})
             assert done.status_code == 200, done.text
