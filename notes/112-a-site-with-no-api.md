@@ -283,7 +283,8 @@ what would a guide to this site say? It sees each call and where it
 landed (the address and the page's title), never the pages' text. A
 guide says where things are, and a page's words are the site's, not
 advice to follow. Whatever it writes waits in the **to keep** tray as
-an editable box. On **keep**, Setu saves it (`setu site guide ID --set`)
+an editable box. The terminal asks right after the turn instead, with
+*[k]eep / [e]dit first / [N]o*. On **keep**, Setu saves it (`setu site guide ID --set`)
 and the connections layer carries it from the next turn. Only sites
 added on this computer are looked at; an installed connector's guide
 belongs to its author.

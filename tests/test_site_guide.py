@@ -88,3 +88,65 @@ class TestTheLook:
         reply = "\n".join(f"place {i}: /p{i}" for i in range(30))
         [offer] = site_guide.look(agent(turn(*CALLS), [reply]))
         assert len(offer.new.splitlines()) == site_guide.GUIDE_MAX_LINES
+
+
+class TestInTheTerminal:
+    """The terminal asks right after the turn, as it does for a recipe."""
+
+    def repl(self, answers, monkeypatch, said=(True, "teashop: guide saved")):
+        import io
+
+        from rich.console import Console
+
+        from yantra.cli.repl import Repl
+        from yantra.setu_link import run_setu  # noqa: F401 -- patched below
+        import yantra.setu_link as setu_link
+
+        calls = []
+        monkeypatch.setattr(setu_link, "run_setu",
+                            lambda *args, **kw: calls.append(args) or said)
+        setu = SimpleNamespace(program="setu", refreshed=0, synced=0)
+        setu.refresh = lambda: setattr(setu, "refreshed", setu.refreshed + 1)
+        setu.sync = lambda mcp, agent: setattr(setu, "synced", setu.synced + 1)
+        agent = SimpleNamespace(setu=setu)
+        feeder = iter(answers)
+        out = io.StringIO()
+        repl = Repl.__new__(Repl)
+        repl.agent, repl.console, repl.mcp = agent, Console(file=out, width=120), object()
+        repl._input = lambda prompt: next(feeder)
+        offer = site_guide.GuideOffer(site="teashop", name="Teashop", old="",
+                                      new="Orders: /account/orders", calls=3)
+        return repl, offer, calls, out, setu
+
+    def test_keep_saves_through_setu_and_refreshes(self, monkeypatch):
+        repl, offer, calls, out, setu = self.repl(["k"], monkeypatch)
+        repl._ask_guide(repl.agent.setu, offer)
+        assert calls == [("setu", "site", "guide", "teashop", "--set",
+                          "Orders: /account/orders")]
+        assert setu.refreshed == 1 and setu.synced == 1
+        assert "Orders: /account/orders" in out.getvalue() and "kept" in out.getvalue()
+
+    def test_enter_is_no(self, monkeypatch):
+        repl, offer, calls, out, _ = self.repl([""], monkeypatch)
+        repl._ask_guide(repl.agent.setu, offer)
+        assert calls == [] and "not kept" in out.getvalue()
+
+    def test_edited_first(self, monkeypatch):
+        repl, offer, calls, _, _ = self.repl(["e", "k"], monkeypatch)
+        repl._edit_text = lambda text, suffix=".txt": "Orders: /orders"
+        repl._ask_guide(repl.agent.setu, offer)
+        assert calls[0][-1] == "Orders: /orders"
+
+    def test_a_refusal_is_said(self, monkeypatch):
+        repl, offer, _, out, setu = self.repl(["k"], monkeypatch,
+                                              said=(False, "error: written by hand"))
+        repl._ask_guide(repl.agent.setu, offer)
+        assert "written by hand" in out.getvalue() and setu.refreshed == 0
+
+    def test_only_after_a_turn_on_a_site_added_here(self, monkeypatch):
+        repl, _, _, _, _ = self.repl([], monkeypatch)
+        looked = []
+        monkeypatch.setattr(site_guide, "local_sites", lambda setu: [])
+        monkeypatch.setattr(site_guide, "look", lambda agent: looked.append(1) or [])
+        repl._offer_site_guides()
+        assert looked == []

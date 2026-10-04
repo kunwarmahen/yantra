@@ -420,6 +420,79 @@ class Repl:
         except Exception as exc:
             self.console.print(f"[yellow]learning skipped: {exc}[/yellow]")
         self._offer_pending_memories()
+        if end.reason == "end_turn":
+            self._offer_site_guides()
+
+    # ---- a site's guide, from use (notes/112) ---------------------------------
+
+    def _offer_site_guides(self) -> None:
+        """After a turn on a site added by its address: what would its guide
+        say? Asked here, as the recipe is; Enter is no, Ctrl-C is no."""
+        from yantra import site_guide
+
+        setu = getattr(self.agent, "setu", None)
+        if not site_guide.local_sites(setu):
+            return
+        try:
+            self.console.print("[dim]· looking at what the sites showed[/dim]")
+            offers = site_guide.look(self.agent)
+        except KeyboardInterrupt:
+            return
+        except Exception as exc:
+            self.console.print(f"[yellow]site guide skipped: {exc}[/yellow]")
+            return
+        for offer in offers:
+            try:
+                self._ask_guide(setu, offer)
+            except (EOFError, KeyboardInterrupt):
+                self.console.print("\n[dim]not kept[/dim]")
+
+    def _ask_guide(self, setu: Any, offer: Any) -> None:
+        from yantra.setu_link import run_setu
+
+        text = offer.new
+        while True:
+            head = "an update to its guide" if offer.old else "its first guide"
+            self.console.print(f"\na guide to {offer.name} ({head}, from this turn's "
+                               f"{offer.calls} page(s)) -- the agent reads it before "
+                               "using the site:", markup=False)
+            self.console.print("\n".join("  " + line for line in text.splitlines()),
+                               markup=False, style="cyan")
+            answer = self._input("[k]eep  [e]dit first  [N]o > ").strip().lower()
+            if answer in ("e", "edit"):
+                text = self._edit_text(text, suffix=".txt") or text
+                continue
+            if answer not in ("k", "keep", "y", "yes"):
+                self.console.print("[dim]not kept[/dim]")
+                return
+            ok, said = run_setu(setu.program or "setu", "site", "guide", offer.site,
+                                "--set", text)
+            if not ok:
+                self.console.print(f"not kept: {said}", markup=False, style="red")
+                return
+            # the connections layer carries guides: ask Setu again, so the
+            # next turn's prompt has this one
+            setu.refresh()
+            if self.mcp is not None:
+                setu.sync(self.mcp, self.agent)
+            self.console.print(f"[green]kept[/green] [dim]-- from the next turn, the "
+                               f"agent reads it before using {offer.name}[/dim]")
+            return
+
+    def _edit_text(self, text: str, *, suffix: str = ".txt") -> str:
+        """$EDITOR on ``text`` in a scratch file; without one, unchanged."""
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        if not (editor and sys.stdin.isatty() and sys.stdout.isatty()):
+            self.console.print("[yellow]no $EDITOR to edit with; kept as shown[/yellow]")
+            return text
+        with tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False,
+                                         encoding="utf-8") as out:
+            out.write(text)
+        try:
+            subprocess.run([editor, out.name])
+            return Path(out.name).read_text(encoding="utf-8").strip()
+        finally:
+            Path(out.name).unlink(missing_ok=True)
 
     def _offer_pending_memories(self) -> None:
         """Facts found mid-turn -- before compaction, or by a skill's

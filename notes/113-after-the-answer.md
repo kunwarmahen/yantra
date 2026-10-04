@@ -107,7 +107,9 @@ the newer one replaces it, because the two share a staging folder.
 The terminal still asks right after the turn, as before. It has no
 place for a question to wait. Text printed while you type would end
 up in the middle of your next prompt. The REPL asks once, and Enter
-means no.
+means no. After a turn on a site you added by its address, it
+also offers that site's guide the same way: the guide printed, then
+*[k]eep, [e]dit first, [N]o*.
 
 ## The tray, on disk
 
