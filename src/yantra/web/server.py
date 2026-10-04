@@ -715,7 +715,7 @@ class WebSession:
         learner = getattr(self.agent, "learner", None)
         learning = learner is not None and learner.mode != "off"
         from yantra import site_guide
-        sites = bool(site_guide.local_sites(getattr(self.agent, "setu", None)))
+        sites = site_guide.worth_a_look(self.agent)
         if not learning and not sites:
             return
         stop = self._look_stop = threading.Event()

@@ -143,10 +143,15 @@ class TestInTheTerminal:
         repl._ask_guide(repl.agent.setu, offer)
         assert "written by hand" in out.getvalue() and setu.refreshed == 0
 
-    def test_only_after_a_turn_on_a_site_added_here(self, monkeypatch):
-        repl, _, _, _, _ = self.repl([], monkeypatch)
+    def test_a_turn_that_used_no_site_says_nothing(self, monkeypatch):
+        repl, _, _, out, _ = self.repl([], monkeypatch)
         looked = []
-        monkeypatch.setattr(site_guide, "local_sites", lambda setu: [])
+        repl.agent.history = turn()                    # a site is added, but unused
+        monkeypatch.setattr(site_guide, "local_sites",
+                            lambda setu: [("hn", "Hacker News", "hn", "")])
         monkeypatch.setattr(site_guide, "look", lambda agent: looked.append(1) or [])
         repl._offer_site_guides()
-        assert looked == []
+        assert looked == [] and out.getvalue() == ""
+        repl.agent.history = turn(*CALLS)
+        repl._offer_site_guides()
+        assert looked == [1] and "looking at what the sites showed" in out.getvalue()

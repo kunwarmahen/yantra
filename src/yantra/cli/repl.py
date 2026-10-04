@@ -414,7 +414,7 @@ class Repl:
                     self.console.print(self._counted_line(name, worked),
                                        markup=False, style="dim")
                     self._suggest_tool(name, worked)
-                if learn and end.reason == "end_turn":
+                if learn and learner.mode != "off" and end.reason == "end_turn":
                     self._offer_skill(learner, forced=False)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](not saved)[/yellow]")
@@ -471,7 +471,7 @@ class Repl:
         from yantra import site_guide
 
         setu = getattr(self.agent, "setu", None)
-        if not site_guide.local_sites(setu):
+        if not site_guide.worth_a_look(self.agent):
             return
         try:
             self.console.print("[dim]· looking at what the sites showed[/dim]")

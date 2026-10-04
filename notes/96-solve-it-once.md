@@ -222,6 +222,11 @@ rewrites it), and the model never writes it.
 ## Counting, honestly
 
 After every turn, Yantra checks for learned skills the turn loaded.
+That includes turns where learning is off, such as a piped one-shot
+run or a scheduled one: `--learn off` stops the *offers*, never the
+counting. Counting asks nothing and calls no model, and a recipe that
+keeps failing where nobody is watching is exactly the one that should
+go stale.
 Each one gets a result: **worked** if the turn finished and no call
 after the load failed, **failed** otherwise. A shell command that
 exited non-zero counts as failed, even though the `bash` tool reports

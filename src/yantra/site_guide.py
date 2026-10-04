@@ -157,6 +157,14 @@ def local_sites(setu: Any) -> list[tuple[str, str, str, str]]:
     return found
 
 
+def worth_a_look(agent: Any) -> bool:
+    """Whether the last turn used a site added here enough to ask about
+    -- checked before anything is said, so a turn that used no site
+    shows no "looking" at all. No model call."""
+    return any(len(site_calls(agent.history, prefix)[1]) >= MIN_CALLS
+               for _, _, prefix, _ in local_sites(getattr(agent, "setu", None)))
+
+
 def look(agent: Any, stop: Any = lambda: False) -> list[GuideOffer]:
     """One model call per site added here that the last turn used enough.
     Raises what the provider raises; the host makes that a line."""

@@ -556,9 +556,38 @@ class TestMode:
         with pytest.raises(ValueError):
             learn_mode("sometimes")
 
-    def test_off_attaches_nothing(self, tmp_path):
+    def test_off_stops_the_offers_not_the_counting(self, tmp_path):
+        """A piped or scheduled run turns learning off -- nobody is there
+        to answer -- but a recipe it follows is still counted, so one that
+        keeps failing unattended still goes stale."""
+        import io
+
+        from rich.console import Console
+
+        from yantra.cli.repl import Repl
+
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(reply()),
+                                      assistant_tool_call("l", "load_skill",
+                                                          {"name": "greet-someone"}),
+                                      assistant_tool_call("g", "bash",
+                                                          {"command": "echo greeted mars"}),
+                                      assistant_text("Greeted mars.")])
+        learner = learner_after(agent)
+        learner.save(learner.consider())
+        off = enable_learning(agent, "off")
+        assert off is not None and agent.learner.mode == "off"
+        out = io.StringIO()
+        repl = Repl(agent, Console(file=out, width=120),
+                    input_fn=lambda prompt: pytest.fail(f"asked: {prompt}"))
+        repl.run_turn("greet mars")
+        record = agent.skills.get("greet-someone").learned
+        assert (record.worked, record.failed) == (1, 0)
+        assert "Save this" not in out.getvalue()
+
+    def test_no_skills_attaches_nothing(self, tmp_path):
         agent = make_agent(tmp_path, [])
-        assert enable_learning(agent, "off") is None and agent.learner is None
+        agent.skills = None
+        assert enable_learning(agent, "ask") is None and agent.learner is None
 
 
 # ---- the terminal's question ---------------------------------------------------------

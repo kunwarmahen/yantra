@@ -1548,8 +1548,13 @@ def learn_mode(flag: str | None = None) -> str:
 def enable_learning(agent: Any, mode: str = "ask",
                     *, home: Path | None = None) -> Learner | None:
     """Attach a Learner as ``agent.learner``; None (and nothing attached)
-    when the mode is off or the session has no skills to add to."""
-    if mode == "off" or getattr(agent, "skills", None) is None:
+    when the session has no skills to add to.
+
+    Off is attached too: it stops the OFFERS, never the counting. A
+    learned skill used by a piped run or a scheduled one is still counted,
+    so one that keeps failing there still goes stale -- counting asks
+    nothing and calls no model."""
+    if getattr(agent, "skills", None) is None:
         agent.learner = None
         return None
     agent.learner = Learner(agent, mode, home=home)
