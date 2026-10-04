@@ -58,6 +58,13 @@ LEVEL_RANK = {"read": 0, "write": 1}
 CLASS_RANK = {"read": 0, "write": 1, "spend": 2}
 #: Words in the address of a page that asks a visitor to sign in.
 SIGN_IN_HINTS = ("signin", "sign_in", "login", "/onboarding")
+#: Words a robot check puts at the top of its page. Conservative: a
+#: false alarm here is a wrong line in a health count, so only phrases
+#: that mean "prove you are a person" are listed.
+ROBOT_HINTS = ("captcha", "are you a robot", "not a robot", "are you human",
+               "verify you are human", "verify you're human", "unusual traffic",
+               "press and hold", "robot check", "automated access",
+               "checking your browser", "just a moment...")
 #: How long a page that builds itself in the browser (X) gets to put
 #: some text on the screen before the snapshot is taken anyway.
 PAINT_TIMEOUT_MS = 8_000
@@ -136,6 +143,20 @@ class SiteSession(BrowserSession):
         self.rules = rules
         self.actions = 0
         self._last_load = 0.0
+        #: Told each thing that went wrong -- a robot check, a signed-out
+        #: page, a refusal, the limit, a handoff -- once per page per
+        #: session (Setu keeps a week of them; setu_link wires it).
+        self.on_event: Any = None
+        self._noted: set[tuple[str, str]] = set()
+
+    def _note(self, kind: str, where: str = "") -> None:
+        if self.on_event is None or (kind, where) in self._noted:
+            return
+        self._noted.add((kind, where))
+        try:
+            self.on_event(kind)
+        except Exception:
+            pass        # a health line never costs the tool call it describes
 
     # -- launch: a site that refuses headless gets a window nobody sees --
 
@@ -178,7 +199,15 @@ class SiteSession(BrowserSession):
         text = super()._snapshot(chrome_last=True, **opts)
         where = urlparse(self._url)
         address = f"{where.path}?{where.query}".lower()
+        head = text[:2000].lower()
+        if any(hint in head for hint in ROBOT_HINTS):
+            self._note("robot_check", where.path)
+            text = (f"(this looks like {self.rules.name}'s robot check, not the page asked "
+                    "for. Do not try to solve it. Hand the page to the person with "
+                    "handoff mode='return', or tell them the site is checking for "
+                    "robots right now)\n" + text)
         if any(hint in address for hint in SIGN_IN_HINTS):
+            self._note("signed_out", where.path)
             text = (f"(this is {self.rules.name}'s sign-in page: the person is signed out. "
                     "Do not type a password. Hand the page to them with handoff "
                     "mode='return' to sign in again, or tell them to run "
@@ -266,6 +295,7 @@ class SiteSession(BrowserSession):
     def _refuse_spending(self, ref: str) -> None:
         element = self._resolve(ref)
         if self.rules.spends_here(self._page.url):
+            self._note("refused", ref)
             raise ToolError(
                 f"this page ({urlparse(self._page.url).path}) is where {self.rules.name} "
                 "spends money or does what cannot be undone -- nothing here is yours to "
@@ -273,6 +303,7 @@ class SiteSession(BrowserSession):
                 "mode='finish'")
         word = self.rules.spending_words(element.get("label", ""))
         if word:
+            self._note("refused", ref)
             raise ToolError(
                 f"{ref} ({element.get('label')!r}) is a '{word}' button -- buying, paying "
                 "and what cannot be undone are the person's to press. Hand the page over "
@@ -280,6 +311,7 @@ class SiteSession(BrowserSession):
 
     def _count_action(self) -> None:
         if self.actions >= self.rules.max_actions:
+            self._note("limit")
             raise ToolError(f"{self.rules.max_actions} actions on {self.rules.name} this "
                             "session is the limit its connector sets; stop and tell the "
                             "person what is left to do")
@@ -299,6 +331,7 @@ class SiteSession(BrowserSession):
         page = self._require_page()
         self._resolve(ref)
         if self._locator(page, ref).evaluate(_IS_SECRET_JS):
+            self._note("refused", ref)
             raise ToolError(f"{ref} asks for a password or payment details -- never typed "
                             "by the agent. Hand the page to the person: handoff "
                             "mode='return' to sign in, mode='finish' to pay")
@@ -419,6 +452,11 @@ class SiteHandoff(BrowserHandoff):
         self.requires = (f"{prefix}_open",)
         self.description = (f"Give the open {session.rules.name} page to the PERSON. "
                             + BrowserHandoff.description.split("PERSON. ", 1)[-1])
+        self._site = session
+
+    def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
+        self._site._note("handoff", str(args.get("mode") or ""))
+        return super().run(args, ctx)
 
 
 def prefix_for(connector: str, account: str, several: bool) -> str:

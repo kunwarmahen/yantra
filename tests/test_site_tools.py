@@ -334,3 +334,41 @@ class TestThroughSetu:
     def test_announced_like_any_other(self, tmp_path):
         setu, _, _, done = synced(tmp_path, report())
         assert "shop (5 tool(s))" in setu_link.announce(setu.link, done.connected)
+
+
+class TestHealthEvents:
+    """What went wrong is told once per page per session (Setu keeps a week)."""
+
+    def told(self, s):
+        seen = []
+        s.on_event = seen.append
+        return seen
+
+    def test_a_robot_check_is_said_and_told(self):
+        page = Page()
+        page.evaluate = lambda script, arg=None: {
+            "text": "Robot Check. Enter the characters you see below to continue.",
+            "dialog": False, "skipped": 0, "elements": []}
+        s = session(page)
+        seen = self.told(s)
+        out = s._snapshot()
+        assert "robot check" in out and "Do not try to solve it" in out
+        s._snapshot()
+        assert seen == ["robot_check"]                 # once per page
+
+    def test_refusals_the_limit_and_a_handoff_are_told(self):
+        s = session()
+        seen = self.told(s)
+        with pytest.raises(ToolError):
+            s._click("e3")                             # 'Buy Now'
+        s._click("e4")
+        s._click("e4")
+        with pytest.raises(ToolError, match="limit"):
+            s._click("e4")                             # max_actions=2
+        assert seen == ["refused", "limit"]
+
+    def test_a_reporter_that_fails_costs_nothing(self):
+        s = session()
+        s.on_event = lambda kind: (_ for _ in ()).throw(RuntimeError("setu is gone"))
+        with pytest.raises(ToolError, match="buy now"):
+            s._click("e3")

@@ -692,6 +692,18 @@ class Setu:
         reported = (self.link.data.get("command") if self.link else None) or None
         return reported or self.path or shutil.which("setu")
 
+    def _reporter(self, ref: str) -> Any:
+        """What a site's tools call when something goes wrong: Setu keeps
+        a week of it (setu site event). On its own thread -- a health
+        line never makes a tool call wait -- and a Setu too old to know
+        the command simply says no."""
+        def report(kind: str) -> None:
+            program = self.program
+            if program:
+                threading.Thread(target=run_setu, args=(program, "site", "event", ref, kind),
+                                 daemon=True, name="yantra-setu-event").start()
+        return report
+
     def _stamp(self) -> tuple | None:
         """The times of the vault and of each added site's file: any
         connect, disconnect, level, new site or kept guide moves one."""
@@ -869,6 +881,7 @@ class Setu:
                                 counts[row.get("connector", "")] > 1)
             session = SiteSession(rules_from(card, row), Path(where["profile"]),
                                   where.get("executable") or None)
+            session.on_event = self._reporter(ref)
             ceiling = None if self.allow is None else self.allow.get(row.get("connector"))
             tools = site_tools(prefix, session, dict(card.get("verbs") or {}),
                                str(row.get("level") or "read"), ceiling)

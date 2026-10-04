@@ -552,3 +552,21 @@ def test_a_merged_account_card_names_the_shared_prefix(tmp_path, monkeypatch):
         assert {r["tools_as"] for r in rows} == {"mcp__gmail__"}
     finally:
         manager.shutdown()
+
+
+def test_a_site_event_goes_to_setu_without_waiting(tmp_path):
+    import sys
+    import time
+    seen = tmp_path / "argv"
+    program = tmp_path / "setu"
+    program.write_text(f"#!{sys.executable}\nimport sys, time\ntime.sleep(0.3)\n"
+                       f"open({str(seen)!r}, 'w').write(' '.join(sys.argv[1:]))\n")
+    program.chmod(0o755)
+    setu = setu_link.Setu(mode="on", path=str(program))
+    started = time.monotonic()
+    setu._reporter("amazon:personal")("robot_check")
+    assert time.monotonic() - started < 0.2          # the tool call did not wait
+    deadline = time.monotonic() + 5
+    while not seen.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert seen.read_text() == "site event amazon:personal robot_check"

@@ -319,6 +319,34 @@ addresses and lost the shop's port. Now `open` takes a path and resolves
 it against the connection's home, port included. Guides write paths, so
 the tools have to read them.
 
+## How a site has been going
+
+A site can turn on its visitor slowly: a robot check that was rare
+starts showing on every page, or a sign-in that lasted weeks now lasts a
+day. Nobody notices that turn by turn. So the site tools now say when
+one of five things happens:
+
+- a robot check;
+- a signed-out page;
+- a refused button or field;
+- the action limit reached;
+- a page handed to you.
+
+Each is reported once per page per session, in the background, with
+`setu site event REF KIND`. Setu keeps a week of them per connection:
+
+```
+$ setu list
+amazon:personal        amazon.com      Read and act   last used 2026-10-04T19:30:37Z
+                       robot check 2×, handed to you 1× this week
+```
+
+The Connections card shows the same line. Only the kind and the time
+are kept, never the page or anything on it. A robot check is recognised
+by the phrases such pages use ("captcha", "are you a robot", "unusual
+traffic", "press and hold"…), and the snapshot now says so to the model
+as well: don't try to solve it, hand the page over.
+
 ## What was deliberately not built
 
 * **No spend level.** A browser-road manifest offers *read* and *write*

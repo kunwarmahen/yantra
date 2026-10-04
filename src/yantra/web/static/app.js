@@ -1925,6 +1925,16 @@ function setupBoxes(d) {
   });
 }
 
+// A week of what went wrong on a browser connection (Setu's health.py).
+const HEALTH = { robot_check: "robot check", signed_out: "signed out",
+  refused: "refused to press", limit: "action limit reached", handoff: "handed to you" };
+function healthLine(h) {
+  const counts = (h && h.counts) || {};
+  const parts = Object.entries(counts).sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${HEALTH[k] || k} ${n}×`);
+  return parts.length ? parts.join(" · ") + " this week" : "";
+}
+
 function levelSelect(c, current) {
   const sel = document.createElement("select");
   for (const lv of c?.levels || []) {
@@ -1951,6 +1961,10 @@ function connectedCard(row, c) {
     <div class="conn-sub">${row.email ? esc(row.email) + " · " : ""}<b>${esc(row.level_label || row.level)}</b>
       · ${row.tools} tool(s) as <code>${esc(row.tools_as || `mcp__${row.server}__`)}…</code>
       ${row.last_used ? " · last used " + esc(String(row.last_used).slice(0, 10)) : ""}</div>`;
+  const seen = healthLine(row.health);
+  if (seen) main.insertAdjacentHTML("beforeend",
+    `<div class="conn-sub conn-health" title="what went wrong on this site in the
+      last week, as its tools saw it">${esc(seen)}</div>`);
   const actions = document.createElement("div");
   actions.className = "conn-actions";
   const change = document.createElement("button");

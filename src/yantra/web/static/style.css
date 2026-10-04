@@ -2108,3 +2108,4 @@ pre.output { color: var(--ink); }
   .kept-row { grid-template-columns: minmax(0, 1fr); }
   .kept-row .conn-actions { grid-column: 1; }
 }
+.conn-health { color: var(--warn); }
