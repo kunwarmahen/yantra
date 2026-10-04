@@ -111,6 +111,7 @@ from yantra.skills.loader import (
     render_skill_md,
     validate_text,
 )
+from yantra.context import is_summary
 from yantra.permissions import REFUSED_UNATTENDED
 from yantra.providers.base import collect
 from yantra.setu_link import connectors_hint, resolve_needs
@@ -270,23 +271,34 @@ def own_steps(skill: Skill, steps: list[Step]) -> list[Step] | None:
 
 
 def _is_prompt(message: Message) -> bool:
-    """A user message a PERSON wrote -- not a batch of tool results."""
+    """A user message a PERSON wrote -- not a batch of tool results, and
+    not the summary compaction put in place of older messages."""
     return (message.role == "user"
             and any(isinstance(b, TextBlock) for b in message.content)
-            and not any(isinstance(b, ToolResult) for b in message.content))
+            and not any(isinstance(b, ToolResult) for b in message.content)
+            and not is_summary(message))
+
+
+def _last_prompt(history: list[Message]) -> int | None:
+    return next((i for i in range(len(history) - 1, -1, -1)
+                 if _is_prompt(history[i])), None)
 
 
 def read_turn(history: list[Message]) -> Turn | None:
     """The last turn in ``history``, from its prompt to its final answer.
 
     Walks back to the most recent message a person typed, so a turn that
-    was held for approval and resumed reads as the one task it was.
+    was held for approval and resumed reads as the one task it was. Only
+    what ``history`` still holds: after compaction folded part of the
+    turn away, ``current_turn`` is the reader that knows the rest.
     """
-    start = next((i for i in range(len(history) - 1, -1, -1)
-                  if _is_prompt(history[i])), None)
+    start = _last_prompt(history)
     if start is None:
         return None
-    task = history[start].text().strip()
+    return _turn_from(history, start, history[start].text().strip())
+
+
+def _turn_from(history: list[Message], start: int, task: str) -> Turn:
     calls: dict[str, ToolCall] = {}
     steps: list[Step] = []
     answer = ""
@@ -303,6 +315,62 @@ def read_turn(history: list[Message]) -> Turn | None:
                 steps.append(Step(call.id, call.name, dict(call.arguments),
                                   block.content, _worked(call.name, block)))
     return Turn(task=task, steps=steps, answer=answer)
+
+
+# ---- a turn compaction cut in two ---------------------------------------------
+#
+# On a small context window compaction can run INSIDE a turn: the older
+# messages, the person's question and the first steps among them, become
+# one summary. Read afterwards, the turn would start at the summary --
+# a five-step solve read as three, with the summary as its "task" -- so
+# nothing would be learned from exactly the long turns worth learning
+# from. So just before compaction the turn so far is kept on the agent
+# (``carry_turn``), and ``current_turn`` joins it to what came after.
+
+
+def carry_turn(agent: Any) -> None:
+    """Keep the turn so far, before compaction folds part of it away."""
+    history = getattr(agent, "history", [])
+    turn = current_turn(agent)
+    if turn is None:
+        agent.turn_carried = None
+        return
+    carried = getattr(agent, "turn_carried", None)
+    prompt = carried[0] if carried and _same_turn(history, carried[0]) is not None \
+        else history[_last_prompt(history)]
+    agent.turn_carried = (prompt, turn)
+
+
+def _same_turn(history: list[Message], prompt: Message) -> int | None:
+    """Where the carried turn continues in ``history`` -- its prompt, or
+    the summary that replaced it -- or None when a newer turn began."""
+    at = next((i for i, m in enumerate(history) if m is prompt), None)
+    last = _last_prompt(history)
+    if at is not None:
+        return at if last == at else None
+    summary = next((i for i in range(len(history) - 1, -1, -1)
+                    if is_summary(history[i])), None)
+    if summary is None or (last is not None and last > summary):
+        return None
+    return summary
+
+
+def current_turn(agent: Any) -> Turn | None:
+    """The last turn, whole: what compaction kept of it, joined to what
+    was carried from before (steps by call id, so none counts twice)."""
+    history = getattr(agent, "history", [])
+    carried = getattr(agent, "turn_carried", None)
+    if not carried:
+        return read_turn(history)
+    prompt, before = carried
+    start = _same_turn(history, prompt)
+    if start is None:
+        return read_turn(history)       # a newer turn: the carried one is done
+    after = _turn_from(history, start, before.task)
+    seen = {step.call_id for step in before.steps}
+    return Turn(task=before.task,
+                steps=before.steps + [s for s in after.steps if s.call_id not in seen],
+                answer=after.answer or before.answer)
 
 
 def why_not(turn: Turn | None, reason: str,
@@ -793,7 +861,7 @@ class Learner:
         """
         self.last_reason = getattr(end, "reason", "")
         skills = getattr(self.agent, "skills", None)
-        turn = read_turn(self.agent.history)
+        turn = current_turn(self.agent)
         if skills is None or turn is None:
             return []
         refused = set(getattr(self.agent, "turn_refusals", {}) or {})
@@ -853,7 +921,7 @@ class Learner:
                   progress: Callable[[str], None] | None) -> Offer | None:
         say = progress or (lambda text: None)
         self.last_skip = None
-        turn = read_turn(self.agent.history)
+        turn = current_turn(self.agent)
         repairs, failure = self._repair_target(turn)
         if repairs is None and failure:
             self.last_skip = failure

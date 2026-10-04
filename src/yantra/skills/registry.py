@@ -446,9 +446,9 @@ class SkillRegistry:
         tool.remember(found)
 
     def _current_task(self) -> str:
-        from yantra.skills.learn import read_turn
+        from yantra.skills.learn import current_turn
 
-        turn = read_turn(getattr(self._agent, "history", []))
+        turn = current_turn(self._agent) if self._agent is not None else None
         return turn.task if turn else ""
 
     def _register_tools(self, agent: Any) -> None:

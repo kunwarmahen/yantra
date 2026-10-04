@@ -183,10 +183,10 @@ class LoadSkill(Tool):
         under the steps that need them. Not left to ``recall_memory`` --
         measured, small models never call it (notes/103).
         """
-        from yantra.skills.learn import read_turn
+        from yantra.skills.learn import current_turn
 
         agent = getattr(self.skills, "_agent", None)
-        turn = read_turn(getattr(agent, "history", []))
+        turn = current_turn(agent) if agent is not None else None
         found = remembered_inputs(agent, skill, turn.task if turn else "")
         if not found:
             return []

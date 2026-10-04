@@ -39,6 +39,18 @@ KEEP_RESULTS = 3          # newest tool results stay verbatim under masking
 KEEP_TURNS = 6            # newest messages stay verbatim under summarization
 YELLOW, RED = 0.60, 0.80  # utilization thresholds of the usable window
 
+#: How a summary message begins. It is a user message with text, so a
+#: reader looking for what the person last typed must know to skip it.
+SUMMARY_MARK = ("[Earlier conversation summarized to save context. The full record "
+                "of tool calls made so far follows.]\n")
+
+
+def is_summary(message: Message) -> bool:
+    return (message.role == "user" and bool(message.content)
+            and isinstance(message.content[0], TextBlock)
+            and message.content[0].text.startswith(SUMMARY_MARK))
+
+
 SUMMARY_PROMPT = """Summarize the conversation segment below for an AI agent \
 that will continue the work with no other record of it. Requirements:
 - List EVERY tool call in order with a one-line outcome (never omit one).
@@ -212,9 +224,7 @@ def compact_history(
     start, end = span
     segment = new_history[start:end]
     summary_text = summarize(render_segment(segment))
-    replacement = Message("user", [TextBlock(
-        "[Earlier conversation summarized to save context. The full record "
-        "of tool calls made so far follows.]\n" + summary_text)])
+    replacement = Message("user", [TextBlock(SUMMARY_MARK + summary_text)])
     new_history = [*new_history[:start], replacement, *new_history[end:]]
     stats.update(summarized=True, segment_size=len(segment))
     return new_history, stats
@@ -249,9 +259,7 @@ async def acompact_history(
     start, end = span
     segment = new_history[start:end]
     summary_text = await asummarize(render_segment(segment))
-    replacement = Message("user", [TextBlock(
-        "[Earlier conversation summarized to save context. The full record "
-        "of tool calls made so far follows.]\n" + summary_text)])
+    replacement = Message("user", [TextBlock(SUMMARY_MARK + summary_text)])
     new_history = [*new_history[:start], replacement, *new_history[end:]]
     stats.update(summarized=True, segment_size=len(segment))
     return new_history, stats

@@ -805,6 +805,10 @@ class Agent:
         memory = getattr(self, "memory", None)
         if memory is not None:
             before_compaction(self)
+        # The turn so far, kept whole: a compaction inside a turn would
+        # otherwise leave the learner only its second half.
+        from yantra.skills.learn import carry_turn
+        carry_turn(self)
         before = len(self.history)
         self.history[:], stats = compact_history(
             self.history,

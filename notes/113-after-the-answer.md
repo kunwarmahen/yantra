@@ -109,6 +109,38 @@ place for a question to wait. Text printed while you type would end
 up in the middle of your next prompt. The REPL asks once, and Enter
 means no.
 
+## A turn cut in two
+
+On a small context window, compaction can run in the middle of a turn.
+`qwen3.8:latest` reports 8192 tokens, so a long solve fills it before
+the answer. Compaction folds the older messages, your question and the
+first steps among them, into one summary. Read afterwards, the turn
+seemed to start at that summary: a five-call solve looked like three,
+with the summary as its task. The look said "fewer than 4 calls,
+nothing to discover", so the long turns most worth keeping were exactly
+the ones never looked at.
+
+The summary is a user message with text, which is why it was taken for
+your question. Now it carries a fixed marker and is never read as one.
+That alone isn't enough, though, because the first steps are gone by
+the time the look runs. So just before compaction, Yantra keeps the
+turn so far, and the look joins it to whatever came after (by call id,
+so no step counts twice). Two compactions in one turn join the same
+way. When you type your next message, the kept half is done with.
+
+The steps kept from before compaction are the full ones. Compaction
+also shortens old tool results to stubs, and the write-up is better
+from what the commands actually printed.
+
+Checked on `qwen3.8:latest` with the window cut to 3,000 tokens
+(`OLLAMA_CONTEXT_WINDOW=3000`), on the CSV task from the receipt below.
+Compaction ran mid-turn: 8 tool results were cut to stubs, and a summary
+sat right after the question. The turn took 260 seconds and 8 tool calls,
+and 88 seconds later the tray held `csv-to-json`, tested and passing
+(`Wrote 40 records to people.json` / `records: 40`). Before this change,
+that summary was the turn's "question" and only the steps after it
+were counted.
+
 ## Receipt
 
 `qwen3.8:latest` through Ollama, `yantra --web --yolo --learn ask

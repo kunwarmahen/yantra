@@ -550,6 +550,8 @@ class AsyncAgent:
         memory = getattr(self, "memory", None)
         if memory is not None:
             await abefore_compaction(self)   # the sync twin's look back
+        from yantra.skills.learn import carry_turn
+        carry_turn(self)                     # the sync twin's turn so far
         before = len(self.history)
         self.history[:], stats = await acompact_history(
             self.history,
