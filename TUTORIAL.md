@@ -2723,7 +2723,9 @@ connected through Setu (§8) that it can read with nobody watching. Read
 the card. In the tutorial's own run, a local model wrote "read only"
 into its instructions and still asked for every Gmail tool, `send_message`
 included. The card said so in capitals, and *edit* lets you narrow it
-before you approve.
+before you approve. (That happened in about a third of schedules on both
+local models tried, until the agent was told that reading needs no
+permission ahead of time; then almost never, [notes/116](notes/116-offered-at-the-right-moment.md).)
 
 In `yantra --web`, the clock chip in the header opens the **Schedules**
 panel: each schedule, its next times and last run, what each run needed
@@ -2903,6 +2905,7 @@ Most carry a live receipt from a real run.
 | [104](notes/104-the-servers-it-came-with.md) [106](notes/106-what-the-recipe-leaves-out.md) [108](notes/108-where-the-model-reads.md) [113](notes/113-after-the-answer.md) | a package's own servers in every session; what a recipe leaves out for memory to fill; where the model reads a promoted tool's inputs; what happens after the answer, without making you wait |
 | [114](notes/114-nobody-watching.md) | a run nobody is watching: `--unattended`, `--allow-tools`, `--json`, and one browser per profile across processes |
 | [115](notes/115-what-a-yes-covers.md) | Samay found at startup, a schedule's approval card in words, and the Schedules panel |
+| [116](notes/116-offered-at-the-right-moment.md) | when two local models offer a schedule, how often they get *when* right, and the two lines that stopped them allowing `send_message` for a read-only check |
 
 ### dvara — the door
 

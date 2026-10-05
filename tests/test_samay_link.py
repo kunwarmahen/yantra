@@ -192,6 +192,17 @@ class TestFoundAndAnnounced:
         finally:
             manager.shutdown()
 
+    def test_the_model_is_told_reads_need_no_allowing_and_how_to_notify(
+            self, fake_samay, tmp_path):
+        _, agent, manager, _ = start(fake_samay[0], tmp_path)
+        try:
+            layer = agent.prompt.get("schedules")
+            assert "run unasked anyway: leave them out" in layer
+            assert "Never allow a tool that sends" in layer
+            assert "`always` for a digest, a summary or a reminder" in layer
+        finally:
+            manager.shutdown()
+
     def test_reads_run_unasked_and_writes_are_asked(self, fake_samay, tmp_path):
         _, agent, manager, _ = start(fake_samay[0], tmp_path)
         try:

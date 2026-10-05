@@ -125,10 +125,14 @@ from `list_schedules`.
 
 A `schedules` prompt layer, added after `connections`, appears only when
 Samay is linked. It says the tools exist, to preview first and say the
-sentence, to create only after a yes, and to name only tools the agent
-really has in `allow_tools`. When Samay's clock isn't running it adds
-one more line: say so when you make a schedule. When to offer is left to
-the model. This is plumbing, and the agent decides.
+sentence, to create only after a yes, what belongs in `allow_tools`
+(nothing that only reads; never something that sends unless the person
+asked), and which `notify` fits. When Samay's clock isn't running it
+adds one more line: say so when you make a schedule. When to offer is
+left to the model. This is plumbing, and the agent decides. The
+`allow_tools` and `notify` lines came from a trial on two local models,
+which also measured when they offer
+([note 116](116-offered-at-the-right-moment.md)).
 
 ## A Schedules panel on the page
 

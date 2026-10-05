@@ -1,0 +1,14 @@
+{"id": "mail-2h", "say": "Check my mail every 2 hours and tell me if anything needs me.", "offer": "yes", "when": [{"every": "2h"}], "notify": "when_new"}
+{"id": "weekday-8", "say": "Every weekday at 8am, give me a summary of my unread mail.", "offer": "yes", "when": [{"at": "08:00", "days": "mon-fri"}], "notify": "always"}
+{"id": "tomorrow-3pm", "say": "Remind me tomorrow at 3pm to look at the invoice from Acme.", "offer": "yes", "when": [{"once": "{tomorrow}T15:00"}], "notify": "always"}
+{"id": "work-hours", "say": "Every 30 minutes during work hours, 9 to 6, check whether anyone replied to my thread about the Q3 budget.", "offer": "yes", "when": [{"every": "30m", "between": "09:00-18:00"}, {"every": "30m", "between": "09:00-18:00", "days": "mon-fri"}], "notify": "when_new"}
+{"id": "twice-a-day", "say": "Twice a day, at 9 in the morning and 9 at night, check my mail for anything urgent.", "offer": "yes", "when": [{"at": ["09:00", "21:00"]}], "notify": "when_new"}
+{"id": "sunday-hn", "say": "Every Sunday evening at 6, look at news.ycombinator.com and send me the top 5 stories.", "offer": "yes", "when": [{"at": "18:00", "days": "sun"}], "notify": "always", "needs": ["web_fetch", "browser_open"]}
+{"id": "hourly-up", "say": "Once an hour, check whether example.com is up, and only bother me if it's down.", "offer": "yes", "when": [{"every": "1h"}], "notify": "when_new", "needs": ["web_fetch", "browser_open"]}
+{"id": "rent-monthly", "say": "On the first of every month at 9am, remind me to pay the rent.", "offer": "yes", "when": [{"cron": "0 9 1 * *"}], "notify": "always"}
+{"id": "landlord", "say": "Can you keep an eye on my inbox for a reply from my landlord? I'm waiting on it.", "offer": "yes", "when": null, "notify": "when_new"}
+{"id": "hn-habit", "say": "I look at Hacker News every morning to see the top stories. What's on it right now?", "offer": "may", "when": null, "notify": null}
+{"id": "readme", "say": "What's in README.md?", "offer": "no"}
+{"id": "latest-mail", "say": "Summarize my latest mail.", "offer": "no"}
+{"id": "tokyo", "say": "What time is it in Tokyo right now?", "offer": "no"}
+{"id": "haiku", "say": "Write a haiku about Mondays.", "offer": "no"}

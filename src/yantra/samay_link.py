@@ -184,9 +184,14 @@ def prompt_text(data: dict[str, Any]) -> str:
         "1. Call `mcp__samay__preview_schedule` first and tell the person its sentence, "
         "what will be done, and when they will be told.",
         "2. Only after they say yes, call `mcp__samay__create_schedule`. Its `prompt` is "
-        "read later by you with NOBODY watching: make it a complete instruction. In "
-        "`allow_tools`, name only tools you actually have (exact names, or globs like "
-        "`browser_*`).",
+        "read later by you with NOBODY watching: make it a complete instruction.",
+        "3. `allow_tools` is only for tools the job needs that do more than read. Tools "
+        "that only read (searching or reading mail, reading files) run unasked anyway: "
+        "leave them out. To look at a website, allow `web_fetch` or `browser_open` if you "
+        "have them. Never allow a tool that sends, posts, fills in a form or runs a "
+        "command unless the person asked for exactly that. Use exact tool names.",
+        "4. `notify`: `when_new` for a check that may find nothing; `always` for a "
+        "digest, a summary or a reminder.",
         "The person can see, pause and delete schedules on the web page's Schedules "
         "panel, or with `samay list`.",
     ]

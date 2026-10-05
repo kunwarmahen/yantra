@@ -678,7 +678,13 @@ samay: 7 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs
 `YANTRA_SAMAY=/path/to/samay` names it when it is elsewhere; `--samay`
 insists, `--no-samay` never looks, and a `--unattended` run never looks
 (nobody is there to say yes). A `schedules` prompt layer tells the model
-to preview first, say the sentence, and create only after a yes. The
+to preview first, say the sentence, and create only after a yes; that
+reads need no `allow_tools` entry and nothing that sends belongs there
+unless you asked; and which `notify` fits. Measured on `qwen3.8:latest`
+and `gemma4:12b`, three runs of fourteen messages each: no false offers
+(0/24), every `when` read right (47/47), and with those lines risky
+grants fell from 9/28 to 0/30 (qwen) and 12/27 to 2/27 (gemma)
+([notes/116](notes/116-offered-at-the-right-moment.md)). The
 approval card for a new schedule is written in words, not JSON: when (in
 Samay's own sentence, with the next times), when you hear, what each
 `allow_tools` glob reaches in this agent (a name that matches nothing is
@@ -1118,7 +1124,12 @@ sessions per fact, on any store — `--distractors` buries it so only the
 store's search can find it, `--repeat` turns one run into a rate with
 an interval, and `--rescore` puts saved runs of different models side
 by side, naming the prompt layer each ran with when they differ;
-`--out` saves each row as it's graded, so a crash keeps what ran), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+`--out` saves each row as it's graded, so a crash keeps what ran),
+[`examples/schedule_offer_trial.py`](examples/schedule_offer_trial.py)
+(does the agent offer a schedule when one fits and never when it
+doesn't, say *when* right, and allow only what the job needs? Fourteen
+messages, real Samay on scratch state, stub mail tools; Samay itself
+grades the `when` — [notes/116](notes/116-offered-at-the-right-moment.md)), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation
