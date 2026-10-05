@@ -120,7 +120,11 @@ closes the window. Two roads to the same profile:
 
 Chromium locks the profile dir while a browser uses it, which doubles
 as the guard against two agents fighting over one identity — the
-second launch fails loudly instead of corrupting state. This is the
+second launch fails loudly instead of corrupting state. (Loudly, but
+at once and in Playwright's words. A lock of Yantra's own now sits in
+front of Chromium's, so a second Yantra waits for the profile and is
+then told which process holds it ([note 114](114-nobody-watching.md)).)
+This is the
 same shape the ecosystem converged on (Playwright MCP's default
 profile, browser-use's storage-state/user_data_dir pair, Browserbase
 "Contexts", Steel "Profiles") minus the parts that only make sense

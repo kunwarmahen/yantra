@@ -142,6 +142,13 @@ uv run yantra "summarize README.md"             # one-shot, then exit
 uv run yantra --image photo.png "what's this?"  # vision one-shot
 ```
 
+When a *program* starts Yantra rather than you — a scheduler checking
+something at 8 every morning — add `--unattended --json`. Nothing then
+waits for a person: writes are refused unless you named them ahead of
+time with `--allow-tools`, a question ends the turn, and the answer
+comes back as one JSON object that says what the run needed from you
+([notes/114](notes/114-nobody-watching.md)).
+
 Type something that needs a file and watch it reach for one. The REPL's
 commands are `/help /model /provider /tools /history /usage /save /load
 /compact /clear /image /build /quit`, plus `/mcp`, `/skills`, `/learn`, `/env` and
@@ -695,6 +702,12 @@ shell **beats** `.env`. If you once pasted an `export
 YANTRA_BROWSER_PROFILE=...` line, it outranks the file you are editing
 and nothing you change there takes effect. Yantra says so when the two
 disagree, but a new terminal is the quicker cure.
+
+Only one browser can use a profile at a time. If a second Yantra wants
+the one your web page has open, it waits a little (`YANTRA_BROWSER_WAIT`)
+and then tells you which process holds it, rather than failing with
+Chromium's lock error. Runs on a schedule are the usual second Yantra:
+give them a profile of their own ([notes/114](notes/114-nobody-watching.md)).
 
 ### Did the login actually stick?
 
@@ -2923,5 +2936,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 1589 offline tests passing (1 skipped) — no network, no key.
-dvara: 323. Both copyright 2026 Mahen Singh, Apache License 2.0.*
+*Yantra: 2620 offline tests passing (1 skipped) — no network, no key.
+dvara: 533. Both copyright 2026 Mahen Singh, Apache License 2.0.*

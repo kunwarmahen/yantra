@@ -189,9 +189,12 @@ The same moment gave every run a second question to answer — not just
   raises `UserUnavailable`, which fails a one-shot with exit 1 and a
   REPL turn without killing the session;
 * `--web` → the session itself (it implements `.ask()` over its
-  websocket bridge).
+  websocket bridge);
+* `--unattended` → `NobodyChannel`: a program started this run and
+  nobody is there, so the question is kept for the `--json` answer and
+  the turn ends ([note 114](114-nobody-watching.md)).
 
-One registration site, three channels — the frontend decides how to
+One registration site, four channels — the frontend decides how to
 reach the person, the tool stays ignorant of all of them.
 
 ## /yolo — flipping the gate mid-session
