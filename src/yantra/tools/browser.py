@@ -659,9 +659,12 @@ class BrowserSession:
         caller will read it, and the model is told to stop -- carrying on
         past a sign-in page is how a run ends up clicking around a login
         form it cannot finish."""
-        where = self._url or "the page"
-        if self._url and reason:
-            unattended.note(f"{self._url}: {reason}")
+        # a load that failed leaves the browser on its blank page, which
+        # is no place to send a person to
+        url = "" if self._url.startswith("about:") else self._url
+        where = url or "the page"
+        if url and reason:
+            unattended.note(f"{url}: {reason}")
         else:
             unattended.note(reason or f"{where} needs a person")
         return ("Nobody is here: this run is unattended, so no window "
@@ -777,15 +780,20 @@ class BrowserSession:
             self._launch()
         if url:
             try:
-                self._page.goto(url, wait_until="domcontentloaded",
-                                timeout=GOTO_TIMEOUT_MS)
+                response = self._page.goto(url, wait_until="domcontentloaded",
+                                           timeout=GOTO_TIMEOUT_MS)
             except ToolError:
                 raise
             except Exception as exc:
-                raise ToolError(
-                    f"could not load {url}: {type(exc).__name__}: {exc}"
-                    ) from exc
+                said = f"could not load {url}: {type(exc).__name__}: {exc}"
+                if REFUSED_LOAD in str(exc):
+                    said += refused_nobody_note(url)
+                raise ToolError(said) from exc
             self._settle()
+            status = getattr(response, "status", None)
+            if status in REFUSED_STATUS:
+                return (f"(HTTP {status}: {url} refused this browser.)"
+                        + refused_nobody_note(url) + "\n\n" + self._snapshot())
         return self._snapshot()
 
     def _click(self, ref: str) -> str:
@@ -1282,6 +1290,29 @@ class BrowserClose(_BrowserTool):
         if self.browser.close():
             return "browser closed"
         return "no browser was open"
+
+
+#: A page that refuses the browser outright: HTTP statuses that mean
+#: "not you" (unsigned, or blocked), and Chromium's error for one that
+#: sends no page with it.
+REFUSED_STATUS = (401, 403)
+REFUSED_LOAD = "ERR_HTTP_RESPONSE_CODE_FAILURE"
+
+
+def refused_nobody_note(url: str) -> str:
+    """What an UNATTENDED run is told when a site refuses the browser:
+    that nobody can sign in now, and which tool says so. Without it a
+    model explains the 403 in prose, the run counts as done, and the
+    schedule tries again -- and tells the person again -- every time.
+    The model still decides whether the site needs the person; this
+    only shows it the way out. Empty when somebody is there."""
+    if not unattended.is_unattended():
+        return ""
+    return ("\nNobody is here to sign in or pass a check: this run is "
+            "unattended. If this site needs the person (to sign in again, or "
+            f"to get past a block on {url}), call browser_handoff now with "
+            "the reason -- that pauses the work until they have fixed it, "
+            "instead of failing the same way at every run.")
 
 
 #: browser_handoff's description in an unattended run (unattended.py).

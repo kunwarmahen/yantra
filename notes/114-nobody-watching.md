@@ -133,6 +133,37 @@ person is needed for sign-in.
 → browser_handoff()
 ```
 
+**A REFUSED PAGE SHOWS THE WAY OUT.** Later, x.com changed what it
+shows a signed-out headless browser: no sign-in page, just an HTTP 403
+with no page at all, which Chromium reports as
+`ERR_HTTP_RESPONSE_CODE_FAILURE`. There was no login form for the
+description to match. The model explained the 403 in prose (*"I
+couldn't complete this: x.com refused access"*), the run counted as
+done, and the schedule would have told the person again every morning
+instead of pausing. Two runs out of two went that way.
+
+Now, in an unattended run only, a page that refuses the browser (401
+or 403, whether Chromium throws or a page comes back) carries one more
+paragraph: nobody is here to sign in; if this site needs the person,
+call `browser_handoff` now, which pauses the work instead of failing
+the same way at every run. Nothing is written down by Yantra itself: a
+403 can be a block that a retry gets past, and whether a person is
+needed is still the model's call. Three runs on fresh profiles, all
+three handed off and paused:
+
+```
+run 1: needs_person | X/Twitter is refusing every page (login included) to this
+       automated browser, so I can't see your timeline. Please sign in at https://x.com …
+run 2: needs_person | X/Twitter refused the automated browser (HTTP 403 on /home and
+       /login) — the timeline needs a valid logged-in session …
+run 3: needs_person | x.com returned an HTTP error (ERR_HTTP_RESPONSE_CODE_FAILURE) on
+       both x.com/home and x.com … sign in to your X account …
+```
+
+A load that fails leaves the browser on its blank page, and the first
+version of the reason began *"about:blank: …"*. A blank page isn't
+somewhere to send a person, so it's left out.
+
 ## One browser per profile, across processes
 
 Your logins live in a browser profile (`YANTRA_BROWSER_PROFILE`), and

@@ -119,6 +119,59 @@ class TestNobodyToHandTo:
         assert unattended.needs() == [f"{URL}: 2FA code needed"]
 
 
+class RefusingPage(FakePage):
+    """x.com to a signed-out headless browser: a 403, thrown by Chromium
+    when no page comes with it, or answered with a page when one does."""
+
+    def __init__(self, *, throws: bool) -> None:
+        super().__init__()
+        self.throws = throws
+
+    def goto(self, url, **kwargs):
+        super().goto(url, **kwargs)
+        if self.throws:
+            raise RuntimeError(f"Page.goto: net::ERR_HTTP_RESPONSE_CODE_FAILURE at {url}")
+        return type("Response", (), {"status": 403})()
+
+
+class TestARefusingSiteShowsTheWayOut:
+    """Live, x.com started answering a signed-out browser with a 403. The
+    model explained it in prose, the run counted as done, and the
+    schedule told the person again every morning instead of pausing."""
+
+    def test_unattended_a_thrown_403_points_at_the_handoff(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_UNATTENDED", "1")
+        session = make_session(RefusingPage(throws=True))
+        with pytest.raises(ToolError) as err:
+            session.open(URL)
+        assert "ERR_HTTP_RESPONSE_CODE_FAILURE" in str(err.value)
+        assert "call browser_handoff now" in str(err.value)
+
+    def test_unattended_a_403_page_says_so_above_the_page(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_UNATTENDED", "1")
+        out = make_session(RefusingPage(throws=False)).open(URL)
+        assert out.startswith(f"(HTTP 403: {URL} refused this browser.)")
+        assert "call browser_handoff now" in out
+
+    def test_the_model_decides_nothing_is_written_down_for_it(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_UNATTENDED", "1")
+        make_session(RefusingPage(throws=False)).open(URL)
+        assert unattended.needs() == []
+
+    def test_a_blank_page_is_not_named_as_where_to_go(self):
+        session = make_session(FakePage(url="about:blank"))
+        session.open(URL)
+        session.handoff("return", "nobody", "x.com refused the browser (403)")
+        assert unattended.needs() == ["x.com refused the browser (403)"]
+
+    def test_with_somebody_there_nothing_is_added(self, monkeypatch):
+        monkeypatch.delenv("YANTRA_UNATTENDED", raising=False)
+        with pytest.raises(ToolError) as err:
+            make_session(RefusingPage(throws=True)).open(URL)
+        assert "browser_handoff" not in str(err.value)
+        assert "browser_handoff" not in make_session(RefusingPage(throws=False)).open(URL)
+
+
 class TestNobodyToAsk:
     def test_a_question_is_kept_and_fails_the_turn(self):
         with pytest.raises(UserUnavailable, match="which account"):

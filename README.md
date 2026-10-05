@@ -845,7 +845,8 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   run a program started with no person in front of it: writes are
   refused unless named with `--allow-tools GLOB` (a tool that asks on
   every call still asks), a question ends the turn, and a handoff opens
-  nothing — the model is told to stop and say what a person must do.
+  nothing — the model is told to stop and say what a person must do. A
+  page that refuses the browser (401/403) tells it the same way out.
   `--json` prints one object on stdout: the answer, `ok`, the cost, and
   three lists kept apart — `needs_person` (a sign-in, a question),
   `busy` (a profile another Yantra holds) and `refused` (tools it was
