@@ -274,6 +274,9 @@ class Repl:
         #: How the last turn ended -- what /learn needs when no Learner
         #: watched it (learning off). "" before the first turn.
         self._last_end = ""
+        #: The last turn's end event, whole: one-shot --json reads the
+        #: answer and the reason from it.
+        self.last_turn: TurnEnd | None = None
 
     # ---- main loop ---------------------------------------------------------
 
@@ -396,6 +399,7 @@ class Repl:
                 self._spinner = None
         if end is not None:
             self._last_end = end.reason
+            self.last_turn = end
             self._after_turn(end, learn=learn)
 
     # ---- learning (notes/96) --------------------------------------------------

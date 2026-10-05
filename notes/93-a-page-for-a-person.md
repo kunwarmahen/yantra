@@ -166,6 +166,9 @@ below.
   verb for pressing Enter.~~ Suggestions are clickable options and
   `browser_fill` can press Enter ([note 94](94-a-form-the-way-a-person-fills-it.md)).
 * **Stop from the web UI** reaching a `return` window, as above.
+* ~~**A handoff with nobody to hand to.**~~ An unattended run's handoff
+  opens nothing, keeps what the person must do, and tells the model to
+  stop ([note 114](114-nobody-watching.md)).
 
 `2159 passed, 1 skipped` (was 2139). The tests in
 `tests/test_browser_handoff.py` pin that the tool takes no address,

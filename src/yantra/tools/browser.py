@@ -91,8 +91,10 @@ from typing import Any, ClassVar
 from yantra.config import BROWSER_CHANNELS, browser_close_policy, \
     browser_executable, browser_handoff, browser_headed, \
     browser_login_command, browser_profile, has_screen, shadowed_by_shell
+from yantra import unattended
 from yantra.errors import ToolError
 from yantra.tools.base import Tool, ToolContext, require_str
+from yantra.tools.profile_lock import ProfileLock
 from yantra.tools.web_fetch import MAX_RESULT_CHARS, _clip
 
 #: How long a navigation may take before we call the page dead.
@@ -508,6 +510,10 @@ class BrowserSession:
         self._elements: dict[str, dict] = {}
         self._exec: ThreadPoolExecutor | None = None
         self._display: _VirtualDisplay | None = None
+        #: One browser per profile across processes (profile_lock.py):
+        #: taken before a launch, given back when the browser closes.
+        self._lock: ProfileLock | None = (
+            ProfileLock(self._profile) if self._profile is not None else None)
 
     # -- plumbing ----------------------------------------------------------
 
@@ -556,6 +562,8 @@ class BrowserSession:
             raise ToolError(_BROWSER_EXTRA_HINT) from exc
         if self._profile is not None:
             check_profile_reachable(self._profile, self._executable)
+        if self._lock is not None:
+            self._lock.acquire()      # ToolError, naming the holder, if busy
         try:
             options = self._launch_options()
             self._pw = sync_playwright().start()
@@ -572,9 +580,11 @@ class BrowserSession:
                 pages = self._context.pages
                 self._page = pages[0] if pages else self._context.new_page()
         except ToolError:
+            self._release_profile()
             raise
         except Exception as exc:
             self._teardown()
+            self._release_profile()
             named = (f" ({self._executable})" if self._executable
                      else "")
             raise ToolError(
@@ -601,6 +611,10 @@ class BrowserSession:
         if self._display is not None:
             self._display.stop()  # outlives the browser otherwise
             self._display = None
+
+    def _release_profile(self) -> None:
+        if self._lock is not None:
+            self._lock.release()
 
     def _require_page(self):
         if self._page is None:
@@ -629,9 +643,29 @@ class BrowserSession:
         """The page a handoff would show; "" when none is open."""
         return self._url
 
-    def handoff(self, mode: str, reach: str) -> str:
+    def handoff(self, mode: str, reach: str, reason: str = "") -> str:
         """Give the open page to the person (browser_handoff)."""
+        if reach == "nobody":
+            return self._nobody(reason)
         return self._call(lambda: self._handoff(mode, reach))
+
+    def _nobody(self, reason: str) -> str:
+        """An unattended run asked for a person (unattended.py). Nothing
+        opens and nothing waits: the need is written down where the
+        caller will read it, and the model is told to stop -- carrying on
+        past a sign-in page is how a run ends up clicking around a login
+        form it cannot finish."""
+        where = self._url or "the page"
+        if self._url and reason:
+            unattended.note(f"{self._url}: {reason}")
+        else:
+            unattended.note(reason or f"{where} needs a person")
+        return ("Nobody is here: this run is unattended, so no window "
+                "opened and nobody will help. Stop using the browser now. "
+                "Say in your answer, in one or two sentences, what the "
+                f"person has to do on {where} before this can work (for "
+                "example: sign in again), and report anything you found "
+                "before this point.")
 
     def release(self) -> None:
         """End of turn: close now, close later, or leave it -- by policy.
@@ -831,6 +865,7 @@ class BrowserSession:
         url = self._require_page().url
         if mode == "finish":
             self._teardown()   # done here; nothing left to hold the profile
+            self._release_profile()
             if reach == "window" and webbrowser.open(url):
                 return (f"Opened {url} in the person's own browser. Your "
                         "part is done: say in your answer what is on that "
@@ -878,6 +913,7 @@ class BrowserSession:
     def _shutdown(self) -> bool:
         was_open = self._page is not None
         self._teardown()
+        self._release_profile()
         if self._exec is not None:
             self._exec.shutdown(wait=False)  # we ARE the worker; safe
             self._exec = None  # next verb builds a fresh one
@@ -1040,7 +1076,12 @@ def run_login_session(profile: Path, url: str | None = None,
         executable = browser_executable()
     check_profile_reachable(profile, executable)
     profile.mkdir(parents=True, exist_ok=True)
-    _person_window(profile, url, executable)
+    lock = ProfileLock(profile)
+    lock.acquire()      # a scheduled run mid-way on this profile: wait, or say whose
+    try:
+        _person_window(profile, url, executable)
+    finally:
+        lock.release()
     # Counted after the window is gone: Chromium writes its cookie store
     # on the way out, so asking any earlier reads a file the browser has
     # not finished with.
@@ -1239,6 +1280,16 @@ class BrowserClose(_BrowserTool):
         return "no browser was open"
 
 
+#: browser_handoff's description in an unattended run (unattended.py).
+NOBODY_DESCRIPTION = (
+    "Nobody is watching this run. Call this when the page needs a PERSON "
+    "-- a sign-in or login page, 2FA, a captcha, a payment -- instead of "
+    "guessing or giving up quietly: the person is told exactly what is "
+    "needed, and you then stop browsing and say in your answer what you "
+    "could and could not do. Either mode works; nothing opens."
+)
+
+
 class BrowserHandoff(_BrowserTool):
     name = "browser_handoff"
     description = (
@@ -1276,6 +1327,16 @@ class BrowserHandoff(_BrowserTool):
     def __init__(self, browser: BrowserSession, reach: str) -> None:
         super().__init__(browser)
         self.reach = reach
+        if reach == "nobody":
+            # Unattended, a handoff opens nothing and sends nothing -- it
+            # only writes down that a person is needed -- so there is
+            # nothing to approve, and a gate that refused it would hide
+            # the one thing the run most needs to report.
+            self.read_only = True
+            # And it says what it is FOR here. Left with the attended
+            # wording, a small model looking at a sign-in page with nobody
+            # to hand it to answered as if the page had been read.
+            self.description = NOBODY_DESCRIPTION
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         how = ("the rest is yours" if args.get("mode") == "finish"
@@ -1288,8 +1349,8 @@ class BrowserHandoff(_BrowserTool):
         mode = require_str(args, "mode").strip()
         if mode not in ("finish", "return"):
             raise ToolError("mode must be 'finish' or 'return'")
-        require_str(args, "reason")
-        return self.browser.handoff(mode, self.reach)
+        reason = require_str(args, "reason")
+        return self.browser.handoff(mode, self.reach, reason)
 
 
 def browser_available() -> bool:

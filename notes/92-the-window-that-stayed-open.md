@@ -185,7 +185,10 @@ disk ([note 28](28-browser-tools.md)), not in the open window.
   lock files is safe only when no Chrome holds the profile, and
   checking that reliably is exactly where the model's own attempt went
   wrong (`pkill -f` matched its own shell). With turns releasing, the
-  stale lock should not be created in the first place.
+  stale lock should not be created in the first place. Beside Chrome's
+  lock there is now one of Yantra's own, which the kernel releases with
+  the process, so it cannot go stale: a second Yantra waits for the
+  profile and is told who holds it ([note 114](114-nobody-watching.md)).
 
 ## What is not here yet
 

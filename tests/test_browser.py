@@ -535,22 +535,22 @@ class TestPersistentProfile:
         assert "hello world" in out  # traffic flows through the context page
 
     def test_existing_context_page_is_reused_not_duplicated(
-            self, monkeypatch):
+            self, monkeypatch, tmp_path):
         page = FakePage()
         context = FakeContext(pages=[page])  # persistent contexts ship one
         chromium = FakeChromium(context=context)
         install_fake_playwright(monkeypatch, chromium)
-        session = BrowserSession(profile=Path("/tmp/never-made"))
+        session = BrowserSession(profile=tmp_path)
         session.open(URL)
         session.open(f"{URL}page2")
         assert len(context.pages) == 1
         assert page.gotos == [URL, f"{URL}page2"]
 
-    def test_close_shuts_down_the_context(self, monkeypatch):
+    def test_close_shuts_down_the_context(self, monkeypatch, tmp_path):
         context = FakeContext()
         chromium = FakeChromium(context=context)
         install_fake_playwright(monkeypatch, chromium)
-        session = BrowserSession(profile=Path("/tmp/never-made"))
+        session = BrowserSession(profile=tmp_path)
         session.open(URL)
         assert session.close() is True
         assert context.closed

@@ -21,6 +21,7 @@ from pathlib import Path
 
 from yantra.errors import ConfigError
 from yantra.providers.base import ProviderSettings
+from yantra.unattended import is_unattended
 
 _DEFAULTS: dict[str, dict[str, str]] = {
     "anthropic": {
@@ -411,7 +412,15 @@ def browser_handoff() -> str | None:
     Unset, it follows the machine: ``window`` when a screen is attached,
     ``link`` when not. A window on a display nobody is watching is a
     turn that waits ten minutes for no one.
+
+    ``nobody``: an unattended run (unattended.py). The tool is still
+    offered, because handing over is how the model says "a person has to
+    do this part" -- but it opens nothing and waits for no one; the need
+    is written down and the model is told to stop. Unattended wins over
+    the variable: a window or a link handed to nobody is the same wait.
     """
+    if is_unattended():
+        return "nobody"
     raw = os.environ.get("YANTRA_BROWSER_HANDOFF", "").strip().lower()
     if not raw:
         return "window" if has_screen() else "link"

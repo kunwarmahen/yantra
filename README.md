@@ -122,6 +122,11 @@ uv run yantra --reflect off                          # don't look back over a fi
                                                       #   you (/remember still does)
 uv run yantra "summarize README.md"                  # one-shot prompt, then exit
 uv run yantra --image photo.png "what's in this picture?"   # vision one-shot
+uv run yantra --json --unattended --allow-tools 'browser_*' \
+              --prompt "what's new on news.ycombinator.com?"
+                                                      # for a PROGRAM that runs Yantra
+                                                      #   (a scheduler): nobody waits,
+                                                      #   one JSON object on stdout
 ```
 
 ### It knows where (and when) it is
@@ -801,6 +806,19 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   is what opens. `YANTRA_BROWSER_HANDOFF=window|link|off`; unset, a
   machine with a screen opens windows and one without gives you a link
   ([notes/93](notes/93-a-page-for-a-person.md)).
+- **Nobody watching.** `--unattended` (or `YANTRA_UNATTENDED=1`) is a
+  run a program started with no person in front of it: writes are
+  refused unless named with `--allow-tools GLOB` (a tool that asks on
+  every call still asks), a question ends the turn, and a handoff opens
+  nothing — the model is told to stop and say what a person must do.
+  `--json` prints one object on stdout: the answer, `ok`, the cost, and
+  three lists kept apart — `needs_person` (a sign-in, a question),
+  `busy` (a profile another Yantra holds) and `refused` (tools it was
+  not allowed). Every Yantra also takes a lock in the browser profile
+  before launching on it, so a second one waits (10 s for a person, 2
+  minutes unattended, `YANTRA_BROWSER_WAIT`) and is then told who holds
+  it, instead of Chromium's `SingletonLock` error
+  ([notes/114](notes/114-nobody-watching.md)).
 - **The browser can be one you already have.**
   `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
   — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
@@ -2043,6 +2061,11 @@ src/yantra/
 │                   zone) -- sync + async twins share all the arithmetic
 ├── leases.py       TTL leases for shared resources -- parallel batch writes
 │                   to one path serialize instead of racing
+├── unattended.py   a run with nobody in front of it (--unattended,
+│                   YANTRA_UNATTENDED): what it needed a person for, what it
+│                   found busy, what it was refused -- the lists --json
+│                   prints; NobodyChannel for ask_user
+│                   ([notes/114](notes/114-nobody-watching.md))
 ├── session.py      SQLite checkpoints: append-only versions, /save /load --resume.
 │                   A checkpoint holds the conversation AND the agent's
 │                   identity; apply_payload(history_only=True) restores only
@@ -2453,7 +2476,14 @@ src/yantra/
 │   │               option/menuitem/tab/radio/switch, and label a "5" by its
 │   │               child's aria-label; a click on a covered element falls
 │   │               back to el.click() and says so
-│   │               ([notes/94](notes/94-a-form-the-way-a-person-fills-it.md))
+│   │               ([notes/94](notes/94-a-form-the-way-a-person-fills-it.md)).
+│   │               Unattended, browser_handoff opens nothing, keeps the need,
+│   │               and is described for that case
+│   │               ([notes/114](notes/114-nobody-watching.md))
+│   ├── profile_lock.py one browser per profile across processes: flock on
+│   │               yantra.lock, waited on (10 s / 2 min unattended), the
+│   │               holder named; the kernel releases it with the process
+│   │               ([notes/114](notes/114-nobody-watching.md))
 │   ├── site.py     a Setu browser-road connection as tools: <site>_open/
 │   │               follow/scroll/search (press nothing, run unasked) and,
 │   │               at the write level, click/fill (asked) on that

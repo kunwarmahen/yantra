@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import fnmatch
+import json
+import os
 import subprocess
 import sys
 import time
@@ -15,7 +17,8 @@ from rich.console import Console
 from rich.markup import escape
 from rich.prompt import Prompt
 
-from yantra.agent import Agent
+from yantra import unattended
+from yantra.agent import Agent, TurnEnd
 from yantra.budget import Budget
 from yantra.builder import BUILD_SYSTEM, BuildSpec, default_checks, run_build
 from yantra.cli.render import Renderer, SubagentTee
@@ -53,8 +56,10 @@ from yantra.memory import memory_mode
 from yantra.memory.mcp import bind_memory_server
 from yantra.memory.reflect import mark_reviewed, reflect_mode
 from yantra.package import MANIFEST, load_package
-from yantra.permissions import (SwitchableGate, allow_read_only,
+from yantra.permissions import (PermissionRequest, SwitchableGate, allow_named,
+                                 allow_read_only,
                                  trust_sandbox, yolo)
+from yantra.pricing import session_cost
 from yantra.providers import get_provider
 from yantra.sandbox import autodetect
 from yantra.spec import AgentSpec
@@ -66,6 +71,7 @@ from yantra.tools.ask_user import AskUser, TerminalChannel
 from yantra.tools.discover import (ENTRY_POINT_GROUP, entry_point_packs,
                                    installed_pack_versions,
                                    package_tool_names)
+from yantra.unattended import NobodyChannel, is_unattended
 from yantra.trace import (FULL, REDACTED, SHAPE, TrajectoryLog, flagged,
                           read_word_list, step_note, why_flagged)
 from yantra.name_reader import NameReader
@@ -281,6 +287,27 @@ def build_parser() -> argparse.ArgumentParser:
                              "remembered, or in the package's [[mcp]]. No "
                              "model, no API key needed")
     parser.add_argument("--prompt", help="one-shot mode: run this prompt and exit")
+    parser.add_argument("--json", action="store_true", dest="json_out",
+                        help="with a one-shot prompt: everything a person "
+                             "would read goes to stderr, and stdout gets ONE "
+                             "JSON object -- the answer, how the turn ended, "
+                             "what it cost, and what it needed a person for. "
+                             "For a program that runs Yantra, such as a "
+                             "scheduler")
+    parser.add_argument("--unattended", action="store_true",
+                        help="nobody is in front of this run (also "
+                             "YANTRA_UNATTENDED=1): nothing waits for a "
+                             "person. Writes not allowed ahead of time are "
+                             "refused, a question fails the turn, and a "
+                             "browser handoff tells the agent to stop and say "
+                             "what it needs instead of opening a window")
+    parser.add_argument("--allow-tools", action="append", default=[],
+                        metavar="GLOB", dest="allow_tools",
+                        help="approve these tools ahead of time (repeatable; "
+                             "globs, e.g. 'browser_*'). Meant for "
+                             "--unattended runs, carrying what the person "
+                             "already accepted. Tools that ask on every call "
+                             "still ask")
     parser.add_argument("--image", action="append", default=[], metavar="PATH",
                         help="attach an image (png/jpeg/gif/webp, <=5 MB) to "
                              "the one-shot prompt; repeat for several. "
@@ -2213,9 +2240,65 @@ def _mcp_login(name: str, args, console: Console) -> int:
     return 0
 
 
+#: The shape ``--json`` prints. A program reading it should refuse a
+#: format it does not know rather than guess.
+RUN_FORMAT = "yantra.run.v1"
+
+
+def _refuse_and_note(request: PermissionRequest) -> bool:
+    """The unattended gate: read-only tools run, anything else is
+    refused AND written down, so the caller sees what the run reached
+    for without reading its answer."""
+    if allow_read_only(request):
+        return True
+    unattended.note_refused(request.tool_name)
+    return False
+
+
+def _print_run(end: TurnEnd | None, agent, *, error: str = "") -> None:
+    """One-shot ``--json``: the whole run as one object on stdout.
+
+    ``ok`` means the turn finished on its own (``end_turn``). A run can
+    be ok AND need a person -- it reported, say, the mails it could read
+    and that one account needs signing in again -- so ``needs_person``
+    is its own field, and a caller decides what each means for it.
+    ``cost_usd`` is the session's, which for one prompt is the turn's;
+    ``priced`` is False when some model in it has no known price.
+    """
+    cost, priced = session_cost(agent.usage_by_model)
+    response = end.response if end is not None else None
+    print(json.dumps({
+        "format": RUN_FORMAT,
+        "ok": not error and end is not None and end.reason == "end_turn",
+        "text": response.message.text() if response is not None else "",
+        "stop_reason": "error" if error and end is None else
+                       (end.reason if end is not None else "error"),
+        "detail": error or (end.detail if end is not None else "") or "",
+        "cost_usd": round(cost, 6),
+        "priced": priced,
+        "needs_person": unattended.needs(),
+        "busy": unattended.busy(),
+        "refused": unattended.refused(),
+    }), flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     console = Console()
+
+    if args.json_out:
+        if args.prompt is None and not args.prompt_positional:
+            print("error: --json answers one prompt: give it --prompt or a "
+                  "positional PROMPT", file=sys.stderr)
+            return 2
+        # stdout is the JSON object and nothing else; everything a person
+        # would read -- the banner, the streamed answer, the tool lines --
+        # goes where a person reads it.
+        console = Console(stderr=True)
+    if args.unattended:
+        # Set in the environment rather than passed down: the browser's
+        # handoff and anything Yantra starts as a child read it there.
+        os.environ["YANTRA_UNATTENDED"] = "1"
 
     if args.image and args.prompt is None and not args.prompt_positional:
         print("error: --image needs a prompt to attach to (--prompt or a "
@@ -2503,8 +2586,15 @@ def main(argv: list[str] | None = None) -> int:
     # between asking and bypassing without a restart.
     if web_session is not None:
         ask_gate = web_session.permission_gate()
+    elif is_unattended():
+        # Nobody to ask: what is not allowed ahead of time is refused, and
+        # the refusal is written down, so whoever scheduled this run
+        # learns which tool it wanted without reading the answer.
+        ask_gate = _refuse_and_note
     else:
         ask_gate = confirm_gate(console)
+    if args.allow_tools:
+        ask_gate = allow_named(args.allow_tools, inner=ask_gate)
     if sandbox is not None and sandbox.confined:
         # containment earns autonomy: confined bash runs without asking,
         # every other tool keeps the ask-gate ([notes/16](../notes/16-sandboxing.md))
@@ -2594,6 +2684,8 @@ def main(argv: list[str] | None = None) -> int:
     # Build agents get nothing: builds are autonomous by definition.
     if web_session is not None:
         agent.registry.register(AskUser(web_session.channel))
+    elif is_unattended():
+        agent.registry.register(AskUser(NobodyChannel()))
     elif sys.stdin.isatty() and sys.stdout.isatty():
         agent.registry.register(AskUser(TerminalChannel()))
     else:
@@ -2640,7 +2732,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     attended = web_session is not None or (sys.stdin.isatty()
-                                           and sys.stdout.isatty())
+                                           and sys.stdout.isatty()
+                                           and not is_unattended())
     if mode == "ask" and not attended:
         mode = "off"
     if enable_learning(agent, mode) is not None and mode == "auto":
@@ -2807,13 +2900,21 @@ def main(argv: list[str] | None = None) -> int:
                 repl.end_conversation()
             except KeyboardInterrupt:
                 console.print("\n[yellow](cancelled)[/yellow]")
+                if args.json_out:
+                    _print_run(repl.last_turn, agent, error="cancelled")
                 return 130
             except UserUnavailable as exc:
                 console.print(f"\n[red]turn failed: {exc}[/red]")
+                if args.json_out:
+                    _print_run(None, agent, error=str(exc))
                 return 1
             except Exception as exc:
                 console.print(f"\n[red]{exc}[/red]")
+                if args.json_out:
+                    _print_run(None, agent, error=str(exc))
                 return 1
+            if args.json_out:
+                _print_run(repl.last_turn, agent)
             return 0
 
         repl.run()

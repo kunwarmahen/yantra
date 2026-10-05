@@ -51,13 +51,14 @@ this module quietly deciding that unanswered means no.
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import inspect
 import math
 import re
 import time
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 
 #: The two runtime modes a session can sit in. "ask" defers to whatever
 #: gate the frontend supplied (y/n/e terminal prompt, browser modal);
@@ -245,6 +246,32 @@ def allow_read_only(request: PermissionRequest) -> bool:
         f"unattended and auto-approves read-only tools only. Nobody is "
         f"available to ask.",
         code=REFUSED_UNATTENDED)
+
+
+def allow_named(patterns: Sequence[str],
+                inner: PermissionFn = allow_read_only) -> PermissionFn:
+    """Approve the tools ``patterns`` name (fnmatch globs); hand every
+    other call to ``inner``.
+
+    This is the answer a person gave AHEAD of time, for a run they will
+    not be watching: "every morning, check x.com" was accepted with the
+    browser in it, so at 08:00 the browser runs without asking anybody.
+    Anything the patterns do not name falls through -- to
+    ``allow_read_only`` by default, which refuses it out loud.
+
+    ALWAYS-ASK STILL ASKS. A name in the list is approval given before
+    the call existed, which is exactly the blanket yes ``always_ask``
+    tools (a purchase, a send) refuse to count. They go to ``inner``
+    like anything unnamed.
+    """
+    globs = tuple(p for p in (s.strip() for s in patterns) if p)
+
+    def gate(request: PermissionRequest) -> bool | Awaitable[bool]:
+        if not request.always_ask and any(
+                fnmatch.fnmatchcase(request.tool_name, g) for g in globs):
+            return True
+        return inner(request)
+    return gate
 
 
 def yolo(request: PermissionRequest) -> bool:
