@@ -235,6 +235,8 @@ def _setu_reach(setu: Any) -> tuple[list[str], dict[str, str]]:
     nothing; a package's session counts only what it was allowed. A
     connector with several accounts shares one set of tools, so its
     prefix names every one of them."""
+    from yantra.setu_link import ceiling_of
+
     link = getattr(setu, "link", None)
     if link is None:
         return [], {}
@@ -242,7 +244,7 @@ def _setu_reach(setu: Any) -> tuple[list[str], dict[str, str]]:
     accounts: dict[str, list[str]] = {}
     names: dict[str, str] = {}
     for row in link.connections:
-        if setu.allow is not None and row.get("connector") not in setu.allow:
+        if not ceiling_of(setu.allow, row):
             continue
         site = setu.sites.get(row.get("ref", ""))
         server = (row.get("mcp") or {}).get("name", "")

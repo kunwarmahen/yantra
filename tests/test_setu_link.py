@@ -570,3 +570,63 @@ def test_a_site_event_goes_to_setu_without_waiting(tmp_path):
     while not seen.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
     assert seen.read_text() == "site event amazon:personal robot_check"
+
+
+# ---- somebody else's sign-ins, one account at a time ---------------------------
+
+
+class TestSomebodyElsesHome:
+    """A service that serves several people (dvara) points each person's
+    Setu at their own folder. The bias: ONE PERSON'S ACCOUNTS NEVER COME
+    FROM ANOTHER PERSON'S FOLDER -- the status is read there, and every
+    connector asks there for its pass."""
+
+    def test_the_status_is_read_in_that_home(self, tmp_path, monkeypatch):
+        log = tmp_path / "homes.log"
+        data = status([sys.executable, "-c", "pass"])
+        program = tmp_path / "setu"
+        record = f"open({str(log)!r}, 'a').write(os.environ.get('SETU_HOME', '-') + '\\n')"
+        program.write_text(f"#!{sys.executable}\nimport os\n{record}\n"
+                           f"print({json.dumps(json.dumps(data))})\n")
+        program.chmod(0o755)
+        setu_link.load("on", str(program), home="/homes/priya")
+        setu_link.load("on", str(program))
+        assert log.read_text().split() == ["/homes/priya", "-"]
+
+    def test_each_connector_asks_that_home(self):
+        link = setu_link.Link(data=status(["connector", "--x"]), road="test")
+        [(_, cfg)] = setu_link.mcp_configs(link, home="/homes/priya")
+        assert cfg.env == {"SETU_HOME": "/homes/priya"}
+        [(_, own)] = setu_link.mcp_configs(link)
+        assert not own.env
+
+
+class TestOneAccountAtATime:
+    ROW_WORK = {"connector": "gmail", "account": "work"}
+    ROW_HOME = {"connector": "gmail", "account": "personal"}
+
+    def test_an_account_key_outranks_the_connector_key(self):
+        allow = {"gmail": "write", "gmail:work": "read"}
+        assert setu_link.ceiling_of(allow, self.ROW_WORK) == "read"
+        assert setu_link.ceiling_of(allow, self.ROW_HOME) == "write"
+
+    def test_an_account_not_named_is_not_reached(self):
+        assert setu_link.ceiling_of({"gmail:work": "read"}, self.ROW_HOME) is None
+
+    def test_your_own_session_has_no_limit(self):
+        assert setu_link.ceiling_of(None, self.ROW_HOME) == "spend"
+
+    def test_only_the_named_account_is_started(self, tmp_path, monkeypatch):
+        program, _ = two_accounts(tmp_path, monkeypatch)
+        agent, manager, _ = session(tmp_path)
+        try:
+            setu = setu_link.Setu(mode="on", path=str(program),
+                                  allow={"gmail:work": "read"})
+            setu.link = setu_link.load("on", str(program))
+            done = setu.sync(manager, agent)
+            assert list(done.connected) == ["gmail-work"]
+            assert "mcp__gmail-personal__search_threads" not in agent.registry
+            assert agent.registry.get("mcp__gmail-work__search_threads").read_only
+            assert "mcp__gmail-work__send_message" not in agent.registry   # above read
+        finally:
+            manager.shutdown()

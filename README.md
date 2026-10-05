@@ -2274,6 +2274,10 @@ src/yantra/
 │                   ([notes/112](notes/112-a-site-with-no-api.md)).
 │                   SignIn also runs `setu connect --site` and answers
 │                   Setu's "did you sign in?" from the page
+│                   Setu(home=...) reads somebody else's folder
+│                   (SETU_HOME, for a service serving several people), and
+│                   an allow key may name one account (gmail:work)
+│                   ([notes/110](notes/110-which-account-and-who-may-use-it.md))
 ├── samay_link.py   doing things later: Samay found by `samay status --json`
 │                   (samay.status.v1), its tools started `--for local` and
 │                   `--agent` this package, skipped when unattended; the

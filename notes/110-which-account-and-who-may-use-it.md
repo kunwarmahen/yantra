@@ -148,6 +148,20 @@ launch asks again. From a terminal, `yantra --agent DIR
 **YOUR OWN SESSIONS ARE UNCHANGED.** Running `yantra` without
 `--agent` still sees every account you connected. They're yours.
 
+### One account, and somebody else's folder
+
+Two more seams, for a service that serves several people (dvara):
+
+* **An allow key may name one account.** `{"gmail:work": "read"}`
+  reaches the work inbox and not the personal one; `{"gmail": "read"}`
+  still means every Gmail account, as a package's needs always have.
+  When both are present, the account's own key wins (`ceiling_of`).
+* **A Setu handle may read somebody else's folder.** `Setu(home=...)`
+  runs `setu status --json` with `SETU_HOME` set to that folder, and
+  starts each connector with the same, so every pass a connector asks
+  for comes from that person's sign-ins. The import road reads this
+  process's own folder, so a named home always takes the command road.
+
 ## Receipt
 
 A scratch Setu reporting two Gmail accounts, each with its own fake

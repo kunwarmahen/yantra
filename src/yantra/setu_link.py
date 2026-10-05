@@ -180,10 +180,16 @@ def _check(data: Any, road: str) -> dict[str, Any]:
     return data
 
 
-def _by_command(path: str) -> Link:
+def home_env(home: str | None) -> dict[str, str] | None:
+    """The environment a Setu program runs in for one person's home --
+    None, this process's own, when there is no home of anybody else's."""
+    return None if home is None else {**os.environ, "SETU_HOME": home}
+
+
+def _by_command(path: str, home: str | None = None) -> Link:
     try:
         done = subprocess.run([path, "status", "--json"], capture_output=True, text=True,
-                              timeout=STATUS_TIMEOUT)
+                              timeout=STATUS_TIMEOUT, env=home_env(home))
     except FileNotFoundError:
         raise SetuLinkError(f"no setu program at {path}") from None
     except subprocess.TimeoutExpired:
@@ -209,13 +215,24 @@ def _by_import() -> Link | None:
     return Link(data=data, road="import", problems=list(data.get("problems") or []))
 
 
-def load(mode: str, path: str | None = None) -> Link | None:
+def load(mode: str, path: str | None = None, home: str | None = None) -> Link | None:
     """Ask Setu, by whichever road is open. None when it is off, or when
-    it is ``auto`` and simply not there; an error when it was asked for."""
+    it is ``auto`` and simply not there; an error when it was asked for.
+
+    ``home`` is somebody's own Setu folder (``SETU_HOME``) -- a person
+    behind a service, with sign-ins of their own. Only the command road
+    can be pointed at it: the import road reads this process's own."""
     if mode == "off":
         return None
     if path:
-        return _by_command(path)
+        return _by_command(path, home)
+    if home is not None:
+        on_path = shutil.which("setu")
+        if on_path is None:
+            if mode == "on":
+                raise SetuLinkError("a Setu home was named but no `setu` is on PATH")
+            return None
+        return _by_command(on_path, home)
     try:
         found = _by_import()
     except SetuLinkError:
@@ -238,15 +255,18 @@ def load(mode: str, path: str | None = None) -> Link | None:
     return None
 
 
-def mcp_configs(link: Link) -> list[tuple[dict[str, Any], MCPServerConfig]]:
-    """One MCP server per connection, as ``setu mcp-config`` would write it."""
+def mcp_configs(link: Link, home: str | None = None
+                ) -> list[tuple[dict[str, Any], MCPServerConfig]]:
+    """One MCP server per connection, as ``setu mcp-config`` would write it.
+    With a ``home``, each connector asks THAT folder's Setu for its pass."""
     out = []
     for row in link.connections:
         mcp = row.get("mcp") or {}
         if not mcp.get("name") or not mcp.get("command"):
             continue
         out.append((row, MCPServerConfig(name=mcp["name"], command=mcp["command"],
-                                         args=list(mcp.get("args") or []))))
+                                         args=list(mcp.get("args") or []),
+                                         env={"SETU_HOME": home} if home else None)))
     return out
 
 
@@ -293,6 +313,23 @@ def account_of(row: dict[str, Any]) -> str:
     return row.get("account") or str(row.get("ref", "")).partition(":")[2] or "default"
 
 
+def ceiling_of(allow: dict[str, str] | None, row: dict[str, Any]) -> str | None:
+    """How far ``allow`` lets this connection reach: its level, or None
+    when it may not be used at all. A key may name one account
+    (``gmail:personal``) or every account of a connector (``gmail``); the
+    account's own key wins. No ``allow`` (your own session): no limit,
+    which is the highest level."""
+    if allow is None:
+        return VERB_CLASSES[-1]
+    cid = row.get("connector", "")
+    return allow.get(f"{cid}:{account_of(row)}") or allow.get(cid)
+
+
+def connector_allowed(allow: dict[str, str] | None, cid: str) -> bool:
+    """Whether any key of ``allow`` reaches this connector at all."""
+    return allow is None or cid in allow or any(k.startswith(f"{cid}:") for k in allow)
+
+
 def prompt_text(link: Link, allow: dict[str, str] | None = None,
                 merged: frozenset[str] = frozenset(),
                 sites: dict[str, str] | None = None) -> str | None:
@@ -302,9 +339,9 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
     browser-road connection to its tools' prefix."""
     sites = sites or {}
     connectors = link.connectors
-    rows = [r for r in link.connections if allow is None or r.get("connector") in allow]
+    rows = [r for r in link.connections if ceiling_of(allow, r)]
     idle = [c for c in connectors.values() if not c.get("connected")
-            and (allow is None or c["id"] in allow)]
+            and connector_allowed(allow, c["id"])]
     if not rows and not idle:
         return None
     lines = ["# Connected accounts (through Setu)",
@@ -656,6 +693,9 @@ class Setu:
     mode: str
     path: str | None = None
     link: Link | None = None
+    #: Whose sign-ins: a ``SETU_HOME`` of somebody else's (a person a
+    #: service serves), or None for this process's own.
+    home: str | None = None
     #: Why the last look failed, when it did -- the page says it.
     error: str = ""
     servers: set[str] = field(default_factory=set)
@@ -701,6 +741,7 @@ class Setu:
             program = self.program
             if program:
                 threading.Thread(target=run_setu, args=(program, "site", "event", ref, kind),
+                                 kwargs={"home": self.home},
                                  daemon=True, name="yantra-setu-event").start()
         return report
 
@@ -739,7 +780,7 @@ class Setu:
         """Ask Setu again. A page asking is the person asking, so a Setu
         that cannot be found is an error here even in ``auto``."""
         try:
-            self.link = load("on" if self.mode == "auto" else self.mode, self.path)
+            self.link = load("on" if self.mode == "auto" else self.mode, self.path, self.home)
             self.error = ""
             self.watched = self._stamp()
         except SetuLinkError as exc:
@@ -755,8 +796,9 @@ class Setu:
         done = Synced()
         link = self.link
         self._unmerge(agent.registry, manager)
-        wanted = [(row, cfg) for row, cfg in (mcp_configs(link) if link is not None else [])
-                  if self.allow is None or row.get("connector") in self.allow]
+        wanted = [(row, cfg) for row, cfg in
+                  (mcp_configs(link, self.home) if link is not None else [])
+                  if ceiling_of(self.allow, row)]
         # a version Setu's catalog withdrew is not started, whoever allowed it;
         # the connection stays in Setu, so an update can use it again
         for row, _ in wanted:
@@ -804,7 +846,7 @@ class Setu:
             elif cfg.name not in self.servers and same_server(existing.config, cfg):
                 self.servers.add(cfg.name)   # configured by hand as this very command
             self.started[cfg.name] = stamp
-            ceiling = None if self.allow is None else self.allow[row["connector"]]
+            ceiling = None if self.allow is None else ceiling_of(self.allow, row)
             kept, removed = apply_verbs(agent.registry, cfg.name,
                                         link.verbs(row["connector"]), ceiling)
             if cfg.name in getattr(manager, "tool_names", {}):
@@ -841,7 +883,7 @@ class Setu:
         from yantra.tools.site import SiteSession, prefix_for, rules_from, site_tools
 
         rows = [r for r in (link.connections if link is not None else [])
-                if r.get("browser") and (self.allow is None or r.get("connector") in self.allow)
+                if r.get("browser") and ceiling_of(self.allow, r)
                 and not (link.connectors.get(r.get("connector")) or {}).get("yanked")]
         counts: dict[str, int] = {}
         for row in rows:
@@ -852,7 +894,7 @@ class Setu:
             wanted[row["ref"]] = (row, (
                 str(row.get("level") or ""), str(where.get("profile") or ""),
                 str(where.get("executable") or ""),
-                str(None if self.allow is None else self.allow.get(row.get("connector"))),
+                str(None if self.allow is None else ceiling_of(self.allow, row)),
                 str(counts[row.get("connector", "")] > 1)))
         for ref in list(self.sites):
             if ref not in wanted or wanted[ref][1] != self.sites[ref].stamp:
@@ -882,7 +924,7 @@ class Setu:
             session = SiteSession(rules_from(card, row), Path(where["profile"]),
                                   where.get("executable") or None)
             session.on_event = self._reporter(ref)
-            ceiling = None if self.allow is None else self.allow.get(row.get("connector"))
+            ceiling = None if self.allow is None else ceiling_of(self.allow, row)
             tools = site_tools(prefix, session, dict(card.get("verbs") or {}),
                                str(row.get("level") or "read"), ceiling)
             taken = [t.name for t in tools if t.name in registry]
@@ -1073,11 +1115,12 @@ ACCOUNT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
 COMMAND_TIMEOUT = 30.0
 
 
-def run_setu(program: str, *args: str, timeout: float = COMMAND_TIMEOUT) -> tuple[bool, str]:
+def run_setu(program: str, *args: str, timeout: float = COMMAND_TIMEOUT,
+             home: str | None = None) -> tuple[bool, str]:
     """One short setu command -> (worked, what it said)."""
     try:
         done = subprocess.run([program, *args], capture_output=True, text=True,
-                              timeout=timeout)
+                              timeout=timeout, env=home_env(home))
     except FileNotFoundError:
         return False, f"no setu program at {program}"
     except subprocess.TimeoutExpired:
