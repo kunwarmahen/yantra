@@ -630,3 +630,21 @@ class TestOneAccountAtATime:
             assert "mcp__gmail-work__send_message" not in agent.registry   # above read
         finally:
             manager.shutdown()
+
+
+class TestAHostsOwnWords:
+    def test_a_need_with_no_account_is_named_with_the_hosts_way_to_connect(self):
+        data = status(["connector"])
+        data["connections"] = []
+        data["connectors"][0]["connected"] = False
+        link = setu_link.Link(data=data, road="test")
+        said = setu_link.prompt_text(link, allow={}, mention=frozenset({"gmail"}),
+                                     connect_how="ask the owner")
+        assert "Installed but not connected (ask the owner):" in said
+        assert "Gmail" in said and "Outlook" not in said
+
+    def test_at_a_keyboard_the_person_runs_setu(self):
+        data = status(["connector"])
+        data["connections"] = []
+        link = setu_link.Link(data=data, road="test")
+        assert "`setu connect <id>`" in setu_link.prompt_text(link)

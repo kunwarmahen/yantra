@@ -330,18 +330,27 @@ def connector_allowed(allow: dict[str, str] | None, cid: str) -> bool:
     return allow is None or cid in allow or any(k.startswith(f"{cid}:") for k in allow)
 
 
+#: How a person at this computer connects an account.
+CONNECT_HERE = "the person can connect one with `setu connect <id>`; you cannot"
+
+
 def prompt_text(link: Link, allow: dict[str, str] | None = None,
                 merged: frozenset[str] = frozenset(),
-                sites: dict[str, str] | None = None) -> str | None:
+                sites: dict[str, str] | None = None,
+                mention: frozenset[str] = frozenset(),
+                connect_how: str = CONNECT_HERE) -> str | None:
     """The ``connections`` layer: what is connected, and what could be.
     ``allow`` narrows it to what a package may use; ``merged`` names the
     connectors whose accounts share one set of tools; ``sites`` maps a
-    browser-road connection to its tools' prefix."""
+    browser-road connection to its tools' prefix. ``mention`` names
+    connectors to mention as not connected even when ``allow`` reaches
+    none of their accounts (a package needs them, the person has none),
+    and ``connect_how`` is how this host's person gets one connected."""
     sites = sites or {}
     connectors = link.connectors
     rows = [r for r in link.connections if ceiling_of(allow, r)]
     idle = [c for c in connectors.values() if not c.get("connected")
-            and connector_allowed(allow, c["id"])]
+            and (connector_allowed(allow, c["id"]) or c["id"] in mention)]
     if not rows and not idle:
         return None
     lines = ["# Connected accounts (through Setu)",
@@ -382,8 +391,7 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
     if allow is not None:
         lines.append("This agent may use only these, at the level the person allowed.")
     if idle:
-        lines.append("Installed but not connected (the person can connect one with "
-                     "`setu connect <id>`; you cannot):")
+        lines.append(f"Installed but not connected ({connect_how}):")
         lines += [f"- {c.get('name', c['id'])} (`{c['id']}`)" for c in idle]
     lines.append("If the person asks about an account that is not listed here, say it is "
                  "not connected rather than guessing.")
@@ -696,6 +704,10 @@ class Setu:
     #: Whose sign-ins: a ``SETU_HOME`` of somebody else's (a person a
     #: service serves), or None for this process's own.
     home: str | None = None
+    #: A host's own words in the prompt layer (prompt_text): connectors
+    #: to name as not connected, and how its person gets one connected.
+    mention: frozenset[str] = frozenset()
+    connect_how: str = CONNECT_HERE
     #: Why the last look failed, when it did -- the page says it.
     error: str = ""
     servers: set[str] = field(default_factory=set)
@@ -871,8 +883,8 @@ class Setu:
         prompt = attach_prompt(agent)
         merged = frozenset(t.connector for t in self.merged.values())
         prompt.set("connections", prompt_text(
-            link, self.allow, merged, {ref: site.prefix for ref, site in self.sites.items()})
-                   if link is not None else None)
+            link, self.allow, merged, {ref: site.prefix for ref, site in self.sites.items()},
+            self.mention, self.connect_how) if link is not None else None)
         prompt.apply()
         return done
 

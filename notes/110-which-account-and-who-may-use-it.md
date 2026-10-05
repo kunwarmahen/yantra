@@ -161,6 +161,13 @@ Two more seams, for a service that serves several people (dvara):
   starts each connector with the same, so every pass a connector asks
   for comes from that person's sign-ins. The import road reads this
   process's own folder, so a named home always takes the command road.
+* **A host's own words.** At a keyboard, a connector that isn't connected
+  is named with "the person can connect one with `setu connect`". A
+  person in a chat can't run anything, so a host says how *its* people
+  get one (`Setu(connect_how=…)`), and names the connectors its package
+  needs even when the person has no account of them yet (`mention`).
+  Told nothing, a local model invented "you'd need Google API
+  credentials"; told this, it said the owner connects it for them.
 
 ## Receipt
 

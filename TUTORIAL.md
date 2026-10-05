@@ -1928,8 +1928,8 @@ README.
 
 ## 23 · dvara — the door
 
-dvara builds a fresh Yantra agent for every turn it serves. Four things
-it needed were grown here first, as framework features argued on the
+dvara builds a fresh Yantra agent for every turn it serves. What
+it needed was grown here first, as framework features argued on the
 framework's terms:
 
 * **An awaitable permission gate** (§16), so one person's unanswered
@@ -1942,7 +1942,10 @@ framework's terms:
   scheduled turns can run at once without reporting each other's needs
   ([notes/114](notes/114-nobody-watching.md)); and a host's own words for
   Samay's tools (`Samay(person=…, runner=…)`), so each person's turn gets
-  schedules that are theirs.
+  schedules that are theirs; and a Setu handle for somebody else's
+  folder (`Setu(home=…)`), allowed one account at a time, so each
+  person's turn reaches their own sign-ins
+  ([notes/110](notes/110-which-account-and-who-may-use-it.md)).
 
 Everything about running dvara — actors, the roster, allowances, asking a
 person on Telegram, schedules asked for in a chat — is in
@@ -1966,9 +1969,9 @@ to read each step.
    ([dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md)).
    For schedules there, start it with `--samay`, and give both dvara and
    Samay's service the same `SAMAY_DVARA_URL` and `SAMAY_DVARA_TOKEN`.
-   One gap to know: agents behind dvara do not get Setu accounts yet, so
-   "check my mail" works at your keyboard and on Samay's direct road, but
-   not in a Telegram chat.
+   For accounts there, give each person a Setu folder of their own in
+   dvara's actors file (`setu = true`) and sign them in at the machine
+   with `SETU_HOME=<their folder> setu connect …` (dvara's tutorial §16).
 
 | Setting | Read by | Documented in |
 |---|---|---|
@@ -1976,6 +1979,7 @@ to read each step.
 | `SAMAY_STATE`, `SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`, `SAMAY_TZ` | Samay | Samay's README |
 | `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
 | `DVARA_TOKEN`, `DVARA_ROOT`, `DVARA_ACTORS`, `DVARA_STATE`, `DVARA_SAMAY` | dvara | dvara's README |
+| `SETU_HOME` | Setu (set per person by dvara) | Setu's README, dvara's tutorial §16 |
 | connections, levels, the catalog | Setu | Setu's README |
 
 ---
