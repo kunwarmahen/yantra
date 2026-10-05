@@ -74,6 +74,7 @@ executor -- one thread sees all the traffic, whichever loop twin runs.
 
 from __future__ import annotations
 
+import contextvars
 import os
 import shutil
 import signal
@@ -527,7 +528,10 @@ class BrowserSession:
         if self._exec is None:
             self._exec = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="yantra-browser")
-        return self._exec.submit(fn).result()
+        # Run in the CALLER's context: an unattended turn's record
+        # (unattended.scope) has to reach the worker, where the profile
+        # lock decides how long to wait and notes a busy profile.
+        return self._exec.submit(contextvars.copy_context().run, fn).result()
 
     def _launch_options(self) -> dict[str, Any]:
         """Every knob the two launch doors share, resolved once.

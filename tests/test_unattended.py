@@ -314,3 +314,48 @@ class TestNobodyWithNoPage:
         session = make_session(FakePage())
         session.handoff("return", "nobody", "sign in to X")
         assert unattended.needs() == ["sign in to X"]
+
+
+class TestOneRecordPerTurn:
+    """A service runs several unattended turns at once; each one's
+    sign-in wall is its own."""
+
+    def test_a_scope_is_unattended_and_keeps_its_own_record(self):
+        assert not unattended.is_unattended()
+        with unattended.scope() as record:
+            assert unattended.is_unattended()
+            unattended.note("sign in to x.com")
+            unattended.note_refused("bash")
+        assert record.needs == ["sign in to x.com"]
+        assert record.refused == ["bash"]
+        assert unattended.needs() == [] and unattended.refused() == []
+
+    def test_two_turns_at_once_do_not_mix(self):
+        import asyncio
+
+        async def turn(need):
+            with unattended.scope() as record:
+                await asyncio.sleep(0.01)
+                await asyncio.to_thread(unattended.note, need)
+                await asyncio.sleep(0.01)
+                return record.needs
+
+        async def both():
+            return await asyncio.gather(turn("a"), turn("b"))
+        assert asyncio.run(both()) == [["a"], ["b"]]
+
+    def test_the_browser_worker_sees_the_turns_record(self, tmp_path):
+        """The lock is taken on the browser's own thread; a busy profile
+        must land on the turn that hit it."""
+        held = ProfileLock(tmp_path)
+        held.acquire(wait=0)
+        session = make_session(FakePage())
+        try:
+            with unattended.scope() as record:
+                with pytest.raises(ToolError):
+                    session._call(lambda: ProfileLock(tmp_path).acquire(wait=0))
+            assert len(record.busy) == 1
+            assert unattended.busy() == []
+        finally:
+            held.release()
+            session.close()

@@ -2410,11 +2410,19 @@ GET  /agents                                     -> {agents: [...]}
 GET  /health
 GET  /asks?actor=                                -> {asks: [{id, tool, summary, ...}]}
 POST /asks/{id}    {actor, approve}              -> {answered, approved}
+POST /notify       {actor, text}                 -> {sent, kept, nowhere}
 ```
 
 ```bash
 DVARA_TOKEN=$(openssl rand -hex 24) dvara serve --port 8765
 ```
+
+Two of these exist for a program that acts for people who are not
+there — a scheduler. `/message` with `"unattended": true` runs a turn
+nobody typed, with `"allow_tools"` standing in for the questions the
+person answered ahead of time (they grant only what a question could
+have), and `/notify` sends a person a finding they did not ask for, on
+their own channels (dvara's note 17).
 
 Every request carries `Authorization: Bearer $DVARA_TOKEN`. **The token
 authenticates the caller, not the person.** A caller is a channel adapter
@@ -2936,5 +2944,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 2620 offline tests passing (1 skipped) — no network, no key.
-dvara: 533. Both copyright 2026 Mahen Singh, Apache License 2.0.*
+*Yantra: 2623 offline tests passing (1 skipped) — no network, no key.
+dvara: 556. Both copyright 2026 Mahen Singh, Apache License 2.0.*

@@ -215,10 +215,12 @@ accept.
 * **Borrowing the browser another Yantra already has open.** It would
   answer "busy" better than waiting does, but it means two processes
   steering one browser, and the lock is what keeps that from happening.
-* **A per-turn unattended switch for a long-lived host.** The lists in
-  `unattended.py` belong to the process, because the process *is* the
-  run: one prompt, one answer, then exit. A host that serves many
-  unattended turns needs the flag per turn, and gets it when one exists.
+* ~~**A per-turn unattended switch for a long-lived host.**~~ For a
+  one-shot run the record belongs to the process, because the process
+  *is* the run. A host that serves many unattended turns at once opens
+  `unattended.scope()` around each one: a context variable, so each
+  turn has a record of its own, and the browser carries it onto its own
+  worker thread. Dvara does this for a schedule's turns (its note 17).
 * **Retrying.** An unattended run doesn't try the browser again after a
   busy profile or a sign-in wall. Whether and when to try again belongs
   to whatever scheduled it, which knows the next time it's due.

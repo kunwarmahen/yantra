@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2620 tests. The
+The harness underneath is complete and covered by 2623 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -2064,7 +2064,8 @@ src/yantra/
 ├── unattended.py   a run with nobody in front of it (--unattended,
 │                   YANTRA_UNATTENDED): what it needed a person for, what it
 │                   found busy, what it was refused -- the lists --json
-│                   prints; NobodyChannel for ask_user
+│                   prints; scope() gives one turn its own record, for a
+│                   host running many at once; NobodyChannel for ask_user
 │                   ([notes/114](notes/114-nobody-watching.md))
 ├── session.py      SQLite checkpoints: append-only versions, /save /load --resume.
 │                   A checkpoint holds the conversation AND the agent's
@@ -2690,7 +2691,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2620 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2623 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -2722,7 +2723,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2620 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2623 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
