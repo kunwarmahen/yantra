@@ -2701,6 +2701,13 @@ dvara as you (§22–33): your allowance pays, the owner's rules apply, a
 tool you did not allow is asked about on your Telegram, and whatever is
 worth telling you arrives there too.
 
+`samay serve` also prints the address of a page: the next 24 hours as a
+strip of dots, every schedule with its last run, and buttons to run,
+pause or delete one. And your agent can make the offer itself:
+connect `samay mcp --for local` as an MCP server (§8), say "keep an eye
+on this for me", and it previews the schedule, tells you the sentence,
+and saves it only once you approve the card.
+
 The rules about time — a missed 08:00 runs late once or not at all, a
 backlog is never replayed, three failures in a row stop it — are argued
 in Samay's own notes.
@@ -2904,6 +2911,7 @@ A separate program, in its own repository:
 |---|---|
 | `notes/01-a-clock-and-a-logbook.md` | saying *when* in a form a model can fill, the rules against each way an unwatched schedule goes wrong, and why `NOTHING NEW` may not hide a sign-in wall |
 | `notes/02-as-the-person.md` | the Dvara road: a run as the person, what an answer given ahead of time may grant, and an answer that reaches someone who did not ask |
+| `notes/03-offered-then-accepted.md` | the tools an agent uses to offer a schedule, the page you see it on, and why even localhost needs a token |
 
 ### The two READMEs
 
