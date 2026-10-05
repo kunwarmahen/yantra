@@ -26,8 +26,10 @@ with ``--for`` the person this agent serves -- ``local`` for a session at
 this computer -- and ``--agent`` the package this session runs, so a
 schedule made while talking to your mail agent runs your mail agent.
 The model has no argument with which to name anybody else. A host that
-serves several people passes its own ``person`` (``connect``'s
-argument); Yantra still never learns who that host is.
+serves several people (Dvara) makes a ``Samay`` per turn with that
+turn's ``person``, its own ``runner``, where its people see their
+schedules (``seen_at``) and who starts a stopped clock (``clock_off``);
+Yantra still never learns who that host is.
 
 THE CARD SAYS WHAT A YES COVERS. Samay marks its writes as writes, so a
 ``create_schedule`` arrives as a permission card -- and its raw
@@ -154,14 +156,18 @@ def load(mode: str, path: str | None = None) -> tuple[dict[str, Any], str] | Non
 
 
 def server_config(data: dict[str, Any], person: str = LOCAL,
-                  agent: str = "") -> MCPServerConfig:
-    """The MCP server, as Samay says to start it, for one person."""
+                  agent: str = "", runner: str = "") -> MCPServerConfig:
+    """The MCP server, as Samay says to start it, for one person. A host
+    that serves people through itself (Dvara) names its road with
+    ``runner``; left out, Samay picks."""
     if not WORD_RE.match(person):
         raise SamayLinkError(f"{person!r} is not a person Samay can keep schedules for")
     mcp = data["mcp"]
     args = [*(mcp.get("args") or []), "--for", person]
     if agent:
         args += ["--agent", agent]
+    if runner:
+        args += ["--runner", runner]
     return MCPServerConfig(name=SERVER, command=mcp["command"], args=args)
 
 
@@ -174,8 +180,22 @@ def announce(data: dict[str, Any], tools: int, program: str) -> str:
             f"{clock} -- via {program}")
 
 
-def prompt_text(data: dict[str, Any]) -> str:
-    """The ``schedules`` layer: the tools exist, and how to offer."""
+#: Where a person at this computer sees their schedules.
+SEEN_HERE = ("The person can see, pause and delete schedules on the web page's "
+             "Schedules panel, or with `samay list`.")
+
+
+#: Who starts the clock, when it is not running: here, the person.
+CLOCK_HERE = ("Samay's clock is not running on this computer: when you make a "
+              "schedule, say it will not run until the person starts `samay serve`.")
+
+
+def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
+                clock_off: str = CLOCK_HERE) -> str:
+    """The ``schedules`` layer: the tools exist, and how to offer.
+    ``seen_at`` says where this host's person sees what they made, and
+    ``clock_off`` who starts the clock -- on a service, not the person
+    talking, who cannot run anything there."""
     lines = [
         "# Doing things later (through Samay)",
         "You can offer to do something later, or on a repeat, with the `mcp__samay__` "
@@ -192,12 +212,10 @@ def prompt_text(data: dict[str, Any]) -> str:
         "command unless the person asked for exactly that. Use exact tool names.",
         "4. `notify`: `when_new` for a check that may find nothing; `always` for a "
         "digest, a summary or a reminder.",
-        "The person can see, pause and delete schedules on the web page's Schedules "
-        "panel, or with `samay list`.",
+        seen_at,
     ]
     if not data.get("serving"):
-        lines.append("Samay's clock is not running on this computer: when you make a "
-                     "schedule, say it will not run until the person starts `samay serve`.")
+        lines.append(clock_off)
     return "\n".join(lines)
 
 
@@ -356,6 +374,9 @@ class Samay:
     program: str | None = None
     person: str = LOCAL
     agent: str = ""
+    runner: str = ""
+    seen_at: str = SEEN_HERE
+    clock_off: str = CLOCK_HERE
     error: str = ""
     tools: list[str] = field(default_factory=list)
 
@@ -379,10 +400,13 @@ class Samay:
         from yantra.prompt import attach_prompt
 
         assert self.data is not None
-        cfg = server_config(self.data, self.person, self.agent)
+        cfg = server_config(self.data, self.person, self.agent, self.runner)
         existing = manager.sessions.get(SERVER)
         if existing is None:
-            self.tools = list(manager.connect(cfg, origin="samay"))
+            # a package's tool list may refuse some (or all): only what
+            # the registry took is this agent's
+            self.tools = [n for n in manager.connect(cfg, origin="samay")
+                          if n in agent.registry]
         else:
             # configured by hand (--mcp-config): recognised, and carded
             self.tools = [n for n in agent.registry.names() if n.startswith("mcp__samay__")]
@@ -393,7 +417,7 @@ class Samay:
                 tool.explain = hook
                 tool.run = self._then_refresh(tool.run)
         prompt = attach_prompt(agent)
-        prompt.set("schedules", prompt_text(self.data))
+        prompt.set("schedules", prompt_text(self.data, self.seen_at, self.clock_off))
         prompt.apply()
         return len(self.tools)
 

@@ -2733,6 +2733,17 @@ from you, and *run now*, *pause*, *delete*. It works whether or not
 `samay serve` is running, and it tells you when it isn't
 ([notes/115](notes/115-what-a-yes-covers.md)).
 
+The same offer works in a Telegram chat. Start dvara with `--samay` (and
+`SAMAY_DVARA_URL`/`SAMAY_DVARA_TOKEN` set, so Samay can check each
+schedule against it). Each person's agent can then offer, the card
+arrives in their chat with two buttons, and the schedule runs as them,
+on their allowance (dvara's note 18). It's off unless the owner turns it
+on, because it lets everyone the bot serves put work on a timer.
+
+To keep the clock running after you close the terminal, `samay unit
+--install` writes a systemd user service for it and prints the two
+`systemctl --user` lines that start it.
+
 The rules about time — a missed 08:00 runs late once or not at all, a
 backlog is never replayed, three failures in a row stop it — are argued
 in Samay's own notes.
@@ -2929,6 +2940,7 @@ In the dvara repository, alongside its own README:
 | `notes/14-a-days-worth-of-being-asked.md` `notes/15-where-the-waiting-shows.md` | how long a person may be kept waiting on questions in a day, and where that shows |
 | `notes/16-kept-for-when-you-are-back.md` | a question nobody answered waits for the person instead of being refused |
 | `notes/17-nobody-wrote-first.md` | a turn nobody typed (a schedule's), the answers given ahead of time, and a message nobody asked for |
+| `notes/18-a-schedule-asked-for-in-the-chat.md` | a person's agent offering a schedule in the chat, made only with their yes on their own channel |
 
 ### samay — the clock
 

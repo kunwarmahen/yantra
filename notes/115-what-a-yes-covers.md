@@ -183,10 +183,10 @@ Without it, that was a glob inside a JSON blob.
 
 ## What was deliberately not built
 
-* **The Dvara road.** The person on the other end of a Telegram chat
-  needs `samay mcp --for <their id>`, and Dvara builds its agents
-  without any MCP servers today. `Samay(person=...)` is the seam;
-  wiring Dvara to it is Dvara's own change.
+* ~~**The Dvara road.**~~ Dvara now starts `samay mcp --for <their id>
+  --runner dvara` for each person's turn, through `Samay(person=...,
+  runner=..., seen_at=..., clock_off=...)`, and this card is the
+  question on their channel (Dvara's note 18).
 * **Narrowing what the model asked for.** The card could offer to drop
   `send_message` from the glob. That's approve-with-edits, which the
   page already has (*edit* on the card). A second, schedule-only way to

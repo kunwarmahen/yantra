@@ -212,6 +212,36 @@ class TestFoundAndAnnounced:
             manager.shutdown()
 
 
+class TestAHostServingSeveralPeople:
+    def test_each_turn_is_for_its_person_on_the_hosts_road(self, fake_samay, tmp_path):
+        """Dvara's seam: one Samay per turn, for that turn's person."""
+        data, program = samay_link.load("on", str(fake_samay[0]))
+        agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry())
+        manager = MCPManager(agent.registry, agent=agent,
+                             memory_path=tmp_path / ".yantra" / "mcp.json")
+        try:
+            samay_link.Samay(mode="on", data=data, program=program, person="priya",
+                             agent="mail", runner="dvara",
+                             seen_at="Ask me to list or pause them.",
+                             clock_off="The owner has to start the clock.").connect(manager,
+                                                                                    agent)
+            mcp_call = [c for c in calls(fake_samay[1]) if "mcp" in c][0]
+            assert mcp_call[-6:] == ["--for", "priya", "--agent", "mail",
+                                     "--runner", "dvara"]
+            layer = agent.prompt.get("schedules")
+            assert "Ask me to list or pause them." in layer
+            assert "Schedules panel" not in layer
+            assert "The owner has to start the clock." in layer
+            assert "the person starts `samay serve`" not in layer
+        finally:
+            manager.shutdown()
+
+    def test_a_person_that_looks_like_an_option_is_refused(self, fake_samay):
+        data, _ = samay_link.load("on", str(fake_samay[0]))
+        with pytest.raises(samay_link.SamayLinkError):
+            samay_link.server_config(data, person="--state")
+
+
 class TestWhenItIsNotThere:
     def test_auto_with_no_samay_is_silence(self, fake_samay, tmp_path):
         code, agent, manager, out = start(None, tmp_path, flag="auto")
