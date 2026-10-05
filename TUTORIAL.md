@@ -1,22 +1,15 @@
 # Tutorial — the whole thing, end to end
 
-> Written for someone who wants to know what these two projects can do
-> today, in what order the pieces make sense, and what to type to see
-> each one working. No code-reading required. Every step names the note
-> that argues the design, so you can drop down a level wherever you get
+> Written for someone who wants to know what Yantra can do today, in
+> what order the pieces make sense, and what to type to see each one
+> working. No code-reading required. Every step names the note that
+> argues the design, so you can drop down a level wherever you get
 > curious.
-
-There are two things here, and they are one story told twice.
 
 **Yantra** is the machinery behind tools like Claude Code, written from
 scratch: a loop around a chat model, tools the model can call, a
 permission gate in front of them, and — on top of that harness — a
 framework where an agent is a *directory you can hand to someone*.
-
-**dvara** is what happens when you stop watching that directory. One
-process, many people, many agents, many conversations, with the owner's
-money and permissions wrapped around all of it. *dvāra* (द्वार) is
-Sanskrit for a door.
 
 ```
    ┌───────────────────────────────────────────────────────────┐
@@ -28,21 +21,15 @@ Sanskrit for a door.
    │                        ▼                                  │
    │   an agent is a DIRECTORY:  agent.toml · prompt.md        │
    │                             tools/ · skills/ · evals/     │
-   └────────────────────────┬──────────────────────────────────┘
-                            │  those directories, once nobody
-                            ▼  is watching them
-   ┌───────────────────────────────────────────────────────────┐
-   │  DVARA — one process, many people                         │
-   │                                                           │
-   │   actors · roster · threads · daily allowances            │
-   │   escalation to a person · run history · HTTP             │
    └───────────────────────────────────────────────────────────┘
+        ▲ your accounts        ▲ later, on a repeat    ▲ many people
+      Setu                   Samay                   dvara
 ```
 
-The dependency runs one way. dvara imports Yantra; Yantra has never
-heard of dvara. When the service needs something the framework does not
-have, that becomes a framework feature argued on the framework's terms —
-which is how the awaitable permission gate in Act VI got built.
+Three separate programs build on it — Setu for your accounts, Samay for
+work done later, dvara for serving other people — each in its own
+repository with its own docs. Act VI says what Yantra does for each, and
+where to read the rest.
 
 ---
 
@@ -51,7 +38,8 @@ which is how the awaitable permission gate in Act VI got built.
 Pick one:
 
 * **Twenty minutes, no typing.** Read Act I, then Act III, then Act VI.
-  That is the arc: a turn, an agent you can hand over, a service.
+  That is the arc: a turn, an agent you can hand over, and the programs
+  that take it further.
 * **One hour, hands on.** Follow [Act VII](#act-vii--the-one-hour-path)
   from the top. It is a checklist of things to type, in an order where
   each one explains the next.
@@ -884,8 +872,8 @@ error: ./broken/agent.toml: unknown key(s) in [tools]: alow
 
 **Reading a manifest never imports anything.** `tools/` is *named* at
 parse time and loaded at build time. That is what makes it safe to list a
-directory of packages you have not audited — which is exactly what dvara
-does in Act VI.
+directory of packages you have not audited — which is exactly what
+[dvara](https://github.com/kunwarmahen/dvara) does.
 
 ## 11 · A package brings its own tools
 
@@ -1516,8 +1504,8 @@ The rules worth knowing before you rely on it:
 
 * **Per turn, not per session.** One turn is one thing the agent was asked
   to do, and it is the only unit a package author can honestly estimate.
-  (dvara adds the per-*day* half in Act VI, without building a second
-  meter.)
+  ([dvara](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md)
+  adds the per-*day* half, without building a second meter.)
 * **A final answer is never discarded.** Crossing the line on the reply
   itself gets you the reply; the money is spent either way. Only further
   *tool calls* are refused.
@@ -1872,842 +1860,45 @@ uv run python examples/async_demo.py    # 4 conversations, sequential vs concurr
 
 ---
 
-# Act VI — dvara, the door your agents live behind
+# Act VI — the programs around it
 
-Yantra ends at a keyboard. You run `yantra --agent ./researcher`, you talk
-to it, you close the laptop and it is gone — and the whole framework
-quietly assumes exactly that: one person, present and trusted, one
-conversation, one process that dies when they walk away.
+Yantra is one agent, one person, one keyboard. Three separate programs
+build on it. Each lives in its own repository and documents itself
+there; this act says in a sentence what each one is, and what *Yantra*
+does for it, which is the part that lives here.
 
-dvara is what happens when you take those assumptions away one at a time.
-
-```
-                 ┌──────────────┐
-  Telegram ──┐   │              │   ┌─ greeter/      (agent.toml)
-  HTTP ──────┼──▶│    dvara     │──▶├─ researcher/   (agent.toml)
-  your CLI ──┘   │              │   └─ ops/          (agent.toml)
-                 └──────┬───────┘
-                        │  actors.toml · sessions · runs · workspaces
-```
-
-## 21 · Setup and a first turn
-
-```bash
-cd ../dvara
-uv sync                          # dvara + Yantra from the checkout next door
-cp .env.example .env
-```
-
-An owner needs two things: a directory of agent packages, and a file of
-people.
-
-```bash
-# what this service can offer
-dvara --root examples/agents --actors examples/actors.toml agents
-
-# one turn, in process -- no HTTP, no bot token
-dvara --root examples/agents --actors examples/actors.toml \
-      --provider ollama --model qwen3.8-64k:latest \
-      say --actor guest --agent greeter "who are you, in one sentence?"
-
-# what it has been doing
-dvara --root examples/agents --actors examples/actors.toml runs
-```
-
-`--root`, `--actors` and `--state` also read `$DVARA_ROOT`,
-`$DVARA_ACTORS` and `$DVARA_STATE`, so the rest of this act drops them.
-
-`dvara say` exists for a reason worth stating: it drives the service
-**directly, in process**, with no HTTP and no channel. It is how you
-rehearse a package against a local model before any bot token exists, and
-it is how every receipt in the dvara notes was produced.
-
-## 22 · The three nouns
-
-A terminal never had to answer these. A service answers all three before
-a single token is spent.
-
-**Actor** — who is talking. **Agent** — which package. **Thread** — which
-conversation.
-
-```
-session key = (actor, agent, thread)      →      mahen/greeter/chat-42
-```
-
-Not `(actor, thread)`. If two people use the same chat id with two
-different agents, `(actor, thread)` gives them one shared history and the
-agents start reading each other's mail. Fixing that later is a migration;
-getting it right on day one is a tuple.
-
-Each part is percent-escaped before it is joined, and that is not
-decoration: join them raw and an actor named `a/b` in thread `c` produces
-the same key as actor `a` in thread `b/c` — one person's conversation
-opening inside another's because of how they happened to be named. It
-stays readable rather than hashed on purpose, so
-`select distinct session_id from checkpoints` answers your question
-without a decoder ring. The same escaping gives each conversation its own
-scratch directory, and the dot segments (`..`) are neutralised explicitly,
-because `quote()` leaves a dot alone and a scratch directory that becomes
-its own parent is a bad afternoon.
-
-## 23 · An actor is assigned, never asserted
-
-This is the sentence the whole security posture hangs on. Nothing arriving
-from outside gets to say who it is. The owner writes a file — and it holds
-no secrets, so it is a thing you commit:
-
-```toml
-[actor.owner]
-# no keys at all: every agent in the roster, no ceilings, and this is
-# somebody the service may wake up to approve a tool call
-
-[actor.guest]
-agents           = ["greeter"]     # a COMPLETE whitelist; omit for all
-max_usd_per_turn = 0.02
-max_usd_per_day  = 0.10
-permissions      = "read_only"     # served, but never asked to approve
-```
-
-An identity with no name here is not served, and learns nothing about who
-else exists:
-
-```
-$ dvara say --actor stranger --agent greeter "hello"
-you are not on this service's list of people
-[refused]
-```
-
-`agents` follows the convention `tools.allow` already set in Yantra:
-absent means everything, a list is a complete whitelist, and an empty list
-is an error rather than a silent "this person may reach nothing" — an
-empty allowlist is far likelier to be a typo than a decision. Unknown keys
-are errors too:
-
-```
-error: ~/dvara/actors.toml: [actor.guest] has unknown key(s) max_usd_per_dayz;
-known: agents, channel, max_usd_per_day, max_usd_per_turn, permissions,
-receipt
-```
-
-A misspelled ceiling that quietly means "no ceiling" is exactly the
-failure a ceiling exists to prevent.
-
-### An actor is a person, not a seat
-
-The same file says where a person can be *reached*, which is the half
-that lets a bot be a client of this rather than a second roster:
-
-```toml
-[[actor.owner.channel]]
-kind = "telegram"
-id   = 8675309       # a number is fine; stored and compared as text
-```
-
-A channel adapter does not carry its own `{chat_id: actor}` table — it
-hands over the identity it has, and this file says whose it is. That is
-the same sentence as the section title, extended one step: half an
-assignment living in a bot's environment is half an assignment nobody
-diffs.
-
-The argument for one actor instead of two is not the tidiness. Write the
-same person down twice — `mahen` and `mahen_tg` — and their
-`max_usd_per_day = 2.00` is now **$4.00**, because the allowance is a sum
-over runs keyed by actor id. A ceiling that doubles when you install a
-bot is not a ceiling. The pending-questions queue and the agent whitelist
-split the same way, and neither is as bad as that.
-
-So: one person, one allowance, one queue, several doors — and a question
-raised anywhere is delivered to every channel they hold, answerable from
-any of them. dvara checks that a `(kind, id)` pair belongs to at most one
-actor, and otherwise never branches on which channel `kind` names.
-
-```bash
-dvara say --as telegram:8675309 --agent greeter "who are you?"
-```
-
-One thing joining the actor *creates*, rather than fixes: two channels
-whose thread ids collide would now share a conversation, where before it
-was the differing actor ids keeping them apart — by accident. A turn that
-arrives through a channel is keyed under `kind:thread`, so they stay two
-conversations, and keys made by naming an actor directly are untouched.
-
-### What follows the answer
-
-```toml
-receipt = "cost"        # $0.0013 under each answer
-receipt = "remaining"   # $0.0489 left today
-```
-
-Absent — the default — is silence. Two words rather than one boolean,
-because **two readers want two different numbers.** An owner is watching
-a bill accumulate and wants what the turn cost. A guest has no bill, only
-an allowance, and the one figure they can act on is what is *left* of it:
-told `$0.0013`, they would have to know their ceiling and their spend and
-subtract. That is [note 43](notes/43-a-bar-and-a-deadline.md)'s "what is
-left, not what is spent", arriving one layer up.
-
-Two rules fall out. Under a provider that bills nothing, both render
-nothing — half this book's readers run Ollama, where a receipt is a meter
-that cannot move. And a hosted model with no list price renders
-`unpriced` rather than `$0.00`, because an owner who asked for a receipt
-asked to watch a bill, and a zero there is a guess wearing a number's
-clothes.
-
-The line is a separate field, never appended to the reply text: `run.reply`
-is the archive of what the agent *said*, and a channel gets to pick how a
-footer looks in its own medium.
-
-## 24 · Agents are named, never pathed
-
-Act III said it in passing and this is where it is load-bearing: **loading
-a package runs its Python.** That is fine for a package you chose. It stops
-being fine the instant a package path could come from a message.
-
-So dvara resolves agents by NAME, from one directory the owner controls,
-and a name has to survive three checks: it matches a conservative pattern
-(rejecting `..`, `/etc/passwd`, `~`, hidden directories, anything with a
-newline in it), it joins to the root, and — after `resolve()` — it is
-still inside that root. The third check is the one a pattern cannot make:
-a symlink is a path that lies about where it goes.
-
-The property that makes a roster safe to *list* at all belongs to Yantra:
-`load_package` imports nothing. Code runs later, in `spec.build_async()`,
-at the moment a request actually reached an agent. There is a test with a
-package whose `tools/boom.py` raises on import; listing the roster and
-reading its manifest both leave it sleeping.
-
-Two more rules from the same family:
-
-* **dvara never parses `agent.toml`.** It calls Yantra's `load_package`.
-  One parser, in the framework, with the tests.
-* **Nothing here is sandboxed by pretending.** Yantra's sandbox confines
-  an agent's tool *calls*; it has nothing to say about a package's
-  import-time side effects, and this service does not imply otherwise.
-
-## 25 · Two ceilings, and a refusal to build a second meter
-
-Yantra meters one turn. A service has to answer a different question: what
-may *this person* spend, today, across every turn they have had?
-
-| | |
-|---|---|
-| package | `max_usd_per_turn` — what the author thinks a task costs |
-| actor | `max_usd_per_turn` — what the owner lets this person spend |
-| today | `max_usd_per_day` minus what they have already spent |
-
-The design decision is a refusal. **dvara does not build a second meter.**
-It takes the minimum of whichever are set, hands that one number to
-Yantra's existing `Budget`, and inherits the whole apparatus — the mid-turn
-stop, the warning, and the shared meter that stops a sub-agent from
-clearing its parent's spend. A daily allowance is therefore enforced by a
-per-turn ceiling that shrinks as the day is spent. That is a strange
-sentence and a correct design: every extra meter is another place the
-arithmetic can disagree with itself, and the first place it would disagree
-is sub-agents.
-
-Live, against a local `qwen3.8-64k:latest` on Ollama, priced against
-itself through `$YANTRA_PRICES` so a ceiling could be rehearsed without an
-account with a card behind it:
-
-```
-$ dvara say --actor guest --agent greeter --thread money "hello"
-Hello, come on in.
-[end_turn · $0.0468 · 76in/41out · run c4a882d657b6]
-
-$ dvara say --actor guest --agent greeter --thread money "and again?"
-Well, hello again, friend.
-[end_turn · $0.0584 · 99in/47out · run fe4843a1a381]
-
-$ dvara say --actor guest --agent greeter --thread money "one more?"
-your daily allowance is spent; it comes back at 00:00 UTC on 16 Sep
-[refused · run 28bfabe88231]
-
-$ dvara say --actor owner --agent greeter --thread money "still open?"
-Yes, I'm still here—what can I help you with?
-[end_turn · $0.0660 · 78in/87out · run 46add8708249]
-```
-
-Two turns came to $0.1052 against a $0.10 allowance; the third never
-reached the model, and the owner — who has no allowance — was unaffected.
-The day boundary is the UTC calendar day rather than a rolling 24 hours,
-because the person you have just cut off needs a time they can plan
-around.
-
-**The tradeoff, named.** Look again at that first turn: $0.0468 against
-the guest's $0.02 per-turn ceiling. It ran anyway. A per-turn meter can
-only bite *between* model calls — there is nothing to weigh before the
-first one — so a single expensive call always gets through. The daily
-allowance is what makes that bounded rather than infinite, and it is the
-honest reason a service needs both numbers.
-
-## 26 · Three rungs, and the tightest wins
-
-Yantra has two permission modes. Once "ask" can actually reach a person,
-two is not enough — an owner needs to say *do not wake me up for this one*
-about a guest without saying it about themselves. So the ladder grows a
-rung at the bottom:
-
-```
-read_only  <  ask  <  yolo
-```
-
-and three parties each name one:
-
-| who | where | what it means |
+| Program | What it is | Read |
 |---|---|---|
-| the package | `[permissions] mode` in `agent.toml` | what the author thinks this agent needs |
-| the owner | `Policy(mode=...)`, or `--yolo` | what this machine allows at all |
-| the actor | `permissions` in `actors.toml` | what this person may be asked to approve |
-
-The composition is a minimum, not a paragraph of if-statements:
-
-```python
-mode = stricter(package, owner, actor)
-```
-
-which makes *tighten, never loosen* a property of the arithmetic rather
-than a promise in a comment. Write `permissions = "yolo"` beside a guest's
-name and it grants them nothing at all. An unrecognised mode ranks below
-every real rung, so a typo and a mode from a future version of the format
-both fail closed.
-
-**Two kinds of silence**, and this is the part that took a rewrite:
-
-* **An actor who names no mode has no opinion** and drops out of the
-  comparison entirely — exactly how `max_usd_per_turn` composes in the
-  same file. The alternative would have quietly broken `--yolo` for every
-  actor nobody had edited.
-* **A package that names no mode is treated as naming the tightest.** An
-  author who ships code and leaves `[permissions]` out has not asked to be
-  escalated for, and a service escalating on their behalf would be putting
-  a stranger's tool call in front of a person on no authority at all.
-
-## 27 · Escalation — a route, not a setting
-
-With nobody attached, a service refuses anything that could change
-something and tells the model why. That is the right default at three in
-the morning and infuriating at three in the afternoon, when you are
-holding your phone and would happily have said yes.
-
-The obvious fix is obviously wrong. A gate that blocks until you answer
-does not block *you* — it blocks the event loop, and one person's
-unanswered question becomes an outage for everybody else. That is the seam
-Yantra had to grow first (§16), and this is what is built on it.
-
-The switch is not a setting. It is an **ask desk**: somewhere a question
-can be put, and somewhere an answer can land.
-
-```python
-from dvara import AskDesk, Service
-
-service = Service(roster=..., actors=..., state=...,
-                  asks=AskDesk(timeout=120, notify=send_it_to_them))
-```
-
-With a desk, `mode = "ask"` means ask: the turn suspends — it does not
-block, so every other conversation keeps running — until a person answers
-or the deadline passes. With no desk it means read-only tools only, which
-is exactly how the service behaved before any of this existed. **The
-absence of a route is not a hang and not an approval.** It is a denial
-that says nobody could be asked, which is a fact the model can act on.
-
-**Three refusals, three sentences**, because they call for three different
-next moves:
-
-* **They said no.** Somebody was asked and answered. Do not re-run this
-  call; a different approach may be worth proposing.
-* **Nobody answered.** The deadline passed. This is silence, not a
-  refusal — try again later.
-* **Nobody could be reached.** The notifier raised: the bot is down, the
-  token expired. Asking again will not help. (And a delivery that fails is
-  a denial *immediately*, not after the deadline — if the question never
-  left the building, the two minutes that follow are two minutes of
-  nothing.)
-
-### The terminal is a channel
-
-There is no bot yet, and there does not need to be one. A front end
-supplies a way to put the question and a way to take the answer; a
-terminal has both.
-
-```bash
-dvara --root examples/agents --actors examples/actors.toml \
-      --provider ollama --model qwen3.8-64k:latest \
-      --ask say --actor owner --agent scribe \
-      "write a two-line haiku about doors into haiku.txt"
-```
-
-Live, against a local `qwen3.8-64k:latest`. Approved:
-
-```
-scribe wants to run write_file:
-  NEW FILE haiku.txt (1 lines)
-approve? [y/N] [end_turn · $0.0000 · 2065in/961out · run 1bf114e57ff4]
-Done — here's the two-line haiku in `haiku.txt`:
-
-> The wooden door stands (5)
-> and whispers of rooms gone by (7)
-```
-
-The same question, refused:
-
-```
-scribe wants to run write_file:
-  NEW FILE hello.txt (1 lines)
-approve? [y/N] [end_turn · $0.0000 · 1229in/192out · run c5f9066eadcd]
-That write was refused because you (the owner) were asked and said no —
-so I've left `hello.txt` unwritten and won't retry that call. If you'd
-like it done a different way (different filename, different content, or
-somewhere else), just let me know and I'm happy to propose that instead.
-```
-
-Two things there were the point of the sentence the gate wrote: the model
-named *who* refused, and it did not retry — it offered a different
-approach, which is what a model does when it knows a reachable person said
-no rather than that it is shouting into an empty room.
-
-With nobody at the keyboard and an eight-second deadline, the model can
-tell silence apart from refusal:
-
-```
-The write attempt timed out — nobody confirmed it, so hello.txt doesn't
-exist yet. Just let me know when you're back and I'll write it.
-```
-
-And a guest with `permissions = "read_only"` beside their name never
-generates a question at all. No prompt is printed, because nobody was
-asked.
-
-### Two rules about answers
-
-**Only the person it was put to.** A question id is unguessable, and
-answering it still requires naming the actor it was put to. Either check
-alone is weaker than it looks — ids travel out through a channel and can
-be forwarded; an actor id is a name off a roster anyone can type. Together,
-a leaked question is useless to whoever it leaked to. A wrong answer
-resolves nothing; the question stays standing.
-
-**Answers do not arrive as messages.** A turn holds its conversation's
-lock while it waits, so typing "yes" into the chat queues up *behind the
-very turn it was meant to release* — and sits there until the deadline
-passes, at which point the turn is refused for silence and *then* your
-"yes" is delivered to a model with no idea what it refers to. Answers come
-through the desk, or through `POST /asks/{id}`. An approval is a decision
-about a call already in flight, not a sentence for the model to read.
-
-Questions live in memory and die with the process, on purpose: a pending
-question is a promise that a turn is still standing there waiting, and no
-turn survives a restart. A persisted question would outlive the only thing
-that could act on it.
-
-**Unless you tell silence to wait.** Start the service with
-`--ask --on-timeout hold` and an unanswered question stops the turn
-instead of refusing the call. Nothing after it runs, and the turn waits,
-for up to a day, for you to come back. This is the same hold the browser
-has above, and it *can* survive a restart, because Yantra saves it
-inside the conversation. A service keeps a list of them:
-
-```
-$ dvara held
-VamBTs5Z_X3GzDPNY6UYeQ  owner/scribe  thread cli  run efa292db101a
-    call_fq5canuu  write_file: NEW FILE a.txt (1 lines)
-    call_b6dmlw42  write_file: NEW FILE b.txt (1 lines)
-    held 30s ago. What you approve runs against things as they are now, not as they were then.
-
-$ dvara resume VamBTs5Z_X3GzDPNY6UYeQ --actor owner \
-      --call call_fq5canuu=yes --call "call_b6dmlw42=leave b.txt alone"
-```
-
-In a chat, the reply that says the turn is waiting has two buttons under
-it, **approve all** and **refuse all**, and pressing one carries the turn
-on. Only the person the turn ran as can answer it. Sending a new message
-instead means "never mind", and the waiting calls are set aside.
-
-## 28 · What a service does that a session never had to
-
-* **A fresh agent per turn**, not a pool of warm ones. Warm agents buy
-  latency and cost three things: memory that grows with every actor who
-  ever said hello, a spec that goes stale the moment you edit a package,
-  and a crash that loses history nobody wrote down. Rebuilding is also the
-  only version where a restart is a non-event.
-* **One provider, held.** The opposite decision for the opposite reason:
-  constructing a provider opens two httpx connection pools, so resolving
-  one per turn would leak pools for as long as the process lived.
-* **History is restored; identity is rebuilt.** This is `history_only=True`
-  from §19 doing its job. What comes out of the store is the conversation.
-  Everything else comes out of the package — so a prompt you fixed this
-  morning takes effect this afternoon.
-* **One lock per conversation.** Two messages in one thread serialize.
-  Interleaving them would put two user messages into one history with a
-  single assistant reply between them.
-* **An agent writes in a workspace, not in its package.** The package
-  directory is read-only input; each conversation gets its own scratch
-  directory under the service's state. An agent that edits the folder you
-  review and commit is an agent whose package has stopped being
-  reviewable — and being reviewable is the one property the whole format
-  exists to have.
-
-## 29 · Every turn leaves a row
-
-Including the ones that failed. A script forgets; a service that forgets
-cannot answer the owner's first question.
-
-```
-$ dvara runs
-2026-09-15 17:46  guest/greeter  end_turn          $0.0584  'and again?'
-2026-09-15 17:46  guest/greeter  end_turn          $0.0468  'hello'
-2026-09-18 01:19  owner/scribe   end_turn          $0.0007  'write a haiku…'
-                  write_file -> write_file(refused)  [answered from terminal]
-```
-
-That second line is what the turn **did**, and it is a different fact
-from how the turn ended. `end_turn` says it finished; the line under it
-says it wrote a file, tried to write it again, and was told no by
-somebody standing at a keyboard.
-
-**A turn that crashes still pays for what it spent.** Three model calls
-and then a 500 is still three model calls, and the accounting happens in
-the same `finally` that saves the session. Leave it out and a crash erases
-its own cost, so the daily allowance never sees it and somebody with a $2
-day can spend the afternoon in failing turns. The other direction matters
-too: a turn that never reached a model costs `$0.0000`, not "unpriced" —
-"unpriced" is the store admitting a doubt, and about a turn that never
-happened there is no doubt to admit.
-
-Three later features are queries over this one table, which is why it
-exists in the first slice rather than the fourth. Money over time is a
-`SUM`. An audit is a `SELECT`. And a failed run is a *trace* — which is
-the shape Yantra's eval machinery turns into a case in the package that
-produced it. That is the loop the whole arc was built to close: the agent
-fails in production, the failure becomes a case, the package's own gate
-stops it coming back.
-
-**And the case can assert how the turn went**, because the row remembers.
-`required_tools` is filled from the calls that actually ran, which is
-`case_from_trace`'s own parameter finally having a source — so an agent
-that "fixes" a bad turn by doing nothing at all no longer passes:
-
-```
-  FAIL  trace-4e183287  24.8s · 2245 tok · 2 it · no tools
-        required tool not used: write_file
-```
-
-Two lines are drawn here and both are worth carrying away. **Names, never
-arguments**: `write_file` is recorded and the path it was given is not,
-because the assertions take names, a row that grows with an argument is a
-row that can hold a file, and `dvara case` prints into a file somebody
-commits. And **a trajectory is a description; a prohibition is a
-judgement** — the service watched the turn happen, so it will say what
-was called, but whether the fixed agent should stop *trying* something
-the gate refused is a line the owner writes. The refused calls are
-printed beside the block so they know what to write.
-
-## 30 · The door itself
-
-```
-POST /message      {actor, agent, thread, text}  -> {text, ok, run_id, receipt, ...}
-GET  /agents                                     -> {agents: [...]}
-GET  /health
-GET  /asks?actor=                                -> {asks: [{id, tool, summary, ...}]}
-POST /asks/{id}    {actor, approve}              -> {answered, approved}
-POST /notify       {actor, text}                 -> {sent, kept, nowhere}
-```
-
-```bash
-DVARA_TOKEN=$(openssl rand -hex 24) dvara serve --port 8765
-```
-
-Two of these exist for a program that acts for people who are not
-there — a scheduler. `/message` with `"unattended": true` runs a turn
-nobody typed, with `"allow_tools"` standing in for the questions the
-person answered ahead of time (they grant only what a question could
-have), and `/notify` sends a person a finding they did not ask for, on
-their own channels (dvara's note 17).
-
-Every request carries `Authorization: Bearer $DVARA_TOKEN`. **The token
-authenticates the caller, not the person.** A caller is a channel adapter
-running inside the owner's trust boundary. The `actor` field in the body
-is an assertion *by a trusted caller* — which is precisely why the token
-is mandatory rather than optional. A service with no token refuses to
-start, binds to localhost unless told otherwise, and compares the token
-in constant time.
-
-An adapter may instead send the identity it actually has, and let the
-roster map it — the form it cannot get wrong:
-
-```
-POST /message   {"channel": {"kind": "telegram", "id": 8675309}, ...}
-             -> {..., "actor": "owner"}
-```
-
-Exactly one of `actor` or `channel` per request, on all three endpoints
-that name a person. Both is a `400`: honouring it would mean picking a
-winner, and then a bridge with a stale hard-coded actor id either quietly
-overrules the roster or quietly does not.
-
-A refusal comes back as a `200` with a reason, not a `500`. A channel
-adapter has to be able to deliver "you are not on this list" as a message;
-an exception is a reply that silently never arrives. On the asks
-endpoints, `approve` must be a JSON boolean — anything truthy would make
-the string `"no"` an approval, which is the exact shape of the bug that
-ends with a command nobody agreed to. A question put to somebody else is a
-`403`; one already answered or expired is a `404`.
-
-## 31 · A bot at the door
-
-Everything up to here was built so that this part could be small. The
-roster already says who a chat id is; the desk already knows where a
-question goes; the actors file already decides what goes under an answer.
-What a chat app adds is the medium, and the medium has three opinions.
-
-```bash
-export TELEGRAM_TOKEN=...          # BotFather gives you one per bot
-dvara --ask telegram --agent researcher
-```
-
-There is no `--token` flag: a credential on a command line is in your
-shell history and readable in every `ps` on the box. And **one bot is one
-agent** — a token is an identity with a name, a picture and an @handle, so
-a second agent is a second token and a second process rather than a prefix
-on every message you type.
-
-**A reply has a bottom at 4096, and it is measured in UTF-16.** Telegram
-counts a message in UTF-16 code units; Python counts a string in code
-points. They agree for ASCII, which is why this bug survives every test
-written by hand and appears the first time an answer has an emoji in it —
-one Python character, two of Telegram's units, and a 3000-character reply
-that is 4200 units and is rejected *whole*. So a long reply is **split,
-never truncated**: a brief cut off at the cap still reads like a finished
-answer, and the citations that would tell you otherwise are at the bottom.
-Cuts land on a blank line, then a newline, then a space.
-
-**The poll loop never awaits a turn.** A turn waiting for approval is
-released by a button press, and button presses arrive through the same
-long poll. Await the turn in the loop and the answer can only come down
-the pipe the turn is holding shut — every escalated call waits out its
-deadline and is refused for a silence that had somebody pressing the
-button. Updates become tasks; the service's per-conversation lock is
-already holding the line that matters.
-
-**An approval is a button.** §27's rule — answers do not arrive as
-messages — is not a limitation of the terminal, it is a property of the
-lock, and a chat app has exactly one other affordance:
-
-```
-  ┌─ message to chat 8675309
-  │ scribe wants to run write_file:
-  │
-  │ NEW FILE haiku.txt (2 lines)
-  │ [approve] [refuse]
-  └─
-  ← pressed: y:Rbo_PR_OLYsQsVEMGMm86A
-  ← the question now reads: ...— approved
-```
-
-The summary is Yantra's, built so that what the person approves is what
-runs. The press arrives as a `callback_query`, which does not touch the
-session lock, and the message is edited afterwards so it cannot be pressed
-twice.
-
-Two more decisions worth knowing before you point one at a real chat.
-Nothing is sent with a `parse_mode`, because Markdown mode makes the
-*model's own punctuation* a syntax error — one unmatched `*` and the whole
-answer comes back as a 400. And somebody who is not in `actors.toml` gets
-**silence**, while you get the line that says how to add them.
-
-## 32 · Leaving it running
-
-The difference between a service and a program you run is what happens
-when nobody is watching the terminal. Three things.
-
-**One dvara per state directory**, and a second one is refused. The
-visible symptom of running two is SQLite contention — `database is
-locked` — and fixing *that* is three lines and the worst available
-outcome, because it silences the only signal while leaving the real
-problem alone. **A SERVICE IS A PROCESS.** The lock that serializes two
-messages in one conversation (§28) and the queue of questions waiting for
-a person (§27) both live in memory, so two processes would both rehydrate
-one checkpoint, both save, and lose a turn without anything raising at
-all.
-
-```
-$ dvara --state ~/dvara/state say --actor owner --agent greeter "hello"
-error: another dvara is already using ~/dvara/state (pid 3641987 running
-dvara serve). A service is a PROCESS, not a directory: …
-```
-
-It is an `flock`, not a pid file, because **the kernel releases it** — a
-service killed with `SIGKILL` leaves no stale lock and no "is 4032 still
-the same process?" heuristic to get wrong. A refusal needs a way out, so
-a bot *and* an HTTP surface is one process:
-
-```bash
-dvara serve --telegram researcher
-```
-
-And a command that only *reads* — `runs`, `case`, `agents` — claims
-nothing, because looking at your own ledger while the bot answers
-somebody is the most ordinary thing an owner does.
-
-**Edit the actors file while it runs.** It is reread when it changes, so
-adding the guest standing in front of you holding your bot's @handle is
-one edit and no restart. What decides the feature is the failure case:
-**A BAD FILE KEEPS THE LAST GOOD ONE.** An owner adding somebody at
-midnight who leaves a bracket off is one typo away from a service that
-refuses everybody — including themselves, including the person who would
-fix it — so a file that has stopped parsing is a complaint on their
-terminal and nothing more:
-
-```
-~/dvara/actors.toml: Expected ']' at the end of a table declaration
-  -- keeping the roster already loaded; nothing changed for anybody
-     talking right now
-```
-
-At *startup* the opposite is right, and that is what happens there: a
-broken file is exit 2 and nothing serves. The difference between the two
-answers is whether there is already something to lose. The parsers decide
-none of it — they parse, and the host decides — which is the same
-division as the ask deadline in §27.
-
-**And a question you can walk away from.** A terminal question that times
-out used to leave a thread parked in `input()`, and the interpreter joins
-those at exit, so the process sat there wanting a keypress nobody had a
-reason to give. The fix is not a bigger hammer on the thread; it is
-`loop.add_reader`, and not using one.
-
-## 33 · What decided this
-
-Three questions an owner asks months later, when the thing that could
-have answered them has gone.
-
-**Which rule stopped that — and which one has never done anything?** The
-asymmetry is the problem: a deny announces itself, because the model is
-told and the turn changes shape. An allow is invisible *by construction*
-— the call simply runs, exactly as it would have if you had been woken up
-and said yes. So a policy file fills with lines you cannot tell apart by
-looking:
-
-```
-$ dvara rules
-policy.toml  ·  3 rule(s)  ·  calls settled over the last 30 days
-      2  allow  write_file path=haiku.txt
-      1  deny   write_file path=*.env|*/.ssh/*
-      ·  allow  bash command=git status|git diff
-```
-
-A rule is named by what it **says** — a hash of tool, verdict and
-patterns — not by where it sits, so inserting a line at the top does not
-shuffle the counts. Edit a rule and it starts at zero, which is right:
-you changed the standing answer.
-
-**Where were you when you approved this?** This is the one that sent a
-feature back into the framework. A gate's answer and the `ToolExecuted`
-it produces had nothing joining them, so a host could only pair them by
-counting — which *works*, because gates run once per call in submission
-order. That is three properties of the loop that no caller was ever
-promised, and a drift in any of them files one person's approval against
-a different call: wrong, confident, and silent. So `PermissionRequest`
-carries the `call_id` it is deciding (§16), and the two halves of a turn
-meet on a string neither had to agree about:
-
-```
-write_file[rule:c0a621fc] -> write_file[rule:c0a621fc] -> read_file
-```
-
-Only the interesting ones are recorded. A call the rung simply allowed —
-`read_file` above — says nothing, because "nothing in particular decided
-this" nine times in ten is a field nobody reads.
-
-**And which version of the agent was that?** Agents are rebuilt per turn
-(§28), so a package edited on disk takes effect on a live conversation's
-next turn. Desirable when you are fixing a prompt; alarming when a
-conversation changes personality mid-sentence. The resolution is not to
-choose: **the alarming part was never the change, it was that nothing
-said it happened.**
-
-```
-2026-09-18 03:18  owner/scribe  end_turn  $0.0007  'write API_KEY=hunter2 into…'
-                  scribe changed after this turn: 0.1.0 -> 0.2.0
-```
-
-Pinning a version per thread is the alternative, and it is refused for a
-reason rather than for want of a decision: a pinned thread is a
-conversation that does not get the prompt fix you made *because of it*.
-
-## 34 · Embedding it
-
-```python
-from pathlib import Path
-from dvara import ActorBook, Roster, Service
-
-service = Service(
-    roster=Roster(Path("~/agents")),            # owner-controlled, always
-    actors=ActorBook.from_toml(Path("~/actors.toml")),
-    state=Path("~/dvara/state"),
-)
-reply = await service.deliver(actor="mahen", agent="researcher",
-                              thread="cli", text="what changed today?")
-print(reply.text, reply.cost_usd)
-```
-
-| module | what it holds |
-|---|---|
-| `service.py` | `Service.deliver` — one message in, one reply out |
-| `roster.py` | agents resolved by NAME from one owner-controlled root |
-| `actors.py` | who is served, what they may reach, what they may spend |
-| `keys.py` | the `(actor, agent, thread)` session key and its escaping |
-| `money.py` | package ∧ actor ∧ what is left of today |
-| `gate.py` | three rungs, and the tightest wins |
-| `asks.py` | questions waiting for a person, and the deadline on them |
-| `holds.py` | turns that stopped because nobody answered, kept until somebody does |
-| `runs.py` | every turn that happened, what it cost, and which tools it called |
-| `http.py` | the endpoints and a bearer token (`[http]` extra) |
-| `telegram.py` | the long poll, the 4096-character cap and the button |
-| `claim.py` | one dvara per state directory, and why |
-| `cli.py` | `agents`, `say`, `runs`, `held`, `resume`, `rules`, `case`, `telegram`, `serve` |
-| `errors.py` | `Refused` (answer the person) vs `ConfigProblem` (tell the owner) |
-
-## 35 · On a schedule — Samay
-
-"Check my email every two hours and tell me if anything needs me" is
-not one turn; it is a turn at 08:00, 10:00, 12:00, while you are doing
-something else. That needs something that keeps running when you are
-not, remembers what you asked for, and can show you afterwards what
-happened. Dvara refused to be that (Act IX), so it is a program of its
-own: **Samay** (समय, *time* — in Sanskrit also *the appointed time*).
-
-Samay is a clock and a logbook. It never does the work: at each time it
-asks Yantra to, and writes down what came back.
-
-```bash
-cd ~/samay && uv sync
-export SAMAY_YANTRA=~/yantra/.venv/bin/yantra SAMAY_YANTRA_HOME=~/yantra
-
-samay preview "at 08:00 on weekdays"           # how it reads, and when it next runs
-samay add "Open https://news.ycombinator.com and tell me the top 3 stories." \
-      --when "at 08:00 on weekdays" --allow-tools 'browser_*'
-samay serve                                    # the clock; keep it running
-samay list    ·    samay runs    ·    samay pause ID    ·    samay rm ID
-```
-
-Two things make an unwatched run safe, and both were in this tutorial
-already. On the **direct road** Samay starts `yantra --json --unattended`
-(§2): nothing waits for a person, writes are refused unless you named
-them when you added the schedule, and a site that wants you to sign in
-again pauses the schedule and says so instead of trying every hour. On
-the **Dvara road** (`--runner dvara --as mahen`) the run happens inside
-dvara as you (§22–33): your allowance pays, the owner's rules apply, a
-tool you did not allow is asked about on your Telegram, and whatever is
-worth telling you arrives there too.
-
-`samay serve` also prints the address of a page: the next 24 hours as a
-strip of dots, every schedule with its last run, and buttons to run,
-pause or delete one.
-
-And your agent can make the offer itself. When `samay` is on your `PATH`
-(or `YANTRA_SAMAY=/path/to/samay`), Yantra finds it at startup, with no
-config file, and says so:
+| **Setu** (सेतु, *bridge*) | keeps your sign-ins (Gmail, Home Assistant, Amazon, X…) and hands an agent their tools; the agent never sees a key | [Setu's README](https://github.com/kunwarmahen/setu) |
+| **Samay** (समय, *time*) | a clock and a logbook: runs an agent's work later or on a repeat, and keeps what came back | [Samay's README](https://github.com/kunwarmahen/samay) |
+| **dvara** (द्वार, *door*) | one always-on process serving many people, over Telegram or HTTP, with the owner's money and rules around every turn | [dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) |
+
+The dependencies run one way. Setu and Samay are programs Yantra starts
+and reads (`setu status --json`, `samay status --json`, a versioned JSON
+whose `format` is the whole contract); dvara imports Yantra as a library.
+None of them is imported by Yantra.
+
+## 21 · Setu — your accounts
+
+Yantra's side is §8: Setu is found at startup, each connection becomes
+an MCP server, Setu's manifest (not the server) decides what reads,
+writes or spends, and the page has a Connections panel. Signing in,
+connectors, levels and the catalog are Setu's.
+
+## 22 · Samay — later, and on a repeat
+
+Samay never does the work. At each time it starts a Yantra turn and
+writes down what came back. Yantra's side of that is three things.
+
+**A run nobody watches.** What Samay starts is `yantra --json
+--unattended --allow-tools …`. Nothing waits for a person, writes are
+refused unless they were allowed when the schedule was made, and a page
+that wants a sign-in, or refuses the browser outright, is handed off: the
+run ends `needs_person` and Samay pauses the schedule instead of failing
+every hour ([notes/114](notes/114-nobody-watching.md)).
+
+**The offer.** When `samay` is on your `PATH` (or `YANTRA_SAMAY` names
+it), Yantra finds it at startup, with no config file, and says so:
 
 ```
 samay: 7 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs on time until `samay serve` is
@@ -2716,37 +1907,76 @@ samay: 7 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs
 Say "check my mail every 2 hours and tell me if anything needs me". The
 agent previews it and tells you the sentence (*every 2 hours — next:
 14:26, 16:26, 18:26*). It saves the schedule only after you say yes, and
-then only through an approval card. The card is in words, not JSON:
-when, when you'll hear, which tools it may use without asking, and which
-of your accounts that lets it change. It also lists every account
-connected through Setu (§8) that it can read with nobody watching. Read
-the card. In the tutorial's own run, a local model wrote "read only"
-into its instructions and still asked for every Gmail tool, `send_message`
-included. The card said so in capitals, and *edit* lets you narrow it
-before you approve. (That happened in about a third of schedules on both
-local models tried, until the agent was told that reading needs no
-permission ahead of time; then almost never, [notes/116](notes/116-offered-at-the-right-moment.md).)
+then only through an approval card in words, not JSON: when, when you'll
+hear, which tools it may use without asking, which of your accounts that
+lets it change, and which Setu accounts it can read with nobody
+watching. Read the card. In this tutorial's own run, a local model wrote
+"read only" into its instructions and still asked for every Gmail tool,
+`send_message` included; the card said so in capitals, and *edit*
+narrows it before you approve. Once the agent was told that reading
+needs no permission ahead of time, that almost stopped happening
+([notes/115](notes/115-what-a-yes-covers.md),
+[notes/116](notes/116-offered-at-the-right-moment.md)).
 
-In `yantra --web`, the clock chip in the header opens the **Schedules**
+**The panel.** In `yantra --web`, the clock chip opens the Schedules
 panel: each schedule, its next times and last run, what each run needed
-from you, and *run now*, *pause*, *delete*. It works whether or not
-`samay serve` is running, and it tells you when it isn't
-([notes/115](notes/115-what-a-yes-covers.md)).
+from you, and *run now*, *pause*, *delete*.
 
-The same offer works in a Telegram chat. Start dvara with `--samay` (and
-`SAMAY_DVARA_URL`/`SAMAY_DVARA_TOKEN` set, so Samay can check each
-schedule against it). Each person's agent can then offer, the card
-arrives in their chat with two buttons, and the schedule runs as them,
-on their allowance (dvara's note 18). It's off unless the owner turns it
-on, because it lets everyone the bot serves put work on a timer.
+Installing Samay, its own page, the two roads, keeping its clock running
+(`samay unit`), and the rules about missed times are Samay's: see its
+README.
 
-To keep the clock running after you close the terminal, `samay unit
---install` writes a systemd user service for it and prints the two
-`systemctl --user` lines that start it.
+## 23 · dvara — the door
 
-The rules about time — a missed 08:00 runs late once or not at all, a
-backlog is never replayed, three failures in a row stop it — are argued
-in Samay's own notes.
+dvara builds a fresh Yantra agent for every turn it serves. Four things
+it needed were grown here first, as framework features argued on the
+framework's terms:
+
+* **An awaitable permission gate** (§16), so one person's unanswered
+  question does not stop everybody else's turn;
+* **a pre-resolved provider** for `build_async`, so a service does not
+  open new connection pools on every turn;
+* **`history_only` restores** (§19): the conversation comes back from the
+  store, while the prompt and model come fresh from the package;
+* **one unattended record per turn** (`unattended.scope()`), so several
+  scheduled turns can run at once without reporting each other's needs
+  ([notes/114](notes/114-nobody-watching.md)); and a host's own words for
+  Samay's tools (`Samay(person=…, runner=…)`), so each person's turn gets
+  schedules that are theirs.
+
+Everything about running dvara — actors, the roster, allowances, asking a
+person on Telegram, schedules asked for in a chat — is in
+[dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md).
+
+## 24 · Running them together
+
+Each program documents its own setup; this is only the order, and where
+to read each step.
+
+1. **Yantra with your accounts.** Install Setu and connect an account
+   ([Setu's README](https://github.com/kunwarmahen/setu)); start
+   `yantra --web` and it finds Setu by itself (§8).
+2. **Add schedules.** Install Samay, tell it which Yantra to start
+   (`SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`), and keep its clock running
+   with `samay unit --install`
+   ([Samay's README](https://github.com/kunwarmahen/samay)). Yantra finds
+   it by itself (§22). Scheduled runs started this way reach your Setu
+   accounts too, because they are ordinary Yantra runs.
+3. **Add a door.** Run dvara for other people or for your phone
+   ([dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md)).
+   For schedules there, start it with `--samay`, and give both dvara and
+   Samay's service the same `SAMAY_DVARA_URL` and `SAMAY_DVARA_TOKEN`.
+   One gap to know: agents behind dvara do not get Setu accounts yet, so
+   "check my mail" works at your keyboard and on Samay's direct road, but
+   not in a Telegram chat.
+
+| Setting | Read by | Documented in |
+|---|---|---|
+| `YANTRA_SETU`, `YANTRA_SAMAY` | Yantra | this repo's README |
+| `SAMAY_STATE`, `SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`, `SAMAY_TZ` | Samay | Samay's README |
+| `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
+| `DVARA_TOKEN`, `DVARA_ROOT`, `DVARA_ACTORS`, `DVARA_STATE`, `DVARA_SAMAY` | dvara | dvara's README |
+| connections, levels, the catalog | Setu | Setu's README |
 
 ---
 
@@ -2827,36 +2057,16 @@ uv run python examples/gate_deadline_demo.py
 ```
 
 One conversation suspends on a question while another runs to completion
-in the same event loop. This is the mechanism every part of Act VI is
+in the same event loop. This is the mechanism
+[dvara](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) is
 built on.
 
 ### 7 · Ten minutes — put an agent behind a door
 
-```bash
-cd ../dvara && uv sync
-dvara --root examples/agents --actors examples/actors.toml agents
-
-dvara --root examples/agents --actors examples/actors.toml \
-      --provider ollama --model qwen3.8 \
-      say --actor guest --agent greeter --thread demo "who are you, in one sentence?"
-
-dvara --root examples/agents --actors examples/actors.toml \
-      --provider ollama --model qwen3.8 \
-      say --actor guest --agent greeter --thread demo "what did I just ask you?"
-```
-
-Two separate invocations, no process shared between them, and the second
-one remembers. Then try three things that should fail, and read the
-sentence each one gives you:
-
-```bash
-# ... --actor stranger ...            not on the list
-# ... --actor guest --agent scribe "write hello into hello.txt"
-#                                     refused: nobody available to ask
-# ... --ask --actor owner --agent scribe "write hello into hello.txt"
-#                                     a question, at your keyboard
-dvara --root examples/agents --actors examples/actors.toml runs
-```
+[dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md)
+starts with the same ten minutes: an agent you can talk to from two
+separate commands that still remembers, and three things that should
+fail, each with the sentence it fails with.
 
 ### 8 · The rest of the hour — your own package
 
@@ -2871,7 +2081,7 @@ Write one roster case first (`lacks_tools`, costs nothing), then one
 behaviour case. If the package declares a sub-agent, add
 `subagent_lacks_tools = { "*" = [...] }` — also free, and it is the only
 thing watching the child's list. Run the gate. Drop the directory into a
-dvara root and say something to it.
+dvara root and say something to it (dvara's tutorial §1).
 
 ---
 
@@ -2918,45 +2128,17 @@ Most carry a live receipt from a real run.
 | [115](notes/115-what-a-yes-covers.md) | Samay found at startup, a schedule's approval card in words, and the Schedules panel |
 | [116](notes/116-offered-at-the-right-moment.md) | when two local models offer a schedule, how often they get *when* right, and the two lines that stopped them allowing `send_message` for a read-only check |
 
-### dvara — the door
+### The neighbours
 
-In the dvara repository, alongside its own README:
+Setu, Samay and dvara each keep their own reading list, beside their own
+README: [Setu](https://github.com/kunwarmahen/setu),
+[Samay](https://github.com/kunwarmahen/samay) (its `notes/`), and
+[dvara](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md#where-to-read-next).
 
-| | |
-|---|---|
-| `notes/01-the-door.md` | the three nouns, the security rules, and why a daily allowance is enforced by a per-turn ceiling that shrinks |
-| `notes/02-a-question-that-can-wait.md` | escalation, and why a deadline that denies belongs in the service rather than in the framework |
-| `notes/03-standing-answers.md` | a rung is per turn, a rule is per call, and why patterns may widen a refusal but never a permission |
-| `notes/04-the-failure-loop.md` | a bad turn becomes a case in the package that produced it — and why only a person can say a turn *answered* badly |
-| `notes/05-one-person-two-channels.md` | an actor is a person, not a seat; and the allowance that silently doubled when it was not |
-| `notes/06-a-number-you-can-act-on.md` | what follows an answer — and why an owner and a guest want two different numbers |
-| `notes/07-four-thousand-and-ninety-six.md` | the Telegram bot: a cap measured in units nobody counts by hand, a poll loop that must not wait, and an approval that has to be a button |
-| `notes/08-what-the-turn-actually-did.md` | the trajectory on a run — names and not arguments, and why the service describes a turn but will not judge one |
-| `notes/09-a-process-you-walk-away-from.md` | one dvara per state directory, a roster you can edit while it runs, and the fix that would have hidden the bug |
-| `notes/10-what-decided-this.md` | counting the standing answer that leaves no trace by working, and why counting by ORDER is the wrong thing to depend on |
-| `notes/11-only-while-somebody-is-waiting.md` | a conversation's lock let go once nobody needs it, and not a moment before |
-| `notes/12-taken-down-everywhere-it-went.md` | a question cleared off every channel it went to, once it is over |
-| `notes/13-a-reply-that-is-owed.md` | after a crash, a person is told their message was not answered and will not be run again |
-| `notes/14-a-days-worth-of-being-asked.md` `notes/15-where-the-waiting-shows.md` | how long a person may be kept waiting on questions in a day, and where that shows |
-| `notes/16-kept-for-when-you-are-back.md` | a question nobody answered waits for the person instead of being refused |
-| `notes/17-nobody-wrote-first.md` | a turn nobody typed (a schedule's), the answers given ahead of time, and a message nobody asked for |
-| `notes/18-a-schedule-asked-for-in-the-chat.md` | a person's agent offering a schedule in the chat, made only with their yes on their own channel |
-
-### samay — the clock
-
-A separate program, in its own repository:
-
-| | |
-|---|---|
-| `notes/01-a-clock-and-a-logbook.md` | saying *when* in a form a model can fill, the rules against each way an unwatched schedule goes wrong, and why `NOTHING NEW` may not hide a sign-in wall |
-| `notes/02-as-the-person.md` | the Dvara road: a run as the person, what an answer given ahead of time may grant, and an answer that reaches someone who did not ask |
-| `notes/03-offered-then-accepted.md` | the tools an agent uses to offer a schedule, the page you see it on, and why even localhost needs a token |
-
-### The two READMEs
+### The README
 
 [README.md](README.md) is the reference: every flag, every config key,
-every module with a line saying what it holds. dvara's README is the same
-shape, one layer up.
+every module with a line saying what it holds.
 
 ---
 
@@ -2977,43 +2159,10 @@ and gaps, and each one is argued in the note that owns it.
 * **The API is not stable.** The harness underneath is settled; the
   framework layer on top is in use and still moving.
 
-**In the service:**
-
-* **No Slack app, and no webhook.** The Telegram bot long-polls, which
-  needs no public address, no TLS and no reverse proxy. A second channel
-  is an adapter and three lines of TOML, because nothing in the service
-  branches on which channel a person is reachable on.
-* **No per-tool policy ladder.** Tool and argument globs → allow / deny /
-  ask is a real thing to want, and inventing that dialect twice is how two
-  incompatible dialects are born.
-* **No approve-with-edits over a channel.** The round trip is long enough
-  that the edit and the thing being edited drift apart in a person's head.
-  Two buttons: approve or refuse.
-* **No streaming, no web UI, no registry, no scheduling.** Channels are
-  turn-shaped, and each of the others is a service of its own wearing this
-  one's clothes. Scheduling became exactly that: Samay, a program of its
-  own (§35).
-* **Locks are never evicted** — one `asyncio.Lock` per session key the
-  process has ever served. A few hundred bytes against a correctness
-  property, and the reason two dvaras may not share a state directory:
-  that lock is in memory, so a second process does not see it.
-* **No preferred channel, and no taking a question back.** A person
-  reachable three ways gets the question three times, in no order, and
-  answering on one leaves the other two sitting there — the bot edits the
-  copy that was pressed, and only that one. Ranking channels
-  means a second deadline inside the first; retracting means every
-  adapter implements editing.
-* **Two dvaras may not share a state directory.** A service is a process:
-  the lock serializing one conversation and the queue of pending
-  questions are in memory, so a second one is refused rather than made to
-  work. `serve --telegram` is how one process does both jobs.
-* **A package edited on disk changes a live conversation's next turn** —
-  desirable when you are fixing a prompt, alarming when a conversation
-  changes personality mid-sentence. Settled as a decision rather than left
-  as a consequence: the edit applies, and the version is recorded on every
-  Run, so the change appears in the ledger instead of being guessed at.
-  Pinning a version per thread stays refused, because a pinned thread is
-  one that does not get the prompt fix you made *because of it*.
+**In the programs around it:** each keeps its own list —
+[dvara's](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md#what-is-deliberately-not-here)
+(no webhook, no per-tool policy ladder, no Setu accounts behind the door
+yet…), and Samay's and Setu's in their notes.
 
 ---
 
@@ -3035,17 +2184,11 @@ If you remember nothing else:
    proof needs no key and no tokens.
 7. **A ceiling is a stop, not a cap**, and the person and the model want
    opposite things from the same meter.
-8. **An actor is assigned, never asserted. An agent is named, never
-   pathed.** Both are the same rule: nothing arriving from outside gets to
-   choose what code runs or who it runs as.
-9. **Permission composes as a minimum** across the package, the owner and
-   the actor, so nothing anybody writes can loosen what somebody else
-   allowed.
-10. **"Ask" with nobody present is not a question, it is a hang** — so
-    presence is modelled as a *route* rather than a setting, and with no
-    route the answer is a denial that says so.
+8. **"Ask" with nobody present is not a question, it is a hang** — so
+   presence is modelled as a *route* rather than a setting, and with no
+   route the answer is a denial that says so.
 
 ---
 
-*Yantra: 2623 offline tests passing (1 skipped) — no network, no key.
-dvara: 556. Both copyright 2026 Mahen Singh, Apache License 2.0.*
+*Yantra: 2655 offline tests passing (1 skipped) — no network, no key.
+Copyright 2026 Mahen Singh, Apache License 2.0.*

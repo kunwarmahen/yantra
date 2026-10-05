@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2623 tests. The
+The harness underneath is complete and covered by 2655 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -40,6 +40,22 @@ break things a teaching repo cannot afford to break.
 
 Copyright 2026 Mahen Singh. Licensed under the Apache License, Version
 2.0 — see [LICENSE](LICENSE).
+
+## Works with
+
+Three separate programs build on Yantra, each documented in its own
+repository; what Yantra does for each is in [the tutorial's Act VI](TUTORIAL.md),
+and §24 there is the order to set them up in.
+
+* **[Setu](https://github.com/kunwarmahen/setu)** keeps your sign-ins; Yantra finds it at startup and gets
+  each account's tools (below: *Your own accounts, through Setu*).
+* **[Samay](https://github.com/kunwarmahen/samay)** runs an agent's work later or on a repeat; Yantra finds
+  it at startup, the agent can offer a schedule, and `yantra --web` shows
+  them (below: *Doing things later, through Samay*). Samay starts
+  `yantra --json --unattended` for each run (below: *Nobody watching*).
+* **[dvara](https://github.com/kunwarmahen/dvara)** serves agents to many people over Telegram or HTTP. It
+  imports Yantra as a library; Yantra knows nothing of it.
+  [Its tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) starts where this one ends.
 
 ## Setup
 
@@ -2746,7 +2762,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2623 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2655 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -2778,7 +2794,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2623 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2655 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
