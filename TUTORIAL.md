@@ -56,7 +56,7 @@ Pick one:
   from the top. It is a checklist of things to type, in an order where
   each one explains the next.
 * **Looking something up.** [Act VIII](#act-viii--where-to-read-next) maps
-  every topic to the note that argues it, in both repos.
+  every topic to the note that argues it, in each repo.
 
 Two roads run through the whole document, and neither is the poor
 relation:
@@ -2668,6 +2668,43 @@ print(reply.text, reply.cost_usd)
 | `cli.py` | `agents`, `say`, `runs`, `held`, `resume`, `rules`, `case`, `telegram`, `serve` |
 | `errors.py` | `Refused` (answer the person) vs `ConfigProblem` (tell the owner) |
 
+## 35 · On a schedule — Samay
+
+"Check my email every two hours and tell me if anything needs me" is
+not one turn; it is a turn at 08:00, 10:00, 12:00, while you are doing
+something else. That needs something that keeps running when you are
+not, remembers what you asked for, and can show you afterwards what
+happened. Dvara refused to be that (Act IX), so it is a program of its
+own: **Samay** (समय, *time* — in Sanskrit also *the appointed time*).
+
+Samay is a clock and a logbook. It never does the work: at each time it
+asks Yantra to, and writes down what came back.
+
+```bash
+cd ~/samay && uv sync
+export SAMAY_YANTRA=~/yantra/.venv/bin/yantra SAMAY_YANTRA_HOME=~/yantra
+
+samay preview "at 08:00 on weekdays"           # how it reads, and when it next runs
+samay add "Open https://news.ycombinator.com and tell me the top 3 stories." \
+      --when "at 08:00 on weekdays" --allow-tools 'browser_*'
+samay serve                                    # the clock; keep it running
+samay list    ·    samay runs    ·    samay pause ID    ·    samay rm ID
+```
+
+Two things make an unwatched run safe, and both were in this tutorial
+already. On the **direct road** Samay starts `yantra --json --unattended`
+(§2): nothing waits for a person, writes are refused unless you named
+them when you added the schedule, and a site that wants you to sign in
+again pauses the schedule and says so instead of trying every hour. On
+the **Dvara road** (`--runner dvara --as mahen`) the run happens inside
+dvara as you (§22–33): your allowance pays, the owner's rules apply, a
+tool you did not allow is asked about on your Telegram, and whatever is
+worth telling you arrives there too.
+
+The rules about time — a missed 08:00 runs late once or not at all, a
+backlog is never replayed, three failures in a row stop it — are argued
+in Samay's own notes.
+
 ---
 
 # Act VII — the one-hour path
@@ -2832,6 +2869,9 @@ Most carry a live receipt from a real run.
 | [38](notes/38-giving-it-back.md) | two things that assumed the process would exit |
 | [45](notes/45-the-road-with-no-key.md) [54](notes/54-the-word-for-a-road.md) | the road with no key, how it says its name, and what to call it |
 | [40](notes/40-a-package-that-delegates.md) [44](notes/44-a-ceiling-and-a-floor.md) [50](notes/50-the-rest-of-what-a-child-is.md) [55](notes/55-two-at-a-time.md) | a package that declares its children, and the gate that watches what they were given |
+| [100](notes/100-what-it-knows-about-you.md) [101](notes/101-looking-back.md) [102](notes/102-kept-somewhere-else.md) [103](notes/103-said-once-found-later.md) [105](notes/105-a-rate-not-a-picture.md) [107](notes/107-a-fact-that-says-what-it-is.md) [109](notes/109-fewer-lines-fewer-facts.md) | remembering you: what it knows, the look back at a conversation's end, a store somewhere else, and the trial that measures whether a fact said once is found later |
+| [104](notes/104-the-servers-it-came-with.md) [106](notes/106-what-the-recipe-leaves-out.md) [108](notes/108-where-the-model-reads.md) [113](notes/113-after-the-answer.md) | a package's own servers in every session; what a recipe leaves out for memory to fill; where the model reads a promoted tool's inputs; what happens after the answer, without making you wait |
+| [114](notes/114-nobody-watching.md) | a run nobody is watching: `--unattended`, `--allow-tools`, `--json`, and one browser per profile across processes |
 
 ### dvara — the door
 
@@ -2849,6 +2889,21 @@ In the dvara repository, alongside its own README:
 | `notes/08-what-the-turn-actually-did.md` | the trajectory on a run — names and not arguments, and why the service describes a turn but will not judge one |
 | `notes/09-a-process-you-walk-away-from.md` | one dvara per state directory, a roster you can edit while it runs, and the fix that would have hidden the bug |
 | `notes/10-what-decided-this.md` | counting the standing answer that leaves no trace by working, and why counting by ORDER is the wrong thing to depend on |
+| `notes/11-only-while-somebody-is-waiting.md` | a conversation's lock let go once nobody needs it, and not a moment before |
+| `notes/12-taken-down-everywhere-it-went.md` | a question cleared off every channel it went to, once it is over |
+| `notes/13-a-reply-that-is-owed.md` | after a crash, a person is told their message was not answered and will not be run again |
+| `notes/14-a-days-worth-of-being-asked.md` `notes/15-where-the-waiting-shows.md` | how long a person may be kept waiting on questions in a day, and where that shows |
+| `notes/16-kept-for-when-you-are-back.md` | a question nobody answered waits for the person instead of being refused |
+| `notes/17-nobody-wrote-first.md` | a turn nobody typed (a schedule's), the answers given ahead of time, and a message nobody asked for |
+
+### samay — the clock
+
+A separate program, in its own repository:
+
+| | |
+|---|---|
+| `notes/01-a-clock-and-a-logbook.md` | saying *when* in a form a model can fill, the rules against each way an unwatched schedule goes wrong, and why `NOTHING NEW` may not hide a sign-in wall |
+| `notes/02-as-the-person.md` | the Dvara road: a run as the person, what an answer given ahead of time may grant, and an answer that reaches someone who did not ask |
 
 ### The two READMEs
 
@@ -2889,7 +2944,8 @@ and gaps, and each one is argued in the note that owns it.
   Two buttons: approve or refuse.
 * **No streaming, no web UI, no registry, no scheduling.** Channels are
   turn-shaped, and each of the others is a service of its own wearing this
-  one's clothes.
+  one's clothes. Scheduling became exactly that: Samay, a program of its
+  own (§35).
 * **Locks are never evicted** — one `asyncio.Lock` per session key the
   process has ever served. A few hundred bytes against a correctness
   property, and the reason two dvaras may not share a state directory:
