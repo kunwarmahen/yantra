@@ -54,7 +54,8 @@ class TestRendering:
 
     def test_layers_snapshot_is_ordered_and_complete(self):
         prompt = SystemPrompt("BASE")
-        assert list(prompt.layers()) == ["agent", "base", "env", "memory", "connections", "skills"]
+        assert list(prompt.layers()) == ["agent", "base", "env", "memory", "connections",
+                                         "schedules", "skills"]
         assert prompt.layers()["env"] is None
 
     def test_agent_layer_renders_before_the_operators_base(self):

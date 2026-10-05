@@ -246,6 +246,14 @@ function applyHeader(s) {
     $("#chip-mem").title = `memory — ${mem.store} store, for ${mem.user}`
       + (mem.notice ? `\n\n${mem.notice}` : "");
   }
+  // schedules chip: hidden unless Samay is linked to this session
+  const sam = s.samay;
+  $("#chip-sched").classList.toggle("hidden", !sam || !sam.found);
+  if (sam && sam.found) {
+    $("#sched-count").textContent = `${sam.counts.active || 0} scheduled`;
+    $("#chip-sched").title = "schedules — what the agent does later or on a repeat"
+      + (sam.serving ? "" : "\n\nSamay's clock is NOT running: nothing runs on time until `samay serve` is");
+  }
   renderKeptChip(s.kept);
   renderPressure(s);
   renderBudget(s);
@@ -1554,6 +1562,155 @@ function renderMemory() {
       actions.append(drop);
     }
     row.append(main, actions);
+    body.append(row);
+  }
+}
+
+/* ---------- schedules panel (samay_link.py) ----------
+
+   What Samay keeps for this computer: each schedule in its own sentence,
+   what it does, its last run, and the person's own switches. Nothing
+   here is a model turn and nothing asks: the person is the one pressing.
+   A run started here is not waited for -- it appears in the history. */
+
+const sched = { data: null, open: new Set(), runs: {} };
+
+$("#chip-sched").onclick = openSchedPanel;
+$("#sched-refresh").onclick = () => loadSchedules(true);
+$("#sched-close").onclick = () => $("#sched-backdrop").classList.add("hidden");
+$("#sched-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#sched-backdrop")) $("#sched-backdrop").classList.add("hidden");
+});
+
+async function openSchedPanel() {
+  $("#sched-backdrop").classList.remove("hidden");
+  $("#sched-body").innerHTML = '<div class="panel-loading">loading…</div>';
+  await loadSchedules(false);
+}
+
+async function loadSchedules(said) {
+  const res = await fetch("/api/schedules");
+  const data = await res.json();
+  if (!res.ok) {
+    $("#sched-body").innerHTML = `<div class="conn-box warn"><span>${esc(data.detail)}</span></div>`;
+    return;
+  }
+  sched.data = data;
+  $("#sched-count").textContent = `${data.counts.active || 0} scheduled`;
+  for (const id of sched.open) await loadRuns(id);
+  renderSchedules();
+  if (said) toast("asked Samay again");
+}
+
+async function loadRuns(id) {
+  const res = await fetch(`/api/schedules/${encodeURIComponent(id)}/runs`);
+  sched.runs[id] = res.ok ? (await res.json()).runs : [];
+}
+
+async function schedAct(id, action) {
+  const res = await fetch(`/api/schedules/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) { addBanner(`schedules: ${data.detail}`, true); return; }
+  toast({ pause: `paused ${id}`, resume: `resumed ${id}`, delete: `deleted ${id}`,
+          run: `${id} started — it shows in its runs when it is done` }[action]);
+  if (action === "delete") sched.open.delete(id);
+  await loadSchedules(false);
+}
+
+const OUTCOME_TONE = { failed: "bad", timed_out: "bad", needs_person: "warn",
+                       missed: "warn", skipped: "warn", held: "warn" };
+const NOTIFY_SAID = { when_new: "tells you only what is new", always: "tells you every time",
+                      never: "keeps it for you to read" };
+
+function clockTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const today = new Date().toDateString() === d.toDateString();
+  // the 24-hour clock Samay's own sentence uses, so the two agree
+  const hm = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+  return d.toLocaleString([], today ? hm : { weekday: "short", ...hm });
+}
+
+function renderSchedules() {
+  const d = sched.data;
+  const body = $("#sched-body");
+  body.textContent = "";
+  if (!d.serving) {
+    const warn = document.createElement("div");
+    warn.className = "conn-box warn";
+    warn.innerHTML = "<span>Samay's clock is not running on this computer: nothing runs on "
+      + "time until it is. Start it in a terminal with <code>samay serve</code>.</span>";
+    body.append(warn);
+  }
+  const list = d.schedules || [];
+  section(body, `${list.length} schedule${list.length === 1 ? "" : "s"}`,
+    d.serving && d.url ? `Samay's own page: ${d.url}` : "kept by Samay on this computer");
+  if (!list.length) {
+    const p = document.createElement("div");
+    p.className = "conn-foot";
+    p.textContent = "nothing yet — ask the agent to do something later or on a repeat "
+      + "(\"check my mail every 2 hours\"); it offers, and you say yes on its card.";
+    body.append(p);
+    return;
+  }
+  for (const s of list) {
+    const row = document.createElement("div");
+    row.className = "conn-card sched-row";
+    const dot = document.createElement("span");
+    dot.className = s.state === "active" ? "dot" : "dot dead";
+    dot.title = s.state;
+    const main = document.createElement("div");
+    const last = s.last_run;
+    const next = (s.upcoming || []).slice(0, 3).map(clockTime).join(", ");
+    main.innerHTML = `<div class="conn-title">${esc(s.sentence)}</div>
+      <div class="conn-sub sched-does">${esc(s.prompt)}</div>
+      <div class="conn-sub">${esc(s.id)} · ${esc(NOTIFY_SAID[s.notify] || s.notify)}
+        ${(s.allow_tools || []).length ? " · may use " + s.allow_tools.map((t) => `<code>${esc(t)}</code>`).join(" ") : ""}
+        ${s.owner && s.owner !== "local" ? " · for " + esc(s.owner) : ""}
+        ${s.state === "active" && next ? " · next " + esc(next) : ""}</div>
+      ${s.paused_because ? `<div class="conn-sub conn-warn">paused: ${esc(s.paused_because)}</div>` : ""}
+      <div class="conn-sub sched-last ${OUTCOME_TONE[last?.outcome] || ""}">${last
+        ? `last: ${esc(last.outcome)} ${esc(clockTime(last.due_at))} — ${esc(last.summary || last.detail || "")}`
+        : "not run yet"}</div>`;
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    const button = (label, cls, fn) => {
+      const b = document.createElement("button");
+      b.className = `m-btn ${cls}`;
+      b.textContent = label;
+      b.onclick = fn;
+      actions.append(b);
+    };
+    button(sched.open.has(s.id) ? "hide runs" : "runs", "", async () => {
+      if (sched.open.has(s.id)) sched.open.delete(s.id);
+      else { sched.open.add(s.id); await loadRuns(s.id); }
+      renderSchedules();
+    });
+    if (s.state !== "done") button("run now", "", () => schedAct(s.id, "run"));
+    if (s.state === "active") button("pause", "", () => schedAct(s.id, "pause"));
+    if (s.state === "paused") button("resume", "primary", () => schedAct(s.id, "resume"));
+    button("delete", "danger", async () => {
+      const ok = await confirmDialog({
+        title: "delete this schedule?",
+        body: `"${s.sentence}" — and every run it recorded. Pausing keeps it instead.`,
+        confirm: "delete", tone: "danger",
+      });
+      if (ok) schedAct(s.id, "delete");
+    });
+    row.append(dot, main, actions);
+    if (sched.open.has(s.id)) {
+      const runs = document.createElement("div");
+      runs.className = "sched-runs";
+      const got = sched.runs[s.id] || [];
+      runs.innerHTML = got.length ? got.map((r) => `<div class="sched-run">
+          <b class="${OUTCOME_TONE[r.outcome] || ""}">${esc(r.outcome)}</b> ${esc(clockTime(r.due_at))}
+          ${r.cost_usd ? ` · $${Number(r.cost_usd).toFixed(4)}` : ""}${r.notified ? " · sent to you" : ""}
+          <div>${esc(r.summary || r.detail || "")}</div>
+          ${(r.needs || []).length ? `<div class="conn-warn">needs you: ${esc(r.needs.join("; "))}</div>` : ""}
+          ${(r.refused || []).length ? `<div>refused (not allowed ahead): ${r.refused.map((t) => `<code>${esc(t)}</code>`).join(" ")}</div>` : ""}</div>`).join("")
+        : '<div class="sched-run">no runs yet</div>';
+      row.append(runs);
+    }
     body.append(row);
   }
 }

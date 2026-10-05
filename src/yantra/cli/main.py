@@ -330,6 +330,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "setu program to use. Also YANTRA_SETU=auto|on|off|PATH")
     parser.add_argument("--no-setu", action="store_const", const="off", dest="setu",
                         help="do not look for Setu connections this session")
+    parser.add_argument("--samay", nargs="?", const="on", default=None, metavar="PATH",
+                        dest="samay",
+                        help="let the agent offer to do things later or on a repeat, "
+                             "through Samay (found automatically when `samay` is on "
+                             "PATH; this flag errors if it cannot be found, and PATH "
+                             "names the samay program). Also YANTRA_SAMAY=auto|on|off|PATH")
+    parser.add_argument("--no-samay", action="store_const", const="off", dest="samay",
+                        help="do not look for Samay this session")
     parser.add_argument("--subagents", action="store_true",
                         help="register spawn_subagent so the model can delegate "
                              "self-contained subtasks to fresh-context child "
@@ -2029,6 +2037,46 @@ def _connect_setu(args, mcp_manager, agent, console: Console, spec=None,
     return None
 
 
+def _connect_samay(args, mcp_manager, agent, console: Console, spec=None) -> int | None:
+    """Start Samay's tools for the person at this computer (samay_link.py).
+
+    Same shape as Setu: an exit code only when Samay was ASKED for and
+    could not be used; in auto mode a missing Samay is silence. The
+    handle is left on ``agent.samay`` (unless off) for the page's
+    Schedules panel. A package's session makes schedules that run that
+    package; your own makes ones that run plain Yantra.
+    """
+    from yantra import samay_link
+
+    mode, path = samay_link.resolve_mode(getattr(args, "samay", None))
+    agent.samay = None
+    if mode == "off" or is_unattended():
+        # a run nobody watches cannot be said yes to: no offers from it
+        return None
+    try:
+        found = samay_link.load(mode, path)
+    except samay_link.SamayLinkError as exc:
+        if mode == "on":
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        console.print(f"[yellow]samay: {exc}[/yellow]")
+        return None
+    if found is None:
+        return None
+    data, program = found
+    samay = samay_link.Samay(mode=mode, path=path, data=data, program=program,
+                             agent=str(spec.root) if spec is not None and spec.root else "")
+    try:
+        count = samay.connect(mcp_manager, agent)
+    except (MCPError, samay_link.SamayLinkError) as exc:
+        samay.error = str(exc)
+        console.print(f"[yellow]samay: tools unavailable: {exc}[/yellow]")
+        return 2 if mode == "on" else None
+    agent.samay = samay
+    console.print(f"[dim]{samay_link.announce(data, count, program)}[/dim]")
+    return None
+
+
 def _ask_yes(question: str) -> bool:
     return Prompt.ask(question, choices=["y", "N"], default="N").strip().lower() == "y"
 
@@ -2814,6 +2862,11 @@ def main(argv: list[str] | None = None) -> int:
         # and remembered servers, so a name they configured by hand wins.
         if _connect_setu(args, mcp_manager, agent, console, spec,
                          _ask_yes if sys.stdin.isatty() else None) is not None:
+            return 2
+
+        # Doing things later, through Samay -- after Setu, so the cards
+        # it writes can say which accounts a scheduled run reaches.
+        if _connect_samay(args, mcp_manager, agent, console, spec) is not None:
             return 2
 
         _connect_package_mcp(spec.mcp, mcp_manager, console)

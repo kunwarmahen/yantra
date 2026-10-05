@@ -663,6 +663,35 @@ client file, and Setu remembers the path. For Home Assistant it asks once
 for your server's address instead
 ([notes/99](notes/99-the-connections-page.md)).
 
+**Doing things later, through Samay.** [Samay](https://github.com/kunwarmahen/samay)
+is a separate clock and logbook for an agent's work: "check my mail every
+two hours and tell me if anything needs me". When `samay` is on `PATH`,
+Yantra starts its tools for you at startup (`samay mcp --for local`, plus
+`--agent` for a package's session, so a schedule runs the agent it was
+made with) and says so in one line, including whether Samay's clock is
+running:
+
+```
+samay: 7 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs on time until `samay serve` is -- via /home/you/samay/.venv/bin/samay
+```
+
+`YANTRA_SAMAY=/path/to/samay` names it when it is elsewhere; `--samay`
+insists, `--no-samay` never looks, and a `--unattended` run never looks
+(nobody is there to say yes). A `schedules` prompt layer tells the model
+to preview first, say the sentence, and create only after a yes. The
+approval card for a new schedule is written in words, not JSON: when (in
+Samay's own sentence, with the next times), when you hear, what each
+`allow_tools` glob reaches in this agent (a name that matches nothing is
+said in capitals), which of your accounts it would change things in
+without asking, and which Setu connections it can read unasked; the
+model's prompt comes last. In the browser UI a **clock** chip opens the
+Schedules panel: every schedule with its next times and last run, its
+history (what a run needed from you, what it was refused), and *run
+now*, *pause*/*resume*, *delete*. The panel runs Samay's own commands
+(`samay list --json` …), so it works whether or not `samay serve` is up,
+and it says at the top when the clock is not running
+([notes/115](notes/115-what-a-yes-covers.md)).
+
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
 to the terminal live):
@@ -2101,7 +2130,7 @@ src/yantra/
 │                   verb it lacks reported rather than fatal
 │                   ([notes/102](notes/102-kept-somewhere-else.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (agent / base / env /
-│                   memory / connections / skills):
+│                   memory / connections / schedules / skills):
 │                   each owner writes one named layer, attach_prompt captures
 │                   the operator's --system exactly once, recompose() rebuilds
 │                   after a /load restores a stale composed string
@@ -2186,7 +2215,10 @@ src/yantra/
 │                   package's [[mcp]] connects in every session, last, so
 │                   the person's own server of the same name wins, and
 │                   listings say which servers the package or Setu brought
-│                   ([notes/104](notes/104-the-servers-it-came-with.md))
+│                   ([notes/104](notes/104-the-servers-it-came-with.md)).
+│                   A tool's `explain` hook gives its approval card plain
+│                   words -- the host's, never the server's
+│                   ([notes/115](notes/115-what-a-yes-covers.md))
 ├── mcp_oauth.py    OAuth 2.1 for authenticated HTTP servers, by hand:
 │                   RFC 9728/8414 discovery, RFC 7591 dynamic
 │                   registration, PKCE + a localhost redirect listener,
@@ -2214,6 +2246,14 @@ src/yantra/
 │                   ([notes/112](notes/112-a-site-with-no-api.md)).
 │                   SignIn also runs `setu connect --site` and answers
 │                   Setu's "did you sign in?" from the page
+├── samay_link.py   doing things later: Samay found by `samay status --json`
+│                   (samay.status.v1), its tools started `--for local` and
+│                   `--agent` this package, skipped when unattended; the
+│                   create card in words (when, who hears, what each glob
+│                   reaches, the accounts it changes or reads unasked), a
+│                   `schedules` prompt layer, and the page's Schedules panel
+│                   through `samay list|runs|pause|resume|rm --json`
+│                   ([notes/115](notes/115-what-a-yes-covers.md))
 ├── site_guide.py   after a turn on a site added by its address: where
 │                   each call landed (address and title, never page text)
 │                   becomes a guide offer in the tray; kept, Setu saves it
@@ -2557,6 +2597,9 @@ src/yantra/
 │                   ([notes/81](notes/81-the-turns-the-page-never-saw.md)),
 │                   with each --trace-full turn's answer as the file holds
 │                   it ([notes/90](notes/90-what-it-said.md)).
+│                   The clock chip's Schedules panel lists what Samay keeps,
+│                   with run now / pause / resume / delete
+│                   ([notes/115](notes/115-what-a-yes-covers.md)).
 │                   --wait-budget keeps with_wait_budget's rule inside
 │                   the session, where the blocking gate already polls:
 │                   reset at start_turn, prompt withdrawn on expiry

@@ -2703,10 +2703,33 @@ worth telling you arrives there too.
 
 `samay serve` also prints the address of a page: the next 24 hours as a
 strip of dots, every schedule with its last run, and buttons to run,
-pause or delete one. And your agent can make the offer itself:
-connect `samay mcp --for local` as an MCP server (§8), say "keep an eye
-on this for me", and it previews the schedule, tells you the sentence,
-and saves it only once you approve the card.
+pause or delete one.
+
+And your agent can make the offer itself. When `samay` is on your `PATH`
+(or `YANTRA_SAMAY=/path/to/samay`), Yantra finds it at startup, with no
+config file, and says so:
+
+```
+samay: 7 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs on time until `samay serve` is
+```
+
+Say "check my mail every 2 hours and tell me if anything needs me". The
+agent previews it and tells you the sentence (*every 2 hours — next:
+14:26, 16:26, 18:26*). It saves the schedule only after you say yes, and
+then only through an approval card. The card is in words, not JSON:
+when, when you'll hear, which tools it may use without asking, and which
+of your accounts that lets it change. It also lists every account
+connected through Setu (§8) that it can read with nobody watching. Read
+the card. In the tutorial's own run, a local model wrote "read only"
+into its instructions and still asked for every Gmail tool, `send_message`
+included. The card said so in capitals, and *edit* lets you narrow it
+before you approve.
+
+In `yantra --web`, the clock chip in the header opens the **Schedules**
+panel: each schedule, its next times and last run, what each run needed
+from you, and *run now*, *pause*, *delete*. It works whether or not
+`samay serve` is running, and it tells you when it isn't
+([notes/115](notes/115-what-a-yes-covers.md)).
 
 The rules about time — a missed 08:00 runs late once or not at all, a
 backlog is never replayed, three failures in a row stop it — are argued
@@ -2879,6 +2902,7 @@ Most carry a live receipt from a real run.
 | [100](notes/100-what-it-knows-about-you.md) [101](notes/101-looking-back.md) [102](notes/102-kept-somewhere-else.md) [103](notes/103-said-once-found-later.md) [105](notes/105-a-rate-not-a-picture.md) [107](notes/107-a-fact-that-says-what-it-is.md) [109](notes/109-fewer-lines-fewer-facts.md) | remembering you: what it knows, the look back at a conversation's end, a store somewhere else, and the trial that measures whether a fact said once is found later |
 | [104](notes/104-the-servers-it-came-with.md) [106](notes/106-what-the-recipe-leaves-out.md) [108](notes/108-where-the-model-reads.md) [113](notes/113-after-the-answer.md) | a package's own servers in every session; what a recipe leaves out for memory to fill; where the model reads a promoted tool's inputs; what happens after the answer, without making you wait |
 | [114](notes/114-nobody-watching.md) | a run nobody is watching: `--unattended`, `--allow-tools`, `--json`, and one browser per profile across processes |
+| [115](notes/115-what-a-yes-covers.md) | Samay found at startup, a schedule's approval card in words, and the Schedules panel |
 
 ### dvara — the door
 

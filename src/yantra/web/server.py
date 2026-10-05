@@ -1203,6 +1203,10 @@ class WebSession:
             # many went into this conversation's prompt. None when off.
             "memory": (agent.memory.describe()
                        if getattr(agent, "memory", None) is not None else None),
+            # Doing things later (samay_link.py): None when Samay is off or
+            # was not found, and then the Schedules chip stays hidden.
+            "samay": (agent.samay.describe()
+                      if getattr(agent, "samay", None) is not None else None),
             "tools": agent.registry.names(),
             # Runtime-disabled subset of ``tools`` (the /api/tools panel's
             # toggles); empty for a stock session.
@@ -1921,6 +1925,56 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(400, setu.error or "Setu was not found: install it, or "
                                 "start Yantra with --setu /path/to/setu")
         return program
+
+    # ---- schedules: what Samay keeps (samay_link.py) ---------------------------
+
+    def require_samay() -> Any:
+        require_ready()
+        samay = getattr(session.agent, "samay", None)
+        if samay is None:
+            raise HTTPException(400, "Samay is not linked to this session: put `samay` "
+                                     "on PATH, or start Yantra with --samay /path/to/samay")
+        return samay
+
+    def samay_call(samay: Any, verb: str, schedule: str | None = None) -> Any:
+        from yantra.samay_link import SamayLinkError
+        try:
+            return samay.call(verb, schedule)
+        except SamayLinkError as exc:
+            said = str(exc)
+            status = 404 if "no schedule" in said else 400 if "not an id" in said else 503
+            raise HTTPException(status, f"samay: {said}") from None
+
+    @app.get("/api/schedules")
+    def schedules_list() -> dict[str, Any]:
+        """The Schedules panel: every schedule on this computer, with its
+        sentence, its next day of times and its last run -- the same JSON
+        Samay's own page draws. Plain ``def``: it runs a program, and
+        FastAPI gives that its own thread."""
+        samay = require_samay()
+        samay.refresh()
+        return {**samay.describe(), "schedules": samay_call(samay, "list")}
+
+    @app.get("/api/schedules/{schedule_id}/runs")
+    def schedules_runs(schedule_id: str) -> dict[str, Any]:
+        return {"runs": samay_call(require_samay(), "runs", schedule_id)}
+
+    @app.post("/api/schedules/{schedule_id}/{action}")
+    def schedules_act(schedule_id: str, action: str) -> dict[str, Any]:
+        """Pause, resume, delete -- the person's own hand, so no card -- or
+        start a run without waiting for it."""
+        from yantra.samay_link import SamayLinkError
+        samay = require_samay()
+        if action == "run":
+            try:
+                samay.run_now(schedule_id)
+            except SamayLinkError as exc:
+                raise HTTPException(400, f"samay: {exc}") from None
+            return {"started": schedule_id}
+        verb = {"pause": "pause", "resume": "resume", "delete": "rm"}.get(action)
+        if verb is None:
+            raise HTTPException(404, f"no schedule action {action!r}")
+        return {"done": action, "result": samay_call(samay, verb, schedule_id)}
 
     @app.get("/api/connections")
     def connections_list(req: Request) -> dict[str, Any]:

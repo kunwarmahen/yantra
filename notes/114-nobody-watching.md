@@ -208,7 +208,7 @@ timeline through their Setu X connection ([note 112](112-a-site-with-no-api.md))
 its read verbs are classed read-only, so they ran unattended without
 `--allow-tools`. An unattended run reaches what any run of that agent
 reaches. Whatever schedules it should say so when it asks the person to
-accept.
+accept — and Yantra's card for a schedule does ([note 115](115-what-a-yes-covers.md)).
 
 ## What was deliberately not built
 

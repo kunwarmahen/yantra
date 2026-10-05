@@ -830,10 +830,20 @@ class MCPToolWrapper(Tool):
         # pessimistic default: honor readOnlyHint when present, assume
         # side effects otherwise -- annotations are hints, not guarantees
         self.read_only = info.read_only_hint
+        #: Plain words for the permission card, set by whoever knows what
+        #: this server's calls mean (samay_link.explain). A server cannot
+        #: set it: its description is its own claim; this is the host's.
+        self.explain: Any = None
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
-        return (f"{self.name}({json.dumps(args, default=str)}) "
-                f"-- mcp server '{self.session.config.name}'")
+        raw = (f"{self.name}({json.dumps(args, default=str)}) "
+               f"-- mcp server '{self.session.config.name}'")
+        if self.explain is None:
+            return raw
+        try:
+            return self.explain(args)
+        except Exception:                 # a broken card must not block the ask
+            return raw
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
         try:
