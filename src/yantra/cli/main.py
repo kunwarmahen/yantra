@@ -2330,7 +2330,35 @@ def _print_run(end: TurnEnd | None, agent, *, error: str = "") -> None:
     }), flush=True)
 
 
+def _status_mode(rest: list[str]) -> int:
+    """``yantra status [--json]``: which release, and would it reach a model.
+
+    THE ONE WORD THAT IS NOT A PROMPT. Everything else Yantra does is a
+    flag, and a bare word is a question for the model -- so before this,
+    ``yantra status --json`` sent "status" to a model and printed what it
+    said. The family's programs (Setu, Samay, Dvara) are all asked this
+    way, so Yantra answers it the same way instead of inventing a flag a
+    reader of the others would not guess. A person who does want to ask
+    a model the one word still can: ``yantra --prompt status``.
+    """
+    from yantra.status import lines, report
+
+    if rest not in ([], ["--json"]):
+        print("error: yantra status takes only --json (to ask a model "
+              "about 'status', use --prompt)", file=sys.stderr)
+        return 2
+    data = report()
+    if rest:
+        print(json.dumps(data, indent=2))
+    else:
+        print("\n".join(lines(data)))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    given = sys.argv[1:] if argv is None else argv
+    if given[:1] == ["status"]:
+        return _status_mode(given[1:])
     args = build_parser().parse_args(argv)
     console = Console()
 

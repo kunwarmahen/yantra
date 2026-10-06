@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2655 tests. The
+The harness underneath is complete and covered by 2676 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -60,6 +60,13 @@ Podman containers.
 * **[dvara](https://github.com/kunwarmahen/dvara)** serves agents to many people over Telegram or HTTP. It
   imports Yantra as a library; Yantra knows nothing of it.
   [Its tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) starts where this one ends.
+
+`yantra status` answers the question each of them answers for itself:
+which release this is, which model a turn would ask and why, and — on a
+local model — whether Ollama is running and has it pulled. `--json`
+prints it as `yantra.status.v1`, which is what Sarathi reads. `status`
+is the one bare word that is not a prompt; to ask a model the word,
+use `--prompt status` ([notes/117](notes/117-asked-what-it-is.md)).
 
 ## Setup
 
@@ -2290,6 +2297,11 @@ src/yantra/
 │                   `schedules` prompt layer, and the page's Schedules panel
 │                   through `samay list|runs|pause|resume|rm --json`
 │                   ([notes/115](notes/115-what-a-yes-covers.md))
+├── status.py       `yantra status [--json]`: the release, the provider and
+│                   model a turn would use (and which setting chose
+│                   them), whether a local model is served and pulled,
+│                   extras and tool packs; yantra.status.v1, no turn and
+│                   no key ([notes/117](notes/117-asked-what-it-is.md))
 ├── site_guide.py   after a turn on a site added by its address: where
 │                   each call landed (address and title, never page text)
 │                   becomes a guide offer in the tray; kept, Setu saves it

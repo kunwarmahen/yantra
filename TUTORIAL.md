@@ -1880,7 +1880,8 @@ does for it, which is the part that lives here.
 The dependencies run one way. Setu and Samay are programs Yantra starts
 and reads (`setu status --json`, `samay status --json`, a versioned JSON
 whose `format` is the whole contract); dvara imports Yantra as a library.
-None of them is imported by Yantra.
+None of them is imported by Yantra. Yantra answers the same question the
+same way: `yantra status --json` (notes/117).
 
 ## 21 · Setu — your accounts
 
@@ -2023,6 +2024,11 @@ uv run yantra --provider ollama --model qwen3.8 "what files are in notes/?"
 
 You have just watched steps 1–4 of the loop. Nothing else in this document
 is harder than that.
+
+No answer? `uv run yantra status` says which model a turn would ask when
+you give no flags, and on Ollama whether it's running and has that model
+pulled, with the command that fixes it if not. (`YANTRA_PROVIDER=local`
+in `.env` makes Ollama the no-flags choice.)
 
 ### 1 · Five minutes — watch the loop, event by event
 
