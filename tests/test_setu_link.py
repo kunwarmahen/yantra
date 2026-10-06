@@ -648,3 +648,34 @@ class TestAHostsOwnWords:
         data["connections"] = []
         link = setu_link.Link(data=data, road="test")
         assert "`setu connect <id>`" in setu_link.prompt_text(link)
+
+
+class TestALockedFolder:
+    """A person may lock their Setu folder with a passphrase (Setu's
+    seal.py). The bias: A LOCKED ACCOUNT IS NAMED, NEVER STARTED, and the
+    key that opens it goes to Setu alone."""
+
+    def locked(self) -> setu_link.Link:
+        data = status(["connector"])
+        data["connections"][0]["locked"] = True
+        return setu_link.Link(data=data, road="test")
+
+    def test_a_locked_connection_is_not_started_but_is_named_with_how_it_opens(self):
+        link = self.locked()
+        assert link.connections == [] and setu_link.mcp_configs(link) == []
+        said = setu_link.prompt_text(link, locked_how="they send /unlock")
+        assert "Connected but locked right now, so not usable (they send /unlock):" in said
+        assert "`gmail:personal`" in said
+
+    def test_the_key_goes_to_the_status_and_the_connector_setu_runs(self, tmp_path):
+        log = tmp_path / "keys.log"
+        data = status(["connector"])
+        program = tmp_path / "setu"
+        record = f"open({str(log)!r}, 'a').write(os.environ.get('SETU_VAULT_KEY', '-') + '\\n')"
+        program.write_text(f"#!{sys.executable}\nimport os\n{record}\n"
+                           f"print({json.dumps(json.dumps(data))})\n")
+        program.chmod(0o755)
+        link = setu_link.load("on", str(program), home="/homes/raj", key="K3Y")
+        assert log.read_text().split() == ["K3Y"]
+        [(_, cfg)] = setu_link.mcp_configs(link, home="/homes/raj", key="K3Y")
+        assert cfg.env == {"SETU_HOME": "/homes/raj", "SETU_VAULT_KEY": "K3Y"}

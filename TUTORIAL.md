@@ -1998,6 +1998,7 @@ read each step.
 | `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
 | `DVARA_TOKEN`, `DVARA_ROOT`, `DVARA_ACTORS`, `DVARA_STATE`, `DVARA_SAMAY` | dvara | dvara's README |
 | `SETU_HOME` | Setu (set per person by dvara) | Setu's README, dvara's tutorial §16 |
+| `SETU_VAULT_KEY` | Setu (held by dvara while a person's locked folder is unlocked) | Setu's README ("How safe is it?"), dvara's note 21 |
 | connections, levels, the catalog | Setu | Setu's README |
 
 ---

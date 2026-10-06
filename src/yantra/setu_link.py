@@ -146,7 +146,16 @@ class Link:
 
     @property
     def connections(self) -> list[dict[str, Any]]:
-        return [row for row in self.data.get("connections") or [] if row.get("installed", True)]
+        """The usable ones: installed, and not sealed in a locked folder."""
+        return [row for row in self.data.get("connections") or []
+                if row.get("installed", True) and not row.get("locked")]
+
+    @property
+    def locked(self) -> list[dict[str, Any]]:
+        """Connections in a folder locked with a passphrase that nobody has
+        opened for this session: named to the model, never started."""
+        return [row for row in self.data.get("connections") or []
+                if row.get("installed", True) and row.get("locked")]
 
     @property
     def connectors(self) -> dict[str, dict[str, Any]]:
@@ -180,16 +189,29 @@ def _check(data: Any, road: str) -> dict[str, Any]:
     return data
 
 
-def home_env(home: str | None) -> dict[str, str] | None:
+def home_env(home: str | None, key: str | None = None) -> dict[str, str] | None:
     """The environment a Setu program runs in for one person's home --
-    None, this process's own, when there is no home of anybody else's."""
-    return None if home is None else {**os.environ, "SETU_HOME": home}
+    None, this process's own, when there is no home of anybody else's.
+    ``key`` opens a folder its person locked (``SETU_VAULT_KEY``): held by
+    the host they unlocked for, handed to Setu and nothing else."""
+    if home is None and key is None:
+        return None
+    env = dict(os.environ)
+    if home is not None:
+        env["SETU_HOME"] = home
+    if key is not None:
+        env[VAULT_KEY] = key
+    return env
 
 
-def _by_command(path: str, home: str | None = None) -> Link:
+#: The key to a locked Setu folder, as Setu reads it.
+VAULT_KEY = "SETU_VAULT_KEY"
+
+
+def _by_command(path: str, home: str | None = None, key: str | None = None) -> Link:
     try:
         done = subprocess.run([path, "status", "--json"], capture_output=True, text=True,
-                              timeout=STATUS_TIMEOUT, env=home_env(home))
+                              timeout=STATUS_TIMEOUT, env=home_env(home, key))
     except FileNotFoundError:
         raise SetuLinkError(f"no setu program at {path}") from None
     except subprocess.TimeoutExpired:
@@ -215,7 +237,8 @@ def _by_import() -> Link | None:
     return Link(data=data, road="import", problems=list(data.get("problems") or []))
 
 
-def load(mode: str, path: str | None = None, home: str | None = None) -> Link | None:
+def load(mode: str, path: str | None = None, home: str | None = None,
+         key: str | None = None) -> Link | None:
     """Ask Setu, by whichever road is open. None when it is off, or when
     it is ``auto`` and simply not there; an error when it was asked for.
 
@@ -225,14 +248,14 @@ def load(mode: str, path: str | None = None, home: str | None = None) -> Link | 
     if mode == "off":
         return None
     if path:
-        return _by_command(path, home)
+        return _by_command(path, home, key)
     if home is not None:
         on_path = shutil.which("setu")
         if on_path is None:
             if mode == "on":
                 raise SetuLinkError("a Setu home was named but no `setu` is on PATH")
             return None
-        return _by_command(on_path, home)
+        return _by_command(on_path, home, key)
     try:
         found = _by_import()
     except SetuLinkError:
@@ -255,18 +278,21 @@ def load(mode: str, path: str | None = None, home: str | None = None) -> Link | 
     return None
 
 
-def mcp_configs(link: Link, home: str | None = None
+def mcp_configs(link: Link, home: str | None = None, key: str | None = None
                 ) -> list[tuple[dict[str, Any], MCPServerConfig]]:
     """One MCP server per connection, as ``setu mcp-config`` would write it.
-    With a ``home``, each connector asks THAT folder's Setu for its pass."""
+    With a ``home``, each connector asks THAT folder's Setu for its pass;
+    with a ``key``, Setu opens that folder's sealed keys (never the
+    connector: Setu keeps the key from its child)."""
     out = []
+    env = {k: v for k, v in (("SETU_HOME", home), (VAULT_KEY, key)) if v}
     for row in link.connections:
         mcp = row.get("mcp") or {}
         if not mcp.get("name") or not mcp.get("command"):
             continue
         out.append((row, MCPServerConfig(name=mcp["name"], command=mcp["command"],
                                          args=list(mcp.get("args") or []),
-                                         env={"SETU_HOME": home} if home else None)))
+                                         env=env or None)))
     return out
 
 
@@ -332,13 +358,17 @@ def connector_allowed(allow: dict[str, str] | None, cid: str) -> bool:
 
 #: How a person at this computer connects an account.
 CONNECT_HERE = "the person can connect one with `setu connect <id>`; you cannot"
+#: How a locked folder opens at a keyboard (a host serving people says its own).
+LOCKED_HERE = ("the person's Setu folder is locked with their passphrase; they open it "
+               "with `setu lock unlock`, and you cannot")
 
 
 def prompt_text(link: Link, allow: dict[str, str] | None = None,
                 merged: frozenset[str] = frozenset(),
                 sites: dict[str, str] | None = None,
                 mention: frozenset[str] = frozenset(),
-                connect_how: str = CONNECT_HERE) -> str | None:
+                connect_how: str = CONNECT_HERE,
+                locked_how: str = LOCKED_HERE) -> str | None:
     """The ``connections`` layer: what is connected, and what could be.
     ``allow`` narrows it to what a package may use; ``merged`` names the
     connectors whose accounts share one set of tools; ``sites`` maps a
@@ -349,9 +379,10 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
     sites = sites or {}
     connectors = link.connectors
     rows = [r for r in link.connections if ceiling_of(allow, r)]
+    shut = [r for r in link.locked if ceiling_of(allow, r)]
     idle = [c for c in connectors.values() if not c.get("connected")
             and (connector_allowed(allow, c["id"]) or c["id"] in mention)]
-    if not rows and not idle:
+    if not rows and not idle and not shut:
         return None
     lines = ["# Connected accounts (through Setu)",
              "The person has signed in to these; their tools are prefixed "
@@ -390,6 +421,10 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
         lines.append(f"- {name} `{row['mcp']['name']}`{who}: {level}")
     if allow is not None:
         lines.append("This agent may use only these, at the level the person allowed.")
+    if shut:
+        lines.append(f"Connected but locked right now, so not usable ({locked_how}):")
+        lines += [f"- {(connectors.get(r.get('connector', '')) or {}).get('name', '')} "
+                  f"`{r.get('ref')}`" for r in shut]
     if idle:
         lines.append(f"Installed but not connected ({connect_how}):")
         lines += [f"- {c.get('name', c['id'])} (`{c['id']}`)" for c in idle]
@@ -708,6 +743,10 @@ class Setu:
     #: to name as not connected, and how its person gets one connected.
     mention: frozenset[str] = frozenset()
     connect_how: str = CONNECT_HERE
+    locked_how: str = LOCKED_HERE
+    #: The key to ``home`` when its person locked it and unlocked it for
+    #: this host (``SETU_VAULT_KEY``); None: locked rows stay unused.
+    vault_key: str | None = None
     #: Why the last look failed, when it did -- the page says it.
     error: str = ""
     servers: set[str] = field(default_factory=set)
@@ -753,7 +792,7 @@ class Setu:
             program = self.program
             if program:
                 threading.Thread(target=run_setu, args=(program, "site", "event", ref, kind),
-                                 kwargs={"home": self.home},
+                                 kwargs={"home": self.home, "key": self.vault_key},
                                  daemon=True, name="yantra-setu-event").start()
         return report
 
@@ -792,7 +831,8 @@ class Setu:
         """Ask Setu again. A page asking is the person asking, so a Setu
         that cannot be found is an error here even in ``auto``."""
         try:
-            self.link = load("on" if self.mode == "auto" else self.mode, self.path, self.home)
+            self.link = load("on" if self.mode == "auto" else self.mode, self.path, self.home,
+                             self.vault_key)
             self.error = ""
             self.watched = self._stamp()
         except SetuLinkError as exc:
@@ -809,7 +849,7 @@ class Setu:
         link = self.link
         self._unmerge(agent.registry, manager)
         wanted = [(row, cfg) for row, cfg in
-                  (mcp_configs(link, self.home) if link is not None else [])
+                  (mcp_configs(link, self.home, self.vault_key) if link is not None else [])
                   if ceiling_of(self.allow, row)]
         # a version Setu's catalog withdrew is not started, whoever allowed it;
         # the connection stays in Setu, so an update can use it again
@@ -884,7 +924,7 @@ class Setu:
         merged = frozenset(t.connector for t in self.merged.values())
         prompt.set("connections", prompt_text(
             link, self.allow, merged, {ref: site.prefix for ref, site in self.sites.items()},
-            self.mention, self.connect_how) if link is not None else None)
+            self.mention, self.connect_how, self.locked_how) if link is not None else None)
         prompt.apply()
         return done
 
@@ -1128,11 +1168,11 @@ COMMAND_TIMEOUT = 30.0
 
 
 def run_setu(program: str, *args: str, timeout: float = COMMAND_TIMEOUT,
-             home: str | None = None) -> tuple[bool, str]:
+             home: str | None = None, key: str | None = None) -> tuple[bool, str]:
     """One short setu command -> (worked, what it said)."""
     try:
         done = subprocess.run([program, *args], capture_output=True, text=True,
-                              timeout=timeout, env=home_env(home))
+                              timeout=timeout, env=home_env(home, key))
     except FileNotFoundError:
         return False, f"no setu program at {program}"
     except subprocess.TimeoutExpired:
