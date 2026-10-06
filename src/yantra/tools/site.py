@@ -467,9 +467,30 @@ class SiteHandoff(BrowserHandoff):
         self.description = (f"Give the open {session.rules.name} page to the PERSON. "
                             + BrowserHandoff.description.split("PERSON. ", 1)[-1])
         self._site = session
+        if reach == "link":
+            # A LINK NEVER SIGNS THIS PROFILE IN. It opens the person's own
+            # browser; 'return' would hand back a page as signed out as it
+            # was. Told so in words, a small model on a door's chat sent
+            # the sign-in address anyway -- so the mode is not offered.
+            self.description = (
+                f"Give the open {session.rules.name} page to the PERSON to finish "
+                "themselves (mode='finish'): anything that spends money, needs "
+                "payment or personal details, or is theirs to decide. They get a "
+                "link to open on their own device, and your browsing ends. It "
+                "cannot sign this connection in: on a sign-in page or a robot "
+                "check, do not hand over -- tell them how to sign in again, as "
+                "the page you read says.")
+            self.parameters = {**BrowserHandoff.parameters, "properties": {
+                **BrowserHandoff.parameters["properties"],
+                "mode": {"type": "string", "enum": ["finish"],
+                         "description": "'finish': theirs from here on."}}}
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
         self._site._note("handoff", str(args.get("mode") or ""))
+        if self.reach == "link" and args.get("mode") == "return":
+            return ("Not handed over: here a handoff is a link to the person's own "
+                    "browser, and signing in there leaves this connection signed out. "
+                    f"To sign it in again, {self._site.reconnect}.")
         return super().run(args, ctx)
 
 

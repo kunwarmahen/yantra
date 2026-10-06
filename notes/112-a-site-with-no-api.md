@@ -140,7 +140,11 @@ for three things:
   browser and leaves the connection exactly as signed out as before, so
   the snapshot says not to hand it over and names the host's way
   instead: `setu connect` at a keyboard, `/connect amazon` in a door's
-  chat. A robot check is treated the same way.
+  chat. A robot check is treated the same way. Told that in words, a
+  small local model behind a door handed the sign-in address over
+  anyway, so where the handoff is a link the tool no longer offers
+  `mode='return'` at all, and one asked for regardless answers with the
+  way to sign in again rather than an address.
 
 ## In the session
 

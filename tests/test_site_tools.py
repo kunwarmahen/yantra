@@ -252,6 +252,22 @@ def test_signed_out_where_a_handoff_is_a_link_it_says_how_to_sign_in_again(monke
     assert "send /connect shop" in note
 
 
+def test_where_a_handoff_is_a_link_it_cannot_be_a_sign_in(monkeypatch):
+    """A door's chat got Amazon's sign-in address from a handoff the
+    snapshot had said not to make. The mode is not offered, and asked for
+    anyway it says how to sign in again instead of sending the address."""
+    from yantra.tools.site import SiteHandoff
+    s = session()
+    s.reconnect = "tell them to send /connect shop"
+    tool = SiteHandoff("shop", s, "link")
+    assert tool.parameters["properties"]["mode"]["enum"] == ["finish"]
+    assert "cannot sign this connection in" in tool.description
+    said = tool.run({"mode": "return", "reason": "sign in"}, None)
+    assert said.startswith("Not handed over") and "send /connect shop" in said
+    assert SiteHandoff("shop", s, "window").parameters["properties"]["mode"]["enum"] == [
+        "finish", "return"]
+
+
 class TestLevels:
     def names(self, level, ceiling=None, verbs=VERBS):
         return [t.name for t in site_tools("shop", session(), verbs, level, ceiling)]
