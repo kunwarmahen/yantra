@@ -103,7 +103,9 @@ spend tool to approve; those pages go to you instead:
 Every refusal tells the model what to do instead: hand the page over
 with `handoff`. *finish* opens the page for you to complete; *return*
 gives you a window on the connection's own profile, for when you were
-signed out, and the agent carries on once you close it.
+signed out, and the agent carries on once you close it. That window
+exists only on a machine with a screen; elsewhere a signed-out page
+asks for the host's own way to sign in again (below).
 
 ## A person's pace
 
@@ -130,8 +132,15 @@ for three things:
 * **Pages that build themselves.** X's page is empty when the load event
   fires. A site session waits up to 8 seconds for text to appear.
 * **Signed out is said.** If a page turns out to be the site's sign-in
-  page, the snapshot says so: don't type a password, hand it over, or
-  run `setu connect` again.
+  page, the snapshot says so: don't type a password, and sign in again
+  the way this host signs people in. Handing the page over is offered
+  only when the handoff is a window on this machine, on the
+  connection's own profile. Where it is a link (a container, a server,
+  a chat behind a door), opening that link signs in the person's *own*
+  browser and leaves the connection exactly as signed out as before, so
+  the snapshot says not to hand it over and names the host's way
+  instead: `setu connect` at a keyboard, `/connect amazon` in a door's
+  chat. A robot check is treated the same way.
 
 ## In the session
 

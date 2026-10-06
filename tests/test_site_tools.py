@@ -234,6 +234,24 @@ def test_a_sign_in_page_says_the_person_is_signed_out():
     assert "signed out" in s._open("")
 
 
+def test_signed_out_with_a_window_here_the_page_is_handed_over(monkeypatch):
+    monkeypatch.setattr("yantra.tools.site.browser_handoff", lambda: "window")
+    s = session(Page(url="https://www.shop.test/ap/signin?return=orders"))
+    assert "handoff mode='return'" in s._open("")
+
+
+def test_signed_out_where_a_handoff_is_a_link_it_says_how_to_sign_in_again(monkeypatch):
+    """In a door's chat the handoff is a link: opening it signs in the
+    person's phone, not this connection, and the next question found the
+    same sign-in page. The host's own way to sign in again is said instead."""
+    monkeypatch.setattr("yantra.tools.site.browser_handoff", lambda: "link")
+    s = session(Page(url="https://www.shop.test/ap/signin?return=orders"))
+    s.reconnect = "tell them to send /connect shop"
+    note = s._open("").split(")\n", 1)[0]
+    assert "handoff" not in note and "Do not hand them this page" in note
+    assert "send /connect shop" in note
+
+
 class TestLevels:
     def names(self, level, ceiling=None, verbs=VERBS):
         return [t.name for t in site_tools("shop", session(), verbs, level, ceiling)]

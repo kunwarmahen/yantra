@@ -976,6 +976,10 @@ class Setu:
             session = SiteSession(rules_from(card, row), Path(where["profile"]),
                                   where.get("executable") or None)
             session.on_event = self._reporter(ref)
+            # the host's own words: a chat's /connect, a keyboard's setu connect
+            session.reconnect = (f"tell them how, as this host does it -- "
+                                 f"{self.connect_how} (this one is "
+                                 f"{row.get('connector', '')})")
             ceiling = None if self.allow is None else ceiling_of(self.allow, row)
             tools = site_tools(prefix, session, dict(card.get("verbs") or {}),
                                str(row.get("level") or "read"), ceiling)

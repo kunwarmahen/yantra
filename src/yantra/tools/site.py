@@ -148,6 +148,9 @@ class SiteSession(BrowserSession):
         #: session (Setu keeps a week of them; setu_link wires it).
         self.on_event: Any = None
         self._noted: set[tuple[str, str]] = set()
+        #: How the person signs in again on this road, for the signed-out
+        #: page (setu_link sets the host's own words: a chat's /connect).
+        self.reconnect = "tell them to run `setu connect` for this site"
 
     def _note(self, kind: str, where: str = "") -> None:
         if self.on_event is None or (kind, where) in self._noted:
@@ -202,17 +205,28 @@ class SiteSession(BrowserSession):
         head = text[:2000].lower()
         if any(hint in head for hint in ROBOT_HINTS):
             self._note("robot_check", where.path)
+            give = ("Hand the page to the person with handoff mode='return', or tell "
+                    "them" if browser_handoff() == "window" else "Tell the person")
             text = (f"(this looks like {self.rules.name}'s robot check, not the page asked "
-                    "for. Do not try to solve it. Hand the page to the person with "
-                    "handoff mode='return', or tell them the site is checking for "
+                    f"for. Do not try to solve it. {give} the site is checking for "
                     "robots right now)\n" + text)
         if any(hint in address for hint in SIGN_IN_HINTS):
             self._note("signed_out", where.path)
             text = (f"(this is {self.rules.name}'s sign-in page: the person is signed out. "
-                    "Do not type a password. Hand the page to them with handoff "
-                    "mode='return' to sign in again, or tell them to run "
-                    "`setu connect` for this site)\n" + text)
+                    f"Do not type a password. {self._sign_in_again()})\n" + text)
         return text
+
+    def _sign_in_again(self) -> str:
+        """What to do on a signed-out page. A handoff is a sign-in only
+        when it is a window on THIS profile: as a link it opens the
+        person's own browser, which signs in their phone and leaves this
+        connection as signed out as it was (a door's chat got exactly
+        that link, and the next question the same sign-in page)."""
+        if browser_handoff() == "window":
+            return (f"Hand the page to them with handoff mode='return' to sign in again, "
+                    f"or {self.reconnect}")
+        return (f"Do not hand them this page or its address: opening it signs in their "
+                f"own browser, not this connection. To sign in again, {self.reconnect}")
 
     def _settle(self) -> None:
         super()._settle()
