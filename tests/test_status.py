@@ -20,6 +20,14 @@ from yantra import status
 from yantra.cli.main import main
 
 
+@pytest.fixture(autouse=True)
+def no_siblings(monkeypatch):
+    """The real Setu and Samay on this machine stay out: a test that is
+    about them says where they are."""
+    monkeypatch.setenv("YANTRA_SETU", "off")
+    monkeypatch.setenv("YANTRA_SAMAY", "off")
+
+
 @pytest.fixture
 def no_local_server(monkeypatch):
     def refuse(*args, **kwargs):
@@ -98,3 +106,26 @@ class TestTheReport:
         monkeypatch.setenv("OLLAMA_MODEL", "qwen3.8")
         monkeypatch.setattr(status.httpx, "get", _tags("qwen3.8:latest"))
         assert status.report()["local"]["pulled"] is True
+
+
+class TestTheSiblings:
+    def test_turned_off_is_not_found_and_not_a_problem(self):
+        data = status.report()
+        assert data["setu"]["found"] is False and data["samay"]["found"] is False
+        assert not any(p.startswith(("setu", "samay")) for p in data["problems"])
+
+    def test_a_named_program_that_is_not_there_is_a_problem(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_SAMAY", "/nowhere/samay")
+        data = status.report()
+        assert data["samay"] == {"found": False, "program": None, "serving": False}
+        assert "samay: no samay program at /nowhere/samay" in data["problems"]
+
+    def test_a_setu_found_is_counted_never_listed(self, monkeypatch, tmp_path):
+        setu = tmp_path / "setu"
+        setu.write_text('#!/bin/sh\necho \'{"format": "setu.status.v1", "connections": '
+                        '[{"ref": "gmail:mine", "email": "me@example.com"}]}\'\n')
+        setu.chmod(0o755)
+        monkeypatch.setenv("YANTRA_SETU", str(setu))
+        data = status.report()
+        assert data["setu"] == {"found": True, "road": str(setu), "connections": 1}
+        assert "me@example.com" not in json.dumps(data)

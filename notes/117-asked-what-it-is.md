@@ -47,11 +47,14 @@ would ask ollama for qwen3.8:latest (chosen by YANTRA_PROVIDER)
 local server answering at http://localhost:11434/v1; qwen3.8:latest is pulled
 extras: web, browse
 tool packs: none
+setu: 9 account(s), found by /home/you/.local/bin/setu
+samay: clock running (/home/you/samay/.venv/bin/samay)
 ```
 
 `--json` prints the same thing as `yantra.status.v1`: `version`,
 `python`, `provider`, `chosen_by`, `model`, `base_url`, `local`
-(`answering`, `pulled`), `extras`, `packs` and `problems`. As with the
+(`answering`, `pulled`), `extras`, `packs`, `setu` (`found`, `road`,
+`connections`), `samay` (`found`, `program`, `serving`) and `problems`. As with the
 others, the `format` field is the contract, and a reader refuses a
 version it doesn't know.
 
@@ -77,6 +80,15 @@ problem: gemma4:12b is not pulled (ollama pull gemma4:12b)
 A cloud provider is never asked anything. Whether a key works is for the
 provider to say, and finding out costs a call.
 
+**SETU AND SAMAY, AS A SESSION WOULD FIND THEM.** The same finders a
+session runs at startup, with the same settings (`YANTRA_SETU`,
+`YANTRA_SAMAY`, then what is installed), so "found" means a session
+started here would get their tools. Each one is asked its own
+`status --json`, and neither is started. Setu's answer is a count of
+accounts and never their names: those are Setu's to list. A finder that
+was pointed somewhere and found nothing is a problem line
+(`samay: no samay program at /opt/samay`).
+
 **A PROBLEM IS A LINE, NOT AN EXIT.** No provider at all is reported in
 `problems` and the command still exits 0 with the rest of the answer. A
 reader that gets a non-zero exit only gets one line of stderr, and the
@@ -84,10 +96,14 @@ person asking `status` is the one who most needs the whole answer.
 
 ## What Sarathi does with it
 
-Sarathi asks it with the model settings `sarathi up` would give Yantra
-(`YANTRA_PROVIDER` and the model from `sarathi.toml`), not with
-Sarathi's own environment. Asked any other way, Yantra would describe a
-model it will never be started with. Live, on the machine this was
+Sarathi asks it with what `sarathi up` would give Yantra: the model
+settings from `sarathi.toml`, and the Setu and Samay it would name with
+`--setu` and `--samay` (as `YANTRA_SETU` and `YANTRA_SAMAY`, or `off`
+for a clock turned off). Asked any other way, Yantra would describe a
+model it will never be started with, or miss a Samay that isn't on its
+PATH. Sarathi's line repeats the model and adds only what Yantra *doesn't*
+find (`finds no samay`), since Setu's and Samay's own lines already say
+what they are. Live, on the machine this was
 written on:
 
 ```

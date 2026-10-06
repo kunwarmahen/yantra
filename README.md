@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2676 tests. The
+The harness underneath is complete and covered by 2679 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -2307,8 +2307,9 @@ src/yantra/
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,
-│                   extras and tool packs; yantra.status.v1, no turn and
-│                   no key ([notes/117](notes/117-asked-what-it-is.md))
+│                   extras, tool packs, and whether a session would find
+│                   Setu (a count) and Samay; yantra.status.v1, no turn
+│                   and no key ([notes/117](notes/117-asked-what-it-is.md))
 ├── site_guide.py   after a turn on a site added by its address: where
 │                   each call landed (address and title, never page text)
 │                   becomes a guide offer in the tray; kept, Setu saves it
