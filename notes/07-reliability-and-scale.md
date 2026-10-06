@@ -117,6 +117,9 @@ serialized against the parent's batch).
 `SessionStore` = one table, `checkpoints(session_id, version, created_at,
 payload)`; every save INSERTs, nothing UPDATEs. Crash mid-write can't
 corrupt the previous good state, and any old version stays inspectable.
+A whole session can be dropped (`forget`), never one version of it: that
+is for a host that knows a conversation is over for good, such as a
+service whose scheduler starts a fresh conversation for every run.
 
 Our scope is much smaller than the book's five-item durable state because
 of one core decision: **history is always resumable at prompt boundaries

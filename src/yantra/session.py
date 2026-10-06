@@ -31,6 +31,14 @@ on the person's message; this one puts the question back and
 held today. No format bump: nothing an old reader does with the file is
 wrong, only less.
 
+A WHOLE SESSION CAN BE FORGOTTEN, NEVER A VERSION. ``forget`` drops
+every checkpoint of one session id and nothing else. Append-only is a
+promise about a conversation that may continue: no save rewrites what
+came before. A host that knows a conversation is over for good -- a
+service whose scheduler starts a fresh one for every run, and never
+writes to it again -- is not breaking that promise by letting it go,
+and without a way to, its file grows by one dead session per run.
+
 Blocks serialize with an explicit ``kind`` discriminator and restore
 via match/case dispatch -- never guesswork. ThinkingBlock signatures
 are opaque strings; they round-trip byte-exact or thinking-assisted
@@ -129,6 +137,17 @@ class SessionStore:
                 (session_id,),
             ).fetchone()
         return json.loads(row[0]) if row else None
+
+    def forget(self, session_id: str) -> int:
+        """Drop every checkpoint of ``session_id``; how many there were.
+        For a host that knows the conversation is over -- see the module
+        docstring. Other sessions in the file are untouched."""
+        with self._lock:
+            gone = self._db.execute(
+                "DELETE FROM checkpoints WHERE session_id = ?", (session_id,)
+            ).rowcount
+            self._db.commit()
+        return gone
 
     def latest_version(self, session_id: str = "default") -> int:
         with self._lock:

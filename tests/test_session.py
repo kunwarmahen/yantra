@@ -265,3 +265,20 @@ class TestRestoreSafety:
 
         assert calls == [("anthropic", "settings-for-anthropic")]
         assert agent.provider is rebuilt
+
+
+class TestForget:
+    """A host drops a conversation it knows is over; nobody else's goes."""
+
+    def test_forgetting_one_session_leaves_every_other_untouched(self, store):
+        agent = make_agent(full_history())
+        store.save(agent, provider_name="anthropic", session_id="done")
+        store.save(agent, provider_name="anthropic", session_id="done")
+        store.save(agent, provider_name="anthropic", session_id="still-talking")
+        assert store.forget("done") == 2
+        assert store.load_latest("done") is None
+        assert store.latest_version("done") == 0
+        assert store.load_latest("still-talking") is not None
+
+    def test_forgetting_a_session_that_was_never_saved_is_nothing(self, store):
+        assert store.forget("never") == 0
