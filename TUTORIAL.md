@@ -1768,6 +1768,10 @@ files. Sessions live in `/app/.yantra/` and vanish with the container
 unless you mount a volume. Docker users swap `podman` → `docker` and
 `host.containers.internal` → `host.docker.internal`.
 
+This image is Yantra alone: it has no Setu or Samay in it, so the page
+inside has no accounts and no schedules. For those together in
+containers, see §24.
+
 ## 19 · The things that keep a long session alive
 
 * **Sessions.** `/save` and `--resume` persist to
@@ -1953,8 +1957,21 @@ person on Telegram, schedules asked for in a chat — is in
 
 ## 24 · Running them together
 
-Each program documents its own setup; this is only the order, and where
-to read each step.
+**The short way is [Sarathi](https://github.com/kunwarmahen/sarathi).**
+It finds the programs, asks once which model should answer, and starts
+Samay's clock and this page together, in the right order and with the
+same model, either as plain programs or as Podman containers that
+systemd keeps running:
+
+```bash
+sarathi init     # Ollama on this machine, or a cloud key
+sarathi up
+```
+
+The rest of this section is what Sarathi does for you, by hand: useful
+if you want to understand the wiring, or to set it up differently. Each
+program documents its own setup; this is only the order, and where to
+read each step.
 
 1. **Yantra with your accounts.** Install Setu and connect an account
    ([Setu's README](https://github.com/kunwarmahen/setu)); start

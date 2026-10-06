@@ -28,6 +28,10 @@
 #
 # Presets only pin what makes them different; keys, models and URLs still
 # come from .env (real environment variables beat .env, as always).
+#
+# This starts Yantra alone. To run it with Setu and Samay -- started in
+# the right order, with one model setting, kept running by systemd --
+# use Sarathi (https://github.com/kunwarmahen/sarathi).
 
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -589,6 +593,9 @@ Inside a session: /skills lists them, /skills off NAME pulls one.
 
 Keys and models come from .env — edit it to change them, or override on
 the command line like any yantra flag.
+
+This starts Yantra alone. With your accounts (Setu) and schedules (Samay)
+started together, use Sarathi: https://github.com/kunwarmahen/sarathi
 EOF
 }
 

@@ -45,7 +45,11 @@ Copyright 2026 Mahen Singh. Licensed under the Apache License, Version
 
 Three separate programs build on Yantra, each documented in its own
 repository; what Yantra does for each is in [the tutorial's Act VI](TUTORIAL.md),
-and §24 there is the order to set them up in.
+and §24 there is the order to set them up in. A fourth,
+**[Sarathi](https://github.com/kunwarmahen/sarathi)**, is the one to
+install if you want them together: it finds them, asks once which model
+answers, and starts Samay's clock and Yantra's page as programs or as
+Podman containers.
 
 * **[Setu](https://github.com/kunwarmahen/setu)** keeps your sign-ins; Yantra finds it at startup and gets
   each account's tools (below: *Your own accounts, through Setu*).
