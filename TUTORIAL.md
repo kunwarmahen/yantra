@@ -1969,6 +1969,10 @@ sarathi door     # optional: dvara too, for your phone and your family (Telegram
 sarathi up
 ```
 
+`sarathi road podman` or `sarathi road process` switches between the two
+at any time; your accounts, schedules and memories are the same files
+either way.
+
 The rest of this section is what Sarathi does for you, by hand: useful
 if you want to understand the wiring, or to set it up differently. Each
 program documents its own setup; this is only the order, and where to
