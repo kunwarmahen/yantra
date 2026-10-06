@@ -1987,8 +1987,8 @@ read each step.
    For schedules there, start it with `--samay`, and give both dvara and
    Samay's service the same `SAMAY_DVARA_URL` and `SAMAY_DVARA_TOKEN`.
    For accounts there, give each person a Setu folder of their own in
-   dvara's actors file (`setu = true`) and sign them in at the machine
-   with `SETU_HOME=<their folder> setu connect …` (dvara's tutorial §16).
+   dvara's actors file (`setu = true`). They connect their own from the
+   chat with `/connect gmail` (dvara's tutorial §16).
 
 | Setting | Read by | Documented in |
 |---|---|---|
