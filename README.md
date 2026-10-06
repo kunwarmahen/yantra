@@ -711,7 +711,12 @@ unless you asked; and which `notify` fits. Measured on `qwen3.8:latest`
 and `gemma4:12b`, three runs of fourteen messages each: no false offers
 (0/24), every `when` read right (47/47), and with those lines risky
 grants fell from 9/28 to 0/30 (qwen) and 12/27 to 2/27 (gemma)
-([notes/116](notes/116-offered-at-the-right-moment.md)). The
+([notes/116](notes/116-offered-at-the-right-moment.md)). The layer also
+says that going on the internet is not reading: a site check must list
+`web_fetch`, or it is refused at its time. On six site checks held out
+from tuning, qwen's under-grants went from 3/18 to 0/18 and its risky
+grants (`browser_fill`) from 3/18 to 0/18
+([notes/118](notes/118-the-internet-is-not-a-read.md)). The
 approval card for a new schedule is written in words, not JSON: when (in
 Samay's own sentence, with the next times), when you hear, what each
 `allow_tools` glob reaches in this agent (a name that matches nothing is
@@ -1157,7 +1162,9 @@ by side, naming the prompt layer each ran with when they differ;
 (does the agent offer a schedule when one fits and never when it
 doesn't, say *when* right, and allow only what the job needs? Fourteen
 messages, real Samay on scratch state, stub mail tools; Samay itself
-grades the `when` — [notes/116](notes/116-offered-at-the-right-moment.md)), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+grades the `when` — [notes/116](notes/116-offered-at-the-right-moment.md);
+`--cases examples/schedule_offer_sites.jsonl` runs six site checks kept
+out of tuning — [notes/118](notes/118-the-internet-is-not-a-read.md)), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation

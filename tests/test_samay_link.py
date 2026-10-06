@@ -197,8 +197,11 @@ class TestFoundAndAnnounced:
         _, agent, manager, _ = start(fake_samay[0], tmp_path)
         try:
             layer = agent.prompt.get("schedules")
-            assert "run unasked anyway: leave them out" in layer
-            assert "Never allow a tool that sends" in layer
+            assert "run anyway: leave them out" in layer
+            # the network is not a read: a site check that lists nothing
+            # is refused at its time (notes/118)
+            assert "Going on the internet is NOT reading" in layer
+            assert "Never list a tool that sends" in layer
             assert "`always` for a digest, a summary or a reminder" in layer
         finally:
             manager.shutdown()

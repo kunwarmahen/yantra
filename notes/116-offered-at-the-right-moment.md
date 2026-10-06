@@ -140,7 +140,9 @@ says so, and the Schedules panel lists it under *refused (not allowed
 ahead)*. An over-grant fails silently, by sending mail. The line wasn't
 tuned further against the same six samples; a seventh wording that
 fixes qwen's two misses on this set would be fitting the test, not the
-models.
+models. [Note 118](118-the-internet-is-not-a-read.md) wrote six new
+site checks first, found the same miss there, and fixed it with one
+fact: going on the internet is not reading.
 
 ## A trial that was wrong first
 

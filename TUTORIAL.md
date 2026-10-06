@@ -1921,7 +1921,10 @@ watching. Read the card. In this tutorial's own run, a local model wrote
 narrows it before you approve. Once the agent was told that reading
 needs no permission ahead of time, that almost stopped happening
 ([notes/115](notes/115-what-a-yes-covers.md),
-[notes/116](notes/116-offered-at-the-right-moment.md)).
+[notes/116](notes/116-offered-at-the-right-moment.md)). The opposite
+mistake, a website check allowed nothing so it's refused at its time,
+stopped once the agent was told that going on the internet is not
+reading ([notes/118](notes/118-the-internet-is-not-a-read.md)).
 
 **The panel.** In `yantra --web`, the clock chip opens the Schedules
 panel: each schedule, its next times and last run, what each run needed
@@ -2160,6 +2163,8 @@ Most carry a live receipt from a real run.
 | [114](notes/114-nobody-watching.md) | a run nobody is watching: `--unattended`, `--allow-tools`, `--json`, and one browser per profile across processes |
 | [115](notes/115-what-a-yes-covers.md) | Samay found at startup, a schedule's approval card in words, and the Schedules panel |
 | [116](notes/116-offered-at-the-right-moment.md) | when two local models offer a schedule, how often they get *when* right, and the two lines that stopped them allowing `send_message` for a read-only check |
+| [117](notes/117-asked-what-it-is.md) | `yantra status`: which release, which model a turn would ask and why, and whether a local model is there to answer |
+| [118](notes/118-the-internet-is-not-a-read.md) | a site check that allowed nothing: new samples first, then the one fact the model was missing |
 
 ### The neighbours
 

@@ -205,11 +205,12 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "what will be done, and when they will be told.",
         "2. Only after they say yes, call `mcp__samay__create_schedule`. Its `prompt` is "
         "read later by you with NOBODY watching: make it a complete instruction.",
-        "3. `allow_tools` is only for tools the job needs that do more than read. Tools "
-        "that only read (searching or reading mail, reading files) run unasked anyway: "
-        "leave them out. To look at a website, allow `web_fetch` or `browser_open` if you "
-        "have them. Never allow a tool that sends, posts, fills in a form or runs a "
-        "command unless the person asked for exactly that. Use exact tool names.",
+        "3. `allow_tools`: at its time nobody is there to say yes. Reading files and "
+        "searching or reading mail run anyway: leave them out. Going on the internet is "
+        "NOT reading and does not run unless listed: a job that visits a website, checks "
+        "one is up, or reads a page must list `web_fetch` (or `browser_open`) if you have "
+        "them. Never list a tool that sends, posts, fills in a form (`browser_fill`) or "
+        "runs a command unless the person asked for exactly that. Use exact tool names.",
         "4. `notify`: `when_new` for a check that may find nothing; `always` for a "
         "digest, a summary or a reminder.",
         seen_at,

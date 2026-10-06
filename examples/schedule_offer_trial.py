@@ -41,6 +41,11 @@ is refused by the gate. The rest of the tool set is a stock build.
         --provider ollama --model gemma4:12b --out gemma.jsonl
     uv run python examples/schedule_offer_trial.py --rescore qwen.jsonl gemma.jsonl
 
+``--cases examples/schedule_offer_sites.jsonl`` sends six site checks
+instead, written after the prompt layer last changed and never used to
+choose a wording: a change to how tools are allowed is judged there, on
+messages it was not fitted to (notes/118).
+
 ``--samay PATH`` names the samay program (default: ``$YANTRA_SAMAY``, then
 PATH). ``--repeat N`` runs every message N times; counts then carry a 95%
 interval. Expected times are relative to now ("tomorrow at 3pm"), so
@@ -70,6 +75,14 @@ from yantra.spec import AgentSpec
 from yantra.tools.base import Tool
 
 CASES = Path(__file__).resolve().parent / "schedule_offer_cases.jsonl"
+#: Site checks written AFTER the prompt layer was last changed, and never
+#: tuned against: what a change to that layer is judged on (notes/117).
+SITES = CASES.with_name("schedule_offer_sites.jsonl")
+
+
+def every_case() -> dict[str, dict]:
+    """Both sets, by id, so a saved row is graded whichever set it came from."""
+    return {c["id"]: c for path in (CASES, SITES) for c in load_cases(path, None)}
 YES = "Yes, please set that up."
 #: Words that offer a schedule without calling a tool: counted apart,
 #: because an offer the model never previewed has no sentence behind it.
@@ -285,7 +298,7 @@ def missing(row: dict, case: dict) -> bool:
 
 
 def totals(rows: list[dict]) -> dict[str, tuple[int, int]]:
-    cases = {c["id"]: c for c in load_cases(CASES, None)}
+    cases = every_case()
     yes = [r for r in rows if r["offer"] == "yes"]
     no = [r for r in rows if r["offer"] == "no"]
     may = [r for r in rows if r["offer"] == "may"]
@@ -314,7 +327,7 @@ def totals(rows: list[dict]) -> dict[str, tuple[int, int]]:
 
 
 def report(rows: list[dict]) -> None:
-    cases = {c["id"]: c for c in load_cases(CASES, None)}
+    cases = every_case()
     interval = max((r["rep"] for r in rows), default=1) > 1
     print(f"\n{rows[0]['model']} ({rows[0]['provider']}) -- "
           f"{len({r['id'] for r in rows})} messages x {max(r['rep'] for r in rows)}")
@@ -349,7 +362,7 @@ def regrade(rows: list[dict], program: str) -> None:
     """A saved row marked wrong, read again by today's rule (same next
     times counts). Absolute times only: a {tomorrow} case would compare
     against a different day than the one it ran on, so it is left be."""
-    cases = {c["id"]: c for c in load_cases(CASES, None)}
+    cases = every_case()
     with tempfile.TemporaryDirectory() as tmp:
         for r in rows:
             expected = cases[r["id"]].get("when") or []
@@ -367,6 +380,10 @@ def main() -> int:
     parser.add_argument("--samay", default=os.environ.get("YANTRA_SAMAY")
                         or shutil.which("samay"), help="the samay program")
     parser.add_argument("--only", help="comma-separated case ids")
+    parser.add_argument("--cases", type=Path, default=CASES,
+                        help="the messages to send (default: the fourteen of "
+                             "notes/116; examples/schedule_offer_sites.jsonl is "
+                             "six site checks held out from tuning)")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--out", help="append each row to this JSONL file")
     parser.add_argument("--rescore", nargs="+", metavar="JSONL",
@@ -389,7 +406,7 @@ def main() -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     trial = Trial(args)
-    cases = load_cases(CASES, set(args.only.split(",")) if args.only else None)
+    cases = load_cases(args.cases, set(args.only.split(",")) if args.only else None)
     rows = []
     for rep in range(1, args.repeat + 1):
         for case in cases:
