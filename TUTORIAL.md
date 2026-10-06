@@ -1965,6 +1965,7 @@ systemd keeps running:
 
 ```bash
 sarathi init     # Ollama on this machine, or a cloud key
+sarathi door     # optional: dvara too, for your phone and your family (Telegram)
 sarathi up
 ```
 
@@ -1982,7 +1983,7 @@ read each step.
    ([Samay's README](https://github.com/kunwarmahen/samay)). Yantra finds
    it by itself (§22). Scheduled runs started this way reach your Setu
    accounts too, because they are ordinary Yantra runs.
-3. **Add a door.** Run dvara for other people or for your phone
+3. **Add a door** (`sarathi door` does this step). Run dvara for other people or for your phone
    ([dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md)).
    For schedules there, start it with `--samay`, and give both dvara and
    Samay's service the same `SAMAY_DVARA_URL` and `SAMAY_DVARA_TOKEN`.
