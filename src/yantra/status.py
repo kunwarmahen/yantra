@@ -12,9 +12,11 @@ than guess. The rest is what Yantra would do with no flags, in this
 folder, with this environment: the provider ``guess_provider`` settles
 on and why, the model it would ask for, which optional parts are
 installed, which tool packs it could name, and whether a session would
-find Setu and Samay -- asked the way a session asks them (``YANTRA_SETU``,
-``YANTRA_SAMAY``, then what is installed), which only reads: each is
-asked its own ``status --json``, and neither is started.
+find Setu, Samay and Sparsh -- asked the way a session asks them
+(``YANTRA_SETU``, ``YANTRA_SAMAY``, ``YANTRA_SPARSH``, then what is
+installed), which only reads: each is asked its own ``status --json``,
+and none is started. Sparsh is reported once found even with no phone
+attached, which is the thing a person setting it up needs to read.
 
 NO TURN, NO KEY. Nothing here builds an Agent or opens a provider. The
 one thing it asks over the network is a LOCAL server's list of models,
@@ -34,13 +36,14 @@ and the command still exits 0 with a whole answer.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 
 import httpx
 
-from yantra import samay_link, setu_link
+from yantra import samay_link, setu_link, sparsh_link
 from yantra.config import default_model, guess_provider, load_settings
 from yantra.errors import ConfigError
 from yantra.tools.discover import entry_point_packs
@@ -110,6 +113,23 @@ def _samay(problems: list[str]) -> dict:
     return {"found": True, "program": program, "serving": bool(data.get("serving"))}
 
 
+def _sparsh(problems: list[str]) -> dict:
+    """Would a session find Sparsh, and which phones can it use now?"""
+    mode, path = sparsh_link.resolve_mode(None)
+    if mode == "auto" and shutil.which("sparsh"):
+        mode = "on"          # found: say what it sees, phone or not
+    try:
+        found = sparsh_link.load(mode, path)
+    except sparsh_link.SparshLinkError as exc:
+        problems.append(f"sparsh: {exc}")
+        return {"found": False, "program": None, "phones": []}
+    if found is None:
+        return {"found": False, "program": None, "phones": []}
+    data, program = found
+    return {"found": True, "program": program,
+            "phones": [p.get("serial") for p in sparsh_link.ready_phones(data)]}
+
+
 def report() -> dict:
     problems: list[str] = []
     provider = model = base_url = why = None
@@ -144,6 +164,7 @@ def report() -> dict:
         "packs": sorted(entry_point_packs()),
         "setu": _setu(problems),
         "samay": _samay(problems),
+        "sparsh": _sparsh(problems),
         "problems": problems,
     }
 
@@ -168,5 +189,9 @@ def lines(data: dict) -> list[str]:
                if setu["found"] else "setu: not found")
     out.append(("samay: " + ("clock running" if samay["serving"] else "clock not running")
                 + f" ({samay['program']})") if samay["found"] else "samay: not found")
+    sparsh = data["sparsh"]
+    out.append(("sparsh: " + (f"phone {', '.join(sparsh['phones'])}" if sparsh["phones"]
+                              else "no phone attached")
+                + f" ({sparsh['program']})") if sparsh["found"] else "sparsh: not found")
     out += [f"problem: {p}" for p in data["problems"]]
     return out

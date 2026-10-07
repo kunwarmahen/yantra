@@ -179,3 +179,6 @@ the Gmail server was started from what Setu reported.
 trusting the server's hint over the manifest, `yolo` approving a spend,
 the yolo mode approving a spend, keeping a tool the manifest does not
 list.
+
+The same move for a phone, where the rules see the screen rather than a
+manifest: [note 119](119-a-phone-and-what-asks.md).

@@ -26,6 +26,7 @@ def no_siblings(monkeypatch):
     about them says where they are."""
     monkeypatch.setenv("YANTRA_SETU", "off")
     monkeypatch.setenv("YANTRA_SAMAY", "off")
+    monkeypatch.setenv("YANTRA_SPARSH", "off")
 
 
 @pytest.fixture
@@ -112,7 +113,8 @@ class TestTheSiblings:
     def test_turned_off_is_not_found_and_not_a_problem(self):
         data = status.report()
         assert data["setu"]["found"] is False and data["samay"]["found"] is False
-        assert not any(p.startswith(("setu", "samay")) for p in data["problems"])
+        assert data["sparsh"] == {"found": False, "program": None, "phones": []}
+        assert not any(p.startswith(("setu", "samay", "sparsh")) for p in data["problems"])
 
     def test_a_named_program_that_is_not_there_is_a_problem(self, monkeypatch):
         monkeypatch.setenv("YANTRA_SAMAY", "/nowhere/samay")

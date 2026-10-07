@@ -338,6 +338,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "names the samay program). Also YANTRA_SAMAY=auto|on|off|PATH")
     parser.add_argument("--no-samay", action="store_const", const="off", dest="samay",
                         help="do not look for Samay this session")
+    parser.add_argument("--sparsh", nargs="?", const="on", default=None, metavar="PATH",
+                        dest="sparsh",
+                        help="let the agent work your Android phone (or the emulator) "
+                             "through Sparsh (found automatically when `sparsh` is on "
+                             "PATH and a phone is attached; this flag errors if Sparsh "
+                             "cannot be found, and PATH names the sparsh program). "
+                             "Also YANTRA_SPARSH=auto|on|off|PATH")
+    parser.add_argument("--no-sparsh", action="store_const", const="off", dest="sparsh",
+                        help="do not look for Sparsh this session")
     parser.add_argument("--subagents", action="store_true",
                         help="register spawn_subagent so the model can delegate "
                              "self-contained subtasks to fresh-context child "
@@ -2082,6 +2091,42 @@ def _connect_samay(args, mcp_manager, agent, console: Console, spec=None) -> int
     return None
 
 
+def _connect_sparsh(args, mcp_manager, agent, console: Console) -> int | None:
+    """Start Sparsh's phone tools (sparsh_link.py).
+
+    Same shape as Samay: an exit code only when Sparsh was ASKED for and
+    could not be used; in auto mode no Sparsh, or no phone attached, is
+    silence. Never for a run nobody watches.
+    """
+    from yantra import sparsh_link
+
+    mode, path = sparsh_link.resolve_mode(getattr(args, "sparsh", None))
+    agent.sparsh = None
+    if mode == "off" or is_unattended():
+        return None
+    try:
+        found = sparsh_link.load(mode, path)
+    except sparsh_link.SparshLinkError as exc:
+        if mode == "on":
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        console.print(f"[yellow]sparsh: {exc}[/yellow]")
+        return None
+    if found is None:
+        return None
+    data, program = found
+    sparsh = sparsh_link.Sparsh(mode=mode, path=path, data=data, program=program)
+    try:
+        count = sparsh.connect(mcp_manager, agent)
+    except (MCPError, sparsh_link.SparshLinkError) as exc:
+        sparsh.error = str(exc)
+        console.print(f"[yellow]sparsh: tools unavailable: {exc}[/yellow]")
+        return 2 if mode == "on" else None
+    agent.sparsh = sparsh
+    console.print(f"[dim]{sparsh_link.announce(data, count, program)}[/dim]")
+    return None
+
+
 def _ask_yes(question: str) -> bool:
     return Prompt.ask(question, choices=["y", "N"], default="N").strip().lower() == "y"
 
@@ -2900,6 +2945,10 @@ def main(argv: list[str] | None = None) -> int:
         # Doing things later, through Samay -- after Setu, so the cards
         # it writes can say which accounts a scheduled run reaches.
         if _connect_samay(args, mcp_manager, agent, console, spec) is not None:
+            return 2
+
+        # The person's phone, through Sparsh.
+        if _connect_sparsh(args, mcp_manager, agent, console) is not None:
             return 2
 
         _connect_package_mcp(spec.mcp, mcp_manager, console)

@@ -2002,7 +2002,8 @@ read each step.
 
 | Setting | Read by | Documented in |
 |---|---|---|
-| `YANTRA_SETU`, `YANTRA_SAMAY` | Yantra | this repo's README |
+| `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_SPARSH` | Yantra | this repo's README |
+| `SPARSH_STATE`, `SPARSH_RULES`, `ANDROID_SERIAL` | Sparsh | Sparsh's README |
 | `SAMAY_STATE`, `SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`, `SAMAY_TZ` | Samay | Samay's README |
 | `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
 | `DVARA_TOKEN`, `DVARA_ROOT`, `DVARA_ACTORS`, `DVARA_STATE`, `DVARA_SAMAY` | dvara | dvara's README |

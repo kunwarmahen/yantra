@@ -86,6 +86,14 @@ def private_state_home(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_phone(monkeypatch):
+    """A phone attached to this machine (or a running emulator) stays out:
+    with `sparsh` on PATH, any test that starts a session would otherwise
+    find it and work it. A test about Sparsh says where its fake one is."""
+    monkeypatch.setenv("YANTRA_SPARSH", "off")
+
+
+@pytest.fixture(autouse=True)
 def private_home(tmp_path_factory, monkeypatch):
     """Skills you wrote or learned live under ~/.yantra/skills/, and the
     loader scans them in every session -- so a test that turns skills on

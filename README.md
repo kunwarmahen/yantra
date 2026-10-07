@@ -43,7 +43,7 @@ Copyright 2026 Mahen Singh. Licensed under the Apache License, Version
 
 ## Works with
 
-Three separate programs build on Yantra, each documented in its own
+Four separate programs build on Yantra, each documented in its own
 repository; what Yantra does for each is in [the tutorial's Act VI](TUTORIAL.md),
 and §24 there is the order to set them up in. A fourth,
 **[Sarathi](https://github.com/kunwarmahen/sarathi)**, is the one to
@@ -57,6 +57,10 @@ Podman containers.
   it at startup, the agent can offer a schedule, and `yantra --web` shows
   them (below: *Doing things later, through Samay*). Samay starts
   `yantra --json --unattended` for each run (below: *Nobody watching*).
+* **[Sparsh](https://github.com/kunwarmahen/sparsh)** works an Android phone, or the emulator; Yantra
+  finds it at startup when a phone is attached, and the agent can tap,
+  type and scroll, asking you before Send, Pay or Delete (below: *Your
+  phone, through Sparsh*).
 * **[dvara](https://github.com/kunwarmahen/dvara)** serves agents to many people over Telegram or HTTP. It
   imports Yantra as a library; Yantra knows nothing of it.
   [Its tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) starts where this one ends.
@@ -734,6 +738,30 @@ now*, *pause*/*resume*, *delete*. The panel runs Samay's own commands
 (`samay list --json` …), so it works whether or not `samay serve` is up,
 and it says at the top when the clock is not running
 ([notes/115](notes/115-what-a-yes-covers.md)).
+
+**Your phone, through Sparsh.** [Sparsh](https://github.com/kunwarmahen/sparsh)
+works an Android phone (or the emulator on this computer) through `adb`.
+The model doesn't get a screenshot. It gets the phone's own description
+of the screen as numbered lines (`6 item "Airplane mode" [tap, off]`),
+and it answers "tap 6". That's why a local model can do it. When
+`sparsh` is on `PATH` and a phone is attached, Yantra starts its tools
+and says so in one line:
+
+```
+sparsh: 9 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via /home/you/sparsh/.venv/bin/sparsh
+```
+
+Sparsh's ordinary steps (look, tap, type, scroll, open an app) run
+without a card. Sparsh holds the risky ones itself: a tap on Send, Pay,
+Buy, Delete, Allow and the like, typing into a password field, and
+Enter while such a button is on screen. The
+model is told "NOT DONE", and the only way through is
+`mcp__sparsh__confirm`. Yantra asks about that every time, even under
+`--yolo`, and its card is Sparsh's own account of what will happen, with
+the screen it will happen on. `YANTRA_SPARSH=/path/to/sparsh` names it
+when it is elsewhere; `--sparsh` insists, even with no phone attached;
+`--no-sparsh` never looks; a `--unattended` run gets no phone
+([notes/119](notes/119-a-phone-and-what-asks.md)).
 
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
@@ -2309,6 +2337,12 @@ src/yantra/
 │                   `schedules` prompt layer, and the page's Schedules panel
 │                   through `samay list|runs|pause|resume|rm --json`
 │                   ([notes/115](notes/115-what-a-yes-covers.md))
+├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
+│                   (sparsh.status.v1) when a phone is attached, skipped when
+│                   unattended; Sparsh's kinds decide what asks (read and
+│                   act run, `confirm` asks every time), the confirm card is
+│                   Sparsh's describe_hold, a `phone` prompt layer
+│                   ([notes/119](notes/119-a-phone-and-what-asks.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,

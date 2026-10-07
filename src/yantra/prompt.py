@@ -19,6 +19,7 @@ So the string gets a seam before the second appender exists. A
     memory  what the person told you in earlier conversations (memory/)
     connections  which of the person's accounts are connected, and how far (setu_link.py)
     schedules  that work can be offered for later, and how (samay_link.py)
+    phone   that the person's phone can be worked, and how (sparsh_link.py)
     skills  the skill roster (notes/30)
 
 ``agent`` renders FIRST and ``base`` second, which is the composition an
@@ -52,7 +53,8 @@ from typing import Any
 
 #: Declared render order. Layers not in this tuple are rejected loudly:
 #: a typo'd name would otherwise vanish into a dict and render nothing.
-LAYER_ORDER = ("agent", "base", "env", "memory", "connections", "schedules", "skills")
+LAYER_ORDER = ("agent", "base", "env", "memory", "connections", "schedules", "phone",
+               "skills")
 
 #: Attribute the composer lives under on an Agent (or any object with a
 #: ``system``). Set by attach_prompt; read by recompose.
