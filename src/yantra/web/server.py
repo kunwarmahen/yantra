@@ -1207,6 +1207,10 @@ class WebSession:
             # was not found, and then the Schedules chip stays hidden.
             "samay": (agent.samay.describe()
                       if getattr(agent, "samay", None) is not None else None),
+            # The person's phone (sparsh_link.py): None when Sparsh is off
+            # or found no phone at the start, and the phone chip stays hidden.
+            "sparsh": (agent.sparsh.describe()
+                       if getattr(agent, "sparsh", None) is not None else None),
             "tools": agent.registry.names(),
             # Runtime-disabled subset of ``tools`` (the /api/tools panel's
             # toggles); empty for a stock session.
@@ -1975,6 +1979,38 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         if verb is None:
             raise HTTPException(404, f"no schedule action {action!r}")
         return {"done": action, "result": samay_call(samay, verb, schedule_id)}
+
+    # ---- the phone: what Sparsh sees (sparsh_link.py) -------------------------
+
+    def require_sparsh() -> Any:
+        require_ready()
+        sparsh = getattr(session.agent, "sparsh", None)
+        if sparsh is None:
+            raise HTTPException(400, "Sparsh is not linked to this session: attach a "
+                                     "phone and put `sparsh` on PATH, or start Yantra "
+                                     "with --sparsh /path/to/sparsh")
+        return sparsh
+
+    @app.get("/api/phone")
+    def phone_state() -> dict[str, Any]:
+        """The phone panel: the phones adb sees now and the rules in force.
+        Plain ``def``: it runs a program."""
+        sparsh = require_sparsh()
+        sparsh.refresh()
+        return sparsh.describe()
+
+    @app.get("/api/phone/screen")
+    def phone_screen(serial: str, shot: bool = True) -> dict[str, Any]:
+        """One phone's screen as it is now -- a PEEK, so an agent working
+        the phone keeps its numbers (sparsh_link.py). Allowed mid-turn:
+        watching what the agent is doing is the point."""
+        from yantra.sparsh_link import SparshLinkError
+        try:
+            return require_sparsh().peek(serial, shot=shot)
+        except SparshLinkError as exc:
+            said = str(exc)
+            raise HTTPException(400 if "which phone" in said else 503,
+                                f"sparsh: {said}") from None
 
     @app.get("/api/connections")
     def connections_list(req: Request) -> dict[str, Any]:

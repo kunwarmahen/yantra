@@ -96,6 +96,28 @@ looking again, and on "NOT DONE" say in a sentence what will happen
 and call `confirm`, never another way round. When to use the phone is
 the model's call.
 
+## The panel peeks
+
+The browser UI has a **phone** chip, shown when Sparsh is linked. Its
+panel lists the phones `adb` sees (ready, or waiting for the USB
+debugging yes), the rules in force with the path of the file that holds
+them, and on **see the screen** a screenshot beside the lines the agent
+reads, exactly as it reads them.
+
+**THE PAGE PEEKS, IT DOESN'T LOOK.** Sparsh remembers each look as the
+screen the agent's numbers refer to, and checks every tap against it
+(Sparsh's note 01). A panel that did an ordinary look mid-turn would
+renumber the screen under the agent: the agent read "7 is Send SMS",
+the person glanced at the phone, and the agent's tap 7 is checked
+against the person's 7. So the panel runs `sparsh look --peek`, a
+separate program run that reads the screen and leaves the last look as
+it was. That makes watching the agent work, the panel's main use, safe.
+
+The panel shows everything, apps on the `never` list included. It is
+the person's own eyes, and nothing it reads reaches the model. It
+doesn't act on the phone either: the person's own hands are `sparsh` in
+a terminal, or the phone itself.
+
 ## Live receipt
 
 The Android 15 emulator, booted clean; `qwen3.8:latest`; Setu, Samay and
@@ -143,7 +165,9 @@ has the rest.
 
 * A phone for scheduled runs, which needs an answer to "held, with
   nobody to ask" better than refusing.
-* The page: Yantra's browser UI shows the confirm card like any other,
-  but has no phone panel (which phone, the rules in force).
+* ~~The page: Yantra's browser UI shows the confirm card like any other,
+  but has no phone panel (which phone, the rules in force).~~ Done:
+  *The panel peeks*, above. Live on the emulator, a peek with its
+  screenshot took 2.4 s.
 * The trial: these tasks and more on `qwen3.8:latest`, `gemma4:12b` and
   a frontier cloud model, counted.

@@ -37,6 +37,15 @@ account of the step and the screen it was on (``describe_hold``) --
 so what a person says yes to is the message that will be sent, not a
 hold id. A tool Sparsh doesn't name keeps the server's hint.
 
+THE PAGE PEEKS, IT DOESN'T LOOK. The phone panel shows the phones, the
+rules in force, and on request the screen as it is now -- the list and
+a screenshot -- through ``sparsh look --peek``, a separate program run
+that leaves the agent's last look alone. Had it used a plain look, a
+person glancing at the panel mid-turn would renumber the screen under
+the agent, and its next "tap 7" would be checked against the person's
+7. The panel shows everything, apps on the ``never`` list included: it
+is the person's own eyes, and nothing it reads reaches the model.
+
 NOT WITH NOBODY WATCHING. A run nobody watches (``--unattended``) gets
 no phone: everything it may do by itself would be done on a phone no
 one is looking at, and a held step could only be refused.
@@ -44,10 +53,14 @@ one is looking at, and a held step could only be refused.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+import re
 import shutil
 import subprocess
+import tempfile
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -60,6 +73,11 @@ SERVER = "sparsh"
 #: How long ``sparsh status --json`` may take (it asks adb for phones).
 STATUS_TIMEOUT = 15.0
 KINDS = ("read", "act", "confirm")
+#: A phone's serial as adb prints it (emulator-5554, R58M..., 192.168.1.5:5555),
+#: as it may reach an argv word: never an option.
+SERIAL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+#: How long a peek may take: a dump (~2.5 s) and a screenshot.
+PEEK_TIMEOUT = 30.0
 
 
 class SparshLinkError(Exception):
@@ -244,3 +262,62 @@ class Sparsh:
         prompt.set("phone", prompt_text(self.data))
         prompt.apply()
         return len(self.tools)
+
+    def refresh(self) -> dict[str, Any] | None:
+        """Ask Sparsh again -- a phone plugged in or taken away since the
+        start shows up. A page asking is the person asking: not found is
+        an error here, even in auto."""
+        try:
+            found = load("on" if self.mode == "auto" else self.mode, self.path or self.program)
+        except SparshLinkError as exc:
+            self.error = str(exc)
+            return self.data
+        if found is not None:
+            self.data, self.program = found
+            self.error = ""
+        return self.data
+
+    def describe(self) -> dict[str, Any]:
+        """For the page's header and panel: phones, rules, never a screen."""
+        data = self.data or {}
+        rules = data.get("rules") or {}
+        return {"mode": self.mode, "found": self.data is not None, "error": self.error,
+                "program": self.program, "version": data.get("version"),
+                "adb": data.get("adb"), "phones": list(data.get("phones") or []),
+                "ready": [p.get("serial") for p in ready_phones(data)],
+                "rules": {"path": rules.get("path"), "exists": bool(rules.get("exists")),
+                          "never": list(rules.get("never") or []),
+                          "ask": list(rules.get("ask") or [])},
+                "tools": len(self.tools)}
+
+    def peek(self, serial: str, shot: bool = True) -> dict[str, Any]:
+        """The screen of one phone as it is now, for the person: Sparsh's
+        list as JSON and, with ``shot``, the screenshot as base64 PNG.
+        Never remembered as the agent's last look (module docstring)."""
+        if self.data is None or not self.program:
+            raise SparshLinkError(self.error or "Sparsh was not found")
+        if not SERIAL_RE.match(serial or ""):
+            raise SparshLinkError(f"which phone? {serial!r} is not a phone's serial")
+        argv = [self.program, "look", "--peek", "--json", "--serial", serial]
+        if self.data.get("state"):
+            argv += ["--state", str(self.data["state"])]
+        with tempfile.TemporaryDirectory(prefix="yantra-peek-") as tmp:
+            png = Path(tmp) / "screen.png"
+            if shot:
+                argv += ["--shot", str(png)]
+            try:
+                done = subprocess.run(argv, capture_output=True, text=True,
+                                      timeout=PEEK_TIMEOUT)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise SparshLinkError(f"sparsh look: {exc}") from None
+            if done.returncode != 0:
+                why = (done.stderr or done.stdout).strip().splitlines()
+                raise SparshLinkError(why[-1].removeprefix("sparsh: ") if why
+                                      else "sparsh look failed")
+            try:
+                screen = json.loads(done.stdout)
+            except json.JSONDecodeError:
+                raise SparshLinkError("sparsh look did not print JSON") from None
+            image = (base64.b64encode(png.read_bytes()).decode()
+                     if shot and png.exists() else None)
+        return {"serial": serial, "screen": screen, "shot": image}

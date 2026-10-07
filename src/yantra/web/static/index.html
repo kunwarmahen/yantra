@@ -40,6 +40,7 @@
     <g id="i-check"><path d="M5 12.5l4.5 4.5L19 7"/></g>
     <g id="i-bookmark"><path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/></g>
     <g id="i-clock"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></g>
+    <g id="i-phone"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/></g>
     <g id="i-link"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L12 5.6"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></g>
   </defs>
 </svg>
@@ -90,6 +91,12 @@
       <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-clock"/></svg>
       <span id="sched-count">—</span>
+    </button>
+
+    <button class="chip hidden" id="chip-phone" title="phone — the phone the agent can work through Sparsh, its screen now, and what it asks you before doing">
+      <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-phone"/></svg>
+      <span id="phone-count">—</span>
     </button>
 
     <button class="chip hidden" id="chip-mem" title="memory — what the agent remembers about you across conversations">
@@ -379,6 +386,28 @@
       </button>
     </div>
     <div id="sched-body"></div>
+  </div>
+</div>
+
+<!-- phone: what Sparsh sees -- the phones attached, the screen now (a
+     peek: the agent's numbers stay as they were), and the person's rules. -->
+<div id="phone-backdrop" class="hidden">
+  <div id="phone-panel" role="dialog" aria-modal="true" aria-labelledby="phone-title">
+    <div class="tools-head">
+      <div>
+        <h3 id="phone-title">phone</h3>
+        <span class="tools-note">the agent taps, types and scrolls by itself; it asks you on an approval card before anything that sends, pays, deletes or types a password.</span>
+      </div>
+      <button class="ghost icon-only" id="phone-refresh" title="ask Sparsh again" aria-label="refresh">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-refresh"/></svg>
+      </button>
+      <button class="ghost icon-only" id="phone-close" title="close" aria-label="close">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div id="phone-body"></div>
   </div>
 </div>
 

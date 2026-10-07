@@ -254,6 +254,10 @@ function applyHeader(s) {
     $("#chip-sched").title = "schedules — what the agent does later or on a repeat"
       + (sam.serving ? "" : "\n\nSamay's clock is NOT running: nothing runs on time until `samay serve` is");
   }
+  // phone chip: hidden unless Sparsh is linked to this session
+  const sp = s.sparsh;
+  $("#chip-phone").classList.toggle("hidden", !sp || !sp.found);
+  if (sp && sp.found) phoneChip(sp);
   renderKeptChip(s.kept);
   renderPressure(s);
   renderBudget(s);
@@ -1713,6 +1717,173 @@ function renderSchedules() {
     }
     body.append(row);
   }
+}
+
+/* ---------- phone panel (sparsh_link.py) ----------
+
+   The phones Sparsh sees, the screen of one as it is now, and the rules
+   that decide what the agent asks before doing. The screen is a PEEK:
+   it never becomes the agent's last look, so opening this mid-turn
+   cannot change what the agent's numbers mean. Nothing here acts on the
+   phone -- the panel is for watching. */
+
+const phone = { data: null, seen: {} };
+
+$("#chip-phone").onclick = openPhonePanel;
+$("#phone-refresh").onclick = () => loadPhone(true);
+$("#phone-close").onclick = () => $("#phone-backdrop").classList.add("hidden");
+$("#phone-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#phone-backdrop")) $("#phone-backdrop").classList.add("hidden");
+});
+
+const PHONE_STATE = {
+  device: "ready",
+  unauthorized: "waiting — unlock the phone and allow USB debugging",
+  offline: "not answering — unplug it and plug it back in",
+};
+
+function phoneChip(d) {
+  const ready = d.ready || [];
+  $("#phone-count").textContent = ready.length === 1 ? "phone"
+    : ready.length ? `${ready.length} phones` : "no phone";
+  $("#chip-phone").title = "phone — " + (ready.length
+    ? `the agent can work ${ready.join(", ")} through Sparsh`
+    : "no phone is attached right now");
+}
+
+async function openPhonePanel() {
+  $("#phone-backdrop").classList.remove("hidden");
+  $("#phone-body").innerHTML = '<div class="panel-loading">loading…</div>';
+  await loadPhone(false);
+}
+
+async function loadPhone(said) {
+  const res = await fetch("/api/phone");
+  const data = await res.json();
+  if (!res.ok) {
+    $("#phone-body").innerHTML = `<div class="conn-box warn"><span>${esc(data.detail)}</span></div>`;
+    return;
+  }
+  phone.data = data;
+  phoneChip(data);
+  renderPhone();
+  if (said) toast("asked Sparsh again");
+}
+
+async function peekPhone(serial) {
+  phone.seen[serial] = { loading: true };
+  renderPhone();
+  const res = await fetch(`/api/phone/screen?serial=${encodeURIComponent(serial)}`);
+  const data = await res.json();
+  phone.seen[serial] = res.ok ? { ...data, at: new Date() } : { error: data.detail };
+  renderPhone();
+}
+
+function screenLines(screen) {
+  // the same lines the agent reads (sparsh's Screen.text), drawn here
+  const flags = (e) => [
+    e.tap && "tap", e.long && !e.tap && "long-press", e.type && "type",
+    e.scroll && "scroll", e.switch && (e.on ? "on" : "off"),
+    e.focused && "focused", e.password && "password", !e.enabled && "disabled",
+  ].filter(Boolean);
+  const head = `App: ${screen.app || "(unknown)"}`;
+  if (screen.note) return [head, screen.note];
+  const rows = (screen.elements || []).map((e) => {
+    const f = flags(e);
+    return `${e.n} ${e.kind}${e.label ? " " + JSON.stringify(e.label) : ""}`
+      + (f.length ? ` [${f.join(", ")}]` : "");
+  });
+  return [head, ...(rows.length ? rows : ["(nothing on this screen can be read)"])];
+}
+
+function renderPhone() {
+  const d = phone.data;
+  const body = $("#phone-body");
+  body.textContent = "";
+  if (d.error || (d.adb && d.adb !== "ok")) {
+    const warn = document.createElement("div");
+    warn.className = "conn-box warn";
+    warn.innerHTML = `<span>${esc(d.error || d.adb)}</span>`;
+    body.append(warn);
+  }
+  const phones = d.phones || [];
+  section(body, phones.length === 1 ? "1 phone" : `${phones.length} phones`,
+    "what adb sees on this computer now");
+  if (!phones.length) {
+    const p = document.createElement("div");
+    p.className = "conn-foot";
+    p.innerHTML = "none attached — plug a phone in with USB debugging on, or start the "
+      + "emulator, then refresh. Sparsh's README has both.";
+    body.append(p);
+  }
+  for (const ph of phones) {
+    const row = document.createElement("div");
+    row.className = "conn-card phone-row";
+    const dot = document.createElement("span");
+    dot.className = ph.state === "device" ? "dot" : "dot dead";
+    dot.title = ph.state;
+    const main = document.createElement("div");
+    main.innerHTML = `<div class="conn-title">${esc(ph.model || ph.serial)}</div>
+      <div class="conn-sub"><code>${esc(ph.serial)}</code> · ${esc(PHONE_STATE[ph.state] || ph.state)}</div>`;
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    if (ph.state === "device") {
+      const b = document.createElement("button");
+      b.className = "m-btn";
+      b.textContent = phone.seen[ph.serial] ? "look again" : "see the screen";
+      b.disabled = !!phone.seen[ph.serial]?.loading;
+      b.onclick = () => peekPhone(ph.serial);
+      actions.append(b);
+    }
+    row.append(dot, main, actions);
+    body.append(row);
+    const seen = phone.seen[ph.serial];
+    if (seen) body.append(phoneScreen(seen));
+  }
+
+  const r = d.rules || {};
+  section(body, "what it asks you first",
+    r.exists ? `your rules: ${r.path}` : `the defaults — write ${r.path || "~/.sparsh/rules.toml"} to change them`);
+  const rules = document.createElement("div");
+  rules.className = "phone-rules";
+  rules.innerHTML = `
+    <div>A tap on anything that says:
+      <div class="phone-words">${(r.ask || []).map((w) => `<code>${esc(w)}</code>`).join(" ")}</div></div>
+    <div>Typing into a password field, and Enter while such a button is on the screen.</div>
+    <div>${(r.never || []).length
+      ? `Never used at all (not opened, its screen not shown to the agent): ${r.never.map((a) => `<code>${esc(a)}</code>`).join(" ")}`
+      : "No app is off limits. Add <code>never = [\"com.yourbank.*\"]</code> to keep the agent out of one."}</div>
+    <div class="conn-foot">The agent can't change these: only you, in that file.</div>`;
+  body.append(rules);
+}
+
+function phoneScreen(seen) {
+  const box = document.createElement("div");
+  box.className = "phone-screen";
+  if (seen.loading) {
+    box.innerHTML = '<div class="panel-loading">reading the screen… (a few seconds)</div>';
+    return box;
+  }
+  if (seen.error) {
+    box.innerHTML = `<div class="conn-box warn"><span>${esc(seen.error)}</span></div>`;
+    return box;
+  }
+  if (seen.shot) {
+    const img = document.createElement("img");
+    img.src = `data:image/png;base64,${seen.shot}`;
+    img.alt = `the screen of ${seen.serial}`;
+    box.append(img);
+  }
+  const side = document.createElement("div");
+  const note = document.createElement("div");
+  note.className = "conn-foot";
+  note.textContent = `what the agent reads, at ${seen.at.toLocaleTimeString()} — `
+    + "looking here doesn't change its numbers";
+  const pre = document.createElement("pre");
+  pre.textContent = screenLines(seen.screen).join("\n");
+  side.append(note, pre);
+  box.append(side);
+  return box;
 }
 
 /* ---------- the look back (memory/reflect.py) ----------

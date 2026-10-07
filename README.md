@@ -761,7 +761,13 @@ model is told "NOT DONE", and the only way through is
 the screen it will happen on. `YANTRA_SPARSH=/path/to/sparsh` names it
 when it is elsewhere; `--sparsh` insists, even with no phone attached;
 `--no-sparsh` never looks; a `--unattended` run gets no phone
-([notes/119](notes/119-a-phone-and-what-asks.md)).
+([notes/119](notes/119-a-phone-and-what-asks.md)). In the browser UI a
+**phone** chip opens the phone panel: the phones `adb` sees, **see the
+screen** for a screenshot beside the exact lines the agent reads, and
+the rules in force (the words that need a yes, the apps kept out, the
+file that holds them). Looking there never changes what the agent's
+numbers mean: the panel peeks (`sparsh look --peek`), so it's safe to
+open mid-turn and watch.
 
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
@@ -2341,7 +2347,8 @@ src/yantra/
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and
 │                   act run, `confirm` asks every time), the confirm card is
-│                   Sparsh's describe_hold, a `phone` prompt layer
+│                   Sparsh's describe_hold, a `phone` prompt layer, and
+│                   the page's phone panel through `sparsh look --peek`
 │                   ([notes/119](notes/119-a-phone-and-what-asks.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose

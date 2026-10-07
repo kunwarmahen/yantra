@@ -20,6 +20,7 @@ Also designed against:
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import sys
@@ -59,6 +60,16 @@ FAKE_SPARSH = """\
                           "adb": "ok", "phones": {phones!r},
                           "mcp": {{"command": {python!r}, "args": [sys.argv[0], "mcp"]}},
                           "tools": KINDS}}))
+    elif args[0] == "look":
+        if "--serial" in args and args[args.index("--serial") + 1] == "gone":
+            sys.exit("sparsh: no phone called gone is attached")
+        if "--shot" in args:
+            with open(args[args.index("--shot") + 1], "wb") as png:
+                png.write(b"\\x89PNG fake")
+        print(json.dumps({{"app": "com.android.settings", "size": [1080, 2400], "note": "",
+                          "elements": [{{"n": 1, "kind": "item", "label": "Airplane mode",
+                                        "bounds": [0, 0, 10, 10], "tap": True,
+                                        "switch": True, "on": False, "enabled": True}}]}}))
     elif args[0] == "mcp":
         TOOLS = [tool(n) for n in ("look", "describe_hold", "tap", "confirm", "mystery")]
         for line in sys.stdin:
@@ -243,3 +254,78 @@ def test_status_reports_sparsh_found_even_with_no_phone(clean, tmp_path, monkeyp
     assert any(line == f"sparsh: no phone attached ({program})" for line in status.lines(data))
     calls = [json.loads(x) for x in (tmp_path / "sparsh-calls.log").read_text().splitlines()]
     assert calls == [["status", "--json"]]
+
+
+class TestThePanel:
+    """The page watches; it never becomes the agent's last look."""
+
+    def served(self, tmp_path, **kw):
+        pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+
+        from yantra.web.server import WebSession, make_app
+
+        _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path, **kw)))
+        session = WebSession()
+        session.attach(agent, None, mcp=manager)
+        return manager, TestClient(make_app(session))
+
+    def test_the_page_state_says_which_phone(self, clean, tmp_path):
+        manager, client = self.served(tmp_path, never=["*bank*"])
+        try:
+            sparsh = client.get("/api/state").json()["sparsh"]
+            assert sparsh["found"] and sparsh["ready"] == ["emulator-5554"]
+            assert sparsh["rules"]["never"] == ["*bank*"] and sparsh["tools"] == 5
+            assert client.get("/api/phone").json()["phones"][0]["model"] == "sdk_gphone64"
+        finally:
+            manager.shutdown()
+
+    def test_the_screen_is_a_peek_with_a_picture(self, clean, tmp_path):
+        manager, client = self.served(tmp_path)
+        try:
+            got = client.get("/api/phone/screen", params={"serial": "emulator-5554"}).json()
+            assert got["screen"]["elements"][0]["label"] == "Airplane mode"
+            assert base64.b64decode(got["shot"]) == b"\x89PNG fake"
+            looks = [c for c in calls(tmp_path) if c[0] == "look"]
+            assert looks and all("--peek" in c for c in looks)
+            assert looks[0][:5] == ["look", "--peek", "--json", "--serial", "emulator-5554"]
+        finally:
+            manager.shutdown()
+
+    def test_an_option_is_not_a_phone(self, clean, tmp_path):
+        manager, client = self.served(tmp_path)
+        try:
+            said = client.get("/api/phone/screen", params={"serial": "--help"})
+            assert said.status_code == 400 and "not a phone's serial" in said.json()["detail"]
+            assert not any(c[0] == "look" for c in calls(tmp_path))
+        finally:
+            manager.shutdown()
+
+    def test_a_phone_gone_is_said_not_crashed(self, clean, tmp_path):
+        manager, client = self.served(tmp_path)
+        try:
+            said = client.get("/api/phone/screen", params={"serial": "gone"})
+            assert said.status_code == 503
+            assert said.json()["detail"] == "sparsh: no phone called gone is attached"
+        finally:
+            manager.shutdown()
+
+    def test_with_no_sparsh_the_panel_says_how_to_get_one(self, clean, tmp_path):
+        pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+
+        from yantra.web.server import WebSession, make_app
+
+        _, agent, manager, _ = start(tmp_path, None)
+        session = WebSession()
+        session.attach(agent, None, mcp=manager)
+        client = TestClient(make_app(session))
+        assert client.get("/api/state").json()["sparsh"] is None
+        said = client.get("/api/phone")
+        assert said.status_code == 400 and "attach a phone" in said.json()["detail"]
+        manager.shutdown()
+
+
+def calls(tmp_path: Path) -> list[list[str]]:
+    log = tmp_path / "sparsh-calls.log"
+    return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
