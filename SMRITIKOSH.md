@@ -88,6 +88,22 @@ podman run -d --name smritikosh-postgres \
 Smritikosh can also use Neo4j, MongoDB and Redis. **You can skip all
 three.** Without them it says it's "degraded" and works fine for Yantra.
 
+**Optional: Neo4j.** Smritikosh keeps facts that link to each other there
+(you, your city, your airport), and uses them when it builds context for
+a question. Yantra's memory doesn't need it, but if you'd like Smritikosh
+complete, start it before Step 6:
+
+```
+podman run -d --name smritikosh-neo4j \
+  -e NEO4J_AUTH=neo4j/smritikosh -e NEO4J_PLUGINS='["apoc"]' \
+  -p 7474:7474 -p 7687:7687 -v smritikosh-neo4j:/data:Z \
+  docker.io/neo4j:5.26-community
+```
+
+The password after `neo4j/` must match `NEO4J_PASSWORD` in Smritikosh's
+`.env` (it's `smritikosh` there unless you change both). With it running,
+Step 6's health check says `"status":"ok"` and `"neo4j":"ok"`.
+
 ## Step 4 · Tell Smritikosh which models to use
 
 ```
@@ -176,8 +192,8 @@ Check it from the second terminal:
 curl -s http://localhost:8080/health
 ```
 
-You should see `"postgres":"ok"`. `"status":"degraded"` is fine: that's
-the Neo4j you skipped.
+You should see `"postgres":"ok"`. `"status":"degraded"` is fine if you
+skipped Neo4j.
 
 ## Step 7 · Make your own account, named the way Yantra knows you
 
@@ -309,7 +325,7 @@ Smritikosh's program logging its own work. It's harmless.
 Smritikosh has to be running before Yantra starts. After a restart:
 
 ```
-podman start smritikosh-postgres
+podman start smritikosh-postgres     # and smritikosh-neo4j, if you added it
 cd ~/src/smritikosh && uv run uvicorn smritikosh.api.main:app --port 8080
 ```
 
