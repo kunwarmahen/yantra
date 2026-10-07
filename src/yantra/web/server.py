@@ -1999,6 +1999,36 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         sparsh.refresh()
         return sparsh.describe()
 
+    @app.post("/api/phone/use")
+    def phone_use() -> dict[str, Any]:
+        """A phone attached after the start: start its tools now.
+        require_idle: the tools and the prompt change."""
+        from yantra.mcp import MCPError
+        from yantra.sparsh_link import SparshLinkError
+        require_idle()
+        sparsh = require_sparsh()
+        if session.mcp is None:
+            raise HTTPException(409, "this page cannot start tools (no MCP manager)")
+        try:
+            said = sparsh.use_now(session.mcp, session.agent)
+        except (SparshLinkError, MCPError) as exc:
+            raise HTTPException(409, f"sparsh: {exc}") from None
+        # The tools count and the chip changed: every open page hears it.
+        session.broadcast({"type": "state", **session.state()})
+        return {**sparsh.describe(), "said": said}
+
+    @app.get("/api/phone/log")
+    def phone_log(serial: str, n: int = 20) -> dict[str, Any]:
+        """What was done on one phone, newest first -- the agent's steps
+        and the person's own, held and refused ones included."""
+        from yantra.sparsh_link import SparshLinkError
+        try:
+            return {"serial": serial, "steps": require_sparsh().recent(serial, n)}
+        except SparshLinkError as exc:
+            said = str(exc)
+            raise HTTPException(400 if "which phone" in said else 503,
+                                f"sparsh: {said}") from None
+
     @app.get("/api/phone/screen")
     def phone_screen(serial: str, shot: bool = True) -> dict[str, Any]:
         """One phone's screen as it is now -- a PEEK, so an agent working

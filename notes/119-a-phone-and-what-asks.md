@@ -118,6 +118,33 @@ the person's own eyes, and nothing it reads reaches the model. It
 doesn't act on the phone either: the person's own hands are `sparsh` in
 a terminal, or the phone itself.
 
+## A phone plugged in later
+
+In auto mode, no phone at the start means no tools. That's right for the
+start, but wrong for the person who plugs the phone in five minutes
+later and finds the agent can't see it until a restart.
+
+**DORMANT, NOT ABSENT.** With Sparsh found but no phone ready, the
+session still says nothing, registers no tools and writes no prompt
+layer. It keeps the Sparsh handle, though, unconnected. The page shows
+the phone chip as "no phone", then "phone · not in use" once one is
+attached. The panel's **use this phone** (POST `/api/phone/use`, only
+between turns, because the tools and the prompt change) or `/phone use`
+in the terminal asks Sparsh again and starts the tools. **Nothing
+happens by itself**: a phone appearing doesn't give the agent new hands
+in the middle of a conversation until the person says so.
+
+The panel's **what was done** reads Sparsh's step log (`sparsh log
+--json`): each act, by the agent or by the person, however it ended.
+
+Live, in a browser against the page: Yantra started with no emulator
+running. Its startup was silent, with 24 tools and no phone tools; the
+chip read "no phone". After the emulator booted, refreshing the panel
+gave "phone · not in use". **Use this phone** turned it to "phone", and
+*"On my phone, open Settings and tell me what the Battery row says"*
+was answered "Battery — Charged" in two calls (31 s). **What was done**
+then listed `done · the agent: open_app name="settings"`.
+
 ## Live receipt
 
 The Android 15 emulator, booted clean; `qwen3.8:latest`; Setu, Samay and

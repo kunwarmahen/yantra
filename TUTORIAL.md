@@ -1867,7 +1867,7 @@ uv run python examples/async_demo.py    # 4 conversations, sequential vs concurr
 
 # Act VI — the programs around it
 
-Yantra is one agent, one person, one keyboard. Three separate programs
+Yantra is one agent, one person, one keyboard. Four separate programs
 build on it. Each lives in its own repository and documents itself
 there; this act says in a sentence what each one is, and what *Yantra*
 does for it, which is the part that lives here.
@@ -1876,10 +1876,12 @@ does for it, which is the part that lives here.
 |---|---|---|
 | **Setu** (सेतु, *bridge*) | keeps your sign-ins (Gmail, Home Assistant, Amazon, X…) and hands an agent their tools; the agent never sees a key | [Setu's README](https://github.com/kunwarmahen/setu) |
 | **Samay** (समय, *time*) | a clock and a logbook: runs an agent's work later or on a repeat, and keeps what came back | [Samay's README](https://github.com/kunwarmahen/samay) |
+| **Sparsh** (स्पर्श, *touch*) | works an Android phone (or the emulator): the agent reads the screen as a numbered list and taps by number, and asks you before Send, Pay or Delete | [Sparsh's README](https://github.com/kunwarmahen/sparsh), and §25 here |
 | **dvara** (द्वार, *door*) | one always-on process serving many people, over Telegram or HTTP, with the owner's money and rules around every turn | [dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) |
 
-The dependencies run one way. Setu and Samay are programs Yantra starts
-and reads (`setu status --json`, `samay status --json`, a versioned JSON
+The dependencies run one way. Setu, Samay and Sparsh are programs Yantra
+starts and reads (`setu status --json`, `samay status --json`, `sparsh
+status --json`, a versioned JSON
 whose `format` is the whole contract); dvara imports Yantra as a library.
 None of them is imported by Yantra. Yantra answers the same question the
 same way: `yantra status --json` (notes/117).
@@ -2010,6 +2012,119 @@ read each step.
 | `SETU_HOME` | Setu (set per person by dvara) | Setu's README, dvara's tutorial §16 |
 | `SETU_VAULT_KEY` | Setu (held by dvara while a person's locked folder is unlocked) | Setu's README ("How safe is it?"), dvara's note 21 |
 | connections, levels, the catalog | Setu | Setu's README |
+
+## 25 · Sparsh — your phone
+
+Most of what people do every day happens in phone apps: messages,
+banking, a food order, the two-factor code. Many of those apps have no
+website and no way in for a program. Sparsh lets the agent use an
+Android phone the way you do: look at the screen, tap, type, scroll,
+press Back, open an app.
+
+**What the agent sees.** Not a picture. Android already describes every
+screen in words (it's what the phone's screen reader reads aloud), and
+Sparsh turns that into a short numbered list:
+
+```
+App: com.android.settings
+6 item "Network & internet — Mobile, Wi‑Fi, hotspot" [tap]
+7 item "Connected devices — Bluetooth, pairing" [tap]
+```
+
+The agent answers "tap 6". Reading a short list is something a model on
+your own computer does well, so this works on a local model.
+
+**Set it up.** You need a phone, or the Android emulator if you'd rather
+not use your own phone:
+
+1. Install Sparsh and `adb` (Sparsh's README, *Getting a phone ready*).
+   For the emulator, install Android Studio, create a phone in *Device
+   Manager*, and start it:
+
+   ```
+   ~/Android/Sdk/emulator/emulator -avd Medium_Phone_API_35 -no-snapshot-save
+   ```
+
+   For a real phone: *Settings → About phone*, tap *Build number* seven
+   times, turn on *USB debugging* in *Developer options*, plug it in, and
+   say yes to the question on the phone's screen.
+2. Put `sparsh` on your `PATH`, or tell Yantra where it is:
+   `export YANTRA_SPARSH=~/sparsh/.venv/bin/sparsh`.
+3. Check: `yantra status` should say `sparsh: phone emulator-5554 (…)`.
+
+**Use it.** Start Yantra as usual. It says one line at startup:
+
+```
+sparsh: 9 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via …/sparsh
+```
+
+Then just ask: *"On my phone, turn on airplane mode."* *"Using Messages,
+text 5554: running late."* (On the emulator, 5554 is its own number,
+so it texts itself.)
+
+**What it asks you first.** Most steps happen without a question:
+opening an app, tapping a row, typing, scrolling. Asking about every
+tap would mean nine questions to send one text, and nobody reads the
+ninth. Sparsh stops the few steps that can't be undone:
+
+* a tap on something that says **Send, Pay, Buy, Order, Delete, Install,
+  Allow, Post, Call**, and a few more like them;
+* typing into a **password** field;
+* **Enter**, while a button like that is on the screen (some chat apps
+  send on Enter).
+
+Those come to you as an approval card that says exactly what will
+happen, with the screen it will happen on, including the message in the
+box:
+
+```
+Do this on the phone?
+On the phone emulator-5554: tap image "Send SMS" in
+com.google.android.apps.messaging -- held because it says "send".
+…
+4 field "running late, be there at 7"
+```
+
+Say yes and it's sent. Say no and the agent stops and tells you the
+message is still in the box. This card appears **every time**, even if
+you've told Yantra to stop asking (`--yolo`). In this tutorial's run on
+`qwen3.8:latest`, sending a text took nine steps and asked one question,
+on Send ([notes/119](notes/119-a-phone-and-what-asks.md)).
+
+**Your rules.** `~/.sparsh/rules.toml` is yours, and the agent can't
+change it:
+
+```toml
+ask = ["archive"]                  # more words that need a yes
+dont_ask = ["share"]               # words not to ask about
+never = ["com.yourbank.*"]         # apps the agent must never use
+```
+
+An app on the `never` list can't be opened, and if the agent lands in it
+anyway, it is shown nothing on that screen.
+
+**The phone panel.** In `yantra --web`, the **phone** chip opens a panel:
+
+* the phones the computer sees, and whether each is ready;
+* **see the screen**: a picture of the phone now, beside the list the
+  agent reads. Opening it while the agent works is safe: looking from
+  the panel never changes what the agent's numbers mean;
+* **what was done**: every step on the phone, the agent's and your own,
+  including the ones that were held or refused. In a terminal, `sparsh
+  log` shows the same;
+* the rules in force, and the file that holds them.
+
+**A phone plugged in later.** If no phone was attached when Yantra
+started, it says nothing and adds no phone tools. Plug one in (or start
+the emulator), then press **use this phone** in the panel, or type
+`/phone use` in the terminal. The tools are added without a restart.
+`/phone` on its own says what's attached and whether it's in use, and
+`/phone log` shows the last steps.
+
+**Not yet:** schedules don't get a phone (nobody would be there to say
+yes to a held step), and typing is plain English letters only (no é,
+Hindi or emoji yet). iPhones need a Mac to set up once; Sparsh's note 03
+has how.
 
 ---
 
@@ -2167,12 +2282,14 @@ Most carry a live receipt from a real run.
 | [116](notes/116-offered-at-the-right-moment.md) | when two local models offer a schedule, how often they get *when* right, and the two lines that stopped them allowing `send_message` for a read-only check |
 | [117](notes/117-asked-what-it-is.md) | `yantra status`: which release, which model a turn would ask and why, and whether a local model is there to answer |
 | [118](notes/118-the-internet-is-not-a-read.md) | a site check that allowed nothing: new samples first, then the one fact the model was missing |
+| [119](notes/119-a-phone-and-what-asks.md) | a phone through Sparsh: why its ordinary taps don't ask, why `confirm` always does, and why the page peeks instead of looking |
 
 ### The neighbours
 
-Setu, Samay and dvara each keep their own reading list, beside their own
-README: [Setu](https://github.com/kunwarmahen/setu),
-[Samay](https://github.com/kunwarmahen/samay) (its `notes/`), and
+Setu, Samay, Sparsh and dvara each keep their own reading list, beside
+their own README: [Setu](https://github.com/kunwarmahen/setu),
+[Samay](https://github.com/kunwarmahen/samay) (its `notes/`),
+[Sparsh](https://github.com/kunwarmahen/sparsh) (its `notes/`), and
 [dvara](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md#where-to-read-next).
 
 ### The README

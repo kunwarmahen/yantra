@@ -13,7 +13,9 @@ kind. Its ``format`` is the whole contract; an unknown one is refused
 rather than guessed at. ``YANTRA_SPARSH`` or the flags choose:
 
     auto  (default) use Sparsh if `sparsh` is on PATH AND a phone is
-          attached; say nothing if not
+          attached; say nothing if not -- and with Sparsh but no phone,
+          wait DORMANT: no tools, no prompt, until a phone is attached and
+          the person says to use it (the page's panel, or /phone use)
     on    use it, and say so loudly if it cannot be found (--sparsh)
     off   never look (--no-sparsh)
     PATH  the sparsh program to run, which also means "on" (--sparsh PATH)
@@ -75,7 +77,8 @@ STATUS_TIMEOUT = 15.0
 KINDS = ("read", "act", "confirm")
 #: A phone's serial as adb prints it (emulator-5554, R58M..., 192.168.1.5:5555),
 #: as it may reach an argv word: never an option.
-SERIAL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+SERIAL_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
+                       r"|https?://[A-Za-z0-9.:\[\]-]{1,80}/?)$")  # or an iPhone's WDA
 #: How long a peek may take: a dump (~2.5 s) and a screenshot.
 PEEK_TIMEOUT = 30.0
 
@@ -131,10 +134,11 @@ def ready_phones(data: dict[str, Any]) -> list[dict[str, Any]]:
     return [p for p in data.get("phones") or [] if p.get("state") == "device"]
 
 
-def load(mode: str, path: str | None = None) -> tuple[dict[str, Any], str] | None:
+def load(mode: str, path: str | None = None,
+         need_phone: bool = True) -> tuple[dict[str, Any], str] | None:
     """(Sparsh's report, the program asked). None when off, or when it is
-    ``auto`` and Sparsh or a phone is simply not there; an error when it
-    was asked for and cannot be used."""
+    ``auto`` and Sparsh -- or, with ``need_phone``, a phone -- is simply
+    not there; an error when it was asked for and cannot be used."""
     if mode == "off":
         return None
     program = path or shutil.which("sparsh")
@@ -149,7 +153,7 @@ def load(mode: str, path: str | None = None) -> tuple[dict[str, Any], str] | Non
         if mode == "on" or path:
             raise
         return None
-    if mode == "auto" and not path and not ready_phones(data):
+    if need_phone and mode == "auto" and not path and not ready_phones(data):
         return None                   # nothing to work: no tools, no prompt
     return data, program
 
@@ -239,6 +243,9 @@ class Sparsh:
     program: str | None = None
     error: str = ""
     tools: list[str] = field(default_factory=list)
+    #: False while DORMANT: Sparsh is here but no phone was at the start,
+    #: so there are no tools and no prompt yet (``use_now``).
+    connected: bool = False
 
     def connect(self, manager: Any, agent: Any) -> int:
         """Start the server, set what asks, write the prompt layer.
@@ -261,7 +268,24 @@ class Sparsh:
         prompt = attach_prompt(agent)
         prompt.set("phone", prompt_text(self.data))
         prompt.apply()
+        self.connected = True
         return len(self.tools)
+
+    def use_now(self, manager: Any, agent: Any) -> str:
+        """A phone attached after the start: ask Sparsh again and, with a
+        phone ready, start the tools now. Returns the startup line it
+        would have printed. Raises SparshLinkError (nothing to use) and
+        MCPError (the server would not start)."""
+        self.refresh()
+        if self.data is None:
+            raise SparshLinkError(self.error or "Sparsh was not found")
+        if self.connected:
+            return f"sparsh: already in use -- phone {_phone_words(self.data)}"
+        if not ready_phones(self.data):
+            raise SparshLinkError("no phone is ready: plug one in with USB debugging on "
+                                  "(and allow it on the phone), or start the emulator")
+        count = self.connect(manager, agent)
+        return announce(self.data, count, self.program or "sparsh")
 
     def refresh(self) -> dict[str, Any] | None:
         """Ask Sparsh again -- a phone plugged in or taken away since the
@@ -288,7 +312,7 @@ class Sparsh:
                 "rules": {"path": rules.get("path"), "exists": bool(rules.get("exists")),
                           "never": list(rules.get("never") or []),
                           "ask": list(rules.get("ask") or [])},
-                "tools": len(self.tools)}
+                "tools": len(self.tools), "connected": self.connected}
 
     def peek(self, serial: str, shot: bool = True) -> dict[str, Any]:
         """The screen of one phone as it is now, for the person: Sparsh's
@@ -321,3 +345,28 @@ class Sparsh:
             image = (base64.b64encode(png.read_bytes()).decode()
                      if shot and png.exists() else None)
         return {"serial": serial, "screen": screen, "shot": image}
+
+    def recent(self, serial: str, n: int = 20) -> list[dict[str, Any]]:
+        """What was done on one phone, newest first (``sparsh log``): the
+        agent's steps and the person's own, held and refused ones too."""
+        if self.data is None or not self.program:
+            raise SparshLinkError(self.error or "Sparsh was not found")
+        if not SERIAL_RE.match(serial or ""):
+            raise SparshLinkError(f"which phone? {serial!r} is not a phone's serial")
+        argv = [self.program, "log", "--json", "-n", str(max(1, min(int(n), 200))),
+                "--serial", serial]
+        if self.data.get("state"):
+            argv += ["--state", str(self.data["state"])]
+        try:
+            done = subprocess.run(argv, capture_output=True, text=True,
+                                  timeout=STATUS_TIMEOUT)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise SparshLinkError(f"sparsh log: {exc}") from None
+        if done.returncode != 0:
+            why = (done.stderr or done.stdout).strip().splitlines()
+            raise SparshLinkError(why[-1].removeprefix("sparsh: ") if why
+                                  else "sparsh log failed")
+        try:
+            return json.loads(done.stdout)
+        except json.JSONDecodeError:
+            raise SparshLinkError("sparsh log did not print JSON") from None

@@ -1727,7 +1727,7 @@ function renderSchedules() {
    cannot change what the agent's numbers mean. Nothing here acts on the
    phone -- the panel is for watching. */
 
-const phone = { data: null, seen: {} };
+const phone = { data: null, seen: {}, steps: {} };
 
 $("#chip-phone").onclick = openPhonePanel;
 $("#phone-refresh").onclick = () => loadPhone(true);
@@ -1744,11 +1744,51 @@ const PHONE_STATE = {
 
 function phoneChip(d) {
   const ready = d.ready || [];
-  $("#phone-count").textContent = ready.length === 1 ? "phone"
-    : ready.length ? `${ready.length} phones` : "no phone";
-  $("#chip-phone").title = "phone — " + (ready.length
-    ? `the agent can work ${ready.join(", ")} through Sparsh`
-    : "no phone is attached right now");
+  $("#phone-count").textContent = !ready.length ? "no phone"
+    : !d.connected ? "phone · not in use"
+    : ready.length === 1 ? "phone" : `${ready.length} phones`;
+  $("#chip-phone").title = "phone — " + (!ready.length
+    ? "no phone is attached right now"
+    : d.connected ? `the agent can work ${ready.join(", ")} through Sparsh`
+    : `${ready.join(", ")} is attached; open this to let the agent use it`);
+}
+
+async function usePhone() {
+  const res = await fetch("/api/phone/use", { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) { addBanner(`phone: ${data.detail}`, true); return; }
+  toast(data.said);
+  phone.data = data;
+  phoneChip(data);
+  renderPhone();
+}
+
+async function phoneSteps(serial) {
+  if (phone.steps[serial]) { delete phone.steps[serial]; renderPhone(); return; }
+  const res = await fetch(`/api/phone/log?serial=${encodeURIComponent(serial)}`);
+  const data = await res.json();
+  phone.steps[serial] = res.ok ? data.steps : { error: data.detail };
+  renderPhone();
+}
+
+const STEP_TONE = { held: "warn", changed: "warn", not_done: "bad" };
+
+function phoneLog(steps) {
+  const box = document.createElement("div");
+  box.className = "sched-runs phone-log";
+  if (steps.error) {
+    box.innerHTML = `<div class="sched-run conn-warn">${esc(steps.error)}</div>`;
+    return box;
+  }
+  box.innerHTML = steps.length ? steps.map((st) => {
+    const args = Object.entries(st.args || {}).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(" ");
+    return `<div class="sched-run">
+      <b class="${STEP_TONE[st.outcome] || ""}">${esc(st.outcome)}</b> ${esc(clockTime(st.at))}
+      · ${esc(st.by === "you" ? "you" : "the agent")}: <code>${esc(st.action)}</code> ${esc(args)}
+      ${st.on ? `<div>on ${esc(st.on)}</div>` : ""}
+      ${st.said ? `<div>${esc(st.said)}</div>` : st.app ? `<div>then in ${esc(st.app)}</div>` : ""}</div>`;
+  }).join("") : '<div class="sched-run">nothing done on this phone yet</div>';
+  return box;
 }
 
 async function openPhonePanel() {
@@ -1806,6 +1846,23 @@ function renderPhone() {
     warn.innerHTML = `<span>${esc(d.error || d.adb)}</span>`;
     body.append(warn);
   }
+  if (!d.connected) {
+    const box = document.createElement("div");
+    box.className = "conn-box";
+    if ((d.ready || []).length) {
+      box.innerHTML = "<span>A phone is attached, but the agent isn't using it: there was "
+        + "none when this session started. Use it to give the agent its phone tools.</span>";
+      const b = document.createElement("button");
+      b.className = "m-btn primary";
+      b.textContent = "use this phone";
+      b.onclick = usePhone;
+      box.append(b);
+    } else {
+      box.innerHTML = "<span>No phone yet. Plug one in with USB debugging on (and allow it "
+        + "on the phone), or start the emulator, then refresh.</span>";
+    }
+    body.append(box);
+  }
   const phones = d.phones || [];
   section(body, phones.length === 1 ? "1 phone" : `${phones.length} phones`,
     "what adb sees on this computer now");
@@ -1833,9 +1890,14 @@ function renderPhone() {
       b.textContent = phone.seen[ph.serial] ? "look again" : "see the screen";
       b.disabled = !!phone.seen[ph.serial]?.loading;
       b.onclick = () => peekPhone(ph.serial);
-      actions.append(b);
+      const l = document.createElement("button");
+      l.className = "m-btn";
+      l.textContent = phone.steps[ph.serial] ? "hide steps" : "what was done";
+      l.onclick = () => phoneSteps(ph.serial);
+      actions.append(b, l);
     }
     row.append(dot, main, actions);
+    if (phone.steps[ph.serial]) row.append(phoneLog(phone.steps[ph.serial]));
     body.append(row);
     const seen = phone.seen[ph.serial];
     if (seen) body.append(phoneScreen(seen));

@@ -70,6 +70,11 @@ FAKE_SPARSH = """\
                           "elements": [{{"n": 1, "kind": "item", "label": "Airplane mode",
                                         "bounds": [0, 0, 10, 10], "tap": True,
                                         "switch": True, "on": False, "enabled": True}}]}}))
+    elif args[0] == "log":
+        print(json.dumps([{{"at": "2026-10-07T10:15:07-04:00", "by": "agent",
+                           "action": "press_key", "args": {{"keys": ["enter"]}},
+                           "on": None, "outcome": "held",
+                           "said": "h1: enter could do what item Send SMS does"}}]))
     elif args[0] == "mcp":
         TOOLS = [tool(n) for n in ("look", "describe_hold", "tap", "confirm", "mystery")]
         for line in sys.stdin:
@@ -202,13 +207,17 @@ class TestTheModelIsTold:
 
 
 class TestWhenNot:
-    def test_no_phone_in_auto_mode_is_silence(self, clean, tmp_path, monkeypatch):
+    def test_no_phone_in_auto_mode_is_silence_and_waits(self, clean, tmp_path, monkeypatch):
         program = make_sparsh(tmp_path, phones=[])
         monkeypatch.setattr(sparsh_link.shutil, "which", lambda _name: str(program))
         code, agent, manager, out = start(tmp_path, None)
         try:
-            assert code is None and out == "" and agent.sparsh is None
+            assert code is None and out == ""
             assert not any(n.startswith("mcp__sparsh__") for n in agent.registry.names())
+            prompt = getattr(agent, "prompt", None)
+            assert prompt is None or prompt.get("phone") is None
+            # dormant, for a phone attached later
+            assert agent.sparsh is not None and agent.sparsh.connected is False
         finally:
             manager.shutdown()
 
@@ -329,3 +338,86 @@ class TestThePanel:
 def calls(tmp_path: Path) -> list[list[str]]:
     log = tmp_path / "sparsh-calls.log"
     return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
+
+
+class TestAPhoneAttachedLater:
+    """Plugged in after the start: taken up when the person says so,
+    without a restart -- and nothing happens by itself."""
+
+    def dormant(self, tmp_path, monkeypatch):
+        program = make_sparsh(tmp_path, phones=[])
+        monkeypatch.setattr(sparsh_link.shutil, "which", lambda _name: str(program))
+        _, agent, manager, _ = start(tmp_path, None)
+        return agent, manager
+
+    def test_use_now_with_no_phone_says_how(self, clean, tmp_path, monkeypatch):
+        agent, manager = self.dormant(tmp_path, monkeypatch)
+        try:
+            with pytest.raises(sparsh_link.SparshLinkError, match="no phone is ready"):
+                agent.sparsh.use_now(manager, agent)
+            assert not agent.sparsh.connected
+        finally:
+            manager.shutdown()
+
+    def test_use_now_starts_the_tools_and_the_prompt(self, clean, tmp_path, monkeypatch):
+        agent, manager = self.dormant(tmp_path, monkeypatch)
+        try:
+            make_sparsh(tmp_path)                   # the phone is plugged in
+            said = agent.sparsh.use_now(manager, agent)
+            assert said.startswith("sparsh: 5 tool(s); phone emulator-5554")
+            assert tool(agent, "confirm").always_ask
+            assert "BY NUMBER" in agent.prompt.get("phone")
+            assert "already in use" in agent.sparsh.use_now(manager, agent)
+        finally:
+            manager.shutdown()
+
+    def test_the_terminal_says_and_uses(self, clean, tmp_path, monkeypatch):
+        from yantra.cli.repl import Repl
+
+        agent, manager = self.dormant(tmp_path, monkeypatch)
+        out = io.StringIO()
+        repl = Repl(agent, Console(file=out, width=200), mcp=manager)
+        try:
+            repl._command("/phone")
+            assert "phone: none attached" in out.getvalue()
+            make_sparsh(tmp_path)
+            repl._command("/phone")
+            assert "in use: no -- /phone use to start" in out.getvalue()
+            repl._command("/phone use")
+            assert "sparsh: 5 tool(s)" in out.getvalue()
+            repl._command("/phone log")
+            assert 'press_key {"keys": ["enter"]} -> held' in out.getvalue()
+        finally:
+            manager.shutdown()
+
+    def test_the_page_uses_it_and_reads_the_steps(self, clean, tmp_path, monkeypatch):
+        pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+
+        from yantra.web.server import WebSession, make_app
+
+        agent, manager = self.dormant(tmp_path, monkeypatch)
+        session = WebSession()
+        session.attach(agent, None, mcp=manager)
+        client = TestClient(make_app(session))
+        try:
+            state = client.get("/api/state").json()["sparsh"]
+            assert state["found"] and not state["connected"] and state["ready"] == []
+            assert client.post("/api/phone/use").status_code == 409
+            make_sparsh(tmp_path)
+            used = client.post("/api/phone/use").json()
+            assert used["connected"] and used["said"].startswith("sparsh: 5 tool(s)")
+            assert "mcp__sparsh__tap" in agent.registry
+            steps = client.get("/api/phone/log", params={"serial": "emulator-5554"}).json()
+            assert steps["steps"][0]["outcome"] == "held"
+            looks = [c for c in calls(tmp_path) if c[0] == "log"]
+            assert looks[0][:6] == ["log", "--json", "-n", "20", "--serial", "emulator-5554"]
+        finally:
+            manager.shutdown()
+
+
+def test_an_iphone_is_named_by_its_wda_address():
+    assert sparsh_link.SERIAL_RE.match("http://127.0.0.1:8100")
+    assert sparsh_link.SERIAL_RE.match("emulator-5554")
+    assert not sparsh_link.SERIAL_RE.match("--help")
+    assert not sparsh_link.SERIAL_RE.match("http://x/../../etc")

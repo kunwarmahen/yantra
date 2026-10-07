@@ -81,6 +81,11 @@ HELP = """[bold]commands[/bold]
   /remember          look back over this conversation now for things
                      worth keeping about you (it also happens by itself on
                      /quit, /clear and /load; you keep or drop each)
+  /phone             the phone the agent can work through Sparsh: what is
+                     attached, whether it is in use, the rules in force
+  /phone use         start the phone tools for a phone attached since the
+                     start (Sparsh found no phone then)
+  /phone log         the last steps on the phone, the agent's and yours
   /mcp               list connected mcp servers
   /mcp add ...       connect a server MID-SESSION: /mcp add NAME URL, or
                      /mcp add NAME COMMAND [ARGS...] (asks whether to save)
@@ -920,6 +925,8 @@ class Repl:
                 self._tools_command(arg)
             case "mcp":
                 self._mcp_command(arg)
+            case "phone":
+                self._phone_command(arg)
             case "build":
                 if not arg:
                     self.console.print("[red]/build needs a spec: "
@@ -1253,6 +1260,65 @@ class Repl:
             self.console.print_json(json.dumps(spec.parameters))
 
     # ---- mcp servers -----------------------------------------------------------
+
+    def _phone_command(self, arg: str) -> None:
+        """/phone, /phone use, /phone log (sparsh_link.py)."""
+        from yantra.mcp import MCPError
+        from yantra.sparsh_link import SparshLinkError
+
+        sparsh = getattr(self.agent, "sparsh", None)
+        if sparsh is None:
+            self.console.print("[yellow]no phone: Sparsh isn't linked to this session "
+                               "(put `sparsh` on PATH, or start with --sparsh PATH)[/yellow]")
+            return
+        if arg == "use":
+            if self.mcp is None:
+                self.console.print("[red]this session cannot start tools[/red]")
+                return
+            try:
+                said = sparsh.use_now(self.mcp, self.agent)
+            except (SparshLinkError, MCPError) as exc:
+                self.console.print(f"[yellow]sparsh: {escape(str(exc))}[/yellow]")
+                return
+            self.console.print(f"[green]{escape(said)}[/green]")
+            return
+        sparsh.refresh()            # a phone plugged in since shows up
+        if arg == "log":
+            ready = sparsh.describe()["ready"]
+            if not ready:
+                self.console.print("no phone is attached")
+                return
+            try:
+                steps = sparsh.recent(ready[0], 15)
+            except SparshLinkError as exc:
+                self.console.print(f"[yellow]sparsh: {escape(str(exc))}[/yellow]")
+                return
+            if not steps:
+                self.console.print(f"nothing done on {ready[0]} yet")
+            for step in reversed(steps):
+                said = step.get("said") or step.get("app") or ""
+                self.console.print(escape(
+                    f"{step.get('at', '')[11:19]} {step.get('by', '?'):5} "
+                    f"{step.get('action')} {json.dumps(step.get('args') or {})} -> "
+                    f"{step.get('outcome')}" + (f" ({said[:120]})" if said else "")))
+            return
+        if arg:
+            self.console.print("[red]usage: /phone, /phone use, /phone log[/red]")
+            return
+        d = sparsh.describe()
+        for phone in d["phones"]:
+            self.console.print(f"phone: {phone.get('serial')}  {phone.get('model') or '?'}  "
+                               f"{phone.get('state')}")
+        if not d["phones"]:
+            self.console.print("phone: none attached")
+        self.console.print("in use: " + (f"yes, {d['tools']} tool(s)" if d["connected"] else
+                                         "no" + (" -- /phone use to start" if d["ready"]
+                                                 else "")))
+        rules = d["rules"]
+        self.console.print(f"rules: {rules['path']}"
+                           + ("" if rules["exists"] else " (not written: the defaults)"))
+        if rules["never"]:
+            self.console.print(f"  kept out of: {', '.join(rules['never'])}")
 
     def _mcp_command(self, arg: str) -> None:
         """/mcp lists connected servers; add|remove manage connections

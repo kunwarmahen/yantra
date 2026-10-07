@@ -767,7 +767,13 @@ screen** for a screenshot beside the exact lines the agent reads, and
 the rules in force (the words that need a yes, the apps kept out, the
 file that holds them). Looking there never changes what the agent's
 numbers mean: the panel peeks (`sparsh look --peek`), so it's safe to
-open mid-turn and watch.
+open mid-turn and watch. **What was done** lists every step on the
+phone (`sparsh log`), the agent's and yours, held and refused ones
+included. With Sparsh on `PATH` but no phone at the start, a session
+says nothing and adds no tools. Attach one later and press **use this
+phone** in the panel, or type `/phone use`, to add them without a
+restart. `/phone` says what's attached, and `/phone log` shows the last
+steps.
 
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
@@ -2349,6 +2355,8 @@ src/yantra/
 │                   act run, `confirm` asks every time), the confirm card is
 │                   Sparsh's describe_hold, a `phone` prompt layer, and
 │                   the page's phone panel through `sparsh look --peek`
+│                   and `sparsh log`; with no phone at the start it waits
+│                   DORMANT for /phone use or the panel's "use this phone"
 │                   ([notes/119](notes/119-a-phone-and-what-asks.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose

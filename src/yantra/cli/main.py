@@ -2096,7 +2096,9 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console) -> int | None:
 
     Same shape as Samay: an exit code only when Sparsh was ASKED for and
     could not be used; in auto mode no Sparsh, or no phone attached, is
-    silence. Never for a run nobody watches.
+    silence -- with Sparsh there, a dormant handle is left on
+    ``agent.sparsh`` for a phone attached later. Never for a run nobody
+    watches.
     """
     from yantra import sparsh_link
 
@@ -2105,7 +2107,7 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console) -> int | None:
     if mode == "off" or is_unattended():
         return None
     try:
-        found = sparsh_link.load(mode, path)
+        found = sparsh_link.load(mode, path, need_phone=False)
     except sparsh_link.SparshLinkError as exc:
         if mode == "on":
             print(f"error: {exc}", file=sys.stderr)
@@ -2116,6 +2118,12 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console) -> int | None:
         return None
     data, program = found
     sparsh = sparsh_link.Sparsh(mode=mode, path=path, data=data, program=program)
+    if mode == "auto" and not path and not sparsh_link.ready_phones(data):
+        # Here, but no phone: no tools and no prompt for a phone that is
+        # not there. Kept DORMANT, so one attached later can be taken up
+        # (the page's phone panel, /phone use) without a restart.
+        agent.sparsh = sparsh
+        return None
     try:
         count = sparsh.connect(mcp_manager, agent)
     except (MCPError, sparsh_link.SparshLinkError) as exc:
