@@ -2128,8 +2128,9 @@ the emulator), then press **use this phone** in the panel, or type
 yes to a held step), and typing is plain English letters only (no é,
 Hindi or emoji yet). An iPhone needs a Mac to set up once (Sparsh's
 SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
-starting Yantra. That road hasn't been run on a real iPhone yet, and the
-phone panel doesn't accept an iPhone's address yet.
+starting Yantra. When its free 7-day signature is two days from running
+out, Yantra's first line says so. That road hasn't been run on a real
+iPhone yet.
 
 ---
 

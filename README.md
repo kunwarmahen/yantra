@@ -57,7 +57,7 @@ Podman containers.
   it at startup, the agent can offer a schedule, and `yantra --web` shows
   them (below: *Doing things later, through Samay*). Samay starts
   `yantra --json --unattended` for each run (below: *Nobody watching*).
-* **[Sparsh](https://github.com/kunwarmahen/sparsh)** works an Android phone, or the emulator; Yantra
+* **[Sparsh](https://github.com/kunwarmahen/sparsh)** works an Android phone, the emulator, or an iPhone; Yantra
   finds it at startup when a phone is attached, and the agent can tap,
   type and scroll, asking you before Send, Pay or Delete (below: *Your
   phone, through Sparsh*).

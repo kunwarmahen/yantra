@@ -198,3 +198,8 @@ has the rest.
   screenshot took 2.4 s.
 * The trial: these tasks and more on `qwen3.8:latest`, `gemma4:12b` and
   a frontier cloud model, counted.
+* An iPhone, run for real. Sparsh drives one through WebDriverAgent
+  ([its note 03](https://github.com/kunwarmahen/sparsh/blob/main/notes/03-an-iphone-through-a-mac.md));
+  here the model is told it's an iPhone (Back is a swipe from the
+  edge), and the startup line says when the iPhone's 7-day signature is
+  two days from running out. Not yet run on a real iPhone.

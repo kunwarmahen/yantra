@@ -198,6 +198,27 @@ class TestTheModelIsTold:
         finally:
             manager.shutdown()
 
+    def test_an_iphone_is_called_an_iphone_and_told_how_back_works(self):
+        iphone = {"serial": "http://127.0.0.1:8100", "state": "device", "model": "iPhone"}
+        layer = sparsh_link.prompt_text({"phones": [iphone]})
+        assert "person's iPhone (http://127.0.0.1:8100 (iPhone))" in layer
+        assert "Android" not in layer and "no Back key" in layer
+
+    def test_an_android_phone_gets_no_iphone_advice(self):
+        android = {"serial": "emulator-5554", "state": "device", "model": "sdk"}
+        layer = sparsh_link.prompt_text({"phones": [android]})
+        assert "person's Android phone" in layer and "no Back key" not in layer
+
+    def test_no_phone_says_how_either_kind_is_connected(self):
+        layer = sparsh_link.prompt_text({"phones": []})
+        assert "USB debugging" in layer and "WebDriverAgent" in layer
+
+    def test_an_iphone_signature_running_out_is_said_at_start(self):
+        note = "the iPhone's WebDriverAgent signature runs out Wed 08 Oct 16:02: rebuild it"
+        line = sparsh_link.announce({"phones": [], "wda": {"note": note}}, 9, "sparsh")
+        assert f"; {note} -- via sparsh" in line
+        assert "signature" not in sparsh_link.announce({"phones": [], "wda": None}, 9, "sparsh")
+
     def test_apps_kept_out_are_said_at_start(self, clean, tmp_path):
         _, _, manager, out = start(tmp_path, str(make_sparsh(tmp_path, never=["*bank*"])))
         try:
@@ -225,7 +246,7 @@ class TestWhenNot:
         _, agent, manager, out = start(tmp_path, str(make_sparsh(tmp_path, phones=[])))
         try:
             assert "phone no phone attached" in out
-            assert "none is attached right now" in agent.prompt.get("phone")
+            assert "none is ready right now" in agent.prompt.get("phone")
         finally:
             manager.shutdown()
 

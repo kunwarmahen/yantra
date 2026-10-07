@@ -1,10 +1,11 @@
 """The person's phone -- through Sparsh, found at startup.
 
-Sparsh (a separate project) works an Android phone, or the emulator,
-through ``adb``: it shows the screen as a numbered list a model can read
-without seeing a picture, and taps, types and scrolls by number. It
-ships the agent's tools as an MCP server (``sparsh mcp``); this module
-finds it, starts it, and decides what a person is asked about.
+Sparsh (a separate project) works an Android phone or the emulator
+through ``adb``, or an iPhone through WebDriverAgent: it shows the
+screen as a numbered list a model can read without seeing a picture,
+and taps, types and scrolls by number. It ships the agent's tools as an
+MCP server (``sparsh mcp``); this module finds it, starts it, and
+decides what a person is asked about.
 
 FOUND LIKE SAMAY, BY THE SAME KIND OF CONTRACT. ``sparsh status --json``
 prints what Sparsh is: its state folder, the phones ``adb`` sees, the
@@ -171,11 +172,25 @@ def _phone_words(data: dict[str, Any]) -> str:
     return ", ".join(f"{p.get('serial')} ({p.get('model') or '?'})" for p in phones)
 
 
+def _is_iphone(phone: dict[str, Any]) -> bool:
+    # Sparsh names an iPhone by its WebDriverAgent's address.
+    return str(phone.get("serial") or "").startswith(("http://", "https://"))
+
+
+def _kind_words(phones: list[dict[str, Any]]) -> str:
+    kinds = {"iPhone" if _is_iphone(p) else "Android phone" for p in phones}
+    return kinds.pop() if len(kinds) == 1 else "phones"
+
+
 def announce(data: dict[str, Any], tools: int, program: str) -> str:
     """The one startup line: tools, which phone, and the apps kept out."""
     never = (data.get("rules") or {}).get("never") or []
     kept = f"; kept out of {', '.join(never)}" if never else ""
-    return f"sparsh: {tools} tool(s); phone {_phone_words(data)}{kept} -- via {program}"
+    # Sparsh's own sentence when an iPhone's signature is about to run
+    # out: said here, at the start, and never as a question.
+    soon = ((data.get("wda") or {}).get("note") or "").strip()
+    soon = f"; {soon}" if soon else ""
+    return f"sparsh: {tools} tool(s); phone {_phone_words(data)}{kept}{soon} -- via {program}"
 
 
 def prompt_text(data: dict[str, Any]) -> str:
@@ -183,12 +198,13 @@ def prompt_text(data: dict[str, Any]) -> str:
     phones = ready_phones(data)
     lines = ["# The person's phone (through Sparsh)"]
     if not phones:
-        lines.append("The `mcp__sparsh__` tools work an Android phone, but none is "
-                     "attached right now: if asked to use it, say the phone needs "
-                     "plugging in (with USB debugging on) or the emulator starting.")
+        lines.append("The `mcp__sparsh__` tools work a phone (Android or iPhone), but "
+                     "none is ready right now: if asked to use it, say the phone needs "
+                     "connecting -- an Android phone plugged in with USB debugging on, "
+                     "the emulator started, or an iPhone with WebDriverAgent running.")
         return "\n".join(lines)
     lines += [
-        f"You can work the person's Android phone ({_phone_words(data)}) with the "
+        f"You can work the person's {_kind_words(phones)} ({_phone_words(data)}) with the "
         "`mcp__sparsh__` tools, when they ask for something done on it.",
         "1. `mcp__sparsh__look` shows the screen as numbered lines. Act BY NUMBER: "
         "`tap`, `type_text` (`into` a field), `scroll` (`on` a list). Every action "
@@ -200,6 +216,10 @@ def prompt_text(data: dict[str, Any]) -> str:
         "Never try to get round a hold another way.",
         "4. \"The screen changed\" means nothing was done: use the screen it gives you.",
     ]
+    if any(_is_iphone(p) for p in phones):
+        lines.append("5. An iPhone has no Back key: `press_key` back swipes in from the "
+                     "left edge. If the screen doesn't change, tap the app's own Back, "
+                     "Cancel or Close instead.")
     return "\n".join(lines)
 
 
