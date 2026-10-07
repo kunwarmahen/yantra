@@ -127,6 +127,37 @@ class TestWhoAndWhether:
         assert memory_mode(None, env={"YANTRA_MEMORY": "off"}) == "off"
         assert memory_mode("local", env={"YANTRA_MEMORY": "off"}) == "local"
 
+    def test_the_store_named_in_dotenv_is_the_one_a_session_uses(
+            self, tmp_path, monkeypatch):
+        """YANTRA_MEMORY=smritikosh in .env was ignored: the spec was
+        settled before anything read .env, so the session stayed local."""
+        from yantra import config
+        from yantra.cli.main import _resolve_spec, build_parser
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("YANTRA_MEMORY", raising=False)
+        monkeypatch.setattr(config, "_dotenv_loaded", False)
+        monkeypatch.setattr(config, "_shadowed", set())
+        (tmp_path / ".env").write_text("YANTRA_MEMORY=kosh\n")
+        args = build_parser().parse_args(["--cwd", str(tmp_path)])
+        try:
+            assert _resolve_spec(args).memory == "kosh"
+        finally:
+            monkeypatch.delenv("YANTRA_MEMORY", raising=False)
+
+    def test_what_a_store_says_is_printed_with_its_brackets(self):
+        """'[[mcp]] in agent.toml' reached the terminal as '[] in
+        agent.toml': the console took the brackets for markup."""
+        from yantra.cli.main import _announce_memory
+
+        class Unbound(BrokenStore):
+            def list(self, *args):
+                raise MemoryStoreError("not connected (or [[mcp]] in agent.toml)")
+        agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry())
+        enable_memory(agent, Unbound(), user="asha")
+        out = io.StringIO()
+        _announce_memory(agent, AgentSpec(), Console(file=out, width=200))
+        assert "[[mcp]] in agent.toml" in out.getvalue()
+
     def test_anything_else_names_an_mcp_server(self):
         assert memory_mode(None, env={"YANTRA_MEMORY": "mem0"}) == "mem0"
 

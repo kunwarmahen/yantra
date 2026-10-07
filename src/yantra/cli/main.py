@@ -585,7 +585,10 @@ def _resolve_spec(args) -> AgentSpec:
         spec = replace(spec, skills=True)
     if spec.memory is None:
         # Reached only with no package (a package always says, off when
-        # silent) and no flag: a session of your own.
+        # silent) and no flag: a session of your own. The knob usually
+        # lives in .env, which nothing has read yet: the provider's
+        # settings, which do read it, come after the spec.
+        _load_dotenv()
         try:
             spec = replace(spec, memory=memory_mode())
         except ValueError as exc:
@@ -606,10 +609,12 @@ def _announce_memory(agent: Agent, spec: AgentSpec, console: Console) -> None:
             count = f"unreadable ({exc})"
         cannot = memory.cannot()
         gaps = f"; cannot {', '.join(cannot)}" if cannot else ""
+        # what a store says may hold brackets ("[[mcp]] in agent.toml"),
+        # which the console would otherwise take for markup and drop
         console.print(f"[dim]memory: {memory.store.name} for {memory.user} -- "
-                      f"{count}{gaps} (/memory; --memory off)[/dim]")
+                      f"{escape(count)}{gaps} (/memory; --memory off)[/dim]")
     elif problem := getattr(agent, "memory_problem", None):
-        console.print(f"[yellow]memory: off -- {problem}[/yellow]")
+        console.print(f"[yellow]memory: off -- {escape(str(problem))}[/yellow]")
     elif spec.memory not in (None, "off"):
         console.print("[yellow]memory: off -- no identity to keep it under "
                       "(set YANTRA_USER)[/yellow]")
@@ -2903,7 +2908,7 @@ def main(argv: list[str] | None = None) -> int:
         # up, and before tool selection, since binding takes the server's
         # own memory tools out of the roster (memory/mcp.py).
         if problem := bind_memory_server(agent, mcp_manager):
-            console.print(f"[yellow]{problem}[/yellow]")
+            console.print(f"[yellow]{escape(problem)}[/yellow]")
         _announce_memory(agent, spec, console)
 
         # Operator kill-switch: YANTRA_DISABLED_TOOLS globs unregister
