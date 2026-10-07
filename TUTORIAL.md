@@ -2289,6 +2289,7 @@ Most carry a live receipt from a real run.
 | [117](notes/117-asked-what-it-is.md) | `yantra status`: which release, which model a turn would ask and why, and whether a local model is there to answer |
 | [118](notes/118-the-internet-is-not-a-read.md) | a site check that allowed nothing: new samples first, then the one fact the model was missing |
 | [119](notes/119-a-phone-and-what-asks.md) | a phone through Sparsh: why its ordinary taps don't ask, why `confirm` always does, and why the page peeks instead of looking |
+| [120](notes/120-thirteen-tasks-on-a-phone.md) | thirteen phone tasks on two local models, graded by the phone: 12 of 13 each, every send held, and the four things it found in Sparsh first |
 
 ### The neighbours
 

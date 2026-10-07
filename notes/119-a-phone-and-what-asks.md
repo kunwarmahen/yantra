@@ -196,8 +196,10 @@ has the rest.
   but has no phone panel (which phone, the rules in force).~~ Done:
   *The panel peeks*, above. Live on the emulator, a peek with its
   screenshot took 2.4 s.
-* The trial: these tasks and more on `qwen3.8:latest`, `gemma4:12b` and
-  a frontier cloud model, counted.
+* ~~The trial: these tasks and more on `qwen3.8:latest`, `gemma4:12b` and
+  a frontier cloud model, counted.~~ Done for two local models:
+  [note 120](120-thirteen-tasks-on-a-phone.md), 12 of 13 each, every
+  send held. The cloud model is parked.
 * An iPhone, run for real. Sparsh drives one through WebDriverAgent
   ([its note 03](https://github.com/kunwarmahen/sparsh/blob/main/notes/03-an-iphone-through-a-mac.md));
   here the model is told it's an iPhone (Back is a swipe from the

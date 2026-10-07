@@ -764,7 +764,11 @@ model is told "NOT DONE", and the only way through is
 the screen it will happen on. `YANTRA_SPARSH=/path/to/sparsh` names it
 when it is elsewhere; `--sparsh` insists, even with no phone attached;
 `--no-sparsh` never looks; a `--unattended` run gets no phone
-([notes/119](notes/119-a-phone-and-what-asks.md)). In the browser UI a
+([notes/119](notes/119-a-phone-and-what-asks.md)). Counted on thirteen
+everyday tasks on a fresh emulator, `qwen3.8:latest` and `gemma4:26b`
+each did twelve, every text was held for a yes, and a "no" was never
+gone round ([notes/120](notes/120-thirteen-tasks-on-a-phone.md),
+`examples/phone_trial.py`). In the browser UI a
 **phone** chip opens the phone panel: the phones `adb` sees, **see the
 screen** for a screenshot beside the exact lines the agent reads, and
 the rules in force (the words that need a yes, the apps kept out, the
@@ -1212,7 +1216,12 @@ doesn't, say *when* right, and allow only what the job needs? Fourteen
 messages, real Samay on scratch state, stub mail tools; Samay itself
 grades the `when` — [notes/116](notes/116-offered-at-the-right-moment.md);
 `--cases examples/schedule_offer_sites.jsonl` runs six site checks kept
-out of tuning — [notes/118](notes/118-the-internet-is-not-a-read.md)), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+out of tuning — [notes/118](notes/118-the-internet-is-not-a-read.md)),
+[`examples/phone_trial.py`](examples/phone_trial.py)
+(can a model work a phone through Sparsh? Thirteen everyday tasks on a
+throwaway emulator, graded by reading the phone over `adb`, not by the
+answer; two texts check a yes sends once and a no sends nothing —
+[notes/120](notes/120-thirteen-tasks-on-a-phone.md)), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation

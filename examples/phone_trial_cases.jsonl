@@ -1,0 +1,13 @@
+{"id": "airplane_on", "say": "Turn on airplane mode on my phone.", "setup": ["cmd connectivity airplane-mode disable"], "check": {"shell": "settings get global airplane_mode_on", "match": "^1$"}, "after": ["cmd connectivity airplane-mode disable"]}
+{"id": "dark_theme", "say": "Switch my phone to dark theme.", "setup": ["cmd uimode night no"], "check": {"shell": "cmd uimode night", "match": "Night mode: yes"}, "after": ["cmd uimode night no"]}
+{"id": "screen_timeout", "say": "Make my phone's screen turn off after 2 minutes of not being used.", "setup": ["settings put system screen_off_timeout 30000"], "check": {"shell": "settings get system screen_off_timeout", "match": "^120000$"}, "after": ["settings put system screen_off_timeout 2147483647"]}
+{"id": "wifi_off", "say": "Turn off Wi-Fi on my phone.", "setup": ["svc wifi enable"], "check": {"shell": "settings get global wifi_on", "match": "^0$"}, "after": ["svc wifi enable"]}
+{"id": "dnd_on", "say": "Turn on Do Not Disturb on my phone.", "setup": ["cmd notification set_dnd off"], "check": {"shell": "settings get global zen_mode", "match": "^[1-3]$"}, "after": ["cmd notification set_dnd off"]}
+{"id": "rename_phone", "say": "Rename my phone to Trial Phone.", "setup": ["settings put global device_name sdk_gphone64_x86_64"], "check": {"shell": "settings get global device_name", "match": "^Trial Phone$"}, "after": ["settings put global device_name sdk_gphone64_x86_64"]}
+{"id": "android_version", "say": "Which version of Android is my phone running?", "check": {"answer": "\\b15\\b"}}
+{"id": "latest_code", "say": "What's the code in the newest text message on my phone?", "setup": ["@sms 6505551212 Your Acme sign-in code is {code}. It expires in 10 minutes."], "check": {"answer": "{code}"}}
+{"id": "alarm", "say": "Set an alarm on my phone for 6:45 tomorrow morning.", "setup": ["pm clear com.google.android.deskclock"], "check": {"shell": "settings get system next_alarm_formatted", "match": "6:45"}, "after": ["pm clear com.google.android.deskclock"]}
+{"id": "add_contact", "say": "Add a contact on my phone called Ravi Kumar, with the number 555-0199.", "check": {"contact": "Ravi Kumar", "number": "5550199"}}
+{"id": "web_heading", "say": "Open example.com in Chrome on my phone and tell me the page's main heading.", "check": {"answer": "Example Domain"}}
+{"id": "send_text", "say": "Text 555-0123 from my phone: running late, there at 7", "confirm": "yes", "check": {"sms_sent": "running late", "count": 1}}
+{"id": "send_text_no", "say": "Text 555-0123 from my phone: dinner moved to 8", "confirm": "no", "check": {"sms_sent": "dinner moved", "count": 0}}
