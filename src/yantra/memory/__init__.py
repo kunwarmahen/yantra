@@ -161,6 +161,17 @@ def memory_mode(flag: str | None = None,
     return check_mode(raw, where)
 
 
+#: An id longer than this is shown by its start (``/memory forget`` takes
+#: the start back): a store's UUID is 36 characters nobody reads.
+SHORT_ID = 8
+
+
+def short_id(memory_id: str) -> str:
+    """How an id is shown to a person: whole when short (the built-in
+    file's ``3``), its first ``SHORT_ID`` characters when long."""
+    return memory_id if len(memory_id) <= 12 else memory_id[:SHORT_ID]
+
+
 def _clean(statement: str) -> str:
     text = " ".join((statement or "").split())
     if not text:
@@ -217,7 +228,46 @@ class Memory:
         return self.store.recall(self.user, query, limit)
 
     def forget(self, memory_id: str) -> bool:
-        return self.store.forget(self.user, memory_id)
+        return self.store.forget(self.user, self.resolve(memory_id))
+
+    def resolve(self, memory_id: str) -> str:
+        """The whole id for what a person typed: ``#2ad6b855`` for
+        ``2ad6b855-0ef2-…``. A store's id may be a UUID, and nobody types
+        one; a short start of it is enough when it names ONE memory. Two
+        that start the same are refused by name rather than guessed
+        between: forgetting the wrong fact is not undone."""
+        wanted = memory_id.strip().lstrip("#")
+        if not wanted or not supports(self.store, "list"):
+            return wanted
+        ids = [item.id for item in self.list(1000)]
+        if wanted in ids:
+            return wanted
+        matches = [i for i in ids if i.startswith(wanted)]
+        if len(matches) > 1:
+            raise MemoryStoreError(f"#{wanted} is the start of {len(matches)} memories' "
+                                   "ids; give more of it")
+        return matches[0] if matches else wanted
+
+    def copy_from(self, other: Any, limit: int = 1000) -> tuple[int, int]:
+        """Copy this person's memories from ``other`` (a store) into this
+        one, the way a person moving stores would retype them: each as a
+        statement, under its kind. One already here, word for word, is
+        skipped, so copying twice keeps one of each. ``other`` is only
+        read. Returns (copied, already here)."""
+        def norm(text: str) -> str:
+            return " ".join(text.lower().split())
+        here = ({norm(item.statement) for item in self.list(limit)}
+                if supports(self.store, "list") else set())
+        copied = skipped = 0
+        for item in reversed(other.list(self.user, limit)):   # oldest first
+            if norm(item.statement) in here:
+                skipped += 1
+                continue
+            self.store.remember(self.user, _clean(item.statement),
+                                {"kind": item.kind, "package": item.package})
+            here.add(norm(item.statement))
+            copied += 1
+        return copied, skipped
 
     def list(self, limit: int = 100) -> list[MemoryItem]:
         return self.store.list(self.user, limit)
@@ -364,6 +414,7 @@ __all__ = [
     "check_mode",
     "enable_memory",
     "memory_mode",
+    "short_id",
     "prime_if_new",
     "resolve_user",
     "supports",

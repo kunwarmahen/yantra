@@ -195,6 +195,38 @@ The stand-in rejected any store call that didn't carry
 `--mcp-config`, the session still starts. It prints the *not connected*
 line and carries on without memory.
 
+## Moving to it, and ids nobody types
+
+Two things stood between a person and a store they had just connected.
+What the built-in file already held stayed there, to be retyped. And a
+server's ids are its own: Smritikosh's is a UUID, so `/memory` printed
+36 characters a row and `/memory forget 1` found nothing.
+
+**`/memory copy local`** copies this person's memories from the built-in
+file into the session's store, oldest first, each under its kind. One
+already there word for word (case and spacing aside) is skipped, so a
+second copy adds nothing. The file is only read: going back to `local`
+finds everything where it was.
+
+**A LONG ID IS SHOWN BY ITS START, AND ITS START IS ENOUGH.** Ids over
+twelve characters show as their first eight, and `forget` takes any start
+that names exactly one memory, with or without the `#`. A start shared by
+two is refused by name, not guessed between: forgetting the wrong fact is
+not undone.
+
+```
+> /memory copy local
+memory: copied 2 from the built-in file into smritikosh (the file is unchanged)
+> /memory
+memory: smritikosh, for asha -- 2 remembered
+   #5f319252  Uses uv, not pip
+   #dab2ebc2  Lives near RDU
+> /memory copy local
+memory: copied 0 from the built-in file into smritikosh; 2 already there (the file is unchanged)
+> /memory forget dab2
+forgot #dab2 -- gone from the next conversation on
+```
+
 How often a fact said in passing comes back, on `local` and on
 Smritikosh, and what changes once the fact is buried under newer ones,
 is measured in [note 103](103-said-once-found-later.md).

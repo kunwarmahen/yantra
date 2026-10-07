@@ -300,25 +300,28 @@ memory: smritikosh, for asha -- 0 remembered
 
 ```
 > /memory add Prefers a window seat on flights
-remembered #2ad6b855-0ef2-43ce-8d0c-2a3ff5f78585
+remembered #2ad6b855
 > /memory find aeroplane seating
 memory: smritikosh, for asha -- 1 match 'aeroplane seating'
-   #2ad6b855-0ef2-43ce-8d0c-2a3ff5f78585  Prefers a window seat on flights
+   #2ad6b855  Prefers a window seat on flights
 ```
 
 No word in *"aeroplane seating"* is in the memory, and it was found
 anyway. That's the whole point. (That's real output, on the local road
 with `nomic-embed-text`.)
 
-To remove a memory, give its whole id: `/memory forget
-2ad6b855-0ef2-43ce-8d0c-2a3ff5f78585`. A Smritikosh id is long. The short
-numbers in the tutorial (`/memory forget 1`) belong to the built-in file.
+To remove a memory, give its id as `/memory` shows it: `/memory forget
+2ad6b855`. Smritikosh's ids are long, so the list shows their first
+eight characters, and any start that names one memory is enough.
 
 On the page (`yantra --web`), the bookmark chip in the header shows the
 same list.
 
-You may see lines starting `INFO ... HTTP Request:` in the terminal. That's
-Smritikosh's program logging its own work. It's harmless.
+Smritikosh's program keeps quiet in Yantra's terminal and prints only
+warnings. To watch every request it makes while you track a problem down,
+add `"SMRITIKOSH_MCP_LOG_LEVEL": "INFO"` to its `env` in
+`.yantra/mcp.json`. (An older Smritikosh prints those lines anyway: `git
+pull` in its folder.)
 
 ## Every day after this
 
@@ -362,10 +365,16 @@ loginctl enable-linger "$USER"     # keep it running when you're logged out
 
 ## Good to know
 
-**Memories don't move over by themselves.** What the built-in file
-already holds stays there. Open `/memory` with the old setting
-(`yantra --memory local`), and copy anything you want into Smritikosh with
-`/memory add`.
+**Bring what Yantra already knows about you.** What the built-in file
+holds doesn't move by itself. Once `/memory` says `smritikosh`, type:
+
+```
+> /memory copy local
+memory: copied 2 from the built-in file into smritikosh (the file is unchanged)
+```
+
+Running it twice is harmless: a memory already there is skipped. The file
+itself is left as it was.
 
 **Going back is one setting.** `YANTRA_MEMORY=local` in `.env` goes back to
 the built-in file, and `--memory off` turns memory off for one session.

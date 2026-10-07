@@ -65,6 +65,33 @@ class BrokenStore:
     recall = list = forget = remember
 
 
+class UuidStore:
+    """A server's store, in memory: long ids, the way Smritikosh's are."""
+    name = "kosh"
+
+    def __init__(self, ids=None):
+        import uuid
+        self._ids = list(ids) if ids else None
+        self._new = lambda: self._ids.pop(0) if self._ids else str(uuid.uuid4())
+        self.rows: list[tuple[str, MemoryItem]] = []
+
+    def remember(self, user, statement, meta):
+        item = MemoryItem(self._new(), statement, kind=meta.get("kind"))
+        self.rows.append((user, item))
+        return item.id
+
+    def recall(self, user, query, limit):
+        return [i for u, i in self.rows if u == user and query.lower() in i.statement.lower()]
+
+    def forget(self, user, memory_id):
+        before = len(self.rows)
+        self.rows = [(u, i) for u, i in self.rows if not (u == user and i.id == memory_id)]
+        return len(self.rows) < before
+
+    def list(self, user, limit):
+        return [i for u, i in reversed(self.rows) if u == user][:limit]
+
+
 # ---- the local store ---------------------------------------------------------
 
 
@@ -361,6 +388,53 @@ class TestReplCommand:
         repl._command("/memory forget 1")
         assert store.list("asha", 5) == []
         assert "forgot #1" in out.getvalue()
+
+    def test_a_long_id_is_shown_short_and_its_start_forgets_it(self):
+        """A server's id is a UUID: /memory showed 36 characters, and
+        '/memory forget 1' (the tutorial's) found nothing."""
+        kosh = UuidStore()
+        kept = kosh.remember("asha", "Prefers a window seat", {})
+        repl, out = self._repl(kosh)
+        repl._command("/memory")
+        assert f"#{kept[:8]}  Prefers a window seat" in out.getvalue()
+        assert kept not in out.getvalue()
+        repl._command(f"/memory forget #{kept[:8]}")
+        assert kosh.list("asha", 5) == []
+        assert f"forgot #{kept[:8]}" in out.getvalue()
+
+    def test_a_start_that_names_two_memories_forgets_neither(self):
+        kosh = UuidStore(ids=["abcd1111-0000", "abcd2222-0000"])
+        kosh.remember("asha", "one", {})
+        kosh.remember("asha", "two", {})
+        repl, out = self._repl(kosh)
+        repl._command("/memory forget abcd")
+        assert len(kosh.list("asha", 5)) == 2
+        assert "start of 2 memories" in out.getvalue()
+
+    def test_copy_local_moves_the_built_in_file_into_the_new_store(
+            self, tmp_path, monkeypatch):
+        """Switching to a server left everything already remembered behind
+        in the built-in file, to be retyped by hand."""
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+        old = LocalStore(default_path())
+        old.remember("asha", "Lives near RDU", {"kind": "fact"})
+        old.remember("asha", "Uses uv, not pip", {"kind": "preference"})
+        old.remember("ravi", "Somebody else's", {})
+        kosh = UuidStore()
+        kosh.remember("asha", "uses UV, not pip", {})
+        repl, out = self._repl(kosh)
+        repl._command("/memory copy local")
+        assert sorted(i.statement for i in kosh.list("asha", 10)) == [
+            "Lives near RDU", "uses UV, not pip"]
+        assert "copied 1 from the built-in file into kosh; 1 already there" in out.getvalue()
+        assert len(old.list("asha", 10)) == 2              # only read
+        repl._command("/memory copy local")
+        assert len(kosh.list("asha", 10)) == 2              # twice keeps one of each
+
+    def test_copy_local_on_the_built_in_file_copies_nothing(self, store):
+        repl, out = self._repl(store)
+        repl._command("/memory copy local")
+        assert "already uses the built-in file" in out.getvalue()
 
     def test_memory_off_says_why(self):
         agent = Agent(ScriptedProvider([]), model="m")

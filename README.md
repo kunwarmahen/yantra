@@ -376,8 +376,10 @@ memory: local, for asha -- 1 remembered
  * #1  Lives near RDU (Raleigh-Durham International Airport)
 ```
 
-`/memory forget ID` removes one, `/memory add TEXT` keeps one in your
-words, and `/memory find WORDS` searches. The page's bookmark chip opens
+`/memory forget ID` removes one (the start of a long id is enough),
+`/memory add TEXT` keeps one in your words, `/memory find WORDS`
+searches, and `/memory copy local` copies the built-in file into a store
+you moved to. The page's bookmark chip opens
 the same list. It's on for your own sessions, stored in
 `~/.local/state/yantra/memory.sqlite` across every project, under
 `$YANTRA_USER` or else your login name. With no identity, there is no

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.status import Status
@@ -31,6 +32,7 @@ from yantra.config import default_model, load_settings
 from yantra.context import RED, estimate_history
 from yantra.errors import ImageError, RateLimitError, UserUnavailable
 from yantra.images import load_image_block
+from yantra.memory import short_id
 from yantra.memory.reflect import (Candidate, decline, keep, mark_reviewed,
                                    reflect)
 from yantra.pricing import is_free, session_cost
@@ -75,6 +77,7 @@ HELP = """[bold]commands[/bold]
   /memory forget ID  remove one -- a fact that stopped being true
   /memory add TEXT   tell it something to keep, in your own words
   /memory find WORDS search what is remembered
+  /memory copy local copy what the built-in file keeps into this store
   /remember          look back over this conversation now for things
                      worth keeping about you (it also happens by itself on
                      /quit, /clear and /load; you keep or drop each)
@@ -576,6 +579,28 @@ class Repl:
         return (f"skill {name}: this use counted as failed "
                 f"({record.failing} in a row; set aside at 3)")
 
+    def _memory_copy(self, memory: Any, source: str) -> None:
+        """``/memory copy local``: what the built-in file keeps about you,
+        into the store this session uses. The file is only read."""
+        from yantra.memory.local import LocalStore, default_path
+        if source != "local":
+            self.console.print("[red]usage: /memory copy local[/red]")
+            return
+        if memory.store.name == "local":
+            self.console.print("[yellow]this session already uses the built-in "
+                               "file; nothing to copy[/yellow]")
+            return
+        path = default_path()
+        if not path.is_file():
+            self.console.print(f"[yellow]no built-in memory file at "
+                               f"{escape(str(path))}[/yellow]")
+            return
+        copied, skipped = memory.copy_from(LocalStore(path))
+        self.console.print(f"memory: copied {copied} from the built-in file into "
+                           f"{memory.store.name}"
+                           + (f"; {skipped} already there" if skipped else "")
+                           + " (the file is unchanged)", markup=False)
+
     def _memory_command(self, arg: str) -> None:
         """``/memory``: read and correct what is remembered about you.
 
@@ -596,7 +621,7 @@ class Repl:
                 if not rest:
                     self.console.print("[red]usage: /memory forget ID[/red]")
                 elif memory.forget(rest):
-                    self.console.print(f"[green]forgot #{rest}[/green] -- "
+                    self.console.print(f"[green]forgot #{escape(rest.lstrip('#'))}[/green] -- "
                                        "gone from the next conversation on")
                 else:
                     self.console.print(f"[red]no memory #{rest}[/red]")
@@ -606,14 +631,17 @@ class Repl:
                     self.console.print("[red]usage: /memory add TEXT[/red]")
                     return
                 memory_id = memory.remember(rest, kind="fact")
-                self.console.print(f"[green]remembered #{memory_id}[/green]")
+                self.console.print(f"[green]remembered #{short_id(memory_id)}[/green]")
+                return
+            if verb == "copy":
+                self._memory_copy(memory, rest)
                 return
             if verb == "find":
                 items = memory.recall(rest, 20) if rest else []
                 title = f"{len(items)} match {rest!r}"
             elif verb:
                 self.console.print("[red]usage: /memory [forget ID | add TEXT "
-                                   "| find WORDS][/red]")
+                                   "| find WORDS | copy local][/red]")
                 return
             elif "list" in memory.cannot():
                 self.console.print(
@@ -633,7 +661,7 @@ class Repl:
         for item in items:
             mark = "*" if item.id in shown else " "
             where = f"  [{item.package}]" if item.package else ""
-            lines.append(f" {mark} #{item.id}  {item.statement}{where}")
+            lines.append(f" {mark} #{short_id(item.id)}  {item.statement}{where}")
         if not items and not verb:
             lines.append("  nothing yet -- tell the agent about yourself, or "
                          "/memory add TEXT")
