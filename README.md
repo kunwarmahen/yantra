@@ -740,7 +740,10 @@ and it says at the top when the clock is not running
 ([notes/115](notes/115-what-a-yes-covers.md)).
 
 **Your phone, through Sparsh.** [Sparsh](https://github.com/kunwarmahen/sparsh)
-works an Android phone (or the emulator on this computer) through `adb`.
+works an Android phone (or the emulator on this computer) through `adb`,
+or an iPhone once a Mac has signed its helper app (Sparsh's
+[SETUP.md](https://github.com/kunwarmahen/sparsh/blob/main/SETUP.md)
+covers all three).
 The model doesn't get a screenshot. It gets the phone's own description
 of the screen as numbered lines (`6 item "Airplane mode" [tap, off]`),
 and it answers "tap 6". That's why a local model can do it. When

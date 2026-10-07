@@ -2005,7 +2005,7 @@ read each step.
 | Setting | Read by | Documented in |
 |---|---|---|
 | `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_SPARSH` | Yantra | this repo's README |
-| `SPARSH_STATE`, `SPARSH_RULES`, `ANDROID_SERIAL` | Sparsh | Sparsh's README |
+| `SPARSH_STATE`, `SPARSH_RULES`, `ANDROID_SERIAL`, `SPARSH_WDA` | Sparsh | Sparsh's README and SETUP.md |
 | `SAMAY_STATE`, `SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`, `SAMAY_TZ` | Samay | Samay's README |
 | `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
 | `DVARA_TOKEN`, `DVARA_ROOT`, `DVARA_ACTORS`, `DVARA_STATE`, `DVARA_SAMAY` | dvara | dvara's README |
@@ -2037,7 +2037,10 @@ your own computer does well, so this works on a local model.
 **Set it up.** You need a phone, or the Android emulator if you'd rather
 not use your own phone:
 
-1. Install Sparsh and `adb` (Sparsh's README, *Getting a phone ready*).
+1. Install Sparsh and `adb`. Sparsh's
+   [SETUP.md](https://github.com/kunwarmahen/sparsh/blob/main/SETUP.md)
+   goes through it step by step for the emulator, an Android phone and an
+   iPhone; the short version for Android is here.
    For the emulator, install Android Studio, create a phone in *Device
    Manager*, and start it:
 
@@ -2123,8 +2126,10 @@ the emulator), then press **use this phone** in the panel, or type
 
 **Not yet:** schedules don't get a phone (nobody would be there to say
 yes to a held step), and typing is plain English letters only (no é,
-Hindi or emoji yet). iPhones need a Mac to set up once; Sparsh's note 03
-has how.
+Hindi or emoji yet). An iPhone needs a Mac to set up once (Sparsh's
+SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
+starting Yantra. That road hasn't been run on a real iPhone yet, and the
+phone panel doesn't accept an iPhone's address yet.
 
 ---
 
