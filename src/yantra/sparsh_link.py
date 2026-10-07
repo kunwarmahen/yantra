@@ -20,6 +20,8 @@ rather than guessed at. ``YANTRA_SPARSH`` or the flags choose:
     on    use it, and say so loudly if it cannot be found (--sparsh)
     off   never look (--no-sparsh)
     PATH  the sparsh program to run, which also means "on" (--sparsh PATH)
+    auto:PATH  auto, with this sparsh program instead of the one on PATH
+          (what Sarathi passes: found by it, still dormant with no phone)
 
 THE PHONE'S RULES DECIDE WHAT ASKS, NOT THE SERVER'S HINTS. Sparsh's
 taps honestly say they change things, and a card before every tap would
@@ -49,6 +51,24 @@ the agent, and its next "tap 7" would be checked against the person's
 7. The panel shows everything, apps on the ``never`` list included: it
 is the person's own eyes, and nothing it reads reaches the model.
 
+SCREENSHOTS ONLY WHERE THE LIST HAS NOTHING, AND NOT TO A CLOUD MODEL
+UNASKED. The model works from the numbered list. A screen that gives
+the list nothing (Settings' About page, which never goes still; an app
+drawn as one picture) can come with a screenshot: Sparsh attaches one
+when started with ``--shots``, and the tools here pass it on to the
+model. ``YANTRA_PHONE_SHOTS`` decides whether that happens:
+
+    auto  (default) yes for a local model that says it can see (Ollama's
+          ``/api/show`` lists "vision"); no for a cloud model -- a
+          phone's screen is the person's messages, names and codes
+    on    yes, cloud models included: the person's own choice
+    off   never
+
+It is asked again on every call, so a switch to a cloud model mid-session
+stops the pictures (a switch to a local one doesn't start them: Sparsh
+was started without ``--shots``). The picture is for reading: there is
+still no tapping by position.
+
 NOT WITH NOBODY WATCHING. A run nobody watches (``--unattended``) gets
 no phone: everything it may do by itself would be done on a phone no
 one is looking at, and a held step could only be refused.
@@ -64,8 +84,11 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 from typing import Any
+
+import httpx
 
 from yantra.mcp import MCPServerConfig
 
@@ -82,6 +105,10 @@ SERIAL_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
                        r"|https?://[A-Za-z0-9.:\[\]-]{1,80}/?)$")  # or an iPhone's WDA
 #: How long a peek may take: a dump (~2.5 s) and a screenshot.
 PEEK_TIMEOUT = 30.0
+#: auto / on / off: screenshots of unreadable screens to the model.
+SHOTS_ENV = "YANTRA_PHONE_SHOTS"
+#: How long asking the local server whether a model can see may take.
+SEE_TIMEOUT = 3.0
 
 
 class SparshLinkError(Exception):
@@ -100,6 +127,8 @@ def resolve_mode(flag: str | None, env: str | None = None) -> tuple[str, str | N
         return "auto", None
     if raw.lower() in ("on", "off"):
         return raw.lower(), None
+    if raw.lower().startswith("auto:") and raw[5:].strip():
+        return "auto", os.path.expanduser(raw[5:].strip())
     return "on", os.path.expanduser(raw)
 
 
@@ -154,14 +183,54 @@ def load(mode: str, path: str | None = None,
         if mode == "on" or path:
             raise
         return None
-    if need_phone and mode == "auto" and not path and not ready_phones(data):
+    if need_phone and mode == "auto" and not ready_phones(data):
         return None                   # nothing to work: no tools, no prompt
     return data, program
 
 
-def server_config(data: dict[str, Any]) -> MCPServerConfig:
+def server_config(data: dict[str, Any], shots: bool = False) -> MCPServerConfig:
     mcp = data["mcp"]
-    return MCPServerConfig(name=SERVER, command=mcp["command"], args=list(mcp.get("args") or []))
+    args = list(mcp.get("args") or [])
+    if shots and data.get("shots"):
+        args.append(str(data["shots"]))
+    return MCPServerConfig(name=SERVER, command=mcp["command"], args=args)
+
+
+def shots(provider: str, base_url: str, model: str,
+          setting: str | None = None) -> tuple[bool, str]:
+    """(send screenshots of unreadable screens to this model?, why), in
+    words for the startup line. See SCREENSHOTS in the module docstring."""
+    raw = (setting if setting is not None else os.environ.get(SHOTS_ENV, "")).strip().lower()
+    raw = raw or "auto"
+    if raw == "off":
+        return False, f"screenshots off ({SHOTS_ENV}=off)"
+    if raw == "on":
+        return True, f"screenshots on ({SHOTS_ENV}=on)"
+    if raw != "auto":
+        return False, f"screenshots off ({SHOTS_ENV}={raw!r} is not auto, on or off)"
+    if not _is_local(provider, base_url):
+        return False, f"no screenshots to a cloud model ({SHOTS_ENV}=on to allow)"
+    if not _can_see(base_url, model):
+        return False, f"no screenshots: {model} can't see pictures"
+    return True, "screenshots on (local model)"
+
+
+def _is_local(provider: str, base_url: str) -> bool:
+    host = (urlparse(base_url).hostname or "").lower()
+    return provider == "ollama" or host in ("localhost", "127.0.0.1", "::1")
+
+
+def _can_see(base_url: str, model: str) -> bool:
+    """Whether a local Ollama model lists "vision" among its capabilities.
+    Unknown (another server, no answer) is no: a picture sent to a model
+    that can't take one fails the turn."""
+    root = base_url.rstrip("/").removesuffix("/v1")
+    try:
+        response = httpx.post(f"{root}/api/show", json={"model": model},
+                              timeout=SEE_TIMEOUT)
+        return "vision" in (response.json().get("capabilities") or [])
+    except (httpx.HTTPError, ValueError, AttributeError, TypeError):
+        return False
 
 
 def _phone_words(data: dict[str, Any]) -> str:
@@ -182,7 +251,7 @@ def _kind_words(phones: list[dict[str, Any]]) -> str:
     return kinds.pop() if len(kinds) == 1 else "phones"
 
 
-def announce(data: dict[str, Any], tools: int, program: str) -> str:
+def announce(data: dict[str, Any], tools: int, program: str, shots: str = "") -> str:
     """The one startup line: tools, which phone, and the apps kept out."""
     never = (data.get("rules") or {}).get("never") or []
     kept = f"; kept out of {', '.join(never)}" if never else ""
@@ -190,10 +259,12 @@ def announce(data: dict[str, Any], tools: int, program: str) -> str:
     # out: said here, at the start, and never as a question.
     soon = ((data.get("wda") or {}).get("note") or "").strip()
     soon = f"; {soon}" if soon else ""
-    return f"sparsh: {tools} tool(s); phone {_phone_words(data)}{kept}{soon} -- via {program}"
+    shots = f"; {shots}" if shots else ""
+    return (f"sparsh: {tools} tool(s); phone {_phone_words(data)}{kept}{shots}{soon}"
+            f" -- via {program}")
 
 
-def prompt_text(data: dict[str, Any]) -> str:
+def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
     """The ``phone`` layer: the tools exist, and how to use them well."""
     phones = ready_phones(data)
     lines = ["# The person's phone (through Sparsh)"]
@@ -216,6 +287,10 @@ def prompt_text(data: dict[str, Any]) -> str:
         "Never try to get round a hold another way.",
         "4. \"The screen changed\" means nothing was done: use the screen it gives you.",
     ]
+    if shots:
+        lines.append("A screen that can't be read as a list comes with a screenshot: read "
+                     "what you need from it. Only numbered things can be tapped, so reach "
+                     "what it shows another way (back, a scroll, a search).")
     if any(_is_iphone(p) for p in phones):
         lines.append("5. An iPhone has no Back key: `press_key` back swipes in from the "
                      "left edge. If the screen doesn't change, tap the app's own Back, "
@@ -266,6 +341,9 @@ class Sparsh:
     #: False while DORMANT: Sparsh is here but no phone was at the start,
     #: so there are no tools and no prompt yet (``use_now``).
     connected: bool = False
+    #: Screenshots of unreadable screens to the model, and why (``shots``).
+    shots: bool = False
+    shots_why: str = ""
 
     def connect(self, manager: Any, agent: Any) -> int:
         """Start the server, set what asks, write the prompt layer.
@@ -274,8 +352,12 @@ class Sparsh:
 
         assert self.data is not None
         if SERVER not in manager.sessions:
-            self.tools = [n for n in manager.connect(server_config(self.data), origin="sparsh")
+            self.tools = [n for n in manager.connect(server_config(self.data, self.shots),
+                                                     origin="sparsh")
                           if n in agent.registry]
+            if self.sees():
+                for name in self.tools:
+                    agent.registry.get(name).images = self._still_allowed(agent)
         else:
             # configured by hand (--mcp-config): recognised, and classed
             self.tools = [n for n in agent.registry.names()
@@ -286,10 +368,31 @@ class Sparsh:
             if classify(tool, kinds) == "confirm":
                 tool.explain = explain_confirm(tool)
         prompt = attach_prompt(agent)
-        prompt.set("phone", prompt_text(self.data))
+        prompt.set("phone", prompt_text(self.data, self.sees()))
         prompt.apply()
         self.connected = True
         return len(self.tools)
+
+    def _still_allowed(self, agent: Any) -> Any:
+        """Asked on every call: the model can change mid-session (/model,
+        /provider, the page), and a switch to a cloud model must stop the
+        pictures. Only the answer for the model in use is kept."""
+        said: dict[tuple[str, str, str], bool] = {}
+
+        def allowed() -> bool:
+            provider = agent.provider
+            road = (getattr(provider, "name", ""),
+                    getattr(getattr(provider, "settings", None), "base_url", ""),
+                    str(agent.model))
+            if road not in said:
+                said.clear()
+                said[road] = shots(*road)[0]
+            return said[road]
+        return allowed
+
+    def sees(self) -> bool:
+        """Whether the model is shown screenshots (this Sparsh can send them)."""
+        return self.shots and bool((self.data or {}).get("shots"))
 
     def use_now(self, manager: Any, agent: Any) -> str:
         """A phone attached after the start: ask Sparsh again and, with a
@@ -305,7 +408,12 @@ class Sparsh:
             raise SparshLinkError("no phone is ready: plug one in with USB debugging on "
                                   "(and allow it on the phone), or start the emulator")
         count = self.connect(manager, agent)
-        return announce(self.data, count, self.program or "sparsh")
+        return announce(self.data, count, self.program or "sparsh", self.shots_words())
+
+    def shots_words(self) -> str:
+        if self.shots and not (self.data or {}).get("shots"):
+            return "no screenshots: this Sparsh can't send them (update it)"
+        return self.shots_why
 
     def refresh(self) -> dict[str, Any] | None:
         """Ask Sparsh again -- a phone plugged in or taken away since the

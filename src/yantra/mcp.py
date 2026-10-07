@@ -72,7 +72,9 @@ import httpx
 
 from yantra.errors import ToolError
 from yantra.providers.sse import iter_sse_lines, parse_events
-from yantra.tools.base import Tool, ToolContext, ToolRegistry
+from yantra.images import MAX_IMAGE_BYTES, MEDIA_TYPES
+from yantra.tools.base import Tool, ToolContext, ToolOutput, ToolRegistry
+from yantra.types import ImageBlock
 
 # Versions this client can speak, newest first. We REQUEST the newest;
 # the server answers with what IT supports -- if that answer isn't in
@@ -299,17 +301,32 @@ def _parse_tools(result: dict[str, Any]) -> list[MCPToolInfo]:
 
 
 def _flatten_tool_result(result: dict[str, Any]) -> tuple[str, bool]:
+    text, is_error, _ = _tool_result(result, images=False)
+    return text, is_error
+
+
+def _tool_result(result: dict[str, Any], *,
+                 images: bool) -> tuple[str, bool, list[ImageBlock]]:
+    """A ``tools/call`` result as (text, is_error, images). Image blocks
+    are kept only when ``images`` is on -- and then only the kinds and
+    sizes a provider takes; anything else is noted, never sent."""
     parts: list[str] = []
+    kept: list[ImageBlock] = []
     omitted = 0
     for block in result.get("content", []):
         if block.get("type") == "text":
             parts.append(block.get("text", ""))
+        elif (images and block.get("type") == "image"
+              and block.get("mimeType") in MEDIA_TYPES.values()
+              and isinstance(block.get("data"), str)
+              and len(block["data"]) * 3 // 4 <= MAX_IMAGE_BYTES):
+            kept.append(ImageBlock(media_type=block["mimeType"], data=block["data"]))
         else:
             omitted += 1
     text = "\n".join(p for p in parts if p != "" or len(parts) == 1)
     if omitted:
         text += f"\n[{omitted} non-text content block(s) omitted]"
-    return text.strip(), bool(result.get("isError"))
+    return text.strip(), bool(result.get("isError")), kept
 
 
 def _reply_for_server_request(method: str) -> tuple[bool, dict[str, Any]]:
@@ -431,14 +448,22 @@ class MCPSession:
         """Invoke a tool; returns ``(text, is_error)``.
 
         Content blocks flatten to text (images/resources are noted, not
-        decoded -- our Tool contract is strings). ``isError`` means the
+        decoded -- our Tool contract is strings; ``call_tool_full`` keeps
+        images, for a tool wired to pass them on). ``isError`` means the
         TOOL ran and failed, which the wrapper turns into a ToolError so
         errors-as-data holds across the process boundary too.
         """
+        text, is_error, _ = self.call_tool_full(name, arguments, timeout=timeout)
+        return text, is_error
+
+    def call_tool_full(self, name: str, arguments: dict[str, Any], *,
+                       timeout: float | None = None,
+                       images: bool = False) -> tuple[str, bool, list[ImageBlock]]:
+        """``call_tool`` that can keep the result's images (``images``)."""
         result = self._request("tools/call",
                                {"name": name, "arguments": arguments},
                                timeout=timeout)
-        return _flatten_tool_result(result)
+        return _tool_result(result, images=images)
 
     # ---- wire plumbing ------------------------------------------------------
 
@@ -648,9 +673,15 @@ class MCPHttpSession:
 
     def call_tool(self, name: str, arguments: dict[str, Any],
                   *, timeout: float | None = None) -> tuple[str, bool]:
-        return _flatten_tool_result(
+        text, is_error, _ = self.call_tool_full(name, arguments, timeout=timeout)
+        return text, is_error
+
+    def call_tool_full(self, name: str, arguments: dict[str, Any], *,
+                       timeout: float | None = None,
+                       images: bool = False) -> tuple[str, bool, list[ImageBlock]]:
+        return _tool_result(
             self._rpc("tools/call", {"name": name, "arguments": arguments},
-                      timeout=timeout))
+                      timeout=timeout), images=images)
 
     # ---- plumbing ----------------------------------------------------------
 
@@ -834,6 +865,11 @@ class MCPToolWrapper(Tool):
         #: this server's calls mean (samay_link.explain). A server cannot
         #: set it: its description is its own claim; this is the host's.
         self.explain: Any = None
+        #: Pass the result's images on to the model. Off: a server's
+        #: pictures reach the model only when whoever wired it knows the
+        #: model can see them and the person allows it (sparsh_link.shots).
+        #: A callable is asked on every call.
+        self.images: Any = False
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         raw = (f"{self.name}({json.dumps(args, default=str)}) "
@@ -845,9 +881,13 @@ class MCPToolWrapper(Tool):
         except Exception:                 # a broken card must not block the ask
             return raw
 
-    def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
+    def run(self, args: dict[str, Any], ctx: ToolContext) -> str | ToolOutput:
         try:
-            text, is_error = self.session.call_tool(self.raw_name, args)
+            if self.images() if callable(self.images) else self.images:
+                text, is_error, images = self.session.call_tool_full(
+                    self.raw_name, args, images=True)
+            else:
+                (text, is_error), images = self.session.call_tool(self.raw_name, args), []
         except MCPError as exc:
             raise ToolError(str(exc)) from None
         if is_error:
@@ -855,7 +895,7 @@ class MCPToolWrapper(Tool):
             # built-ins: ToolError becomes an is_error result the model
             # can read and retry differently
             raise ToolError(text or "mcp tool reported failure")
-        return text
+        return ToolOutput(text=text, images=images) if images else text
 
 
 # ---------------------------------------------------------------------------

@@ -344,7 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "through Sparsh (found automatically when `sparsh` is on "
                              "PATH and a phone is attached; this flag errors if Sparsh "
                              "cannot be found, and PATH names the sparsh program). "
-                             "Also YANTRA_SPARSH=auto|on|off|PATH")
+                             "Also YANTRA_SPARSH=auto|on|off|PATH|auto:PATH")
     parser.add_argument("--no-sparsh", action="store_const", const="off", dest="sparsh",
                         help="do not look for Sparsh this session")
     parser.add_argument("--subagents", action="store_true",
@@ -2091,14 +2091,16 @@ def _connect_samay(args, mcp_manager, agent, console: Console, spec=None) -> int
     return None
 
 
-def _connect_sparsh(args, mcp_manager, agent, console: Console) -> int | None:
+def _connect_sparsh(args, mcp_manager, agent, console: Console,
+                    model_road: tuple[str, str, str] = ("", "", "")) -> int | None:
     """Start Sparsh's phone tools (sparsh_link.py).
 
     Same shape as Samay: an exit code only when Sparsh was ASKED for and
     could not be used; in auto mode no Sparsh, or no phone attached, is
     silence -- with Sparsh there, a dormant handle is left on
     ``agent.sparsh`` for a phone attached later. Never for a run nobody
-    watches.
+    watches. ``model_road`` is (provider, base url, model): whether the
+    model may be shown screenshots of screens the list can't read.
     """
     from yantra import sparsh_link
 
@@ -2118,7 +2120,8 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console) -> int | None:
         return None
     data, program = found
     sparsh = sparsh_link.Sparsh(mode=mode, path=path, data=data, program=program)
-    if mode == "auto" and not path and not sparsh_link.ready_phones(data):
+    sparsh.shots, sparsh.shots_why = sparsh_link.shots(*model_road)
+    if mode == "auto" and not sparsh_link.ready_phones(data):
         # Here, but no phone: no tools and no prompt for a phone that is
         # not there. Kept DORMANT, so one attached later can be taken up
         # (the page's phone panel, /phone use) without a restart.
@@ -2131,7 +2134,8 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console) -> int | None:
         console.print(f"[yellow]sparsh: tools unavailable: {exc}[/yellow]")
         return 2 if mode == "on" else None
     agent.sparsh = sparsh
-    console.print(f"[dim]{sparsh_link.announce(data, count, program)}[/dim]")
+    console.print(f"[dim]{sparsh_link.announce(data, count, program, sparsh.shots_words())}"
+                  "[/dim]")
     return None
 
 
@@ -2956,7 +2960,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
         # The person's phone, through Sparsh.
-        if _connect_sparsh(args, mcp_manager, agent, console) is not None:
+        if _connect_sparsh(args, mcp_manager, agent, console,
+                           (provider_name, getattr(settings, "base_url", ""), model)) is not None:
             return 2
 
         _connect_package_mcp(spec.mcp, mcp_manager, console)

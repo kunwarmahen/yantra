@@ -1143,3 +1143,19 @@ class TestPackageServersInASession:
         assert "mcp__docs__echo" not in registry.names()
         assert "mcp__docs__echo" in registry.refused_names()
         manager.shutdown()
+
+
+# -- images in a tool's result ----------------------------------------------
+
+def test_images_are_kept_only_when_asked_and_only_kinds_a_provider_takes():
+    from yantra.mcp import _tool_result
+    result = {"content": [
+        {"type": "text", "text": "App: com.android.settings"},
+        {"type": "image", "mimeType": "image/png", "data": "iVBORw0KGgo="},
+        {"type": "image", "mimeType": "image/bmp", "data": "Qk0="},
+    ]}
+    text, failed, images = _tool_result(result, images=False)
+    assert images == [] and "2 non-text content block(s) omitted" in text
+    text, failed, images = _tool_result(result, images=True)
+    assert [i.media_type for i in images] == ["image/png"]
+    assert "1 non-text content block(s) omitted" in text and not failed

@@ -780,7 +780,16 @@ included. With Sparsh on `PATH` but no phone at the start, a session
 says nothing and adds no tools. Attach one later and press **use this
 phone** in the panel, or type `/phone use`, to add them without a
 restart. `/phone` says what's attached, and `/phone log` shows the last
-steps.
+steps. A screen the list can't describe (Settings' About page, which
+never goes still) comes with a **screenshot** when the model is local
+and says it can see (Ollama's `/api/show` lists "vision"); a cloud model
+gets none unless `YANTRA_PHONE_SHOTS=on`, and `off` stops them
+everywhere. The startup line says which. It's asked again on every call,
+so switching to a cloud model mid-session stops them. On the About page,
+`gemma4:26b` read the phone's IMEI from the picture
+([notes/121](notes/121-a-picture-where-the-list-has-nothing.md)).
+`YANTRA_SPARSH=auto:/path/to/sparsh` names the program without turning
+it on: no phone at the start still means no tools (what Sarathi passes).
 
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
@@ -2319,6 +2328,9 @@ src/yantra/
 │                   the person's own server of the same name wins, and
 │                   listings say which servers the package or Setu brought
 │                   ([notes/104](notes/104-the-servers-it-came-with.md)).
+│                   A tool's `images` lets its result's pictures through
+│                   (off for every server unless whoever wired it says so;
+│                   [notes/121](notes/121-a-picture-where-the-list-has-nothing.md)).
 │                   A tool's `explain` hook gives its approval card plain
 │                   words -- the host's, never the server's
 │                   ([notes/115](notes/115-what-a-yes-covers.md))
@@ -2369,7 +2381,10 @@ src/yantra/
 │                   the page's phone panel through `sparsh look --peek`
 │                   and `sparsh log`; with no phone at the start it waits
 │                   DORMANT for /phone use or the panel's "use this phone"
-│                   ([notes/119](notes/119-a-phone-and-what-asks.md))
+│                   ([notes/119](notes/119-a-phone-and-what-asks.md)); a
+│                   screenshot of a screen the list can't read, to a local
+│                   model that can see, to a cloud one only when asked
+│                   (YANTRA_PHONE_SHOTS; [notes/121](notes/121-a-picture-where-the-list-has-nothing.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,

@@ -16,6 +16,10 @@ Also designed against:
   tools and no prompt; asked for by name, it connects and says so.
 * **A Sparsh that speaks another format.** Refused, never guessed at.
 * **A tool Sparsh didn't name.** It keeps its own hint (pessimistic).
+* **A phone's screen sent to a cloud model unasked.** Screenshots of
+  screens the list can't read go to a local model that can see; to a
+  cloud one only with YANTRA_PHONE_SHOTS=on; and a switch to a cloud
+  model mid-session stops them.
 """
 
 from __future__ import annotations
@@ -59,6 +63,7 @@ FAKE_SPARSH = """\
                                     "never": {never!r}, "ask": ["send"]}},
                           "adb": "ok", "phones": {phones!r},
                           "mcp": {{"command": {python!r}, "args": [sys.argv[0], "mcp"]}},
+                          **({{"shots": "--shots"}} if {shots!r} else {{}}),
                           "tools": KINDS}}))
     elif args[0] == "look":
         if "--serial" in args and args[args.index("--serial") + 1] == "gone":
@@ -95,8 +100,11 @@ FAKE_SPARSH = """\
                 text = {{"describe_hold": 'On the phone emulator-5554: tap button "Send SMS" '
                                          'in com.google.android.apps.messaging\\n'
                                          '1 field "running late"'}}.get(name, "done")
-                send({{"jsonrpc": "2.0", "id": mid, "result": {{
-                    "content": [{{"type": "text", "text": text}}]}}}})
+                content = [{{"type": "text", "text": text}}]
+                if name == "look" and "--shots" in args:
+                    content.append({{"type": "image", "mimeType": "image/png",
+                                    "data": "iVBORw0KGgo="}})
+                send({{"jsonrpc": "2.0", "id": mid, "result": {{"content": content}}}})
             elif mid is not None:
                 send({{"jsonrpc": "2.0", "id": mid, "error": {{"code": -32601, "message": "no"}}}})
     else:
@@ -107,12 +115,12 @@ EMULATOR = [{"serial": "emulator-5554", "state": "device", "model": "sdk_gphone6
 
 
 def make_sparsh(tmp_path: Path, *, fmt: str = sparsh_link.FORMAT, phones=None,
-                never=()) -> Path:
+                never=(), shots=True) -> Path:
     program = tmp_path / "sparsh"
     program.write_text(f"#!{sys.executable}\n" + textwrap.dedent(FAKE_SPARSH).format(
         log=str(tmp_path / "sparsh-calls.log"), fmt=fmt,
         phones=EMULATOR if phones is None else phones, never=list(never),
-        python=sys.executable))
+        python=sys.executable, shots=shots))
     program.chmod(0o755)
     return program
 
@@ -124,12 +132,12 @@ def clean(monkeypatch):
     monkeypatch.delenv("YANTRA_UNATTENDED", raising=False)
 
 
-def start(tmp_path, flag):
+def start(tmp_path, flag, road=("", "", "")):
     agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry())
     manager = MCPManager(agent.registry, agent=agent,
                          memory_path=tmp_path / ".yantra" / "mcp.json")
     console = Console(file=io.StringIO(), width=200)
-    code = _connect_sparsh(SimpleNamespace(sparsh=flag), manager, agent, console)
+    code = _connect_sparsh(SimpleNamespace(sparsh=flag), manager, agent, console, road)
     return code, agent, manager, console.file.getvalue()
 
 
@@ -371,6 +379,19 @@ class TestAPhoneAttachedLater:
         _, agent, manager, _ = start(tmp_path, None)
         return agent, manager
 
+    def test_auto_with_a_named_program_still_waits_for_a_phone(self, clean, tmp_path):
+        # What Sarathi passes: the sparsh it found, without turning it on.
+        program = make_sparsh(tmp_path, phones=[])
+        assert sparsh_link.resolve_mode(f"auto:{program}") == ("auto", str(program))
+        _, agent, manager, out = start(tmp_path, f"auto:{program}")
+        try:
+            assert out == "" and not agent.sparsh.connected
+            assert not [n for n in agent.registry.names() if n.startswith("mcp__sparsh__")]
+            make_sparsh(tmp_path)                   # a phone, and asked again
+            assert agent.sparsh.use_now(manager, agent).startswith("sparsh: 5 tool(s)")
+        finally:
+            manager.shutdown()
+
     def test_use_now_with_no_phone_says_how(self, clean, tmp_path, monkeypatch):
         agent, manager = self.dormant(tmp_path, monkeypatch)
         try:
@@ -442,3 +463,94 @@ def test_an_iphone_is_named_by_its_wda_address():
     assert sparsh_link.SERIAL_RE.match("emulator-5554")
     assert not sparsh_link.SERIAL_RE.match("--help")
     assert not sparsh_link.SERIAL_RE.match("http://x/../../etc")
+
+
+# -- screenshots of screens the list can't read -----------------------------
+
+LOCAL = ("ollama", "http://localhost:11434/v1", "gemma4:26b")
+CLOUD = ("anthropic", "https://api.anthropic.com", "a-cloud-model")
+
+
+@pytest.fixture
+def sees(monkeypatch):
+    monkeypatch.delenv(sparsh_link.SHOTS_ENV, raising=False)
+    seen = {"gemma4:26b": True}
+    monkeypatch.setattr(sparsh_link, "_can_see", lambda _url, model: seen.get(model, False))
+    return seen
+
+
+def looked(agent):
+    return tool(agent, "look").run({}, agent.ctx)
+
+
+def on_road(agent, road):
+    """The agent's model as it is mid-session: asked again on every call."""
+    agent.provider = SimpleNamespace(name=road[0], settings=SimpleNamespace(base_url=road[1]))
+    agent.model = road[2]
+
+
+class TestScreenshots:
+    def test_a_local_model_that_can_see_gets_them(self, clean, sees, tmp_path):
+        code, agent, manager, out = start(tmp_path, str(make_sparsh(tmp_path)), LOCAL)
+        try:
+            assert code is None and "screenshots on (local model)" in out
+            assert ["mcp", "--shots"] in calls(tmp_path)
+            on_road(agent, LOCAL)
+            result = looked(agent)
+            assert result.images[0].media_type == "image/png"
+            assert "comes with a screenshot" in agent.prompt.get("phone")
+        finally:
+            manager.shutdown()
+
+    def test_a_cloud_model_does_not_unless_the_person_says_so(self, clean, sees, tmp_path,
+                                                               monkeypatch):
+        _, agent, manager, out = start(tmp_path, str(make_sparsh(tmp_path)), CLOUD)
+        try:
+            assert "no screenshots to a cloud model (YANTRA_PHONE_SHOTS=on to allow)" in out
+            assert ["mcp"] in calls(tmp_path)
+            assert looked(agent) == "done"
+            assert "screenshot" not in agent.prompt.get("phone")
+        finally:
+            manager.shutdown()
+        monkeypatch.setenv(sparsh_link.SHOTS_ENV, "on")
+        _, agent, manager, out = start(tmp_path, str(make_sparsh(tmp_path)), CLOUD)
+        try:
+            assert "screenshots on (YANTRA_PHONE_SHOTS=on)" in out
+            on_road(agent, CLOUD)
+            assert looked(agent).images
+        finally:
+            manager.shutdown()
+
+    def test_a_switch_to_a_cloud_model_stops_them(self, clean, sees, tmp_path):
+        _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)), LOCAL)
+        try:
+            on_road(agent, LOCAL)
+            assert looked(agent).images
+            on_road(agent, CLOUD)
+            result = looked(agent)
+            assert isinstance(result, str) and "1 non-text content block(s) omitted" in result
+        finally:
+            manager.shutdown()
+
+    def test_a_model_that_cannot_see_and_an_old_sparsh_get_none(self, clean, sees, tmp_path):
+        blind = ("ollama", LOCAL[1], "qwen-text-only")
+        _, agent, manager, out = start(tmp_path, str(make_sparsh(tmp_path)), blind)
+        try:
+            assert "no screenshots: qwen-text-only can't see pictures" in out
+        finally:
+            manager.shutdown()
+        old = make_sparsh(tmp_path, shots=False)
+        _, agent, manager, out = start(tmp_path, str(old), LOCAL)
+        try:
+            assert "this Sparsh can't send them (update it)" in out
+            assert looked(agent) == "done"
+        finally:
+            manager.shutdown()
+
+    @pytest.mark.parametrize("setting,said", [
+        ("off", "screenshots off (YANTRA_PHONE_SHOTS=off)"),
+        ("maybe", "is not auto, on or off"),
+    ])
+    def test_off_and_a_word_it_does_not_know_are_no(self, setting, said):
+        allowed, why = sparsh_link.shots(*LOCAL, setting=setting)
+        assert not allowed and said in why

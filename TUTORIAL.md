@@ -2004,7 +2004,7 @@ read each step.
 
 | Setting | Read by | Documented in |
 |---|---|---|
-| `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_SPARSH` | Yantra | this repo's README |
+| `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_SPARSH`, `YANTRA_PHONE_SHOTS` | Yantra | this repo's README |
 | `SPARSH_STATE`, `SPARSH_RULES`, `ANDROID_SERIAL`, `SPARSH_WDA` | Sparsh | Sparsh's README and SETUP.md |
 | `SAMAY_STATE`, `SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`, `SAMAY_TZ` | Samay | Samay's README |
 | `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
@@ -2124,9 +2124,20 @@ the emulator), then press **use this phone** in the panel, or type
 `/phone` on its own says what's attached and whether it's in use, and
 `/phone log` shows the last steps.
 
+**A screen it can't read.** A few screens don't describe themselves,
+like Settings' *About phone* page, whose "Up time" ticks every second.
+With a local model that can see pictures (`gemma4:26b`, say), such a
+screen comes to the agent with a screenshot, and its first line says
+`screenshots on (local model)`. It can read the page from the picture,
+but it can only tap what's on the list, so it goes another way to change
+anything there. With a cloud model, no screenshot leaves your computer
+unless you set `YANTRA_PHONE_SHOTS=on`. `YANTRA_PHONE_SHOTS=off` turns
+them off for local models too.
+
 **Not yet:** schedules don't get a phone (nobody would be there to say
-yes to a held step), and typing is plain English letters only (no é,
-Hindi or emoji yet). An iPhone needs a Mac to set up once (Sparsh's
+yes to a held step). Letters beyond plain English (é, Hindi, emoji) need
+a small keyboard app on an Android phone, which you install once
+(Sparsh's SETUP.md, Part G). An iPhone needs a Mac to set up once (Sparsh's
 SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
 starting Yantra. When its free 7-day signature is two days from running
 out, Yantra's first line says so. That road hasn't been run on a real
