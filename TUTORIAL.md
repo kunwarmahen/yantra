@@ -445,7 +445,8 @@ run a memory server with real search (Smritikosh is one), connect it as
 an MCP server and point memory at it by name:
 `--memory smritikosh --mcp-config smritikosh.json`. Everything above
 works the same, and the memories live there instead
-([notes/102](notes/102-kept-somewhere-else.md)).
+([notes/102](notes/102-kept-somewhere-else.md)). Setting up Smritikosh,
+step by step on either road, is in [SMRITIKOSH.md](SMRITIKOSH.md).
 
 The same tradeoff as `--env-context`: on a cloud model, what it
 remembers about you rides inside every request to your provider. On

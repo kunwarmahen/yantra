@@ -395,6 +395,9 @@ unless `[memory] verbs` maps them to other names. A server that lacks
 some of them still works, and `/memory` says what it can't do. Your
 identity goes on every call, so set `YANTRA_USER` to the name the store
 knows you by ([notes/102](notes/102-kept-somewhere-else.md)).
+`YANTRA_MEMORY=NAME` in `.env`, with the server saved in
+`.yantra/mcp.json`, makes it every session's store.
+[SMRITIKOSH.md](SMRITIKOSH.md) sets one up from start to finish.
 
 Measured on `qwen3.8:latest`: a fact said once, in passing, changed the
 answer in a fresh conversation 6 of 7 times on `local` and 7 of 7 on
