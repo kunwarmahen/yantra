@@ -877,7 +877,7 @@ class Setu:
                 # signed in again at another level: the running connector
                 # still offers the old level's tools until it restarts
                 try:
-                    manager.disconnect(cfg.name)
+                    manager.disconnect(cfg.name, forget=False)
                 except MCPError:
                     pass
                 self.servers.discard(cfg.name)

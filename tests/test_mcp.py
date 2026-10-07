@@ -956,6 +956,21 @@ class TestMCPManager:
             all(c.name != "tiny" for c in load_remembered(path))
         assert manager.pinned == set()
 
+    def test_a_remembered_server_outlives_the_session_that_saved_it(self, tmp_path):
+        """Shutdown closed each server through disconnect, which forgets:
+        every exit emptied .yantra/mcp.json, and a saved server lasted one
+        session."""
+        manager, _ = self._manager(tmp_path)
+        manager.connect(_cfg("tiny"), remember=True)
+        manager.shutdown()
+        assert manager.sessions == {}
+        assert [c.name for c in load_remembered(manager.memory_path)] == ["tiny"]
+        again, _ = self._manager(tmp_path)
+        for cfg in load_remembered(again.memory_path):
+            again.connect(cfg)
+        again.shutdown()
+        assert [c.name for c in load_remembered(again.memory_path)] == ["tiny"]
+
     def test_catalog_refresh_keeps_pins_and_adds_new_tools(self, tmp_path):
         """Selection stays correct after membership changes: rebuilt
         index contains the new tools, custom pins survive."""

@@ -2428,10 +2428,11 @@ def make_app(session: WebSession, static_dir: Path | None = None,
                     "authorize_url": shown[0] if shown else None,
                     **session.state()}
 
-        # Reconnect so the tools register against the fresh token.
+        # Reconnect so the tools register against the fresh token. Only
+        # closed, not forgotten: a saved server stays saved.
         if mcp.sessions.get(name) is not None:
             try:
-                mcp.disconnect(name)
+                mcp.disconnect(name, forget=False)
             except MCPError:
                 pass
         try:

@@ -1004,10 +1004,12 @@ class MCPManager:
         self._refresh_catalog()
         return names
 
-    def disconnect(self, name: str) -> int:
+    def disconnect(self, name: str, *, forget: bool = True) -> int:
         """Close one server's connection and pull its tools. Also drops
         its remembered entry -- removing a server you had saved means
-        gone-gone, not 'until next launch'. Returns the tool count."""
+        gone-gone, not 'until next launch'. Returns the tool count.
+        ``forget=False`` only closes it: the session is ending, and a
+        saved server is saved FOR the next launch."""
         session = self.sessions.pop(name, None)
         if session is None:
             raise MCPError(f"no mcp server named {name!r} is connected")
@@ -1017,7 +1019,7 @@ class MCPManager:
             self.registry.unregister(tool_name)
         self.pinned.discard(name)
         self.origins.pop(name, None)
-        if self.memory_path is not None:
+        if forget and self.memory_path is not None:
             forget_server(name, self.memory_path)
         self._refresh_catalog()
         return len(removed)
@@ -1035,10 +1037,11 @@ class MCPManager:
         return len(names)
 
     def shutdown(self) -> None:
-        """Close everything; main()'s finally calls this on EVERY exit."""
+        """Close everything; main()'s finally calls this on EVERY exit.
+        Closing is not removing: what was remembered stays remembered."""
         for name in list(self.sessions):
             try:
-                self.disconnect(name)
+                self.disconnect(name, forget=False)
             except Exception:
                 pass  # best effort at interpreter teardown
 
