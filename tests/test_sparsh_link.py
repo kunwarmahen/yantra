@@ -42,6 +42,7 @@ from yantra.agent import Agent
 from yantra.cli.main import _connect_sparsh
 from yantra.mcp import MCPManager
 from yantra.permissions import PermissionRequest, yolo
+from yantra.setu_link import Link, announce, phone_rules, prompt_text
 from yantra.tools.base import ToolRegistry
 
 FAKE_SPARSH = """\
@@ -554,3 +555,70 @@ class TestScreenshots:
     def test_off_and_a_word_it_does_not_know_are_no(self, setting, said):
         allowed, why = sparsh_link.shots(*LOCAL, setting=setting)
         assert not allowed and said in why
+
+
+# -- a site's app on the phone: Setu's phone road as Sparsh's rules ------------
+
+
+X_CARD = {"id": "x", "name": "X", "verbs": {},
+          "phone": {"android": "com.twitter.android", "ios": "com.atebits.Tweetie2",
+                    "act_words": ["post", "like"], "spend_words": ["buy"], "pace": 3.0,
+                    "guide": "Home is the timeline."}}
+
+
+def x_on_phone(level="read", ref="x:personal", **row):
+    return {"ref": ref, "connector": "x", "account": ref.split(":")[1], "level": level,
+            "level_label": {"read": "Read only", "write": "Read and post"}[level],
+            "mcp": None, "browser": None,
+            "phone": {"android": "com.twitter.android", "ios": "com.atebits.Tweetie2"}, **row}
+
+
+def setu_said(*rows, card=X_CARD):
+    return Link(data={"connections": list(rows), "connectors": [card]}, road="test")
+
+
+class TestTheAppsRules:
+    def test_read_only_refuses_acting_and_spending_on_both_phones(self):
+        rules = phone_rules(setu_said(x_on_phone("read")))
+        assert set(rules) == {"com.twitter.android", "com.atebits.Tweetie2"}
+        rule = rules["com.twitter.android"]
+        assert rule["refuse"] == ["buy", "post", "like"] and rule["ask"] == []
+        assert rule["pace"] == 3.0 and "x:personal" in rule["why"] and "Read only" in rule["why"]
+
+    def test_read_and_post_asks_about_acting_and_still_refuses_spending(self):
+        rule = phone_rules(setu_said(x_on_phone("write")))["com.twitter.android"]
+        assert rule["refuse"] == ["buy"] and rule["ask"] == ["post", "like"]
+
+    def test_a_packages_ceiling_lowers_the_level(self):
+        rule = phone_rules(setu_said(x_on_phone("write")), allow={"x": "read"})
+        assert "post" in rule["com.twitter.android"]["refuse"]
+        assert phone_rules(setu_said(x_on_phone("write")), allow={"gmail": "read"}) == {}
+
+    def test_two_connections_on_one_app_keep_the_stricter(self):
+        rules = phone_rules(setu_said(x_on_phone("write", ref="x:work"),
+                                      x_on_phone("read", ref="x:personal")))
+        rule = rules["com.twitter.android"]
+        assert "post" in rule["refuse"] and rule["ask"] == []
+
+    def test_a_withdrawn_connector_or_none_at_all_gives_no_rules(self):
+        assert phone_rules(setu_said(x_on_phone(), card={**X_CARD, "yanked": "bad"})) == {}
+        assert phone_rules(None) == {}
+
+    def test_the_model_is_told_to_use_the_app(self):
+        said = prompt_text(setu_said(x_on_phone("read")))
+        assert "X through its own app on the person's phone (`com.twitter.android`)" in said
+        assert "Read only" in said and "Home is the timeline." in said
+
+    def test_the_rules_go_to_sparsh_when_it_starts(self):
+        agent = SimpleNamespace(setu=SimpleNamespace(link=setu_said(x_on_phone()), allow=None))
+        rules = sparsh_link.app_rules_of(agent)
+        config = sparsh_link.server_config({"mcp": {"command": "sparsh", "args": ["mcp"]}},
+                                           app_rules=rules)
+        sent = json.loads(config.env[sparsh_link.APP_RULES])
+        assert "post" in sent["com.twitter.android"]["refuse"]
+        assert sparsh_link.server_config({"mcp": {"command": "s"}}).env is None
+        assert sparsh_link.app_rules_of(SimpleNamespace(setu=None)) == {}
+
+    def test_the_startup_line_names_a_connection_on_the_phone(self):
+        assert announce(setu_said(x_on_phone()), {}) == \
+            "setu: x:personal (on the phone) -- via test"

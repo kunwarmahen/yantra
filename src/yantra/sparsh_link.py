@@ -64,6 +64,13 @@ model. ``YANTRA_PHONE_SHOTS`` decides whether that happens:
     on    yes, cloud models included: the person's own choice
     off   never
 
+SETU'S PHONE CONNECTIONS ARE RULES FOR AN APP. A site connected on Setu's
+phone road (``setu connect x --phone``) reaches the phone through its
+own app; ``app_rules_of`` turns those connections into Sparsh's per-app
+rules (``SPARSH_APP_RULES``: refuse, ask, pace), handed over when the
+server starts. They only tighten. A connection made after the start
+reaches the phone at the next one.
+
 It is asked again on every call, so a switch to a cloud model mid-session
 stops the pictures (a switch to a local one doesn't start them: Sparsh
 was started without ``--shots``). The picture is for reading: there is
@@ -105,6 +112,8 @@ SERIAL_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
                        r"|https?://[A-Za-z0-9.:\[\]-]{1,80}/?)$")  # or an iPhone's WDA
 #: How long a peek may take: a dump (~2.5 s) and a screenshot.
 PEEK_TIMEOUT = 30.0
+#: Sparsh's name for the per-app rules a harness adds (Setu's phone road).
+APP_RULES = "SPARSH_APP_RULES"
 #: auto / on / off: screenshots of unreadable screens to the model.
 SHOTS_ENV = "YANTRA_PHONE_SHOTS"
 #: How long asking the local server whether a model can see may take.
@@ -188,12 +197,24 @@ def load(mode: str, path: str | None = None,
     return data, program
 
 
-def server_config(data: dict[str, Any], shots: bool = False) -> MCPServerConfig:
+def server_config(data: dict[str, Any], shots: bool = False,
+                  app_rules: dict[str, Any] | None = None) -> MCPServerConfig:
     mcp = data["mcp"]
     args = list(mcp.get("args") or [])
     if shots and data.get("shots"):
         args.append(str(data["shots"]))
-    return MCPServerConfig(name=SERVER, command=mcp["command"], args=args)
+    env = {APP_RULES: json.dumps(app_rules)} if app_rules else None
+    return MCPServerConfig(name=SERVER, command=mcp["command"], args=args, env=env)
+
+
+def app_rules_of(agent: Any) -> dict[str, Any]:
+    """Setu's phone connections, as Sparsh's per-app rules (setu_link)."""
+    setu = getattr(agent, "setu", None)
+    if setu is None or getattr(setu, "link", None) is None:
+        return {}
+    from yantra.setu_link import phone_rules
+
+    return phone_rules(setu.link, setu.allow)
 
 
 def shots(provider: str, base_url: str, model: str,
@@ -352,8 +373,8 @@ class Sparsh:
 
         assert self.data is not None
         if SERVER not in manager.sessions:
-            self.tools = [n for n in manager.connect(server_config(self.data, self.shots),
-                                                     origin="sparsh")
+            config = server_config(self.data, self.shots, app_rules_of(agent))
+            self.tools = [n for n in manager.connect(config, origin="sparsh")
                           if n in agent.registry]
             if self.sees():
                 for name in self.tools:

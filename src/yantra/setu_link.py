@@ -92,6 +92,18 @@ profile the person signed in to, and the manifest's rules for the site.
 cannot press anything; the write level adds click and fill, asked about
 every time. Nothing on that road spends: those pages go to the person.
 
+A SITE'S APP ON THE PHONE IS RULES, NOT TOOLS. A connection on Setu's
+phone road (``setu connect x --phone``) holds nothing: the sign-in is
+the X app's, on the person's phone. Its tools are Sparsh's, already
+there when a phone is. What it adds is how far they may go in that app:
+``phone_rules`` turns each such connection into Sparsh's per-app rules
+(``SPARSH_APP_RULES``, sparsh_link): the site's spend words refused at
+every level, its act words refused at Read only and asked about above,
+and its pace kept between steps. A package's ceiling lowers the level
+as it does for every other connection. The prompt layer names the app
+and the level, so the model goes there instead of to a browser that
+the site turns away.
+
 LIVE, NOT ONLY AT STARTUP. ``Setu`` is the session's handle on all of
 this (``agent.setu``). ``sync`` makes the MCP servers match what Setu
 reports -- a new connection gets its server and tools, a gone one loses
@@ -356,6 +368,56 @@ def connector_allowed(allow: dict[str, str] | None, cid: str) -> bool:
     return allow is None or cid in allow or any(k.startswith(f"{cid}:") for k in allow)
 
 
+def phone_rules(link: Link | None, allow: dict[str, str] | None = None) -> dict[str, Any]:
+    """Setu's phone-road connections as Sparsh's per-app rules, by app
+    package (Android and iPhone both). Two connections on one app keep
+    the stricter of each: every refusal, and the slower pace."""
+    rules: dict[str, Any] = {}
+    if link is None:
+        return rules
+    for row in link.connections:
+        app = row.get("phone") or {}
+        ceiling = ceiling_of(allow, row)
+        card = link.connectors.get(row.get("connector", "")) or {}
+        spec = card.get("phone") or {}
+        if not app or not ceiling or card.get("yanked"):
+            continue
+        level = _lower(str(row.get("level") or "read"), None if allow is None else ceiling)
+        acts = [str(w) for w in spec.get("act_words") or []]
+        spends = [str(w) for w in spec.get("spend_words") or []]
+        name = card.get("name") or row.get("connector", "")
+        label = row.get("level_label") or level
+        why = (f"Setu keeps {name} on this phone ({row.get('ref')}) at {label}: buying, "
+               f"paying and what can't be undone are the person's to do"
+               + (", and at this level nothing is posted, liked, followed or added"
+                  if level == "read" else ""))
+        rule = {"refuse": spends + (acts if level == "read" else []),
+                "ask": acts if level != "read" else [],
+                "pace": float(spec.get("pace") or 0), "why": why}
+        for package in (app.get("android"), app.get("ios")):
+            if not package:
+                continue
+            had = rules.get(package)
+            if had is None:
+                rules[package] = dict(rule)
+                continue
+            refuse = sorted({*had["refuse"], *rule["refuse"]})
+            rules[package] = {"refuse": refuse,
+                              "ask": sorted({*had["ask"], *rule["ask"]} - set(refuse)),
+                              "pace": max(had["pace"], rule["pace"]),
+                              "why": had["why"] if len(had["refuse"]) >= len(rule["refuse"])
+                              else rule["why"]}
+    return rules
+
+
+def _lower(level: str, ceiling: str | None) -> str:
+    """The lower of a connection's level and a package's ceiling. A
+    level this doesn't know counts as the lowest: unsure is strict."""
+    if ceiling is None:
+        return level
+    return min(level, ceiling, key=lambda v: VERB_CLASSES.index(v) if v in VERB_CLASSES else -1)
+
+
 #: How a person at this computer connects an account.
 CONNECT_HERE = "the person can connect one with `setu connect <id>`; you cannot"
 #: How a locked folder opens at a keyboard (a host serving people says its own).
@@ -404,6 +466,16 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
                          f"sends or changes; a read may leave it out to use every account.")
             continue
         level = row.get("level_label") or row.get("level")
+        if row.get("phone"):
+            app = row["phone"].get("android") or row["phone"].get("ios") or "its app"
+            lines.append(f"- {name} through its own app on the person's phone (`{app}`), "
+                         f"with the phone tools (`mcp__sparsh__open_app`, then by number): "
+                         f"{level}. Buying, paying and what cannot be undone are never "
+                         f"yours there; at Read only, posting, liking and following are "
+                         f"refused too. Use the app rather than a browser for {name}.")
+            guide = ((connectors.get(cid) or {}).get("phone") or {}).get("guide") or ""
+            lines += [f"  {line.strip()}" for line in guide.splitlines() if line.strip()]
+            continue
         if row.get("browser"):
             prefix = sites.get(row.get("ref", ""))
             if prefix is None:
@@ -435,12 +507,15 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
 
 def announce(link: Link, connected: dict[str, int],
              allow: dict[str, str] | None = None) -> str:
-    """The one startup line: which connections, how many tools each."""
-    if not connected and allow is not None and link.connections:
+    """The one startup line: which connections, how many tools each, and
+    the apps on the phone (no tools of their own: rules for the phone's)."""
+    phones = [f"{r.get('ref')} (on the phone)" for r in link.connections
+              if r.get("phone") and ceiling_of(allow, r)]
+    if not connected and not phones and allow is not None and link.connections:
         return f"setu: none of your connections for this agent ({link.road})"
-    if not connected:
+    if not connected and not phones:
         return f"setu: no connections yet ({link.road})"
-    parts = [f"{name} ({count} tool(s))" for name, count in connected.items()]
+    parts = [f"{name} ({count} tool(s))" for name, count in connected.items()] + phones
     return f"setu: {', '.join(parts)} -- via {link.road}"
 
 

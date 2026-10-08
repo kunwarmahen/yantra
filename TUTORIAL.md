@@ -2124,6 +2124,13 @@ the emulator), then press **use this phone** in the panel, or type
 `/phone` on its own says what's attached and whether it's in use, and
 `/phone log` shows the last steps.
 
+**A site's own app.** If a site turns the agent's browser away (X often
+does), connect its app on your phone instead: `setu connect x --phone`,
+and sign in to the X app on the phone yourself. The agent then uses the
+app, and Setu's level holds there too: at *Read only*, a tap on Post,
+Like or Follow is refused outright; at the level above, it comes to you
+as a card first. Buying and paying are never done at any level.
+
 **A screen it can't read.** A few screens don't describe themselves,
 like Settings' *About phone* page, whose "Up time" ticks every second.
 With a local model that can see pictures (`gemma4:26b`, say), such a

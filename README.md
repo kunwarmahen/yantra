@@ -684,6 +684,15 @@ manifest's pace (X: 3 seconds a page, 10 actions a session, a real window
 on an invisible screen)
 ([notes/112](notes/112-a-site-with-no-api.md)).
 
+When a site turns the browser away but not its own phone app (X, often),
+connect the app instead: `setu connect x --phone`. You sign in to the app
+on your phone, and Setu holds nothing. With Sparsh running the phone, the
+agent is told to use the app, and Sparsh keeps Setu's level in it: at
+Read only a tap on Post, Like or Follow is refused; at the level above
+it's held for your yes; buy, pay and delete are refused at every level.
+The startup line names it (`setu: x:personal (on the phone)`)
+([notes/122](notes/122-the-app-instead-of-the-browser.md)).
+
 In the browser UI, the **connections** chip opens a panel of cards: the
 accounts you connected (address, level, tool count, *change access*,
 *disconnect*) and the connectors installed but not connected (name the
@@ -2359,6 +2368,9 @@ src/yantra/
 │                   A browser-road connection (no `mcp`, a profile) gets
 │                   its own site tools instead of a server
 │                   ([notes/112](notes/112-a-site-with-no-api.md)).
+│                   A phone-road one (an app on the phone) becomes
+│                   Sparsh's per-app rules, `phone_rules`, handed over as
+│                   SPARSH_APP_RULES ([notes/122](notes/122-the-app-instead-of-the-browser.md)).
 │                   SignIn also runs `setu connect --site` and answers
 │                   Setu's "did you sign in?" from the page
 │                   Setu(home=...) reads somebody else's folder
