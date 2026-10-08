@@ -60,6 +60,34 @@ The everyday tasks are short. The five switches took three or four
 steps each, about half a minute. Reading the code from the newest text
 took two steps. The alarm and the contact took seven to eleven.
 
+**Three times each.** One run per task is a receipt, not a measure. With
+`--repeat 3`, on the same Sparsh and Yantra as above, a fresh emulator
+per model:
+
+| | `qwen3.8:latest` | `gemma4:26b` |
+|---|---|---|
+| **done** | **34 of 39** (73–94%) | **32 of 39** (67–91%) |
+| the eleven tasks off the About page | 32 of 33 | 30 of 33 |
+| rename the phone | 0 of 3 | 0 of 3 |
+| which Android version | 2 of 3 | 1 of 3 |
+| texts held for your yes | 5 of 6 | 6 of 6 |
+| after **no**: messages sent | none | none |
+| minutes, all 39 | 57 | 54 |
+
+The ranges are 95% intervals; the two models overlap, so this doesn't
+say one is better. What it does say: the five switches, the newest
+code, the alarm and the contact were done every time on both. The
+misses sit on the About page (luck, below) and two single slips:
+`gemma4:26b` left one web heading unanswered and one text typed but
+never confirmed.
+
+**The text that wasn't held wasn't sent either.** In `qwen3.8`'s third
+round it opened Messages, saw the same text already sent in its second
+round (the phone isn't wiped between rounds), and asked instead of
+sending again: *"Looks like you already sent "running late, there at 7"
+to 555-0123 24 minutes ago… Want me to send it again?"* A sensible
+answer, counted as not done.
+
 **The miss is the same for both, and it isn't the model's.** Renaming
 the phone means typing on Settings' *About phone* page, and that page
 can't be read at all (below). Both models found their way to it, were
@@ -190,10 +218,10 @@ reading afterwards.
 ## What is not here yet
 
 * **A frontier cloud model**, parked: the same thirteen tasks through
-  Yantra's cloud road, and the comparison with screenshots once Sparsh
-  can hand them out.
-* **Repeats.** Each task ran once per round. `--repeat 3` gives the
-  interval the other trials report; three hours a model, here.
+  Yantra's cloud road, and the comparison with screenshots
+  ([note 121](121-a-picture-where-the-list-has-nothing.md)).
+* ~~**Repeats.**~~ Done: *Three times each*, above — about an hour a
+  model.
 * **A real phone.** The emulator is close, but a real phone has its own
   apps, a lock screen and notifications arriving mid-task.
 * **Your own apps.** WhatsApp, a bank, a food order: the tasks that
