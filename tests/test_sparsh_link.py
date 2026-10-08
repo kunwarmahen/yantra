@@ -649,6 +649,13 @@ class TestTheAppsRules:
         assert sparsh_link.server_config({"mcp": {"command": "s"}}).env is None
         assert sparsh_link.app_rules_of(SimpleNamespace(setu=None)) == {}
 
+    def test_a_schedules_grants_go_to_sparsh_as_the_person_accepted_them(self):
+        said = ["send in Messages when the screen shows 555-0123"]
+        config = sparsh_link.server_config({"mcp": {"command": "s"}}, grants=said)
+        assert json.loads(config.env[sparsh_link.GRANTS]) == said
+        assert sparsh_link.GRANTS not in (
+            sparsh_link.server_config({"mcp": {"command": "s"}}, grants=[]).env or {})
+
     def test_the_startup_line_names_a_connection_on_the_phone(self):
         assert announce(setu_said(x_on_phone()), {}) == \
             "setu: x:personal (on the phone) -- via test"

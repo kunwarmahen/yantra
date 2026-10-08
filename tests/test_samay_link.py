@@ -314,6 +314,25 @@ class TestTheCardIsWords:
         finally:
             manager.shutdown()
 
+    def test_a_phone_schedule_says_so_and_names_each_step_it_may_do_unasked(self):
+        said = samay_link.explain_create(
+            {"prompt": "text Sam", "when": "every day at 8", "wait": 20,
+             "phone_steps": ["send in Messages when the screen shows 555-0123"]},
+            registry=ToolRegistry(), phone=True)
+        assert "IT WORKS YOUR PHONE" in said and "asked to unlock" in said
+        assert ("ON YOUR PHONE, WITHOUT ASKING: send in Messages when the screen "
+                "shows 555-0123") in said
+        assert "waits 20 minutes in all" in said
+        assert "refused while nobody is there" not in said
+        plain = samay_link.explain_create({"prompt": "x", "when": "every 2h"},
+                                          registry=ToolRegistry())
+        assert "PHONE" not in plain
+
+    def test_a_turn_with_the_phone_starts_samays_tools_with_it(self):
+        data = {"mcp": {"command": "samay", "args": ["mcp"]}}
+        assert samay_link.server_config(data, "raj", phone=True).args[-1] == "--phone"
+        assert "--phone" not in samay_link.server_config(data, "raj").args
+
     def test_no_allow_tools_means_only_reads(self):
         said = samay_link.explain_create({"prompt": "x", "when": "every 2h"},
                                          registry=ToolRegistry(), sentence="every 2 hours")

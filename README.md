@@ -2398,7 +2398,10 @@ src/yantra/
 │                   reaches, the accounts it changes or reads unasked), a
 │                   `schedules` prompt layer, and the page's Schedules panel
 │                   through `samay list|runs|pause|resume|rm --json`
-│                   ([notes/115](notes/115-what-a-yes-covers.md))
+│                   ([notes/115](notes/115-what-a-yes-covers.md)); a host
+│                   whose turn has the phone (Dvara) starts it `--phone`,
+│                   and the card says IT WORKS YOUR PHONE, each step it may
+│                   do there unasked, and how long its questions wait
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and
@@ -2413,7 +2416,9 @@ src/yantra/
 │                   (YANTRA_PHONE_SHOTS; [notes/121](notes/121-a-picture-where-the-list-has-nothing.md));
 │                   a tap by position's confirm card carries the screen
 │                   with the spot ringed, for the person's eyes only
-│                   ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md))
+│                   ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)); a
+│                   schedule's granted steps go to Sparsh as SPARSH_GRANTS
+│                   when its host (Dvara) gives a run the phone
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,

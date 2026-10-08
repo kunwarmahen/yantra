@@ -120,6 +120,8 @@ SERIAL_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
 PEEK_TIMEOUT = 30.0
 #: Sparsh's name for the per-app rules a harness adds (Setu's phone road).
 APP_RULES = "SPARSH_APP_RULES"
+#: Sparsh's name for a schedule's grants (held taps it may do unasked).
+GRANTS = "SPARSH_GRANTS"
 #: auto / on / off: screenshots of unreadable screens to the model.
 SHOTS_ENV = "YANTRA_PHONE_SHOTS"
 #: How long asking the local server whether a model can see may take.
@@ -204,13 +206,19 @@ def load(mode: str, path: str | None = None,
 
 
 def server_config(data: dict[str, Any], shots: bool = False,
-                  app_rules: dict[str, Any] | None = None) -> MCPServerConfig:
+                  app_rules: dict[str, Any] | None = None,
+                  grants: list[str] | None = None) -> MCPServerConfig:
+    """``grants``: held taps a schedule may do without a yes, as the person
+    accepted them ("send in Messages when the screen shows 555-0123"),
+    for a run nobody watches -- Sparsh checks each one (its rules.py)."""
     mcp = data["mcp"]
     args = list(mcp.get("args") or [])
     if shots and data.get("shots"):
         args.append(str(data["shots"]))
-    env = {APP_RULES: json.dumps(app_rules)} if app_rules else None
-    return MCPServerConfig(name=SERVER, command=mcp["command"], args=args, env=env)
+    env = {APP_RULES: json.dumps(app_rules)} if app_rules else {}
+    if grants:
+        env[GRANTS] = json.dumps(list(grants))
+    return MCPServerConfig(name=SERVER, command=mcp["command"], args=args, env=env or None)
 
 
 def app_rules_of(agent: Any) -> dict[str, Any]:
@@ -384,14 +392,15 @@ class Sparsh:
     shots: bool = False
     shots_why: str = ""
 
-    def connect(self, manager: Any, agent: Any) -> int:
+    def connect(self, manager: Any, agent: Any, grants: list[str] | None = None) -> int:
         """Start the server, set what asks, write the prompt layer.
-        Returns how many tools it brought. Raises MCPError."""
+        Returns how many tools it brought. Raises MCPError. ``grants``:
+        a schedule's, for a run whose harness (Dvara) let it have the phone."""
         from yantra.prompt import attach_prompt
 
         assert self.data is not None
         if SERVER not in manager.sessions:
-            config = server_config(self.data, self.shots, app_rules_of(agent))
+            config = server_config(self.data, self.shots, app_rules_of(agent), grants)
             self.tools = [n for n in manager.connect(config, origin="sparsh")
                           if n in agent.registry]
             if self.sees():

@@ -156,10 +156,11 @@ def load(mode: str, path: str | None = None) -> tuple[dict[str, Any], str] | Non
 
 
 def server_config(data: dict[str, Any], person: str = LOCAL,
-                  agent: str = "", runner: str = "") -> MCPServerConfig:
+                  agent: str = "", runner: str = "", phone: bool = False) -> MCPServerConfig:
     """The MCP server, as Samay says to start it, for one person. A host
     that serves people through itself (Dvara) names its road with
-    ``runner``; left out, Samay picks."""
+    ``runner``; left out, Samay picks. ``phone``: this turn has the
+    person's phone, so a schedule made in it works the phone too."""
     if not WORD_RE.match(person):
         raise SamayLinkError(f"{person!r} is not a person Samay can keep schedules for")
     mcp = data["mcp"]
@@ -168,6 +169,8 @@ def server_config(data: dict[str, Any], person: str = LOCAL,
         args += ["--agent", agent]
     if runner:
         args += ["--runner", runner]
+    if phone:
+        args.append("--phone")
     return MCPServerConfig(name=SERVER, command=mcp["command"], args=args)
 
 
@@ -264,7 +267,7 @@ def _setu_reach(setu: Any) -> tuple[list[str], dict[str, str]]:
 
 
 def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
-                   sentence: str = "", problem: str = "") -> str:
+                   sentence: str = "", problem: str = "", phone: bool = False) -> str:
     """The permission card for ``create_schedule``, in plain words.
 
     ``sentence`` is Samay's own reading of ``when`` (preview_schedule);
@@ -315,7 +318,18 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
         lines.append("  without asking, it may use only tools that read.")
     if reach:
         lines.append("  through Setu, it can read without asking: " + "; ".join(reach))
-    lines.append("  Anything else that changes something is refused while nobody is there.")
+    if phone:
+        steps = args.get("phone_steps") or []
+        steps = [steps] if isinstance(steps, str) else list(steps)
+        wait = args.get("wait") or 30
+        lines.append("  IT WORKS YOUR PHONE at each time. In use: it waits up to 10 "
+                     "minutes, then skips. Locked: you're asked to unlock it.")
+        for step in steps:
+            lines.append(f"    ON YOUR PHONE, WITHOUT ASKING: {step}")
+        lines.append(f"  Anything else held on the phone is asked in your chat; it waits "
+                     f"{wait} minutes in all, then it's refused.")
+    else:
+        lines.append("  Anything else that changes something is refused while nobody is there.")
     prompt = " ".join(str(args.get("prompt") or "").split())
     lines.append(f"  does:      {prompt or '(nothing -- no prompt given)'}")
     return "\n".join(lines)
@@ -333,7 +347,7 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
     return head + (f"\n  {found}" if found else "")
 
 
-def explain(tool: Any, registry: Any, setu_of: Any) -> Any:
+def explain(tool: Any, registry: Any, setu_of: Any, phone: bool = False) -> Any:
     """The ``explain`` hook for one of Samay's write tools (mcp.py), or
     None for the reads, which are never asked about."""
     verb = tool.raw_name
@@ -353,7 +367,7 @@ def explain(tool: Any, registry: Any, setu_of: Any) -> Any:
             said, failed = ask("preview_schedule", preview)
             return explain_create(args, registry=registry, setu=setu_of(),
                                   sentence="" if failed else said,
-                                  problem=said if failed else "")
+                                  problem=said if failed else "", phone=phone)
         return card
     if verb in ("pause_schedule", "resume_schedule", "delete_schedule"):
         def change(args: dict[str, Any]) -> str:
@@ -378,6 +392,8 @@ class Samay:
     person: str = LOCAL
     agent: str = ""
     runner: str = ""
+    #: This turn has the person's phone (Dvara): schedules made work it.
+    phone: bool = False
     seen_at: str = SEEN_HERE
     clock_off: str = CLOCK_HERE
     error: str = ""
@@ -403,7 +419,7 @@ class Samay:
         from yantra.prompt import attach_prompt
 
         assert self.data is not None
-        cfg = server_config(self.data, self.person, self.agent, self.runner)
+        cfg = server_config(self.data, self.person, self.agent, self.runner, self.phone)
         existing = manager.sessions.get(SERVER)
         if existing is None:
             # a package's tool list may refuse some (or all): only what
@@ -415,7 +431,8 @@ class Samay:
             self.tools = [n for n in agent.registry.names() if n.startswith("mcp__samay__")]
         for name in self.tools:
             tool = agent.registry.get(name)
-            hook = explain(tool, agent.registry, lambda: getattr(agent, "setu", None))
+            hook = explain(tool, agent.registry, lambda: getattr(agent, "setu", None),
+                           self.phone)
             if hook is not None:
                 tool.explain = hook
                 tool.run = self._then_refresh(tool.run)
