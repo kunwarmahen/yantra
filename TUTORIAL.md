@@ -2153,6 +2153,11 @@ anything there. With a cloud model, no screenshot leaves your computer
 unless you set `YANTRA_PHONE_SHOTS=on`. `YANTRA_PHONE_SHOTS=off` turns
 them off for local models too.
 
+**No cable?** An Android phone on the same Wi-Fi works too, with
+wireless debugging (Sparsh's SETUP.md, B4: `sparsh pair` once, then
+`export SPARSH_CONNECT=<its address>` so it's found again by itself).
+Sarathi's containers reach the phone this way (`sarathi phone`).
+
 **Not yet:** schedules don't get a phone (nobody would be there to say
 yes to a held step). Letters beyond plain English (é, Hindi, emoji) need
 a small keyboard app on an Android phone, which you install once

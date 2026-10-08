@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2679 tests. The
+The harness underneath is complete and covered by 2733 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -802,6 +802,9 @@ so switching to a cloud model mid-session stops them. On the About page,
 ([notes/121](notes/121-a-picture-where-the-list-has-nothing.md)).
 `YANTRA_SPARSH=auto:/path/to/sparsh` names the program without turning
 it on: no phone at the start still means no tools (what Sarathi passes).
+A phone on the same Wi-Fi works without a cable: pair it once (`sparsh
+pair`) and set `SPARSH_CONNECT=<its address>`, and Sparsh finds it again
+by itself (its SETUP.md, B4).
 
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
@@ -2886,7 +2889,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2655 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2733 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local

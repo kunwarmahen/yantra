@@ -112,8 +112,9 @@ Note 120's two About-page tasks, with `examples/phone_trial.py --shots`
 
 The version is now read from the first visit instead of by luck. The
 rename still can't be done: the picture shows "Device name", but there
-is no number to tap it by, and Sparsh deliberately never taps by
-position. In one run gemma renamed the phone's Bluetooth name instead
+is no number to tap it by, and Sparsh doesn't tap by position (if it
+ever does, each such tap waits for the person's yes, the spot marked on
+the picture). In one run gemma renamed the phone's Bluetooth name instead
 and said the phone was renamed. Reading the phone afterwards caught it.
 
 ## What the tests hold
