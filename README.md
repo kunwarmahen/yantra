@@ -773,7 +773,9 @@ model is told "NOT DONE", and the only way through is
 `--yolo`, and its card is Sparsh's own account of what will happen, with
 the screen it will happen on. `YANTRA_SPARSH=/path/to/sparsh` names it
 when it is elsewhere; `--sparsh` insists, even with no phone attached;
-`--no-sparsh` never looks; a `--unattended` run gets no phone
+`--no-sparsh` never looks; a plain `--mcp-config` entry running
+`sparsh mcp` works too, but then every tap asks (Yantra can't tell
+Sparsh's steps apart without finding Sparsh itself); a `--unattended` run gets no phone
 ([notes/119](notes/119-a-phone-and-what-asks.md)). Counted on thirteen
 everyday tasks on a fresh emulator, `qwen3.8:latest` and `gemma4:26b`
 each did twelve, every text was held for a yes, and a "no" was never
