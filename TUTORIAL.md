@@ -2051,9 +2051,21 @@ not use your own phone:
    For a real phone: *Settings → About phone*, tap *Build number* seven
    times, turn on *USB debugging* in *Developer options*, plug it in, and
    say yes to the question on the phone's screen.
-2. Put `sparsh` on your `PATH`, or tell Yantra where it is:
-   `export YANTRA_SPARSH=~/sparsh/.venv/bin/sparsh`.
-3. Check: `yantra status` should say `sparsh: phone emulator-5554 (…)`.
+2. Put `sparsh` on your `PATH`, so Yantra finds it by itself. A checkout's
+   `sparsh` lives in its `.venv`, so link just that one program:
+
+   ```
+   ln -sf ~/sparsh/.venv/bin/sparsh ~/.local/bin/sparsh
+   ```
+
+   (Or name it each time: `export YANTRA_SPARSH=~/sparsh/.venv/bin/sparsh`.)
+3. Check: `sparsh devices` lists the phone, and `yantra status` says
+   `sparsh: phone emulator-5554 (…)`.
+4. Test it end to end with one line: `uv run yantra --prompt "Turn on
+   airplane mode on my phone."`, then `adb shell settings get global
+   airplane_mode_on` says `1`. Sparsh's SETUP.md, Part T, has the same
+   test for a real Android phone (cable or Wi-Fi) and an iPhone, and one
+   that checks a text is stopped for your yes.
 
 **Use it.** Start Yantra as usual. It says one line at startup:
 

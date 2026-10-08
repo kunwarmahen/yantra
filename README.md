@@ -756,7 +756,8 @@ covers all three).
 The model doesn't get a screenshot. It gets the phone's own description
 of the screen as numbered lines (`6 item "Airplane mode" [tap, off]`),
 and it answers "tap 6". That's why a local model can do it. When
-`sparsh` is on `PATH` and a phone is attached, Yantra starts its tools
+`sparsh` is on `PATH` (link a checkout's: `ln -sf ~/sparsh/.venv/bin/sparsh
+~/.local/bin/sparsh`) and a phone is attached, Yantra starts its tools
 and says so in one line:
 
 ```
