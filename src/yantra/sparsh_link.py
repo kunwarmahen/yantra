@@ -82,9 +82,12 @@ the picture with the spot ringed, from ``describe_hold``
 (``PermissionRequest.picture``). The person answers by looking. That
 picture is the person's: it goes on the card, never to the model.
 
-NOT WITH NOBODY WATCHING. A run nobody watches (``--unattended``) gets
-no phone: everything it may do by itself would be done on a phone no
-one is looking at, and a held step could only be refused.
+NOT WITH NOBODY WATCHING, FROM HERE. A run Yantra starts with nobody
+watching (``--unattended``) gets no phone: everything it may do by
+itself would be done on a phone no one is looking at, and a held step
+could only be refused. A host that checks the phone is free and can
+reach its person (Dvara) may give a scheduled run the phone, with the
+steps its person granted (``grants``).
 """
 
 from __future__ import annotations

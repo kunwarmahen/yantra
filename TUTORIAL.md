@@ -2070,7 +2070,7 @@ not use your own phone:
 **Use it.** Start Yantra as usual. It says one line at startup:
 
 ```
-sparsh: 9 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via …/sparsh
+sparsh: 10 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via …/sparsh
 ```
 
 Then just ask: *"On my phone, turn on airplane mode."* *"Using Messages,
@@ -2148,8 +2148,11 @@ like Settings' *About phone* page, whose "Up time" ticks every second.
 With a local model that can see pictures (`gemma4:26b`, say), such a
 screen comes to the agent with a screenshot, and its first line says
 `screenshots on (local model)`. It can read the page from the picture,
-but it can only tap what's on the list, so it goes another way to change
-anything there. With a cloud model, no screenshot leaves your computer
+and tap a spot on it, but **every such tap asks you first**: the card
+shows the picture with the spot ringed in red (in the terminal, a file
+whose path is printed). Say yes only if the ring is on what you meant.
+Typing on such a screen asks too. Renaming the emulator from that page
+takes four yeses. With a cloud model, no screenshot leaves your computer
 unless you set `YANTRA_PHONE_SHOTS=on`. `YANTRA_PHONE_SHOTS=off` turns
 them off for local models too.
 
