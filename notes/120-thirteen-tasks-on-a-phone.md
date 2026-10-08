@@ -67,7 +67,7 @@ per model:
 | | `qwen3.8:latest` | `gemma4:26b` |
 |---|---|---|
 | **done** | **34 of 39** (73–94%) | **32 of 39** (67–91%) |
-| the eleven tasks off the About page | 32 of 33 | 30 of 33 |
+| the eleven tasks off the About page | 32 of 33 | 31 of 33 |
 | rename the phone | 0 of 3 | 0 of 3 |
 | which Android version | 2 of 3 | 1 of 3 |
 | texts held for your yes | 5 of 6 | 6 of 6 |
