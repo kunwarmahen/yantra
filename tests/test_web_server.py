@@ -26,7 +26,7 @@ from yantra.providers.base import ProviderSettings  # noqa: E402
 from yantra.session import SessionStore  # noqa: E402
 from yantra.tools.ask_user import AskUser  # noqa: E402
 from yantra.tools.base import Tool, ToolRegistry  # noqa: E402
-from yantra.types import Message, ModelResponse, TextBlock, Usage  # noqa: E402
+from yantra.types import ImageBlock, Message, ModelResponse, TextBlock, Usage  # noqa: E402
 from yantra.web.server import WebSession, make_app  # noqa: E402
 
 
@@ -266,6 +266,26 @@ def test_permission_deny_becomes_error_data():
         result = next(e for e in envelopes if e["type"] == "tool_result")
         assert result["is_error"]
         assert "denied" in result["output"].lower()
+
+
+def test_a_cards_picture_rides_with_the_question():
+    script = [
+        assistant_tool_call("t1", "write_thing", {"text": "here"}),
+        assistant_text("okay"),
+    ]
+    session, agent = make_session(script)
+    agent.registry.get("write_thing").card_picture = (
+        lambda args: ImageBlock(media_type="image/png", data="iVBORw0KGgo="))
+    client = TestClient(make_app(session))
+
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "state"
+        assert client.post("/api/message", json={"text": "go"}).status_code == 200
+        req = next(e for e in drain_until(ws, {"permission_request"})
+                   if e["type"] == "permission_request")
+        assert req["picture"] == {"media_type": "image/png", "data": "iVBORw0KGgo="}
+        ws.send_json({"type": "answer", "id": req["id"], "decision": "deny"})
+        drain_until(ws, {"turn_done"})
 
 
 def test_permission_edit_round_trip_adopts_edited_args():

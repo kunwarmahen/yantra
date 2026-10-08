@@ -41,9 +41,10 @@ from yantra import sparsh_link, status
 from yantra.agent import Agent
 from yantra.cli.main import _connect_sparsh
 from yantra.mcp import MCPManager
-from yantra.permissions import PermissionRequest, yolo
+from yantra.permissions import PermissionRequest, card_picture, yolo
 from yantra.setu_link import Link, announce, phone_rules, prompt_text
 from yantra.tools.base import ToolRegistry
+from yantra.types import ToolCall
 
 FAKE_SPARSH = """\
     import json, sys
@@ -94,7 +95,7 @@ FAKE_SPARSH = """\
                 send({{"jsonrpc": "2.0", "id": mid, "result": {{"tools": TOOLS}}}})
             elif method == "tools/call":
                 name, a = msg["params"]["name"], msg["params"].get("arguments") or {{}}
-                if name == "describe_hold" and a.get("hold") != "h1":
+                if name == "describe_hold" and a.get("hold") not in ("h1", "h2"):
                     send({{"jsonrpc": "2.0", "id": mid, "result": {{"isError": True,
                         "content": [{{"type": "text", "text": "no step is waiting"}}]}}}})
                     continue
@@ -102,6 +103,9 @@ FAKE_SPARSH = """\
                                          'in com.google.android.apps.messaging\\n'
                                          '1 field "running late"'}}.get(name, "done")
                 content = [{{"type": "text", "text": text}}]
+                if name == "describe_hold" and a.get("hold") == "h2":  # a tap by position
+                    content.append({{"type": "image", "mimeType": "image/png",
+                                    "data": "iVBORw0KGgo="}})
                 if name == "look" and "--shots" in args:
                     content.append({{"type": "image", "mimeType": "image/png",
                                     "data": "iVBORw0KGgo="}})
@@ -185,6 +189,32 @@ class TestTheCard:
             card = tool(agent, "confirm").summary({"hold": "h1"}, agent.ctx)
             assert card.startswith("Do this on the phone?")
             assert 'tap button "Send SMS"' in card and '"running late"' in card
+        finally:
+            manager.shutdown()
+
+    def test_a_tap_by_position_brings_its_picture_for_the_person(self, clean, tmp_path):
+        _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
+        try:
+            confirm = tool(agent, "confirm")
+            card = confirm.summary({"hold": "h2"}, agent.ctx)
+            assert "a tap is where it is ringed" in card
+            picture = card_picture(confirm, {"hold": "h2"})
+            assert picture.media_type == "image/png" and picture.data == "iVBORw0KGgo="
+            # a step that is words alone has none
+            confirm.summary({"hold": "h1"}, agent.ctx)
+            assert card_picture(confirm, {"hold": "h1"}) is None
+        finally:
+            manager.shutdown()
+
+    def test_the_picture_reaches_the_gate_and_not_the_model(self, clean, tmp_path):
+        _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
+        asked = []
+        agent.permissions = lambda request: asked.append(request) or False
+        try:
+            call = ToolCall(id="c1", name="mcp__sparsh__confirm", arguments={"hold": "h2"})
+            result = agent._execute(call)
+            assert asked[0].picture.data == "iVBORw0KGgo="
+            assert "iVBORw0KGgo" not in str(result)
         finally:
             manager.shutdown()
 

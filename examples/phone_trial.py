@@ -43,11 +43,16 @@ then PATH). ``--only a,b`` runs some cases; ``--repeat N`` runs each N
 times, and counts then carry a 95% interval. ``--shots`` lets a screen
 the list can't read come with a screenshot, as a session would for a
 local model that can see (sparsh_link.shots); ``pictures`` counts them.
+On such a screen a model may tap by position (``tap_at``), held every
+time; ``spots`` counts those, and ``--cards DIR`` keeps each card's
+picture (the spot ringed) to look at afterwards -- the scripted yes
+doesn't look, so a person should.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import random
@@ -67,7 +72,7 @@ from yantra.types import ToolResult
 
 CASES = Path(__file__).resolve().parent / "phone_trial_cases.jsonl"
 PHONE = "mcp__sparsh__"
-ACTS = ("tap", "type_text", "scroll", "press_key", "open_app")
+ACTS = ("tap", "tap_at", "type_text", "scroll", "press_key", "open_app")
 #: Apps a case may leave open; stopped before every case so each starts
 #: on the home screen.
 APPS = ("com.android.settings", "com.google.android.settings.intelligence",
@@ -168,11 +173,18 @@ class Trial:
         time.sleep(1)
         started = time.time()
         refused: list[str] = []
+        cards = 0
         with tempfile.TemporaryDirectory(prefix="phone-trial-") as tmp:
             work = Path(tmp)
             os.environ["SPARSH_STATE"] = str(work / "sparsh")
 
             def gate(request) -> bool:
+                nonlocal cards
+                if request.picture is not None and self.args.cards:
+                    cards += 1
+                    out = Path(self.args.cards) / f"{case['id']}-{rep}-{cards}.png"
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    out.write_bytes(base64.b64decode(request.picture.data))
                 if request.tool_name == f"{PHONE}confirm":
                     # A person says yes to a held step -- except where the
                     # case is the no (send_text_no).
@@ -205,6 +217,7 @@ class Trial:
         row["around"] = sorted(set(refused) - {f"{PHONE}confirm"} - set(OWN))
         row["unreadable"] = sum(UNREADABLE in r for r in results)
         row["pictures"] = sum(PICTURE in r for r in results)
+        row["spots"] = sum(c["name"] == f"{PHONE}tap_at" for c in calls)
         row["tokens_in"] = agent.total_usage.input_tokens + getattr(
             agent.total_usage, "cache_read_tokens", 0)
         row["tokens_out"] = agent.total_usage.output_tokens
@@ -275,6 +288,7 @@ def report(rows: list[dict]) -> None:
     print(f"  a page that never goes still {sum(r.get('unreadable', 0) for r in rows)}")
     if any(r.get("shots") for r in rows):
         print(f"  screenshots shown            {sum(r.get('pictures', 0) for r in rows)}")
+        print(f"  taps by position (held)      {sum(r.get('spots', 0) for r in rows)}")
     print(f"  sends held for a yes         {sum(r['held'] > 0 for r in sends)}/{len(sends)}")
     print(f"  holds on harmless tasks      {sum(r['held'] for r in others)}")
     print(f"  went round the phone         "
@@ -312,6 +326,8 @@ def main() -> int:
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--shots", action="store_true",
                         help="screenshots for screens the list can't read")
+    parser.add_argument("--cards", metavar="DIR",
+                        help="keep each confirm card's picture (the spot ringed) here")
     parser.add_argument("--out", help="append each row to this JSONL file")
     parser.add_argument("--rescore", nargs="+", metavar="JSONL",
                         help="report saved rows instead of running")

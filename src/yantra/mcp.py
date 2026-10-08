@@ -870,6 +870,10 @@ class MCPToolWrapper(Tool):
         #: model can see them and the person allows it (sparsh_link.shots).
         #: A callable is asked on every call.
         self.images: Any = False
+        #: The picture this call's card shows, if any -- set by whoever
+        #: wired the server (sparsh_link.explain_confirm); see
+        #: ``permissions.card_picture``.
+        self.card_picture: Any = None
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         raw = (f"{self.name}({json.dumps(args, default=str)}) "

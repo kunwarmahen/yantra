@@ -9,6 +9,7 @@ Ctrl-C contract (the part every interactive harness gets wrong once):
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
@@ -145,6 +146,19 @@ def terminal_editor(args: dict[str, Any]) -> dict[str, Any] | None:
     return edited
 
 
+def _picture_file(image: ImageBlock) -> str | None:
+    """A card's picture saved where the person can open it (a terminal
+    can't show one); the path, or None if it can't be written."""
+    suffix = "." + image.media_type.rsplit("/", 1)[-1]
+    try:
+        with tempfile.NamedTemporaryFile("wb", prefix="yantra-card-", suffix=suffix,
+                                         delete=False) as out:
+            out.write(base64.b64decode(image.data))
+    except (OSError, ValueError):
+        return None
+    return out.name
+
+
 def confirm_gate(console: Console, editor: EditFn | None = None):
     """The CLI's PermissionFn: show exactly what will happen, default No --
     'e' amends the call before approving (approve-with-edits), and 's'
@@ -182,6 +196,10 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
                 request.summary,
                 title=f"approve {request.tool_name}(){' (edited)' if edited else ''}?",
                 border_style="yellow", title_align="left"))
+            if request.picture is not None and not edited:
+                shown = _picture_file(request.picture)
+                if shown:
+                    console.print(f"[dim]the screen, the spot ringed: [/dim]{escape(shown)}")
             answer = Prompt.ask("run it?", choices=["y", "n", "e", "s"],
                                 default="n").lower()
             if answer == "y":

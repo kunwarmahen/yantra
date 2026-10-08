@@ -161,6 +161,23 @@ class PermissionRequest:
     #: a renderer or a host can branch without matching on English.
     #: None => ``REFUSED_UNSPECIFIED`` (see ``denial_code``).
     code: str | None = None
+    #: A picture the card shows beside ``summary`` -- the phone's screen
+    #: with the spot a tap by position would hit ringed (sparsh_link).
+    #: For the PERSON's eyes: no gate sends it to the model. An
+    #: ``ImageBlock``; None for every card that is words alone.
+    picture: Any = None
+
+
+def card_picture(tool: Any, arguments: dict[str, Any]) -> Any:
+    """The tool's picture for this call's card (its ``card_picture``), or
+    None. Like a summary, a broken one must never block the asking."""
+    hook = getattr(tool, "card_picture", None)
+    if hook is None:
+        return None
+    try:
+        return hook(arguments)
+    except Exception:
+        return None
 
 
 #: A gate receives one request per dangerous call; True => allow. The

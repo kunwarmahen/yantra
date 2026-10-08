@@ -149,6 +149,17 @@ function onState(env) {
   }
 }
 
+/* The picture a card carries -- a phone's screen with the spot a tap by
+   position would hit ringed. Above the words: it is what the person
+   answers by, and below Sparsh's account it was scrolled out of sight.
+   Only image types, only base64. */
+function cardPicture(p) {
+  if (!p || !/^image\/(png|jpeg|gif|webp)$/.test(p.media_type || "")
+      || !/^[A-Za-z0-9+/=]+$/.test(p.data || "")) return "";
+  return `<img class="card-picture" alt="the phone's screen; a tap is where it is ringed"
+              src="data:${p.media_type};base64,${p.data}">`;
+}
+
 /* A turn stopped for approval (--on-timeout hold, notes/88). Unlike the
    modal, this stays in the transcript: nobody is waiting on a clock now,
    so the questions sit where the turn stopped until the person answers
@@ -162,6 +173,7 @@ function renderHeld(held) {
         <label><input type="radio" name="h-${esc(c.id)}" value="approve" checked> approve</label>
         <label><input type="radio" name="h-${esc(c.id)}" value="deny"> deny</label>
       </div>
+      ${cardPicture(c.picture)}
       <div class="summary">${esc(c.summary)}</div>
       <details><summary>raw arguments</summary>
         <pre class="args">${esc(JSON.stringify(c.arguments ?? {}, null, 2))}</pre>
@@ -829,6 +841,7 @@ function showPermissionModal(env) {
     <h3>${esc(env.tool_name)}() ${env.edited
       ? '<span class="edited-flag">(edited)</span>' : ""}</h3>
     ${env.wait_left != null ? '<div class="wait-clock" id="wait-clock"></div>' : ""}
+    ${cardPicture(env.picture)}
     <div class="summary">${esc(env.summary)}</div>
     <details><summary>raw arguments</summary>
       <pre class="args">${esc(JSON.stringify(env.arguments ?? {}, null, 2))}</pre>

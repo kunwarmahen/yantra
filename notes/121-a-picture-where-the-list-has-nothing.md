@@ -112,9 +112,8 @@ Note 120's two About-page tasks, with `examples/phone_trial.py --shots`
 
 The version is now read from the first visit instead of by luck. The
 rename still can't be done: the picture shows "Device name", but there
-is no number to tap it by, and Sparsh doesn't tap by position (if it
-ever does, each such tap waits for the person's yes, the spot marked on
-the picture). In one run gemma renamed the phone's Bluetooth name instead
+is no number to tap it by. (Tapping by position, each tap waiting for
+the person's yes, is [note 123](123-a-tap-you-say-yes-to-by-looking.md).) In one run gemma renamed the phone's Bluetooth name instead
 and said the phone was renamed. Reading the phone afterwards caught it.
 
 ## What the tests hold
@@ -134,4 +133,6 @@ provider takes. 2717 tests before, 2725 after (and 1 skipped, as before).
   the model see, may the picture leave).
 * The cloud road with pictures, untried, like the rest of the cloud
   trial.
-* Acting on what only the picture shows.
+* ~~Acting on what only the picture shows.~~ A tap by position, asked
+  every time, the spot ringed on the card
+  ([note 123](123-a-tap-you-say-yes-to-by-looking.md)).

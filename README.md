@@ -799,7 +799,13 @@ gets none unless `YANTRA_PHONE_SHOTS=on`, and `off` stops them
 everywhere. The startup line says which. It's asked again on every call,
 so switching to a cloud model mid-session stops them. On the About page,
 `gemma4:26b` read the phone's IMEI from the picture
-([notes/121](notes/121-a-picture-where-the-list-has-nothing.md)).
+([notes/121](notes/121-a-picture-where-the-list-has-nothing.md)). On
+such a screen the model can also **tap a spot** on the picture. Every
+one of those taps asks you first, and the card shows the picture with
+the spot ringed; in the terminal it's saved to a file and the path is
+printed. Typing on such a screen asks too. `qwen3.8:latest` renamed the
+emulator from Settings' About page this way, four yeses
+([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)).
 `YANTRA_SPARSH=auto:/path/to/sparsh` names the program without turning
 it on: no phone at the start still means no tools (what Sarathi passes).
 A phone on the same Wi-Fi works without a cable: pair it once (`sparsh
@@ -2346,6 +2352,8 @@ src/yantra/
 │                   A tool's `images` lets its result's pictures through
 │                   (off for every server unless whoever wired it says so;
 │                   [notes/121](notes/121-a-picture-where-the-list-has-nothing.md)).
+│                   A tool's `card_picture` puts a picture on its approval
+│                   card ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)).
 │                   A tool's `explain` hook gives its approval card plain
 │                   words -- the host's, never the server's
 │                   ([notes/115](notes/115-what-a-yes-covers.md))
@@ -2402,7 +2410,10 @@ src/yantra/
 │                   ([notes/119](notes/119-a-phone-and-what-asks.md)); a
 │                   screenshot of a screen the list can't read, to a local
 │                   model that can see, to a cloud one only when asked
-│                   (YANTRA_PHONE_SHOTS; [notes/121](notes/121-a-picture-where-the-list-has-nothing.md))
+│                   (YANTRA_PHONE_SHOTS; [notes/121](notes/121-a-picture-where-the-list-has-nothing.md));
+│                   a tap by position's confirm card carries the screen
+│                   with the spot ringed, for the person's eyes only
+│                   ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,

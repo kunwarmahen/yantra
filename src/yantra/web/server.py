@@ -154,8 +154,17 @@ def _held_view(agent) -> dict[str, Any] | None:
         return None
     return {"at": held.at, "age": round(time.time() - held.at),
             "calls": [{"id": r.call_id, "tool_name": r.tool_name,
-                       "summary": r.summary, "arguments": r.arguments}
+                       "summary": r.summary, "arguments": r.arguments,
+                       "picture": _picture(r)}
                       for r in held.waiting]}
+
+
+def _picture(request) -> dict[str, str] | None:
+    """The card's picture as the page shows it (an ``<img>``), or None."""
+    image = getattr(request, "picture", None)
+    if image is None:
+        return None
+    return {"media_type": image.media_type, "data": image.data}
 
 
 def _refusal_tally(agent) -> dict[str, int]:
@@ -429,6 +438,8 @@ class WebSession:
                     "summary": request.summary,
                     "arguments": request.arguments,
                     "edited": edited,
+                    # the phone's screen, the spot ringed: the person's eyes only
+                    "picture": None if edited else _picture(request),
                 }
                 if self._wait_left is not None:
                     # Seconds, not a timestamp: the page's clock and

@@ -73,8 +73,14 @@ reaches the phone at the next one.
 
 It is asked again on every call, so a switch to a cloud model mid-session
 stops the pictures (a switch to a local one doesn't start them: Sparsh
-was started without ``--shots``). The picture is for reading: there is
-still no tapping by position.
+was started without ``--shots``).
+
+A TAP BY POSITION SHOWS THE PERSON WHERE. On such a screen the model may
+``tap_at`` a spot on the picture; Sparsh holds it every time (and any
+typing there), so it comes through ``confirm`` -- whose card carries
+the picture with the spot ringed, from ``describe_hold``
+(``PermissionRequest.picture``). The person answers by looking. That
+picture is the person's: it goes on the card, never to the model.
 
 NOT WITH NOBODY WATCHING. A run nobody watches (``--unattended``) gets
 no phone: everything it may do by itself would be done on a phone no
@@ -310,8 +316,10 @@ def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
     ]
     if shots:
         lines.append("A screen that can't be read as a list comes with a screenshot: read "
-                     "what you need from it. Only numbered things can be tapped, so reach "
-                     "what it shows another way (back, a scroll, a search).")
+                     "what you need from it. To act on what it shows, first try another "
+                     "way (back, a scroll, a search); if there is none, `tap_at` its spot "
+                     "-- x and y from 0 to 1000 across and down the picture. It is held "
+                     "for the person, who sees the spot ringed.")
     if any(_is_iphone(p) for p in phones):
         lines.append("5. An iPhone has no Back key: `press_key` back swipes in from the "
                      "left edge. If the screen doesn't change, tap the app's own Back, "
@@ -333,19 +341,29 @@ def classify(tool: Any, kinds: dict[str, str]) -> str | None:
 
 
 def explain_confirm(tool: Any) -> Any:
-    """The card for ``confirm``: Sparsh's own words for the held step."""
+    """The card for ``confirm``: Sparsh's own words for the held step --
+    and, for a step on a screen with no list, its picture, which is set
+    as the tool's ``card_picture`` (asked right after the words)."""
     session = tool.session
+    pictures: dict[str, Any] = {}
 
     def card(args: dict[str, Any]) -> str:
         hold = str(args.get("hold") or "")
+        pictures.clear()
         try:
-            said, failed = session.call_tool("describe_hold", {"hold": hold})
+            said, failed, images = session.call_tool_full(
+                "describe_hold", {"hold": hold}, images=True)
         except Exception as exc:             # the card must still show
-            said, failed = str(exc), True
+            said, failed, images = str(exc), True, []
         if failed:
             return (f"Do a step on the phone that was held for your yes ({hold}).\n"
                     f"  SPARSH CANNOT DESCRIBE IT: {said}")
+        if images:
+            pictures[hold] = images[0]
+            said += "\n(The picture shows the screen; a tap is where it is ringed.)"
         return "Do this on the phone?\n" + said
+
+    tool.card_picture = lambda args: pictures.get(str(args.get("hold") or ""))
     return card
 
 

@@ -70,8 +70,8 @@ from yantra.memory import prime_if_new
 from yantra.memory.reflect import abefore_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
-                                adecide, allow_read_only, denial_code,
-                                denial_text)
+                                adecide, allow_read_only, card_picture,
+                                denial_code, denial_text)
 from yantra.providers.base import Provider, acollect
 from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
                                 coerce_arguments)
@@ -705,6 +705,9 @@ class AsyncAgent:
             # Closed over so an edit-and-reapprove UI can re-render the
             # preview for amended args (approve-with-edits).
             summarize=lambda args: tool.summary(args, self.ctx),
+            # What the card shows beside its words, if anything (a phone's
+            # screen with the spot ringed); never sent to the model.
+            picture=card_picture(tool, call.arguments),
         )
         try:
             # Awaitable-TOLERANT: a plain function answers inline exactly as

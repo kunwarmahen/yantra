@@ -37,8 +37,8 @@ from yantra.memory import prime_if_new
 from yantra.memory.reflect import before_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
-                                allow_read_only, decide, denial_code,
-                                denial_text)
+                                allow_read_only, card_picture, decide,
+                                denial_code, denial_text)
 from yantra.providers.base import Provider, collect
 from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
                                 coerce_arguments)
@@ -962,6 +962,9 @@ class Agent:
             # Closed over so an edit-and-reapprove UI can re-render the
             # preview for amended args (approve-with-edits).
             summarize=lambda args: tool.summary(args, self.ctx),
+            # What the card shows beside its words, if anything (a phone's
+            # screen with the spot ringed); never sent to the model.
+            picture=card_picture(tool, call.arguments),
         )
         try:
             # decide(), not self.permissions(): an async gate handed to the
