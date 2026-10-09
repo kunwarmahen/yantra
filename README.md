@@ -780,7 +780,8 @@ Sparsh's steps apart without finding Sparsh itself); a `--unattended` run gets n
 everyday tasks on a fresh emulator, `qwen3.8:latest` and `gemma4:26b`
 each did twelve, every text was held for a yes, and a "no" was never
 gone round ([notes/120](notes/120-thirteen-tasks-on-a-phone.md),
-`examples/phone_trial.py`). In the browser UI a
+`examples/phone_trial.py`); on a real Nexus 6P (Android 8.1),
+`qwen3.8:latest` did eleven of the twelve that phone can do. In the browser UI a
 **phone** chip opens the phone panel: the phones `adb` sees, **see the
 screen** for a screenshot beside the exact lines the agent reads, and
 the rules in force (the words that need a yes, the apps kept out, the
@@ -1253,7 +1254,9 @@ out of tuning — [notes/118](notes/118-the-internet-is-not-a-read.md)),
 (can a model work a phone through Sparsh? Thirteen everyday tasks on a
 throwaway emulator, graded by reading the phone over `adb`, not by the
 answer; two texts check a yes sends once and a no sends nothing —
-[notes/120](notes/120-thirteen-tasks-on-a-phone.md)), [`examples/hooks_demo.py`](examples/hooks_demo.py)
+[notes/120](notes/120-thirteen-tasks-on-a-phone.md);
+`--cases examples/phone_trial_real.jsonl` is a set for your own phone,
+nothing wiped or sent, each switch turned and turned back), [`examples/hooks_demo.py`](examples/hooks_demo.py)
 (watch every tool execution without touching the loop),
 [`examples/async_gate_demo.py`](examples/async_gate_demo.py) (a permission
 gate that waits several seconds for a person while a second conversation

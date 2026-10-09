@@ -1,0 +1,9 @@
+{"id": "airplane_off", "say": "Turn off airplane mode on my phone.", "check": {"shell": "settings get global airplane_mode_on", "match": "^0$"}}
+{"id": "airplane_on", "say": "Turn on airplane mode on my phone.", "check": {"shell": "settings get global airplane_mode_on", "match": "^1$"}}
+{"id": "dnd_off", "say": "Turn off Do Not Disturb on my phone.", "check": {"shell": "settings get global zen_mode", "match": "^0$"}}
+{"id": "dnd_on", "say": "Turn on Do Not Disturb on my phone.", "check": {"shell": "settings get global zen_mode", "match": "^[1-3]$"}}
+{"id": "screen_timeout", "say": "Make my phone's screen turn off after 2 minutes of not being used.", "check": {"shell": "settings get system screen_off_timeout", "match": "^120000$"}}
+{"id": "screen_timeout_back", "say": "Make my phone's screen turn off after 30 seconds of not being used.", "check": {"shell": "settings get system screen_off_timeout", "match": "^30000$"}}
+{"id": "wifi_off", "say": "Turn off Wi-Fi on my phone.", "setup": ["svc wifi enable"], "check": {"shell": "settings get global wifi_on", "match": "^0$"}, "after": ["svc wifi enable"]}
+{"id": "android_version", "say": "Which version of Android is my phone running?", "check": {"answer": "\\b{version}\\b"}}
+{"id": "web_heading", "say": "Open example.com in Chrome on my phone and tell me the page's main heading.", "check": {"answer": "Example Domain"}}

@@ -47,6 +47,14 @@ On such a screen a model may tap by position (``tap_at``), held every
 time; ``spots`` counts those, and ``--cards DIR`` keeps each card's
 picture (the spot ringed) to look at afterwards -- the scripted yes
 doesn't look, so a person should.
+
+A REAL PHONE, YOUR OWN, takes ``--cases examples/phone_trial_real.jsonl``
+instead: nothing wiped, no text sent or received, no contact or alarm
+added. Each switch comes as a pair, off then on, so the phone ends as
+it began (the screen ends at 30 seconds; Do Not Disturb comes back in
+whichever mode the phone's own tile turns on). The Android version is
+read from the phone (``{version}``). Use the USB cable, not Wi-Fi: one
+task turns Wi-Fi off.
 """
 
 from __future__ import annotations
@@ -142,8 +150,8 @@ class Phone:
         self.shell("input keyevent KEYCODE_HOME")
 
 
-def load_cases(only: set[str] | None) -> list[dict]:
-    cases = [json.loads(line) for line in CASES.read_text().splitlines() if line.strip()]
+def load_cases(only: set[str] | None, path: Path = CASES) -> list[dict]:
+    cases = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     return [c for c in cases if not only or c["id"] in only]
 
 
@@ -152,12 +160,14 @@ class Trial:
         self.args = args
         self.phone = Phone(args.serial)
         self.provider = get_provider(args.provider, load_settings(args.provider))
+        self.version = self.phone.shell("getprop ro.build.version.release")
 
     def run_case(self, case: dict, rep: int) -> dict:
         row: dict = {"id": case["id"], "rep": rep, "model": self.args.model,
                      "provider": self.args.provider, "shots": self.args.shots}
         code = str(random.randint(100000, 999999))
-        fill = lambda text: text.replace("{code}", code)  # noqa: E731
+        fill = lambda text: text.replace("{code}", code).replace(  # noqa: E731
+            "{version}", re.escape(self.version))
         self.phone.home()
         check = case["check"]
         if "contact" in check:
@@ -323,6 +333,8 @@ def main() -> int:
                         or shutil.which("sparsh"), help="the sparsh program")
     parser.add_argument("--steps", type=int, default=30, help="model calls per task")
     parser.add_argument("--only", help="comma-separated case ids")
+    parser.add_argument("--cases", type=Path, default=CASES,
+                        help="the tasks (default: the emulator's thirteen)")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--shots", action="store_true",
                         help="screenshots for screens the list can't read")
@@ -347,7 +359,7 @@ def main() -> int:
     trial = Trial(args)
     rows = []
     for rep in range(1, args.repeat + 1):
-        for case in load_cases(set(args.only.split(",")) if args.only else None):
+        for case in load_cases(set(args.only.split(",")) if args.only else None, args.cases):
             row = trial.run_case(case, rep)
             rows.append(row)
             print(f"  {case['id']} r{rep}: {'done' if row['done'] else 'NOT DONE'} "

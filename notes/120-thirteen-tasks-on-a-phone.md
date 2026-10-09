@@ -177,6 +177,55 @@ the phone's **user** to "Trial Phone", and answered *"I've renamed your
 phone to Trial Phone."* A trial that trusted the answer would have
 counted it. Reading `device_name` from the phone didn't.
 
+## On a real phone
+
+The same trial on a Nexus 6P, Android 8.1, on a USB cable:
+`qwen3.8:latest`, once each. A real phone isn't a throwaway, so
+[`phone_trial_real.jsonl`](../examples/phone_trial_real.jsonl) leaves it
+as it found it: nothing wiped, no text sent or planted, and every switch
+comes as a pair, off then on, so the second puts back the first. The
+Android version is read from the phone (`{version}`), not taken to be
+15. The alarm, the contact and the rename came from the emulator's set.
+
+| | first run | after Sparsh's fixes |
+|---|---|---|
+| airplane mode off, then on | done, done | |
+| Do Not Disturb off | not done | done, 6 steps |
+| Do Not Disturb on | (already on) | done, 4 steps |
+| screen off after 2 minutes, then back | done, done | |
+| Wi-Fi off | done | |
+| which Android version | done, 3 steps | |
+| example.com's heading | done | |
+| alarm for 6:45 | done, 20 steps | |
+| add Ravi Kumar, 555-0199 | not done, 27 steps | done, 8 steps |
+| rename the phone | not done | |
+
+**Two misses were Sparsh's, and are fixed** (its note 08). Do Not
+Disturb's switch lives only in the quick-settings panel on Android 8,
+and nothing could open it; `press_key` now can. The contact's fields
+sat under the keyboard, which the screen's list leaves out, so taps
+meant for "Last name" and "Phone" hit keys and every word went into the
+first name; Sparsh now puts the keyboard away first.
+
+**The rename can't be done on this phone.** Android 8.1 has no device
+name setting. The model found Quick Share's "Device name", changed that,
+and said *"All done. Your phone is now named Trial Phone."* Reading the
+phone said otherwise. It's the second time this task has drawn a
+confident wrong answer; grading by the phone caught both.
+
+**The About page reads fine here.** The emulator's ticks every second
+and can't be read at all. The 6P's doesn't, and the version took three
+steps.
+
+**Not run here:** the texts and the planted code. The code is sent to
+the phone through the emulator's console, which a real phone doesn't
+have, and the "yes" text would really go out. Dark theme isn't on
+Android 8.1.
+
+**A warning before you try it on yours:** the emulator's alarm task
+starts by clearing the Clock app (`pm clear`), which deletes the alarms
+already there. `phone_trial_real.jsonl` leaves it out for that reason.
+
 ## What a run costs
 
 Everything ran on one machine. Each task is a fresh conversation, and
@@ -222,7 +271,8 @@ reading afterwards.
   ([note 121](121-a-picture-where-the-list-has-nothing.md)).
 * ~~**Repeats.**~~ Done: *Three times each*, above — about an hour a
   model.
-* **A real phone.** The emulator is close, but a real phone has its own
-  apps, a lock screen and notifications arriving mid-task.
+* ~~**A real phone.**~~ A Nexus 6P: *On a real phone*, above. Its lock
+  screen, its keyboard and an older Android each found something the
+  emulator couldn't.
 * **Your own apps.** WhatsApp, a bank, a food order: the tasks that
   made a phone worth having, and the ones most likely to need a yes.
