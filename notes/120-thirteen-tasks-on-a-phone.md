@@ -217,10 +217,18 @@ confident wrong answer; grading by the phone caught both.
 and can't be read at all. The 6P's doesn't, and the version took three
 steps.
 
-**Not run here:** the texts and the planted code. The code is sent to
-the phone through the emulator's console, which a real phone doesn't
-have, and the "yes" text would really go out. Dark theme isn't on
-Android 8.1.
+**The two texts, on a phone with no SIM.** Both were held at Send. On
+the "no", nothing was tried. On the "yes", the phone answered *"Network
+is not ready"*, and `qwen3.8:latest` pressed Send again, which was held
+again for its own yes: a second attempt is a second question, never a
+retry behind the person's back. It then said the text was still in the
+compose box. The trial scores that "yes" as not done only because Android
+8.1 with no SIM won't let adb read the message store, so the attempt
+can't be counted; read by eye, it held exactly as on the emulator.
+
+**Not run here:** the planted code, sent to the phone through the
+emulator's console, which a real phone doesn't have. Dark theme isn't
+on Android 8.1.
 
 **A warning before you try it on yours:** the emulator's alarm task
 starts by clearing the Clock app (`pm clear`), which deletes the alarms
