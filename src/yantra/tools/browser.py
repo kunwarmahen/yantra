@@ -128,6 +128,12 @@ XVFB_DISPLAYS = range(90, 120)
 #: anything -- the browser IS ordinary; these flags were the only part
 #: claiming otherwise.
 _AUTOMATION_ARGS = ("--disable-blink-features=AutomationControlled",)
+#: On Xvfb Chrome blocks the only GL there is (Mesa's software one), and a
+#: page finds no WebGL at all -- a browser almost no person has. X refused
+#: every password typed into such a window and let the same one through on
+#: a real screen. Allowed, WebGL is Mesa's llvmpipe, as on a Linux PC with
+#: no graphics driver.
+_SOFTWARE_GL_ARG = "--ignore-gpu-blocklist"
 _AUTOMATION_DEFAULT_ARGS_DROPPED = ("--enable-automation",)
 
 #: Which key encrypts this profile's cookies -- and the one flag BOTH
@@ -557,6 +563,7 @@ class BrowserSession:
             # env= reaches the BROWSER process only: nothing else in this
             # Yantra learns about a display it has no business drawing on.
             options["env"] = {**os.environ, "DISPLAY": self._display.start()}
+            options["args"].append(_SOFTWARE_GL_ARG)
         return options
 
     def _launch(self) -> None:

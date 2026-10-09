@@ -693,6 +693,8 @@ class TestHeadedMode:
         (kwargs,) = chromium.persistent_calls
         assert kwargs["headless"] is False
         assert kwargs["env"]["DISPLAY"] == ":91"
+        # WebGL from Mesa: with none, X refused every password on Xvfb
+        assert "--ignore-gpu-blocklist" in kwargs["args"]
         assert len(started) == 1 and not stopped
         session.close()
         assert len(stopped) == 1  # the screen dies with the browser
@@ -711,6 +713,7 @@ class TestHeadedMode:
         (kwargs,) = chromium.persistent_calls
         assert kwargs["headless"] is False
         assert "env" not in kwargs  # the session's own DISPLAY is enough
+        assert "--ignore-gpu-blocklist" not in kwargs["args"]  # its own GPU
 
     def test_missing_xvfb_names_the_package_to_install(self, monkeypatch):
         monkeypatch.delenv("DISPLAY", raising=False)

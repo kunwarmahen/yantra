@@ -984,7 +984,9 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   ([notes/59](notes/59-one-key-both-halves.md)).
   `YANTRA_BROWSER_HEADED=1` adds a real window, on an Xvfb Yantra
   starts and kills when no display is attached, so it exists without
-  being seen. The `--enable-automation` flag and the
+  being seen, with WebGL from Mesa's software renderer (a page finds
+  none on plain Xvfb, and X refuses a browser like that;
+  [notes/58](notes/58-the-browser-you-already-have.md)). The `--enable-automation` flag and the
   `AutomationControlled` Blink feature are dropped on every launch
   with no knob at all. None of it is stealth — a bot check that
   refuses you still refuses you, and the snapshot shows the check

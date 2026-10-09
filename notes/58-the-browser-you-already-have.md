@@ -68,6 +68,15 @@ honestly; nothing renders. This is the one that matters most, because
 headless is not a flag on a normal browser, it is a different build
 with different fingerprints, and no argument talks it out of them.
 
+One fingerprint Xvfb adds on its own: no WebGL. The only GL on that
+screen is Mesa's software one, which Chrome blocks, so a page asking
+for WebGL gets nothing, and few people's browsers lack it. X refused
+every password typed into such a window and accepted the same sign-in
+on a real screen (Setu's streamed window, measured both ways). So on an
+Xvfb Yantra started, the browser is launched with
+`--ignore-gpu-blocklist`, and a page sees `ANGLE (Mesa, llvmpipe ...)`,
+which is what a Linux PC with no graphics driver reports.
+
 ## The login door is not a Playwright door
 
 The three above make the agent's own sessions ordinary. They do not
