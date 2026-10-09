@@ -2156,15 +2156,50 @@ takes four yeses. With a cloud model, no screenshot leaves your computer
 unless you set `YANTRA_PHONE_SHOTS=on`. `YANTRA_PHONE_SHOTS=off` turns
 them off for local models too.
 
+**A locked phone.** If your phone has a PIN, pattern or password and is
+locked, the agent can't open it, and it's told so in plain words: the
+screen it gets back starts *"The phone is locked: this is its lock
+screen, not the app asked for. Ask its person to unlock it."* It asks
+you; unlock it and say go on. A phone with only a swipe lock (no PIN) is
+swiped open by itself: nobody has to be asked to open what anyone could.
+
 **No cable?** An Android phone on the same Wi-Fi works too, with
 wireless debugging (Sparsh's SETUP.md, B4: `sparsh pair` once, then
 `export SPARSH_CONNECT=<its address>` so it's found again by itself).
-Sarathi's containers reach the phone this way (`sarathi phone`).
+Android 10 and older have no wireless debugging page: plug the phone in
+once and run `adb tcpip 5555`, then `sparsh connect <its Wi-Fi
+address>:5555` (until the phone restarts). Sarathi's containers reach
+the phone this way (`sarathi phone`).
 
-**Not yet:** schedules don't get a phone (nobody would be there to say
-yes to a held step). Letters beyond plain English (é, Hindi, emoji) need
-a small keyboard app on an Android phone, which you install once
-(Sparsh's SETUP.md, Part G). An iPhone needs a Mac to set up once (Sparsh's
+**Test it on your own phone.** The trial in `examples/phone_trial.py`
+gives the agent everyday tasks and checks the phone afterwards, not the
+agent's answer. Its usual set is for a throwaway emulator: it wipes
+things and sends texts. On your own phone use the set made for it, which
+turns each switch and turns it back, and sends nothing:
+
+```
+YANTRA_SPARSH=~/sparsh/.venv/bin/sparsh uv run python examples/phone_trial.py \
+  --serial <your phone, from sparsh devices> --provider ollama --model qwen3.8:latest \
+  --cases examples/phone_trial_real.jsonl
+#   airplane_off r1: done 7 acts (97.9s)
+#   airplane_on r1: done 3 acts (36.0s)
+#   ...                          then a table: done, steps and minutes per task
+```
+
+Keep the phone on the cable for it (one task turns Wi-Fi off). Don't run
+the usual set's `alarm` task on your phone: it starts by clearing the
+Clock app, alarms and all. On a Nexus 6P (Android 8.1), `qwen3.8:latest`
+did every task Android 8.1 has
+([notes/120](notes/120-thirteen-tasks-on-a-phone.md)).
+
+**On a schedule.** Through Dvara, a schedule can work your phone (its
+tutorial, §18): if the phone is locked with a PIN, it asks you on
+Telegram and waits; unlock it and the run goes.
+
+**Not yet:** a schedule run by Yantra alone (`--unattended`, no Dvara)
+gets no phone: nobody would be there to say yes to a held step. Letters
+beyond plain English (é, Hindi, emoji) need a small keyboard app on an
+Android phone, which you install once (Sparsh's SETUP.md, Part G). An iPhone needs a Mac to set up once (Sparsh's
 SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
 starting Yantra. When its free 7-day signature is two days from running
 out, Yantra's first line says so. That road hasn't been run on a real
