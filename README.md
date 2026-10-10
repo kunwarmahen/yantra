@@ -810,7 +810,8 @@ picture with the spot ringed; in the terminal it's saved to a file and
 the path is printed. **Every** phone card comes with a picture now, not
 only that one: a held Send or Call shows the screen with what it would
 tap ringed, and the number or message filled in, in one line, instead
-of the screen's whole numbered list. Typing on such a screen asks too. `qwen3.8:latest` renamed the
+of the screen's whole numbered list. Apps can be named as you'd say
+them ("Google Maps", "the phone app", "Gmail"). Typing on such a screen asks too. `qwen3.8:latest` renamed the
 emulator from Settings' About page this way, four yeses
 ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)).
 `YANTRA_SPARSH=auto:/path/to/sparsh` names the program without turning

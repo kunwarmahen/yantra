@@ -2150,12 +2150,21 @@ as boxes with no names. With a local model that can see pictures
 (`gemma4:26b`, `qwen3.8:latest`), such a screen comes to the agent with
 a screenshot, and its first line says `screenshots on (local model)`.
 The model can also ask for one when the list seems to be missing
-something. It can read the page from the picture,
-and tap a spot on it, but **every such tap asks you first**: the card
-shows the picture with the spot ringed in red (in the terminal, a file
-whose path is printed). Say yes only if the ring is on what you meant.
-Typing on such a screen asks too. Renaming the emulator from that page
-takes four yeses. With a cloud model, no screenshot leaves your computer
+something. It can read the page from the picture, and tap a spot on
+it, but **every such tap asks you first**: the card shows the picture
+with the spot ringed in red (in the terminal, a file whose path is
+printed). Say yes only if the ring is on what you meant. Typing on a
+screen with no list asks too. Renaming the emulator from Settings'
+About page takes four yeses. To try one on your own phone: *"On my
+phone, search Google Maps for Indian restaurants, then tap the pin on
+the map (not the list) of the best-rated one you can see on the map,
+to open it, and tell me its name."* The pins are only in the picture,
+so the question comes with one ringed.
+
+**App names.** Ask for apps the way you'd say them: "Google Maps",
+"the phone app", "Gmail", "Chrome". Sparsh finds the app even when its
+name isn't in the app's package, and when a word could mean several
+apps ("Google") it says so and lists them rather than guess. With a cloud model, no screenshot leaves your computer
 unless you set `YANTRA_PHONE_SHOTS=on`. `YANTRA_PHONE_SHOTS=off` turns
 them off for local models too.
 
