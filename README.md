@@ -171,6 +171,10 @@ you're in. The same prompt tells it to try its tools before asking you
 for any fact it could discover itself; questions stay reserved for what
 only you know — preferences, permissions, irreversible calls.
 
+The clock is the one fact that doesn't wait for startup: every message
+you send carries the time it was sent, so a page left open for an hour
+still counts *"in ten minutes"* from now, not from when it opened.
+
 Three levels (`YANTRA_ENV_CONTEXT` / `--env-context` set the start,
 `/env` or the web UI's env chip flip it live):
 

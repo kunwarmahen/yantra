@@ -205,6 +205,24 @@ def _with_approval_notice(agent, messages: list[Message]) -> list[Message]:
     return _with_notice(messages, said)
 
 
+def _with_clock_notice(agent, messages: list[Message]) -> list[Message]:
+    """The time now, when it has changed since this turn last said it.
+
+    The session's fact sheet is frozen at startup (env_context), so a
+    session opened at 15:16 and asked at 15:40 to "check in ten minutes"
+    used to count from 15:16. Asked at every model call and told only
+    when the minute differs from the last one told this turn -- once for
+    a quick turn, again in a long one. Sent, never stored, for
+    ``_with_notice``'s reason. Shared by both loops.
+    """
+    ctx = getattr(agent, "env_context", None)
+    said = ctx.now_line() if ctx is not None else None
+    if said is None or said == agent._clock_told:
+        return messages
+    agent._clock_told = said
+    return _with_notice(messages, said)
+
+
 def _with_notice(messages: list[Message], notice: str) -> list[Message]:
     """One request carrying a notice for the model, without a fossil.
 
@@ -320,6 +338,7 @@ class Agent:
         #: means no clock, and nothing is said.
         self.approval_notice: Callable[[str], str | None] | None = None
         self._approval_told: str | None = None
+        self._clock_told: str | None = None  # _with_clock_notice, per turn
         #: The parent's turn, on a sub-agent (notes/91): the clock its
         #: prompts spend and the one it is told about. "" on an agent
         #: nobody spawned, which spends its own turn's clock.
@@ -501,6 +520,7 @@ class Agent:
         # through ``clock_turn``.)
         self._turn_id = uuid.uuid4().hex
         self._approval_told = None
+        self._clock_told = None
         self.turn_refusals = {}
 
     def _turn_then_release(self) -> Iterator[AgentEvent]:
@@ -565,6 +585,7 @@ class Agent:
                         if notice is not None:
                             messages = _with_notice(messages, notice)
                 messages = _with_approval_notice(self, messages)
+                messages = _with_clock_notice(self, messages)
                 self._sent_through = len(messages)
                 response = collect(
                     self._tee(

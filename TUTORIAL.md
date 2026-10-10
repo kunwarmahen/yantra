@@ -222,6 +222,9 @@ time and timezone, host and working directory — and by default your city,
 from one keyless lookup to ipinfo.io at startup. Ask *"what's the
 temperature outside?"* and it answers for where you actually are, using
 its own tools, instead of burning a turn asking which city you are in.
+The time it uses is the time of your message, not the time the session
+opened: ask for *"a check in ten minutes"* on a page that has been open
+since lunch and it counts from now.
 
 ```bash
 uv run yantra --env-context local    # machine facts only, no lookup

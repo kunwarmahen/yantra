@@ -77,7 +77,7 @@ class TestCollection:
         ctx = _ctx()
         ctx.ensure_facts()
         block = ctx.render_block()
-        assert "- Time:" in block
+        assert "- Session started:" in block
         assert "- Host:" in block
         assert "/tmp/wksp" in block
         assert "Location" not in block  # local mode carries no location
@@ -225,3 +225,65 @@ class TestAttachAndFlips:
         ctx.attach(agent)
         assert ctx._base_system is None  # still the original (None) base
         assert agent.system == composed_once
+
+
+class TestLiveClock:
+    """The fact sheet is frozen at startup; the time is not. A session
+    opened at 15:16 and asked at 15:40 for "in ten minutes" must count
+    from 15:40 -- so the live time rides with each request, never stored."""
+
+    def _fixed_now(self, monkeypatch, hour, minute):
+        from datetime import datetime
+
+        class Fixed(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                # naive = local, as the real now() is before astimezone()
+                return datetime(2026, 10, 10, hour, minute, 33)
+        monkeypatch.setattr("yantra.env_context.datetime", Fixed)
+
+    def test_off_says_nothing(self):
+        assert _ctx("off").now_line() is None
+
+    def test_reads_the_clock_when_asked_not_at_start(self, monkeypatch):
+        ctx = _ctx()
+        ctx.ensure_facts()
+        self._fixed_now(monkeypatch, 15, 40)
+        assert ctx.now_line().startswith("Current time: Saturday 2026-10-10 15:40")
+
+    def test_block_names_the_start_as_the_start(self):
+        ctx = _ctx()
+        ctx.ensure_facts()
+        block = ctx.render_block()
+        assert "- Session started:" in block
+        assert "- Time:" not in block
+
+    def _agent(self, script):
+        from conftest import ScriptedProvider
+        from yantra.agent import Agent
+        from yantra.tools.base import ToolRegistry
+        agent = Agent(ScriptedProvider(script), model="m", tools=ToolRegistry())
+        _ctx().attach(agent)
+        return agent
+
+    def test_sent_with_the_request_never_stored(self, monkeypatch):
+        from conftest import assistant_text
+        self._fixed_now(monkeypatch, 15, 40)
+        agent = self._agent([assistant_text("ok")])
+        agent.run("remind me in ten minutes")
+        sent = agent.provider.last_request()["messages"][-1].text()
+        assert "Current time: Saturday 2026-10-10 15:40" in sent
+        assert all("Current time" not in m.text() for m in agent.history)
+
+    def test_each_turn_tells_again_one_minute_tells_once(self, monkeypatch):
+        from conftest import assistant_text, assistant_tool_call
+        self._fixed_now(monkeypatch, 15, 40)
+        agent = self._agent([assistant_tool_call("c1", "nope", {}),
+                             assistant_text("ok"), assistant_text("ok")])
+        agent.run("first")
+        first, second = agent.provider.requests[:2]
+        assert "Current time" in first["messages"][-1].text()
+        assert "Current time" not in second["messages"][-1].text()
+        self._fixed_now(monkeypatch, 15, 52)
+        agent.run("later")
+        assert "15:52" in agent.provider.last_request()["messages"][-1].text()

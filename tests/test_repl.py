@@ -391,7 +391,7 @@ class TestEnvCommand:
         assert agent.system is None  # off == pre-awareness wire shape
         repl._command("/env local")
         assert "applies to the next model call" in console.file.getvalue()
-        assert "- Time:" in agent.system
+        assert "- Session started:" in agent.system
 
     def test_invalid_argument_reports_usage_and_keeps_level(self):
         repl, console, agent, ctx = self.make_env_repl()

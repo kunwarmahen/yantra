@@ -25,6 +25,13 @@ Design constraints worth remembering:
   caches the request PREFIX including the system prompt; a per-request
   clock would bust it every turn. Facts are therefore collected once,
   rendered once, and describe themselves as possibly-stale.
+* THE CLOCK IS NOT. A web session can sit open for hours, and a model
+  that reads "15:16" off the frozen block will put "in ten minutes" at
+  15:26 when it is already 15:40 -- wrong for every schedule it makes.
+  So the block names the start time as the START, and the live time
+  rides with each request instead (``now_line``, sent by the loop and
+  never stored -- agent._with_clock_notice), at the tail where it costs
+  the cache nothing.
 * COMPOSITION IS ADDITIVE. The operator's own ``--system`` prompt is
   captured verbatim as the base; awareness appends below it. Nothing
   here edits the operator's words -- and since skills append a roster
@@ -161,6 +168,17 @@ class EnvContext:
                 self._location = None
                 self.geo_error = f"{type(exc).__name__}: {exc}"
 
+    def now_line(self) -> str | None:
+        """The live clock, read at the moment of asking; None when off.
+        To the minute, with the weekday, so "in ten minutes" and "next
+        Friday" have something true to count from."""
+        if self.mode == "off":
+            return None
+        now = datetime.now().astimezone()
+        tz = now.tzname() or "local time"
+        return (f"Current time: {now.strftime('%A %Y-%m-%d %H:%M')} "
+                f"({tz}, UTC{_utc_offset(now.utcoffset())})")
+
     # ---- composition ----------------------------------------------------------
 
     def render_block(self) -> str | None:
@@ -170,7 +188,8 @@ class EnvContext:
             return None
         lines = [
             "Session context (auto-detected at session start; may be stale):",
-            f"- Time: {self._local['time']}",
+            f"- Session started: {self._local['time']} (the current "
+            f"time comes with each message; use that one)",
             f"- Host: {self._local['host']} -- {self._local['os']}",
             f"- Working directory: {self._local['cwd']}",
         ]

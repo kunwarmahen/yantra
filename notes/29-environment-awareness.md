@@ -52,6 +52,28 @@ collected ONCE per session, rendered once, and describe themselves as
 possibly-stale ("auto-detected at session start"). Honesty about the
 staleness is printed into the block itself; nobody has to remember it.
 
+## The clock rides with the message
+
+Possibly-stale is fine for a hostname. It is not fine for the time. A
+web session opened at 15:24 and asked at 15:49 for *"a reminder in ten
+minutes"* read 15:24 off the block and answered 15:34 — a schedule set
+for a moment already gone. So the block names its time as **Session
+started**, says the current time comes with each message, and the loop
+does exactly that: before each model call it appends one line —
+`Current time: Saturday 2026-10-10 15:49 (EDT, UTC-04:00)` — to the
+request.
+
+SENT, NEVER STORED. It is the same rule as the budget notice: the line
+rides in the last user message of what is sent, and history never sees
+it, so a resumed or checkpointed session is not read back with last
+week's clock in it as something the person said. It sits at the TAIL
+of the request, which is the part no cache covers anyway, so the frozen
+prefix stays frozen. And it is said ONCE PER MINUTE PER TURN: the first
+call of every turn, and again only if a long turn crosses into a new
+minute — a ten-call tool loop does not repeat the same line ten times.
+The weekday rides along because *"next Friday"* needs it. At `off`
+nothing is said, as with everything else here.
+
 ## Graded by default: full > local > off
 
 - **full** (the default): machine facts + location. The honest cost:
@@ -108,6 +130,10 @@ prints a dim notice, and the session proceeds with local facts.
 - flips: live on the agent; upgrade looks up EXACTLY once across
   downgrades; bad argument raises and keeps the old level; reapply()
   never adopts a restored composed string as the new base
+- the live clock: `off` says nothing; the time is read when asked, not
+  at start; the block calls its time "Session started"; the line is in
+  the request and not in history; a turn tells it once per minute, and
+  the next turn tells it again
 - REPL: bare /env prints the panel; /env off|local|full flips; invalid
   usage reported; missing EnvContext reports instead of crashing
 - web: state carries `env_context` (None for unaware agents); POST
@@ -135,3 +161,8 @@ outside right now? Check the actual current weather.", Ollama
   feature deletes.
 
 The toggle moves real behavior, not just prompt text.
+
+Live receipt for the clock, Ollama `qwen3.8`: a session whose block
+said 15:24 while the real time was 15:49, asked *"I want a reminder ten
+minutes from now. At what clock time (HH:MM) should it fire?"* — with
+the clock line left out it answered **15:34**; with it, **15:59**.
