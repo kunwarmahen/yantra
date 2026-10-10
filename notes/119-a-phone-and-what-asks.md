@@ -54,7 +54,9 @@ and the model is told so:
 ```
 NOT DONE -- this needs the person's yes: tap image "Send SMS" in
 com.google.android.apps.messaging -- held because it says "send". Call
-confirm with hold "h68873c" to ask them. Do not try another way round it.
+confirm with hold "h68873c" now, in this same answer: that is how they
+are asked. Do not ask them in words first, and do not try another way
+round it.
 ```
 
 `confirm` is the only way through. Setting `read_only` on an act is a
@@ -189,6 +191,11 @@ now refused with the right name. Sparsh's
 has the rest.
 
 ## What is not here yet
+
+* ~~**A yes asked in words.**~~ A model asked "shall I send it?" instead
+  of calling `confirm`; the hold was gone by the reply. The card for a
+  hold that is gone is now never shown
+  ([note 124](124-a-question-with-no-step-behind-it.md)).
 
 * A phone for scheduled runs, which needs an answer to "held, with
   nobody to ask" better than refusing.

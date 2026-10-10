@@ -2163,6 +2163,32 @@ screen, not the app asked for. Ask its person to unlock it."* It asks
 you; unlock it and say go on. A phone with only a swipe lock (no PIN) is
 swiped open by itself: nobody has to be asked to open what anyone could.
 
+**The screen stays on while it works.** A local model can think for
+longer than your phone's screen timeout between two steps, and a screen
+that goes dark locks. So while the agent works the phone, Sparsh keeps
+the screen on, and puts your own timeout back two minutes after the
+last step. Choose in `.env`:
+
+```
+SPARSH_AWAKE=working    # the default: on while working, then yours back
+SPARSH_AWAKE=always     # never sleeps: only for a phone set aside for the agent
+SPARSH_AWAKE=off        # leave the screen timeout alone
+```
+
+On a Nexus 6P with a 30-second timeout, a 17-step rename ran without
+meeting the lock screen once, and the timeout read 30 seconds again
+after. Don't use the phone yourself while the agent is on it: Sparsh
+notices the screen changed and does nothing, but the agent has to find
+its place again.
+
+**The card is the question.** When a step is held, the agent says in a
+sentence what it will do and the card comes in the same answer. If a
+model asks *"shall I send it?"* in words and waits for you, the held
+step is gone by the time you reply (it lives only while that turn's
+tools run). Yantra then doesn't show you a card for nothing. The model
+is told to do the step again and ask properly
+([notes/124](notes/124-a-question-with-no-step-behind-it.md)).
+
 **No cable?** An Android phone on the same Wi-Fi works too, with
 wireless debugging (Sparsh's SETUP.md, B4: `sparsh pair` once, then
 `export SPARSH_CONNECT=<its address>` so it's found again by itself).
@@ -2363,6 +2389,10 @@ Most carry a live receipt from a real run.
 | [118](notes/118-the-internet-is-not-a-read.md) | a site check that allowed nothing: new samples first, then the one fact the model was missing |
 | [119](notes/119-a-phone-and-what-asks.md) | a phone through Sparsh: why its ordinary taps don't ask, why `confirm` always does, and why the page peeks instead of looking |
 | [120](notes/120-thirteen-tasks-on-a-phone.md) | thirteen phone tasks on two local models, graded by the phone: 12 of 13 each, every send held, and the four things it found in Sparsh first |
+| [121](notes/121-a-picture-where-the-list-has-nothing.md) | a screenshot where the phone's list has nothing, to a local model that can see, and to a cloud one only when asked |
+| [122](notes/122-the-app-instead-of-the-browser.md) | a site's own app on the phone, at Setu's level, for sites that refuse the browser |
+| [123](notes/123-a-tap-you-say-yes-to-by-looking.md) | a tap by position on a screen only the picture shows, asked every time with the spot ringed |
+| [124](notes/124-a-question-with-no-step-behind-it.md) | a yes asked in words for a held step that was already gone, and the card that is now never shown for one |
 
 ### The neighbours
 

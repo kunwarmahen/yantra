@@ -70,7 +70,7 @@ from yantra.memory import prime_if_new
 from yantra.memory.reflect import abefore_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
-                                adecide, allow_read_only, card_picture,
+                                adecide, allow_read_only, card_picture, nothing_to_ask,
                                 denial_code, denial_text)
 from yantra.providers.base import Provider, acollect
 from yantra.tools.base import (ToolContext, ToolOutput, ToolRegistry,
@@ -680,6 +680,12 @@ class AsyncAgent:
         # the arguments that will actually run. Schema-driven and a no-op
         # for anything already well-formed (tools/base.coerce_arguments).
         call.arguments = coerce_arguments(call.arguments, tool.parameters)
+
+        # A call that can't do anything is refused before anyone is asked
+        # (permissions.nothing_to_ask: a phone's hold that is gone).
+        moot = nothing_to_ask(tool, call.arguments)
+        if moot:
+            return ToolResult(call.id, moot, is_error=True)
 
         # Build the human-facing summary defensively: a broken summary()
         # must never block the approval flow itself.

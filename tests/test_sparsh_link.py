@@ -5,8 +5,9 @@ ordinary steps run without asking (Sparsh holds the risky ones itself),
 so the whole of the person's protection is in two places: ``confirm``
 must ask EVERY time -- a blanket yes (--yolo) included -- and its card
 must say what will happen on the phone, in Sparsh's words, not show a
-hold id. These tests drive a fake ``sparsh`` over the same command road
-and MCP server a real one uses.
+hold id -- and a hold that is gone is never asked about at all. These
+tests drive a fake ``sparsh`` over the same command road and MCP server
+a real one uses.
 
 Also designed against:
 
@@ -41,7 +42,7 @@ from yantra import sparsh_link, status
 from yantra.agent import Agent
 from yantra.cli.main import _connect_sparsh
 from yantra.mcp import MCPManager
-from yantra.permissions import PermissionRequest, card_picture, yolo
+from yantra.permissions import PermissionRequest, card_picture, nothing_to_ask, yolo
 from yantra.setu_link import Link, announce, phone_rules, prompt_text
 from yantra.tools.base import ToolRegistry
 from yantra.types import ToolCall
@@ -225,6 +226,34 @@ class TestTheCard:
             assert "SPARSH CANNOT DESCRIBE IT: no step is waiting" in card
         finally:
             manager.shutdown()
+
+    def test_a_hold_that_is_gone_is_refused_to_the_model_and_nobody_is_asked(
+            self, clean, tmp_path):
+        """A real chat: asked "shall I send it?" in words, the turn ended
+        and its hold with it; the person's "Yes" brought a card that
+        couldn't say what it was for, and they pressed yes to nothing."""
+        _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
+        asked = []
+        agent.permissions = lambda request: asked.append(request) or True
+        try:
+            call = ToolCall(id="c1", name="mcp__sparsh__confirm", arguments={"hold": "h9"})
+            result = agent._execute(call)
+            assert asked == []
+            assert result.is_error and "Not asked, and nothing was done" in result.content
+            assert "call confirm in that same answer" in result.content
+            # a hold that is there is asked as before
+            agent._execute(ToolCall(id="c2", name="mcp__sparsh__confirm",
+                                    arguments={"hold": "h1"}))
+            assert len(asked) == 1
+        finally:
+            manager.shutdown()
+
+    def test_a_broken_check_still_asks(self):
+        def broken(args):
+            raise RuntimeError("the server went away")
+
+        assert nothing_to_ask(SimpleNamespace(nothing_to_ask=broken), {}) is None
+        assert nothing_to_ask(SimpleNamespace(), {}) is None
 
 
 class TestTheModelIsTold:

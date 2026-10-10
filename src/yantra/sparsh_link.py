@@ -321,7 +321,9 @@ def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
         "2. `open_app` starts an app by name; `press_key` back or home leaves one.",
         "3. A step that comes back \"NOT DONE -- this needs the person's yes\" was held "
         "(sending, paying, deleting, a password ...). Tell the person in one sentence "
-        "what it will do, then call `mcp__sparsh__confirm` with its hold: they are asked. "
+        "what it will do, then call `mcp__sparsh__confirm` with its hold IN THE SAME "
+        "ANSWER: that call is the question, and they answer it with a button. Don't ask "
+        "in words and wait for their reply -- by then the hold is gone. "
         "Never try to get round a hold another way.",
         "4. \"The screen changed\" means nothing was done: use the screen it gives you.",
     ]
@@ -375,7 +377,28 @@ def explain_confirm(tool: Any) -> Any:
         return "Do this on the phone?\n" + said
 
     tool.card_picture = lambda args: pictures.get(str(args.get("hold") or ""))
+    tool.nothing_to_ask = gone(session)
     return card
+
+
+def gone(session: Any) -> Any:
+    """``confirm``'s ``nothing_to_ask`` (permissions.py): a hold Sparsh no
+    longer has is refused to the model, not asked of the person. A hold
+    lives only as long as the server that made it -- Dvara stops its
+    servers when a turn ends -- so a yes sought in words, in a later
+    message, names one that is gone."""
+
+    def check(args: dict[str, Any]) -> str | None:
+        hold = str(args.get("hold") or "")
+        said, failed, _ = session.call_tool_full("describe_hold", {"hold": hold})
+        if not (failed and "no step is waiting" in said):
+            return None
+        return (f"Not asked, and nothing was done: {said}. A held step lasts only "
+                "while these tools run, which can end with your answer. Do the step "
+                "again, and when it is held call confirm in that same answer -- the "
+                "confirm is the question; don't ask in words first.")
+
+    return check
 
 
 @dataclass(slots=True)

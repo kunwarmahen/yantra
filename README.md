@@ -811,7 +811,14 @@ emulator from Settings' About page this way, four yeses
 it on: no phone at the start still means no tools (what Sarathi passes).
 A phone on the same Wi-Fi works without a cable: pair it once (`sparsh
 pair`) and set `SPARSH_CONNECT=<its address>`, and Sparsh finds it again
-by itself (its SETUP.md, B4).
+by itself (its SETUP.md, B4). While the agent works the phone, Sparsh keeps its screen
+on and puts your own screen timeout back afterwards, so a model that
+thinks for longer than 30 seconds between steps doesn't find it locked
+(`SPARSH_AWAKE` in `.env`: `working`, `always` or `off`). A held step is
+asked with a card in the same answer, never in words first: a hold lives
+only while the tools that made it run, and a confirm for one that is
+gone is refused to the model instead of shown to you
+([notes/124](notes/124-a-question-with-no-step-behind-it.md)).
 
 Sub-agents (agent-as-tool: fresh-context children with a filtered tool
 catalog, per-session spawn budget, compact results — child streams tee
@@ -2191,6 +2198,10 @@ src/yantra/
 │                   request.reason, and the model reads that instead of
 │                   "Permission denied by user."
 │                   ([notes/37](notes/37-a-gate-that-can-wait.md)).
+│                   nothing_to_ask(): a call that can do nothing whatever
+│                   the answer (a phone's hold that is gone) is refused to
+│                   the model before anyone is asked
+│                   ([notes/124](notes/124-a-question-with-no-step-behind-it.md)).
 │                   with_deadline() puts a clock on a gate that suspends
 │                   and REFUSES to guess what the silence meant --
 │                   on_timeout has no default; refuse() writes a machine
@@ -2423,7 +2434,9 @@ src/yantra/
 │                   with the spot ringed, for the person's eyes only
 │                   ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)); a
 │                   schedule's granted steps go to Sparsh as SPARSH_GRANTS
-│                   when its host (Dvara) gives a run the phone
+│                   when its host (Dvara) gives a run the phone; a confirm
+│                   for a hold that is gone is never a card
+│                   ([notes/124](notes/124-a-question-with-no-step-behind-it.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,

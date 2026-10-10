@@ -180,6 +180,27 @@ def card_picture(tool: Any, arguments: dict[str, Any]) -> Any:
         return None
 
 
+def nothing_to_ask(tool: Any, arguments: dict[str, Any]) -> str | None:
+    """Why this call can't do anything whatever the answer (the tool's
+    ``nothing_to_ask``), or None: ask as usual.
+
+    A QUESTION WITH NO STEP BEHIND IT IS NOT ASKED. A phone's held step
+    lives only as long as the tools that held it, so a yes sought in a
+    later message names a hold that is gone. Asking would show a card
+    that can't say what it is for, and a yes to it does nothing (a real
+    chat got exactly that card, and the person pressed yes). The call is
+    refused to the model instead, with the tool's reason, before anyone
+    is asked. A broken hook asks as usual: it may never stop a real yes."""
+    hook = getattr(tool, "nothing_to_ask", None)
+    if hook is None:
+        return None
+    try:
+        said = hook(arguments)
+    except Exception:
+        return None
+    return said or None
+
+
 #: A gate receives one request per dangerous call; True => allow. The
 #: answer may be awaited: a gate that asks a human over a channel returns
 #: a coroutine, and only ``adecide`` (so only AsyncAgent) can take one.
