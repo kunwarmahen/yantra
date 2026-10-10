@@ -149,14 +149,14 @@ function onState(env) {
   }
 }
 
-/* The picture a card carries -- a phone's screen with the spot a tap by
-   position would hit ringed. Above the words: it is what the person
+/* The picture a card carries -- a phone's screen as a held step found
+   it, what it would tap or type into ringed. Above the words: it is what the person
    answers by, and below Sparsh's account it was scrolled out of sight.
    Only image types, only base64. */
 function cardPicture(p) {
   if (!p || !/^image\/(png|jpeg|gif|webp)$/.test(p.media_type || "")
       || !/^[A-Za-z0-9+/=]+$/.test(p.data || "")) return "";
-  return `<img class="card-picture" alt="the phone's screen; a tap is where it is ringed"
+  return `<img class="card-picture" alt="the phone's screen; what it would tap is ringed"
               src="data:${p.media_type};base64,${p.data}">`;
 }
 

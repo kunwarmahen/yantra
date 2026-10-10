@@ -801,10 +801,16 @@ everywhere. The startup line says which. It's asked again on every call,
 so switching to a cloud model mid-session stops them. On the About page,
 `gemma4:26b` read the phone's IMEI from the picture
 ([notes/121](notes/121-a-picture-where-the-list-has-nothing.md)). On
-such a screen the model can also **tap a spot** on the picture. Every
-one of those taps asks you first, and the card shows the picture with
-the spot ringed; in the terminal it's saved to a file and the path is
-printed. Typing on such a screen asks too. `qwen3.8:latest` renamed the
+The same goes for a screen the list reads only **in part** (Google
+Maps' places, which are boxes with no words), and the model can ask
+for a picture when it can tell the list is missing something (Sparsh's
+notes/10). On such a screen the model can also **tap a spot** on the
+picture. Every one of those taps asks you first, and the card shows the
+picture with the spot ringed; in the terminal it's saved to a file and
+the path is printed. **Every** phone card comes with a picture now, not
+only that one: a held Send or Call shows the screen with what it would
+tap ringed, and the number or message filled in, in one line, instead
+of the screen's whole numbered list. Typing on such a screen asks too. `qwen3.8:latest` renamed the
 emulator from Settings' About page this way, four yeses
 ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)).
 `YANTRA_SPARSH=auto:/path/to/sparsh` names the program without turning
@@ -2427,11 +2433,11 @@ src/yantra/
 │                   and `sparsh log`; with no phone at the start it waits
 │                   DORMANT for /phone use or the panel's "use this phone"
 │                   ([notes/119](notes/119-a-phone-and-what-asks.md)); a
-│                   screenshot of a screen the list can't read, to a local
-│                   model that can see, to a cloud one only when asked
+│                   screenshot of a screen the list can't read or reads in
+│                   part, to a local model that can see, to a cloud one only when asked
 │                   (YANTRA_PHONE_SHOTS; [notes/121](notes/121-a-picture-where-the-list-has-nothing.md));
-│                   a tap by position's confirm card carries the screen
-│                   with the spot ringed, for the person's eyes only
+│                   every confirm card carries the screen with what it
+│                   would tap ringed, for the person's eyes only
 │                   ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)); a
 │                   schedule's granted steps go to Sparsh as SPARSH_GRANTS
 │                   when its host (Dvara) gives a run the phone; a confirm

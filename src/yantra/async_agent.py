@@ -712,7 +712,7 @@ class AsyncAgent:
             # preview for amended args (approve-with-edits).
             summarize=lambda args: tool.summary(args, self.ctx),
             # What the card shows beside its words, if anything (a phone's
-            # screen with the spot ringed); never sent to the model.
+            # screen, what it would tap ringed); never sent to the model.
             picture=card_picture(tool, call.arguments),
         )
         try:

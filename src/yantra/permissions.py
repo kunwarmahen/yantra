@@ -162,7 +162,7 @@ class PermissionRequest:
     #: None => ``REFUSED_UNSPECIFIED`` (see ``denial_code``).
     code: str | None = None
     #: A picture the card shows beside ``summary`` -- the phone's screen
-    #: with the spot a tap by position would hit ringed (sparsh_link).
+    #: as a held step found it, what it would tap ringed (sparsh_link).
     #: For the PERSON's eyes: no gate sends it to the model. An
     #: ``ImageBlock``; None for every card that is words alone.
     picture: Any = None

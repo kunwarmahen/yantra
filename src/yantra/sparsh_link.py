@@ -40,7 +40,10 @@ A held step comes back to the model as "NOT DONE", with a hold id;
 ``confirm`` is the only way through it, and its card is Sparsh's own
 account of the step and the screen it was on (``describe_hold``) --
 so what a person says yes to is the message that will be sent, not a
-hold id. A tool Sparsh doesn't name keeps the server's hint.
+hold id. That card is a sentence and the screen as the step was held,
+what it would tap ringed -- never the model's numbered list, which on
+a real phone was forty-one lines of a dialler's keys. A tool Sparsh
+doesn't name keeps the server's hint.
 
 THE PAGE PEEKS, IT DOESN'T LOOK. The phone panel shows the phones, the
 rules in force, and on request the screen as it is now -- the list and
@@ -51,12 +54,14 @@ the agent, and its next "tap 7" would be checked against the person's
 7. The panel shows everything, apps on the ``never`` list included: it
 is the person's own eyes, and nothing it reads reaches the model.
 
-SCREENSHOTS ONLY WHERE THE LIST HAS NOTHING, AND NOT TO A CLOUD MODEL
+SCREENSHOTS ONLY WHERE THE LIST FALLS SHORT, AND NOT TO A CLOUD MODEL
 UNASKED. The model works from the numbered list. A screen that gives
 the list nothing (Settings' About page, which never goes still; an app
-drawn as one picture) can come with a screenshot: Sparsh attaches one
-when started with ``--shots``, and the tools here pass it on to the
-model. ``YANTRA_PHONE_SHOTS`` decides whether that happens:
+drawn as one picture) or only part (Google Maps' places, unnamed boxes)
+can come with a screenshot, and the model can ask for one (``look``
+with ``picture``): Sparsh attaches it when started with ``--shots``,
+and the tools here pass it on to the model. ``YANTRA_PHONE_SHOTS``
+decides whether that happens:
 
     auto  (default) yes for a local model that says it can see (Ollama's
           ``/api/show`` lists "vision"); no for a cloud model -- a
@@ -75,10 +80,11 @@ It is asked again on every call, so a switch to a cloud model mid-session
 stops the pictures (a switch to a local one doesn't start them: Sparsh
 was started without ``--shots``).
 
-A TAP BY POSITION SHOWS THE PERSON WHERE. On such a screen the model may
-``tap_at`` a spot on the picture; Sparsh holds it every time (and any
-typing there), so it comes through ``confirm`` -- whose card carries
-the picture with the spot ringed, from ``describe_hold``
+A HELD STEP SHOWS THE PERSON WHERE. On a screen that came with a
+picture the model may ``tap_at`` a spot on it; Sparsh holds that every
+time (and any typing there). Every held step comes through ``confirm``,
+whose card carries the screen with what it would tap ringed -- for a
+tap by position, the spot -- from ``describe_hold``
 (``PermissionRequest.picture``). The person answers by looking. That
 picture is the person's: it goes on the card, never to the model.
 
@@ -324,15 +330,20 @@ def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
         "what it will do, then call `mcp__sparsh__confirm` with its hold IN THE SAME "
         "ANSWER: that call is the question, and they answer it with a button. Don't ask "
         "in words and wait for their reply -- by then the hold is gone. "
-        "Never try to get round a hold another way.",
+        "Never try to get round a hold another way. When `confirm` comes back "
+        "\"Done:\", the step WAS carried out; what follows is the phone's own answer "
+        "to it (\"Turn off airplane mode to make a call\") -- tell the person that, "
+        "never that the hold lapsed.",
         "4. \"The screen changed\" means nothing was done: use the screen it gives you.",
     ]
     if shots:
-        lines.append("A screen that can't be read as a list comes with a screenshot: read "
-                     "what you need from it. To act on what it shows, first try another "
-                     "way (back, a scroll, a search); if there is none, `tap_at` its spot "
-                     "-- x and y from 0 to 1000 across and down the picture. It is held "
-                     "for the person, who sees the spot ringed.")
+        lines.append("A screen the list can't read, or reads only in part (unnamed rows, "
+                     "a map, a blank web page), comes with a screenshot: read what you "
+                     "need from it. If the list seems to be missing what you need, "
+                     "`look` with `picture` true asks for one -- don't open rows one by "
+                     "one to find out what they are. To act on what only the picture "
+                     "shows, `tap_at` its spot -- x and y from 0 to 1000 across and down "
+                     "the picture. It is held for the person, who sees the spot ringed.")
     if any(_is_iphone(p) for p in phones):
         lines.append("5. An iPhone has no Back key: `press_key` back swipes in from the "
                      "left edge. If the screen doesn't change, tap the app's own Back, "
@@ -373,7 +384,7 @@ def explain_confirm(tool: Any) -> Any:
                     f"  SPARSH CANNOT DESCRIBE IT: {said}")
         if images:
             pictures[hold] = images[0]
-            said += "\n(The picture shows the screen; a tap is where it is ringed.)"
+            said += "\n(The picture shows the phone's screen; what it would tap is ringed.)"
         return "Do this on the phone?\n" + said
 
     tool.card_picture = lambda args: pictures.get(str(args.get("hold") or ""))

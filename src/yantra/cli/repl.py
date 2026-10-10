@@ -199,7 +199,8 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
             if request.picture is not None and not edited:
                 shown = _picture_file(request.picture)
                 if shown:
-                    console.print(f"[dim]the screen, the spot ringed: [/dim]{escape(shown)}")
+                    console.print("[dim]the phone's screen, what it would tap ringed: "
+                                  f"[/dim]{escape(shown)}")
             answer = Prompt.ask("run it?", choices=["y", "n", "e", "s"],
                                 default="n").lower()
             if answer == "y":

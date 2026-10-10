@@ -198,7 +198,7 @@ class TestTheCard:
         try:
             confirm = tool(agent, "confirm")
             card = confirm.summary({"hold": "h2"}, agent.ctx)
-            assert "a tap is where it is ringed" in card
+            assert "what it would tap is ringed" in card
             picture = card_picture(confirm, {"hold": "h2"})
             assert picture.media_type == "image/png" and picture.data == "iVBORw0KGgo="
             # a step that is words alone has none
@@ -276,6 +276,17 @@ class TestTheModelIsTold:
         android = {"serial": "emulator-5554", "state": "device", "model": "sdk"}
         layer = sparsh_link.prompt_text({"phones": [android]})
         assert "person's Android phone" in layer and "no Back key" not in layer
+
+    def test_a_model_that_sees_is_told_to_ask_for_a_picture_not_open_rows(self):
+        android = {"serial": "emulator-5554", "state": "device", "model": "sdk"}
+        seeing = sparsh_link.prompt_text({"phones": [android]}, shots=True)
+        assert "`look` with `picture` true" in seeing and "one by one" in seeing
+        assert "`picture`" not in sparsh_link.prompt_text({"phones": [android]})
+
+    def test_a_done_after_a_yes_is_said_as_done_not_as_lapsed(self):
+        android = {"serial": "emulator-5554", "state": "device", "model": "sdk"}
+        layer = sparsh_link.prompt_text({"phones": [android]})
+        assert "the step WAS carried out" in layer and "never that the hold lapsed" in layer
 
     def test_no_phone_says_how_either_kind_is_connected(self):
         layer = sparsh_link.prompt_text({"phones": []})

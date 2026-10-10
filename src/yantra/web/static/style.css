@@ -2177,7 +2177,7 @@ pre.output { color: var(--ink); }
   font-size: 12px;
 }
 
-/* a phone's screen on an approval card, the spot ringed */
+/* a phone's screen on an approval card, what it would tap ringed */
 .card-picture {
   display: block;
   max-width: 100%;

@@ -95,7 +95,13 @@ words has none; the picture reaches the gate and not the tool result.
 
 ## Not here yet
 
-* Dvara. A person asked in Telegram gets the card's words, not its
-  picture: the gate there would need to send a photo with the question.
+* ~~Dvara. A person asked in Telegram gets the card's words, not its
+  picture.~~ Dvara sends the photo first and the buttons under it
+  (Dvara's notes/32).
+* ~~A picture only for a tap by position.~~ Every held step now comes
+  with the screen it was held on, what it would tap ringed, and the
+  words filled in on it -- not the model's numbered list, which on a
+  real phone was forty-one lines of a dialler's keys (Sparsh's
+  notes/10).
 * The cloud road, with pictures to the model, untried like the rest of
   the cloud trial.

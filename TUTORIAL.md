@@ -2145,9 +2145,12 @@ as a card first. Buying and paying are never done at any level.
 
 **A screen it can't read.** A few screens don't describe themselves,
 like Settings' *About phone* page, whose "Up time" ticks every second.
-With a local model that can see pictures (`gemma4:26b`, say), such a
-screen comes to the agent with a screenshot, and its first line says
-`screenshots on (local model)`. It can read the page from the picture,
+Others describe only part of themselves: Google Maps lists its places
+as boxes with no names. With a local model that can see pictures
+(`gemma4:26b`, `qwen3.8:latest`), such a screen comes to the agent with
+a screenshot, and its first line says `screenshots on (local model)`.
+The model can also ask for one when the list seems to be missing
+something. It can read the page from the picture,
 and tap a spot on it, but **every such tap asks you first**: the card
 shows the picture with the spot ringed in red (in the terminal, a file
 whose path is printed). Say yes only if the ring is on what you meant.
@@ -2155,6 +2158,22 @@ Typing on such a screen asks too. Renaming the emulator from that page
 takes four yeses. With a cloud model, no screenshot leaves your computer
 unless you set `YANTRA_PHONE_SHOTS=on`. `YANTRA_PHONE_SHOTS=off` turns
 them off for local models too.
+
+**What a phone card looks like.** Whatever the step (a Send, a Call, a
+tap by position), the card is one sentence, the words filled in on the
+screen, and a picture of the phone's screen with what it would tap
+ringed:
+
+```
+Do this on the phone?
+On the phone 84B7N16128001616: tap button "Call (dial)" in com.google.android.dialer -- held because it says "call".
+On the screen: field "(919) 535-3020"
+(The picture shows the phone's screen; what it would tap is ringed.)
+```
+
+Check the number or the message, check the ring, then answer. The
+picture is yours alone: it never goes to the model. In the terminal
+it's a file whose path is printed under the card.
 
 **A locked phone.** If your phone has a PIN, pattern or password and is
 locked, the agent can't open it, and it's told so in plain words: the

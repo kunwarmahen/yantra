@@ -136,3 +136,9 @@ provider takes. 2717 tests before, 2725 after (and 1 skipped, as before).
 * ~~Acting on what only the picture shows.~~ A tap by position, asked
   every time, the spot ringed on the card
   ([note 123](123-a-tap-you-say-yes-to-by-looking.md)).
+* ~~A screen the list reads only in part.~~ Google Maps' places are
+  unnamed boxes, and a web page can come back blank right after a
+  search. Sparsh now sends the picture there too, reads a blank page
+  twice, and lets the model ask (`look` with `picture`); the phone
+  layer tells a model that sees to ask rather than open rows one by one
+  (Sparsh's notes/10, *where the list falls short*).

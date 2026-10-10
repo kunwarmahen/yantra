@@ -438,7 +438,7 @@ class WebSession:
                     "summary": request.summary,
                     "arguments": request.arguments,
                     "edited": edited,
-                    # the phone's screen, the spot ringed: the person's eyes only
+                    # the phone's screen, what it would tap ringed: the person's eyes only
                     "picture": None if edited else _picture(request),
                 }
                 if self._wait_left is not None:
