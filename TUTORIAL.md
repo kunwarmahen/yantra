@@ -2089,15 +2089,15 @@ ninth. Sparsh stops the few steps that can't be undone:
   send on Enter).
 
 Those come to you as an approval card that says exactly what will
-happen, with the screen it will happen on, including the message in the
-box:
+happen, names your phone the way its Settings do, shows the message in
+the box, and comes with a picture of the screen with Send ringed:
 
 ```
 Do this on the phone?
-On the phone emulator-5554: tap image "Send SMS" in
+On your phone (Nexus 6P): tap image "Send SMS" in
 com.google.android.apps.messaging -- held because it says "send".
-…
-4 field "running late, be there at 7"
+On the screen: field "running late, be there at 7"
+(The picture shows the phone's screen; what it would tap is ringed.)
 ```
 
 Say yes and it's sent. Say no and the agent stops and tells you the
@@ -2175,7 +2175,7 @@ ringed:
 
 ```
 Do this on the phone?
-On the phone 84B7N16128001616: tap button "Call (dial)" in com.google.android.dialer -- held because it says "call".
+On your phone (Nexus 6P): tap button "Call (dial)" in com.google.android.dialer -- held because it says "call".
 On the screen: field "(919) 535-3020"
 (The picture shows the phone's screen; what it would tap is ringed.)
 ```
