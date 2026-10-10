@@ -2094,8 +2094,8 @@ the box, and comes with a picture of the screen with Send ringed:
 
 ```
 Do this on the phone?
-On your phone (Nexus 6P): tap image "Send SMS" in
-com.google.android.apps.messaging -- held because it says "send".
+On your phone (Nexus 6P): tap image "Send SMS" in Messages -- held
+because it says "send".
 On the screen: field "running late, be there at 7"
 (The picture shows the phone's screen; what it would tap is ringed.)
 ```
@@ -2175,7 +2175,7 @@ ringed:
 
 ```
 Do this on the phone?
-On your phone (Nexus 6P): tap button "Call (dial)" in com.google.android.dialer -- held because it says "call".
+On your phone (Nexus 6P): tap button "Call (dial)" in Phone -- held because it says "call".
 On the screen: field "(919) 535-3020"
 (The picture shows the phone's screen; what it would tap is ringed.)
 ```
