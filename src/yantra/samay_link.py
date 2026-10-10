@@ -48,6 +48,13 @@ exist, to preview first and say the sentence, and to create only after a
 yes. When to offer is the model's call -- this is plumbing, and the
 agent decides.
 
+AN ANSWER COMES BACK TO THE PAGE. A schedule made at this computer runs
+on the direct road, with nobody attached; what it said is in Samay's
+record either way. ``answers`` reads it for the page's answers chip, so
+a run's reply shows where the schedule was made -- and the card says
+where else it goes (``answers_go``: through Dvara, when the running
+clock sends there).
+
 THE PAGE'S PANEL USES THE PROGRAM, NOT THE PAGE'S API. ``samay list
 --json`` and its neighbours work whether ``samay serve`` is running or
 not, need no token, and are the same JSON Samay's own page is drawn
@@ -84,7 +91,11 @@ VERBS = {"list": False, "runs": True, "pause": True, "resume": True, "rm": True}
 #: notify, in the words the card uses.
 NOTIFY_WORDS = {"when_new": "only when there is something new",
                 "always": "after every run",
-                "never": "never -- it is kept for you to read"}
+                "never": "never -- it is kept for you to read here"}
+#: Run outcomes with something for the person to read (``Samay.answers``).
+ANSWERED = ("ok", "needs_person", "failed", "timed_out", "held", "interrupted")
+#: How much of a schedule's prompt its card shows.
+PROMPT_SHOWN = 240
 #: How many matched tools the card names before it counts the rest.
 SHOWN = 6
 
@@ -267,43 +278,60 @@ def _setu_reach(setu: Any) -> tuple[list[str], dict[str, str]]:
 
 
 def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
-                   sentence: str = "", problem: str = "", phone: bool = False) -> str:
+                   sentence: str = "", problem: str = "", phone: bool = False,
+                   where: str = "") -> str:
     """The permission card for ``create_schedule``, in plain words.
 
+    LAID OUT LIKE SAMAY'S OWN NEW-SCHEDULE FORM: what it does each time,
+    when, tell me, may use without asking -- one heading per line and the
+    answer under it, the way a person filling the form in would have
+    written it. The card is text because it goes everywhere a question
+    goes (this page, a terminal, Telegram through Dvara), so the layout
+    is in the words, not in markup.
+
     ``sentence`` is Samay's own reading of ``when`` (preview_schedule);
-    ``problem`` is why it could not read it, if it could not. What the
-    run may do unasked comes before the prompt: a long prompt read first
-    pushes the line that matters off the bottom of the card.
+    ``problem`` is why it could not read it, if it could not; ``where``
+    is where an answer goes (``Samay.answers_go``). A LONG PROMPT IS CUT
+    on the card: read first, it would push what the run may do unasked
+    off the bottom. The whole prompt is under the raw arguments.
     """
     when = args.get("when")
     raw_when = json.dumps(when) if not isinstance(when, str) else when
     notify = str(args.get("notify") or "when_new")
     allow = args.get("allow_tools") or []
     allow = [allow] if isinstance(allow, str) else list(allow)
-    lines = ["Save a schedule. At each time this agent runs it with NOBODY watching.",
-             f"  when:      {sentence or raw_when}"]
+    prompt = " ".join(str(args.get("prompt") or "").split())
+    if len(prompt) > PROMPT_SHOWN:
+        prompt = prompt[:PROMPT_SHOWN - 1] + "… (all of it under raw arguments)"
+    lines = ["New schedule. At each time it runs with nobody watching.", "",
+             "What it does each time",
+             f"  {prompt or '(nothing -- no prompt given)'}",
+             "When",
+             f"  {sentence or raw_when}"]
     if problem:
-        lines.append(f"             SAMAY CANNOT READ THIS 'when': {problem}")
+        lines.append(f"  SAMAY CANNOT READ THIS 'when': {problem}")
     if args.get("tz"):
         lines.append(f"  time zone: {args['tz']}")
-    lines.append(f"  tells you: {NOTIFY_WORDS.get(notify, notify)}")
+    told = NOTIFY_WORDS.get(notify, notify)
+    lines += ["Tell me", f"  {told}" + (f" -- {where}" if where and notify != "never"
+                                        else "")]
     reach, prefixes = _setu_reach(setu)
+    lines.append("May use without asking")
     if allow:
-        lines.append("  without asking, it may also use:")
         changes: dict[str, list[str]] = {}
         for pattern, hits in match_tools(allow, registry):
             if not hits:
-                lines.append(f"    {pattern}: NO TOOL BY THIS NAME in this agent -- it "
+                lines.append(f"  {pattern}: NO TOOL BY THIS NAME in this agent -- it "
                              f"matches nothing")
                 continue
             shown = ", ".join(hits[:SHOWN]) + (f" +{len(hits) - SHOWN} more"
                                                if len(hits) > SHOWN else "")
-            lines.append(f"    {pattern}: {shown}" if pattern not in hits
-                         else f"    {pattern}")
+            lines.append(f"  {pattern}: {shown}" if pattern not in hits
+                         else f"  {pattern}")
             for name in hits:
                 tool = registry.get(name)
                 if getattr(tool, "always_ask", False):
-                    lines.append(f"      {name} spends money: it is asked about every "
+                    lines.append(f"    {name} spends money: it is asked about every "
                                  f"time, and with nobody there it will be refused")
                     continue
                 if getattr(tool, "read_only", False):
@@ -312,26 +340,26 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
                 if prefix is not None:
                     changes.setdefault(prefixes[prefix], []).append(name[len(prefix):])
         for label, verbs in changes.items():
-            lines.append(f"    THIS CHANGES THINGS IN YOUR {label} WITHOUT ASKING: "
+            lines.append(f"  THIS CHANGES THINGS IN YOUR {label} WITHOUT ASKING: "
                          f"{', '.join(dict.fromkeys(verbs))}")
     else:
-        lines.append("  without asking, it may use only tools that read.")
+        lines.append("  only tools that read")
     if reach:
-        lines.append("  through Setu, it can read without asking: " + "; ".join(reach))
+        lines.append("  through Setu, it can read: " + "; ".join(reach))
     if phone:
         steps = args.get("phone_steps") or []
         steps = [steps] if isinstance(steps, str) else list(steps)
         wait = args.get("wait") or 30
+        lines.append("Your phone")
         lines.append("  IT WORKS YOUR PHONE at each time. In use: it waits up to 10 "
                      "minutes, then skips. Locked: you're asked to unlock it.")
         for step in steps:
-            lines.append(f"    ON YOUR PHONE, WITHOUT ASKING: {step}")
+            lines.append(f"  ON YOUR PHONE, WITHOUT ASKING: {step}")
         lines.append(f"  Anything else held on the phone is asked in your chat; it waits "
                      f"{wait} minutes in all, then it's refused.")
     else:
-        lines.append("  Anything else that changes something is refused while nobody is there.")
-    prompt = " ".join(str(args.get("prompt") or "").split())
-    lines.append(f"  does:      {prompt or '(nothing -- no prompt given)'}")
+        lines += ["", "Anything else that changes something is refused while nobody "
+                      "is there."]
     return "\n".join(lines)
 
 
@@ -347,7 +375,8 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
     return head + (f"\n  {found}" if found else "")
 
 
-def explain(tool: Any, registry: Any, setu_of: Any, phone: bool = False) -> Any:
+def explain(tool: Any, registry: Any, setu_of: Any, phone: bool = False,
+            where: Any = None) -> Any:
     """The ``explain`` hook for one of Samay's write tools (mcp.py), or
     None for the reads, which are never asked about."""
     verb = tool.raw_name
@@ -367,7 +396,8 @@ def explain(tool: Any, registry: Any, setu_of: Any, phone: bool = False) -> Any:
             said, failed = ask("preview_schedule", preview)
             return explain_create(args, registry=registry, setu=setu_of(),
                                   sentence="" if failed else said,
-                                  problem=said if failed else "", phone=phone)
+                                  problem=said if failed else "", phone=phone,
+                                  where=where() if where is not None else "")
         return card
     if verb in ("pause_schedule", "resume_schedule", "delete_schedule"):
         def change(args: dict[str, Any]) -> str:
@@ -432,7 +462,7 @@ class Samay:
         for name in self.tools:
             tool = agent.registry.get(name)
             hook = explain(tool, agent.registry, lambda: getattr(agent, "setu", None),
-                           self.phone)
+                           self.phone, self.answers_go)
             if hook is not None:
                 tool.explain = hook
                 tool.run = self._then_refresh(tool.run)
@@ -440,6 +470,21 @@ class Samay:
         prompt.set("schedules", prompt_text(self.data, self.seen_at, self.clock_off))
         prompt.apply()
         return len(self.tools)
+
+    def answers_go(self) -> str:
+        """Where a schedule's answer reaches its person, for the card.
+
+        A person behind Dvara hears in their chat. At this computer, every
+        answer is kept on Yantra's page (its answers chip), and the
+        running clock says whether it also sends them through Dvara
+        (``local_to`` in Samay's status)."""
+        if self.person != LOCAL:
+            return "in your chat"
+        to = (self.data or {}).get("local_to")
+        if to:
+            return ("on Yantra's page, and to you through Dvara (Telegram, "
+                    "Sarathi's page)")
+        return "on Yantra's page (its answers chip)"
 
     def _then_refresh(self, run: Any) -> Any:
         """A write's run, followed by a fresh look -- so the page's count
@@ -473,6 +518,34 @@ class Samay:
             return json.loads(done.stdout)
         except json.JSONDecodeError:
             raise SamayLinkError(f"samay {verb} did not print JSON") from None
+
+    def answers(self, limit: int = 30) -> list[dict[str, Any]]:
+        """What this person's schedules said lately, newest first: the
+        page's answers chip. Every run that ended with something to read
+        -- a reply, a failure, a need -- with its schedule's sentence; a
+        quiet run (nothing new), a skip and a miss are left out. Read from
+        Samay's own record, so it is the same whether or not anything was
+        sent anywhere."""
+        listed = {s["id"]: s for s in self.call("list")
+                  if isinstance(s, dict) and s.get("owner") == self.person}
+        if not listed:
+            return []
+        argv = [*self._base(), "runs", "--limit", str(max(1, min(int(limit), 200))),
+                "--json"]
+        try:
+            done = subprocess.run(argv, capture_output=True, text=True,
+                                  timeout=STATUS_TIMEOUT)
+            runs = json.loads(done.stdout) if done.returncode == 0 else []
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            runs = []
+        out = []
+        for run in runs:
+            schedule = listed.get(run.get("schedule"))
+            if schedule is None or run.get("outcome") not in ANSWERED:
+                continue
+            out.append({**run, "sentence": schedule.get("sentence", ""),
+                        "prompt": schedule.get("prompt", "")})
+        return out
 
     def run_now(self, schedule: str) -> None:
         """Start one run and do not wait for it: it is an agent turn, and

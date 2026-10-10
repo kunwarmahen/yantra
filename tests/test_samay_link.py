@@ -69,6 +69,15 @@ FAKE_SAMAY = """\
         print(json.dumps({{**CARD, "state": "paused" if args[0] == "pause" else "active"}}))
     elif args[0] == "rm":
         print(json.dumps({{"removed": args[1]}}))
+    elif args[0] == "runs" and args[1].startswith("-"):
+        print(json.dumps([
+            {{"id": "r3", "schedule": "s-abc", "outcome": "ok", "reply": "2 new mails",
+              "due_at": "2026-10-05T14:00:00+00:00", "ended_at": "2026-10-05T14:01:00+00:00",
+              "summary": "2 new mails"}},
+            {{"id": "r2", "schedule": "s-abc", "outcome": "quiet", "reply": "NOTHING NEW",
+              "due_at": "2026-10-05T13:00:00+00:00", "summary": "NOTHING NEW"}},
+            {{"id": "r1", "schedule": "s-raj", "outcome": "ok", "reply": "raj's",
+              "due_at": "2026-10-05T12:00:00+00:00", "summary": "raj's"}}]))
     elif args[0] == "runs":
         print(json.dumps([{{"id": "r1", "schedule": args[1], "outcome": "ok",
                            "due_at": "2026-10-05T12:00:00+00:00", "summary": "2 new"}}]))
@@ -288,8 +297,12 @@ class TestTheCardIsWords:
             assert "every 2 hours, from now -- next: 14:00, 16:00" in said
             assert "check my mail; tell me what needs me" in said
             assert "only when there is something new" in said
-            assert "NOBODY watching" in said
+            assert "runs with nobody watching" in said
             assert '{"every"' not in said
+            # laid out like Samay's new-schedule form, in its order
+            heads = ["What it does each time", "When", "Tell me", "May use without asking"]
+            assert [said.index(h + "\n") for h in heads] == sorted(
+                said.index(h + "\n") for h in heads)
         finally:
             manager.shutdown()
 
@@ -358,7 +371,7 @@ class TestTheCardIsWords:
         said = samay_link.explain_create(
             {"prompt": "x", "when": "every 2h", "allow_tools": ["mcp__gmail-personal__*"]},
             registry=registry, setu=setu)
-        assert "through Setu, it can read without asking: Gmail (me@example.com)" in said
+        assert "through Setu, it can read: Gmail (me@example.com)" in said
         assert ("THIS CHANGES THINGS IN YOUR Gmail (me@example.com) WITHOUT ASKING: "
                 "send_message") in said
 
@@ -377,13 +390,32 @@ class TestTheCardIsWords:
         assert ("YOUR Gmail (mine@example.com; personal@example.com) WITHOUT ASKING: "
                 "send_message") in said
 
-    def test_what_it_may_do_unasked_comes_before_a_long_prompt(self):
+    def test_a_long_prompt_is_cut_so_what_it_may_do_unasked_stays_on_the_card(self):
         registry = ToolRegistry()
         registry.register(Named("browser_click"))
         said = samay_link.explain_create(
             {"prompt": "word " * 300, "when": "every 2h", "allow_tools": ["browser_*"]},
             registry=registry)
-        assert said.index("browser_click") < said.index("does:")
+        assert "all of it under raw arguments" in said
+        assert len(said) < 900 and "browser_click" in said
+
+    def test_the_card_says_where_the_answer_goes(self):
+        said = samay_link.explain_create(
+            {"prompt": "x", "when": "every 2h", "notify": "always"},
+            registry=ToolRegistry(), where="on Yantra's page")
+        assert "after every run -- on Yantra's page" in said
+        kept = samay_link.explain_create(
+            {"prompt": "x", "when": "every 2h", "notify": "never"},
+            registry=ToolRegistry(), where="on Yantra's page")
+        assert "never -- it is kept for you to read here" in kept
+        assert "-- on Yantra's page" not in kept
+
+    def test_where_follows_the_person_and_the_running_clock(self):
+        here = samay_link.Samay(mode="on", data={"local_to": ""})
+        assert here.answers_go() == "on Yantra's page (its answers chip)"
+        sent = samay_link.Samay(mode="on", data={"local_to": "mahen"})
+        assert "through Dvara" in sent.answers_go()
+        assert samay_link.Samay(mode="on", person="raj").answers_go() == "in your chat"
 
     def test_a_package_does_not_hear_of_accounts_it_was_not_allowed(self):
         row = {"ref": "gmail:personal", "connector": "gmail", "mcp": {"name": "gmail-personal"}}
@@ -438,6 +470,17 @@ class TestThePanel:
             made = calls(fake_samay[1])
             assert ["--state", state, "pause", "s-abc", "--json"] in made
             assert ["--state", state, "rm", "s-abc", "--json"] in made
+        finally:
+            manager.shutdown()
+
+    def test_answers_are_this_persons_runs_with_something_to_read(self, fake_samay,
+                                                                  tmp_path):
+        _, manager, client = self.served(fake_samay[0], tmp_path)
+        try:
+            got = client.get("/api/schedules/answers").json()["answers"]
+            # the quiet run and somebody else's schedule are left out
+            assert [a["id"] for a in got] == ["r3"]
+            assert got[0]["reply"] == "2 new mails" and got[0]["sentence"] == "every 2 hours"
         finally:
             manager.shutdown()
 

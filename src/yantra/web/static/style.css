@@ -2072,6 +2072,24 @@ pre.output { color: var(--ink); }
 @media (max-width: 560px) {
   .sched-runs { grid-column: 2; }
 }
+/* what a schedule said, back on the page it was made on */
+.chip-new { color: var(--accent); border-color: var(--accent); }
+.sched-answers { display: grid; gap: 8px; margin-bottom: 14px; }
+.sched-answer {
+  padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--paper); min-width: 0;
+}
+.sched-answer.is-new { border-color: var(--accent); }
+.sched-answer .conn-sub { font-family: var(--mono); font-size: 12px; }
+.sched-answer .reply { margin-top: 4px; overflow-wrap: anywhere; font-size: 13.5px; }
+.sched-answer .reply > :first-child { margin-top: 0; }
+.sched-answer .reply > :last-child { margin-bottom: 0; }
+.sched-answer.bad { border-left: 3px solid var(--danger); }
+.sched-answer.warn { border-left: 3px solid var(--warn); }
+.tell-me { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 2px;
+           font-size: 13px; color: var(--ink-2); }
+.tell-me select { font: inherit; color: var(--ink); background: var(--paper);
+                  border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
 
 /* ---- memory ---- */
 #mem-body { overflow-y: auto; padding: 0 22px 20px; }

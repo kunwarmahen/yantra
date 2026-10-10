@@ -197,6 +197,10 @@ Without it, that was a glob inside a JSON blob.
   normally has the same tools. A Setu connection made or dropped
   between now and 08:00 changes what it reaches, and the card can't
   know that.
+* ~~**Where the answer goes.**~~ The card was silent on it, and a
+  schedule made on this page answered nobody. The card now says where,
+  under Samay's own headings, and the answers come back to the page:
+  [note 125](125-the-answer-comes-back-here.md).
 * **The 24-hour strip of Samay's own page.** The panel lists the next
   times instead. The strip is one click away on Samay's page, whose
   address the panel shows while the clock is running.

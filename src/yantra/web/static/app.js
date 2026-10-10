@@ -262,6 +262,7 @@ function applyHeader(s) {
   const sam = s.samay;
   $("#chip-sched").classList.toggle("hidden", !sam || !sam.found);
   if (sam && sam.found) {
+    startAnswers();
     $("#sched-count").textContent = `${sam.counts.active || 0} scheduled`;
     $("#chip-sched").title = "schedules — what the agent does later or on a repeat"
       + (sam.serving ? "" : "\n\nSamay's clock is NOT running: nothing runs on time until `samay serve` is");
@@ -843,6 +844,7 @@ function showPermissionModal(env) {
     ${env.wait_left != null ? '<div class="wait-clock" id="wait-clock"></div>' : ""}
     ${cardPicture(env.picture)}
     <div class="summary">${esc(env.summary)}</div>
+    ${tellMe(env)}
     <details><summary>raw arguments</summary>
       <pre class="args">${esc(JSON.stringify(env.arguments ?? {}, null, 2))}</pre>
     </details>
@@ -855,6 +857,15 @@ function showPermissionModal(env) {
     </div>`);
   startWaitClock(env);
   const answer = (payload) => send({ type: "answer", id: env.id, ...payload });
+  const approve = () => {
+    // a different "tell me" is an edit: the card comes back in its words
+    const told = $("#tell-me")?.value;
+    if (told && told !== (env.arguments?.notify || "when_new")) {
+      answer({ decision: "edit", edited_args: { ...env.arguments, notify: told } });
+      return;
+    }
+    answer({ decision: "approve" });
+  };
   const onKey = (e) => {
     // Enter approves only while THIS modal is up and no edit box is open
     if (ui.modalId !== env.id || e.key !== "Enter") return;
@@ -869,13 +880,13 @@ function showPermissionModal(env) {
       if (said.trim()) { answer({ decision: "deny", reason: said }); return; }
     }
     e.preventDefault();
-    answer({ decision: "approve" });
+    approve();
   };
   document.addEventListener("keydown", onKey);
   $("#modal").onclick = (e) => {
     const act = e.target?.dataset?.act;
     if (!act) return;
-    if (act === "approve") { document.removeEventListener("keydown", onKey); answer({ decision: "approve" }); }
+    if (act === "approve") { document.removeEventListener("keydown", onKey); approve(); }
     if (act === "deny") {
       document.removeEventListener("keydown", onKey);
       // Whatever the person typed rides along with the no: the model
@@ -885,6 +896,21 @@ function showPermissionModal(env) {
     }
     if (act === "edit") renderEditBox(env, answer, onKey);
   };
+}
+
+/* Samay's new schedule asks where its answer goes: "Tell me", as on
+   Samay's own new-schedule form. Changing it is an edit, so the card
+   comes back saying exactly what the yes now covers. */
+function tellMe(env) {
+  if (env.tool_name !== "mcp__samay__create_schedule") return "";
+  const now = env.arguments?.notify || "when_new";
+  const options = [["when_new", "only when there is something new"],
+                   ["always", "after every run"],
+                   ["never", "never — keep it here for me to read"]];
+  return `<label class="tell-me">Tell me
+    <select id="tell-me">${options.map(([v, label]) =>
+      `<option value="${v}" ${v === now ? "selected" : ""}>${esc(label)}</option>`).join("")}
+    </select></label>`;
 }
 
 /* This turn's approval allowance (--wait-budget, notes/78), counting down.
@@ -1593,6 +1619,7 @@ function renderMemory() {
 const sched = { data: null, open: new Set(), runs: {} };
 
 $("#chip-sched").onclick = openSchedPanel;
+$("#chip-answers").onclick = openSchedPanel;
 $("#sched-refresh").onclick = () => loadSchedules(true);
 $("#sched-close").onclick = () => $("#sched-backdrop").classList.add("hidden");
 $("#sched-backdrop").addEventListener("click", (e) => {
@@ -1602,7 +1629,76 @@ $("#sched-backdrop").addEventListener("click", (e) => {
 async function openSchedPanel() {
   $("#sched-backdrop").classList.remove("hidden");
   $("#sched-body").innerHTML = '<div class="panel-loading">loading…</div>';
+  await loadAnswers();
   await loadSchedules(false);
+  markAnswersSeen();
+}
+
+/* What the schedules said, back on the page they were made on. A
+   schedule made here runs with nobody attached; its reply is in Samay's
+   record, and the chip says when there is one you haven't seen. Which
+   ones you've seen is this browser's to remember: reading them changes
+   nothing anywhere else. */
+
+const ANSWERS_SEEN = "yantra-answers-seen";
+const ANSWERS_EVERY = 60000;
+const answers = { list: [], seenAt: "", timer: null, shownSeen: "" };
+
+function answersSeen() {
+  try { return localStorage.getItem(ANSWERS_SEEN) || ""; } catch { return answers.seenAt; }
+}
+
+function answerAt(a) { return a.ended_at || a.started_at || a.due_at || ""; }
+
+function startAnswers() {
+  if (answers.timer) return;
+  loadAnswers();
+  answers.timer = setInterval(() => { if (!document.hidden) loadAnswers(); }, ANSWERS_EVERY);
+}
+
+async function loadAnswers() {
+  try {
+    const res = await fetch("/api/schedules/answers");
+    if (!res.ok) return;
+    answers.list = (await res.json()).answers || [];
+  } catch { return; }
+  const seen = answersSeen();
+  const fresh = answers.list.filter((a) => answerAt(a) > seen).length;
+  $("#chip-answers").classList.toggle("hidden", !fresh);
+  $("#answers-count").textContent = `${fresh} new answer${fresh === 1 ? "" : "s"}`;
+}
+
+function markAnswersSeen() {
+  answers.shownSeen = answersSeen();
+  const newest = answers.list.map(answerAt).sort().pop();
+  if (!newest) return;
+  answers.seenAt = newest;
+  try { localStorage.setItem(ANSWERS_SEEN, newest); } catch { /* private mode */ }
+  $("#chip-answers").classList.add("hidden");
+}
+
+function renderAnswers(body) {
+  const list = answers.list.slice(0, 8);
+  if (!list.length) return;
+  section(body, "what they said", "newest first; the whole history is under each schedule's runs");
+  const box = document.createElement("div");
+  box.className = "sched-answers";
+  const seen = answers.shownSeen || answersSeen();
+  for (const a of list) {
+    const card = document.createElement("div");
+    card.className = `sched-answer ${OUTCOME_TONE[a.outcome] || ""}`
+      + (answerAt(a) > seen ? " is-new" : "");
+    const text = a.reply || a.detail || a.summary || "";
+    // the schedule as said, without its next times: this is about the last one
+    const said = (a.sentence || a.schedule).split(" -- next:")[0];
+    card.innerHTML = `<div class="conn-title">${esc(said)}</div>
+      <div class="conn-sub">${esc(a.outcome)} · ${esc(clockTime(answerAt(a)))}${
+        a.notified ? " · sent to you" : ""}</div>
+      <div class="reply">${a.outcome === "ok" ? renderMarkdown(text) : esc(text)}</div>
+      ${(a.needs || []).length ? `<div class="conn-sub conn-warn">needs you: ${esc(a.needs.join("; "))}</div>` : ""}`;
+    box.append(card);
+  }
+  body.append(box);
 }
 
 async function loadSchedules(said) {
@@ -1659,6 +1755,7 @@ function renderSchedules() {
       + "time until it is. Start it in a terminal with <code>samay serve</code>.</span>";
     body.append(warn);
   }
+  renderAnswers(body);
   const list = d.schedules || [];
   section(body, `${list.length} schedule${list.length === 1 ? "" : "s"}`,
     d.serving && d.url ? `Samay's own page: ${d.url}` : "kept by Samay on this computer");

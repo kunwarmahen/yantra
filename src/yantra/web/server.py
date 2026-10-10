@@ -1970,6 +1970,18 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         samay.refresh()
         return {**samay.describe(), "schedules": samay_call(samay, "list")}
 
+    @app.get("/api/schedules/answers")
+    def schedules_answers() -> dict[str, Any]:
+        """What this person's schedules said lately, newest first: the
+        answers chip. Which ones are new is the browser's to remember --
+        one person's page, and nothing else is told by reading them."""
+        from yantra.samay_link import SamayLinkError
+        samay = require_samay()
+        try:
+            return {"answers": samay.answers()}
+        except SamayLinkError as exc:
+            raise HTTPException(503, f"samay: {exc}") from None
+
     @app.get("/api/schedules/{schedule_id}/runs")
     def schedules_runs(schedule_id: str) -> dict[str, Any]:
         return {"runs": samay_call(require_samay(), "runs", schedule_id)}

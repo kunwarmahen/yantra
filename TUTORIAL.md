@@ -1929,9 +1929,22 @@ mistake, a website check allowed nothing so it's refused at its time,
 stopped once the agent was told that going on the internet is not
 reading ([notes/118](notes/118-the-internet-is-not-a-read.md)).
 
+**The card.** It reads like Samay's own new-schedule form: *What it does
+each time*, *When*, *Tell me* (when you hear, and where), *May use
+without asking*. On the page it also has a **Tell me** list; pick
+*never — keep it here for me to read* and press approve, and the card
+comes back saying so, for one more approve.
+
 **The panel.** In `yantra --web`, the clock chip opens the Schedules
 panel: each schedule, its next times and last run, what each run needed
 from you, and *run now*, *pause*, *delete*.
+
+**The answers.** Press *run now* on a schedule and wait for it to
+finish (or let it run at its time). Within a minute an **answers** chip
+appears in the top bar: *1 new answer*. Click it: the panel opens with
+**what they said** at the top, the reply outlined because you haven't
+seen it, and the chip goes away
+([notes/125](notes/125-the-answer-comes-back-here.md)).
 
 Installing Samay, its own page, the two roads, keeping its clock running
 (`samay unit`), and the rules about missed times are Samay's: see its
@@ -2421,6 +2434,7 @@ Most carry a live receipt from a real run.
 | [122](notes/122-the-app-instead-of-the-browser.md) | a site's own app on the phone, at Setu's level, for sites that refuse the browser |
 | [123](notes/123-a-tap-you-say-yes-to-by-looking.md) | a tap by position on a screen only the picture shows, asked every time with the spot ringed |
 | [124](notes/124-a-question-with-no-step-behind-it.md) | a yes asked in words for a held step that was already gone, and the card that is now never shown for one |
+| [125](notes/125-the-answer-comes-back-here.md) | a schedule made on the page answered nobody; its replies come back to an answers chip, and its card reads like Samay's new-schedule form, with where the answer goes |
 
 ### The neighbours
 
@@ -2485,5 +2499,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 2655 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 2746 offline tests passing (1 skipped) — no network, no key.
 Copyright 2026 Mahen Singh, Apache License 2.0.*

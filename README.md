@@ -735,18 +735,26 @@ says that going on the internet is not reading: a site check must list
 from tuning, qwen's under-grants went from 3/18 to 0/18 and its risky
 grants (`browser_fill`) from 3/18 to 0/18
 ([notes/118](notes/118-the-internet-is-not-a-read.md)). The
-approval card for a new schedule is written in words, not JSON: when (in
-Samay's own sentence, with the next times), when you hear, what each
-`allow_tools` glob reaches in this agent (a name that matches nothing is
-said in capitals), which of your accounts it would change things in
-without asking, and which Setu connections it can read unasked; the
-model's prompt comes last. In the browser UI a **clock** chip opens the
+approval card for a new schedule is written in words, not JSON, under
+the headings of Samay's own new-schedule form: what it does each time
+(cut at 240 characters), when (in Samay's own sentence, with the next
+times), **tell me** (when you hear, and where: this page, and through
+Dvara when Samay's clock sends there), and what it may use without
+asking: what each `allow_tools` glob reaches in this agent (a name that
+matches nothing is said in capitals), which of your accounts it would
+change things in, and which Setu connections it can read. On the page
+the card has a **Tell me** list too; a different choice comes back as an
+edited card to approve. In the browser UI a **clock** chip opens the
 Schedules panel: every schedule with its next times and last run, its
 history (what a run needed from you, what it was refused), and *run
 now*, *pause*/*resume*, *delete*. The panel runs Samay's own commands
 (`samay list --json` …), so it works whether or not `samay serve` is up,
 and it says at the top when the clock is not running
-([notes/115](notes/115-what-a-yes-covers.md)).
+([notes/115](notes/115-what-a-yes-covers.md)). What a schedule made here
+said comes back here: an **answers** chip appears when there's a reply
+you haven't seen (*1 new answer*), and the panel opens with **what they
+said** at the top, read from Samay's record
+([notes/125](notes/125-the-answer-comes-back-here.md)).
 
 **Your phone, through Sparsh.** [Sparsh](https://github.com/kunwarmahen/sparsh)
 works an Android phone (or the emulator on this computer) through `adb`,
@@ -2418,7 +2426,9 @@ src/yantra/
 │                   (samay.status.v1), its tools started `--for local` and
 │                   `--agent` this package, skipped when unattended; the
 │                   create card in words (when, who hears, what each glob
-│                   reaches, the accounts it changes or reads unasked), a
+│                   reaches, the accounts it changes or reads unasked; laid
+│                   out like Samay's new-schedule form, and where an answer
+│                   goes, [notes/125](notes/125-the-answer-comes-back-here.md)), a
 │                   `schedules` prompt layer, and the page's Schedules panel
 │                   through `samay list|runs|pause|resume|rm --json`
 │                   ([notes/115](notes/115-what-a-yes-covers.md)); a host
@@ -2795,7 +2805,11 @@ src/yantra/
 │                   it ([notes/90](notes/90-what-it-said.md)).
 │                   The clock chip's Schedules panel lists what Samay keeps,
 │                   with run now / pause / resume / delete
-│                   ([notes/115](notes/115-what-a-yes-covers.md)).
+│                   ([notes/115](notes/115-what-a-yes-covers.md)); the
+│                   answers chip and "what they said", the replies of this
+│                   person's schedules (GET /api/schedules/answers), seen
+│                   kept by the browser; the schedule card's Tell me list
+│                   ([notes/125](notes/125-the-answer-comes-back-here.md)).
 │                   --wait-budget keeps with_wait_budget's rule inside
 │                   the session, where the blocking gate already polls:
 │                   reset at start_turn, prompt withdrawn on expiry
@@ -2962,7 +2976,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2655 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2746 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
