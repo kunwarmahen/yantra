@@ -297,14 +297,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--unattended", action="store_true",
                         help="nobody is in front of this run (also "
                              "YANTRA_UNATTENDED=1): nothing waits for a "
-                             "person. Writes not allowed ahead of time are "
-                             "refused, a question fails the turn, and a "
+                             "keystroke. Writes not allowed ahead of time are "
+                             "refused (or asked through $YANTRA_ASK_URL, a "
+                             "Dvara, when set), a question fails the turn, and a "
                              "browser handoff tells the agent to stop and say "
                              "what it needs instead of opening a window")
     parser.add_argument("--allow-tools", action="append", default=[],
-                        metavar="GLOB", dest="allow_tools",
+                        metavar="GRANT", dest="allow_tools",
                         help="approve these tools ahead of time (repeatable; "
-                             "globs, e.g. 'browser_*'). Meant for "
+                             "globs, e.g. 'browser_*', or one tool with fixed "
+                             "arguments, e.g. 'call_service(domain=switch, "
+                             "entity_id=switch.lights_2)'). Meant for "
                              "--unattended runs, carrying what the person "
                              "already accepted. Tools that ask on every call "
                              "still ask")
@@ -2727,12 +2730,19 @@ def main(argv: list[str] | None = None) -> int:
     elif is_unattended():
         # Nobody to ask: what is not allowed ahead of time is refused, and
         # the refusal is written down, so whoever scheduled this run
-        # learns which tool it wanted without reading the answer.
-        ask_gate = _refuse_and_note
+        # learns which tool it wanted without reading the answer -- unless
+        # whoever started it said where its person can still be asked
+        # (``$YANTRA_ASK_URL``: a Dvara), and then the question goes there.
+        reach = unattended.Reach.from_env()
+        ask_gate = reach.gate if reach is not None else _refuse_and_note
     else:
         ask_gate = confirm_gate(console)
     if args.allow_tools:
-        ask_gate = allow_named(args.allow_tools, inner=ask_gate)
+        try:
+            ask_gate = allow_named(args.allow_tools, inner=ask_gate)
+        except ValueError as exc:
+            print(f"error: --allow-tools {exc}", file=sys.stderr)
+            return 2
     if sandbox is not None and sandbox.confined:
         # containment earns autonomy: confined bash runs without asking,
         # every other tool keeps the ask-gate ([notes/16](../notes/16-sandboxing.md))

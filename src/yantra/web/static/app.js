@@ -1694,7 +1694,7 @@ function renderAnswers(body) {
     card.innerHTML = `<div class="conn-title">${esc(said)}</div>
       <div class="conn-sub">${esc(a.outcome)} · ${esc(clockTime(answerAt(a)))}${
         a.notified ? " · sent to you" : ""}</div>
-      <div class="reply">${a.outcome === "ok" ? renderMarkdown(text) : esc(text)}</div>
+      <div class="reply">${(a.outcome === "ok" || a.outcome === "refused") ? renderMarkdown(text) : esc(text)}</div>
       ${(a.needs || []).length ? `<div class="conn-sub conn-warn">needs you: ${esc(a.needs.join("; "))}</div>` : ""}`;
     box.append(card);
   }
@@ -1731,7 +1731,7 @@ async function schedAct(id, action) {
 }
 
 const OUTCOME_TONE = { failed: "bad", timed_out: "bad", needs_person: "warn",
-                       missed: "warn", skipped: "warn", held: "warn" };
+                       missed: "warn", skipped: "warn", held: "warn", refused: "bad" };
 const NOTIFY_SAID = { when_new: "tells you only what is new", always: "tells you every time",
                       never: "keeps it for you to read" };
 

@@ -36,12 +36,17 @@ turn gets a record of its own.
 
 from __future__ import annotations
 
+import json
 import os
 import threading
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from typing import Any
 
 from yantra.errors import UserUnavailable
 
@@ -146,6 +151,121 @@ def clear() -> None:
     """Empty the process's record (tests; a host reusing a process)."""
     global _process
     _process = Record()
+
+
+#: Where a run nobody is watching may still put a question: a Dvara's
+#: ``POST /ask``, its token, the person, and seconds of waiting in all.
+ASK_URL, ASK_TOKEN, ASK_ACTOR, ASK_WAIT = (
+    "YANTRA_ASK_URL", "YANTRA_ASK_TOKEN", "YANTRA_ASK_ACTOR", "YANTRA_ASK_WAIT")
+#: Extra seconds the HTTP call gets beyond the question's own wait.
+ASK_SLACK = 30.0
+
+
+@dataclass
+class Reach:
+    """Somebody a run nobody is WATCHING can still ASK.
+
+    Unattended means nobody is at this run; it does not have to mean the
+    person is out of reach. "Turn off the stairs light at four" made at
+    the computer ran on Samay's direct road, met a switch nobody had
+    allowed ahead of time, and was refused -- while its person sat in
+    front of Telegram and the page that would have taken a yes. When
+    whoever started this run knows a Dvara and who the run is for, the
+    question goes there instead (``POST /ask``): on the person's chat,
+    with two buttons, waiting at most ``seconds`` IN ALL for the run.
+
+    THE WAIT IS THE RUN'S, NOT EACH QUESTION'S. A run with five held
+    calls does not wait five times thirty minutes; once its wait is
+    spent, what is left is refused without asking, the way Dvara's own
+    scheduled turns lapse. A question nobody answered is a refusal, never
+    a yes, and every refusal is written down (``note_refused``) exactly
+    as the plain unattended gate writes them.
+
+    Dvara decides what a person may be asked: its owner's deny rules
+    still refuse, and a person who is never asked is never "answered".
+    This only carries the question; it grants nothing.
+    """
+
+    url: str
+    token: str
+    actor: str
+    seconds: float
+    spent: float = 0.0
+
+    @classmethod
+    def from_env(cls) -> Reach | None:
+        url = os.environ.get(ASK_URL, "").strip().rstrip("/")
+        actor = os.environ.get(ASK_ACTOR, "").strip()
+        if not url or not actor:
+            return None
+        try:
+            seconds = float(os.environ.get(ASK_WAIT, "") or 1800)
+        except ValueError:
+            seconds = 1800.0
+        return cls(url=url, token=os.environ.get(ASK_TOKEN, "").strip(),
+                   actor=actor, seconds=max(0.0, seconds))
+
+    def gate(self, request: Any) -> bool:
+        """A ``PermissionFn``: read-only runs, anything else is asked."""
+        from yantra.permissions import (REFUSED_OUT_OF_TIME,
+                                        REFUSED_UNATTENDED, refuse)
+
+        if request.read_only:
+            return True
+        left = self.seconds - self.spent
+        if left <= 0:
+            note_refused(request.tool_name)
+            return refuse(
+                request,
+                f"{request.tool_name} was denied: this run's time for asking "
+                f"its person is spent, so it was not asked. Say what you would "
+                f"have done.", code=REFUSED_OUT_OF_TIME)
+        started = time.monotonic()
+        try:
+            answer = self._post({
+                "actor": self.actor, "tool": request.tool_name,
+                "summary": request.summary or request.tool_name,
+                "arguments": _plain(request.arguments), "timeout": left})
+        except (OSError, ValueError) as exc:
+            note_refused(request.tool_name)
+            return refuse(
+                request,
+                f"{request.tool_name} was denied: this run is unattended and "
+                f"its person could not be reached to ask ({exc}). Say what "
+                f"you would have done.", code=REFUSED_UNATTENDED)
+        finally:
+            self.spent += time.monotonic() - started
+        if answer.get("approved") is True:
+            return True
+        note_refused(request.tool_name)
+        return refuse(request, str(answer.get("reason") or
+                                   f"{request.tool_name} was not approved."),
+                      code=str(answer.get("code") or REFUSED_UNATTENDED))
+
+    def _post(self, body: dict[str, Any]) -> dict[str, Any]:
+        request = urllib.request.Request(
+            f"{self.url}/ask", data=json.dumps(body).encode(), method="POST",
+            headers={"Authorization": f"Bearer {self.token}",
+                     "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(
+                    request, timeout=body["timeout"] + ASK_SLACK) as response:
+                answer = json.loads(response.read() or b"{}")
+        except urllib.error.HTTPError as exc:
+            try:
+                said = json.loads(exc.read() or b"{}").get("detail")
+            except (ValueError, AttributeError):
+                said = None
+            raise OSError(f"dvara said {exc.code}: {said or exc.reason}") from None
+        if not isinstance(answer, dict):
+            raise ValueError("dvara answered something that is not an object")
+        return answer
+
+
+def _plain(arguments: Any) -> Any:
+    """The call's arguments as JSON can carry them (Dvara's rules read
+    them); anything odd becomes its text."""
+    return json.loads(json.dumps(arguments or {}, default=str))
 
 
 class NobodyChannel:

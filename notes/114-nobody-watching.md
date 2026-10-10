@@ -252,6 +252,11 @@ accept — and Yantra's card for a schedule does ([note 115](115-what-a-yes-cove
   `unattended.scope()` around each one: a context variable, so each
   turn has a record of its own, and the browser carries it onto its own
   worker thread. Dvara does this for a schedule's turns (its note 17).
+* ~~**Somebody to ask.**~~ Unattended meant every write not allowed
+  ahead of time was refused, even with the person a tap away on
+  Telegram. When whoever started the run names a Dvara
+  (`YANTRA_ASK_URL`), the question goes there instead, waiting at most
+  the run's own wait in all ([note 126](126-a-yes-that-covers-the-job.md)).
 * **Retrying.** An unattended run doesn't try the browser again after a
   busy profile or a sign-in wall. Whether and when to try again belongs
   to whatever scheduled it, which knows the next time it's due.

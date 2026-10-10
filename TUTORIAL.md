@@ -1902,17 +1902,20 @@ Samay never does the work. At each time it starts a Yantra turn and
 writes down what came back. Yantra's side of that is three things.
 
 **A run nobody watches.** What Samay starts is `yantra --json
---unattended --allow-tools …`. Nothing waits for a person, writes are
+--unattended --allow-tools …`. Nothing waits for a keystroke, writes are
 refused unless they were allowed when the schedule was made, and a page
 that wants a sign-in, or refuses the browser outright, is handed off: the
 run ends `needs_person` and Samay pauses the schedule instead of failing
-every hour ([notes/114](notes/114-nobody-watching.md)).
+every hour ([notes/114](notes/114-nobody-watching.md)). Nobody watching
+isn't the same as nobody to ask, though: when Samay's clock knows a
+Dvara, a write nothing allowed comes to you on Telegram (and Sarathi's
+page) as a yes/no, and waits 30 minutes for you in all.
 
 **The offer.** When `samay` is on your `PATH` (or `YANTRA_SAMAY` names
 it), Yantra finds it at startup, with no config file, and says so:
 
 ```
-samay: 7 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs on time until `samay serve` is
+samay: 8 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs on time until `samay serve` is
 ```
 
 Say "check my mail every 2 hours and tell me if anything needs me". The
@@ -1931,6 +1934,24 @@ needs no permission ahead of time, that almost stopped happening
 mistake, a website check allowed nothing so it's refused at its time,
 stopped once the agent was told that going on the internet is not
 reading ([notes/118](notes/118-the-internet-is-not-a-read.md)).
+
+**A schedule that changes something.** Say "turn off the stairs light in
+5 minutes". The job itself is a change, so the agent has to list the
+tool that makes it, and it's told to fix that tool to the one thing:
+
+```
+May use without asking
+  mcp__homeassistant-home__call_service -- only with domain=switch,
+  service=turn_off, entity_id=switch.lights_2
+```
+
+That yes covers the stairs light and nothing else the same tool can
+reach. If the agent forgets, the card tells you before you approve:
+*IT SAYS "turn off", BUT NOTHING ALLOWED HERE CAN CHANGE ANYTHING*. If
+a run is still refused something, it's filed as **refused**, not done,
+and its message says what it wasn't allowed and how to allow it next
+time: tell the agent in a chat (you get one more card), or `samay allow
+ID 'TOOL'` ([notes/126](notes/126-a-yes-that-covers-the-job.md)).
 
 **The card.** It reads like Samay's own new-schedule form: *What it does
 each time*, *When*, *Tell me* (when you hear, and where), *May use

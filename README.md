@@ -721,7 +721,7 @@ made with) and says so in one line, including whether Samay's clock is
 running:
 
 ```
-samay: 7 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs on time until `samay serve` is -- via /home/you/samay/.venv/bin/samay
+samay: 8 tool(s), 0 active schedule(s); its clock is NOT running -- nothing runs on time until `samay serve` is -- via /home/you/samay/.venv/bin/samay
 ```
 
 `YANTRA_SAMAY=/path/to/samay` names it when it is elsewhere; `--samay`
@@ -738,15 +738,26 @@ says that going on the internet is not reading: a site check must list
 `web_fetch`, or it is refused at its time. On six site checks held out
 from tuning, qwen's under-grants went from 3/18 to 0/18 and its risky
 grants (`browser_fill`) from 3/18 to 0/18
-([notes/118](notes/118-the-internet-is-not-a-read.md)). The
+([notes/118](notes/118-the-internet-is-not-a-read.md)). And when the
+job itself changes something (turns a light off, sends the message),
+the layer says to list the tool that does it, fixed to what it acts on:
+`call_service(domain=switch, service=turn_off,
+entity_id=switch.lights_2)` allows that one switch, not every device
+([notes/126](notes/126-a-yes-that-covers-the-job.md)). The
 approval card for a new schedule is written in words, not JSON, under
 the headings of Samay's own new-schedule form: what it does each time
 (cut at 240 characters), when (in Samay's own sentence, with the next
 times), **tell me** (when you hear, and where: this page, and through
 Dvara when Samay's clock sends there), and what it may use without
 asking: what each `allow_tools` glob reaches in this agent (a name that
-matches nothing is said in capitals), which of your accounts it would
-change things in, and which Setu connections it can read. On the page
+matches nothing is said in capitals; a grant fixed to arguments says
+*only with …*; a tool that changes things listed bare says *WITH ANY
+ARGUMENTS*), which of your accounts it would change things in, and which
+Setu connections it can read. A job that reads like a change with
+nothing listed that can make one gets a line in capitals before the
+yes: *IT SAYS "turn off", BUT NOTHING ALLOWED HERE CAN CHANGE
+ANYTHING*. When Samay's clock knows a Dvara, the card's foot says what
+nothing allowed is asked about through Dvara at its time, not refused. On the page
 the card has a **Tell me** list too; a different choice comes back as an
 edited card to approve. In the browser UI a **clock** chip opens the
 Schedules panel: every schedule with its next times and last run, its
@@ -984,7 +995,7 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   ([notes/93](notes/93-a-page-for-a-person.md)).
 - **Nobody watching.** `--unattended` (or `YANTRA_UNATTENDED=1`) is a
   run a program started with no person in front of it: writes are
-  refused unless named with `--allow-tools GLOB` (a tool that asks on
+  refused unless named with `--allow-tools GRANT` (a tool that asks on
   every call still asks), a question ends the turn, and a handoff opens
   nothing — the model is told to stop and say what a person must do. A
   page that refuses the browser (401/403) tells it the same way out.
@@ -995,7 +1006,16 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   before launching on it, so a second one waits (10 s for a person, 2
   minutes unattended, `YANTRA_BROWSER_WAIT`) and is then told who holds
   it, instead of Chromium's `SingletonLock` error
-  ([notes/114](notes/114-nobody-watching.md)).
+  ([notes/114](notes/114-nobody-watching.md)). A grant can be fixed to
+  what it acts on — `--allow-tools 'call_service(domain=switch,
+  entity_id=switch.lights_2)'` covers that switch and nothing else; values
+  match exactly, and a grant typed wrong is an error, not the whole
+  tool. And nobody watching need not mean nobody to ask: with
+  `YANTRA_ASK_URL` (a Dvara), `YANTRA_ASK_TOKEN`, `YANTRA_ASK_ACTOR` and
+  `YANTRA_ASK_WAIT` (seconds, for the whole run), a write nothing
+  allowed is put to that person on their chat (Dvara's `POST /ask`), and
+  silence or an unreachable Dvara is still a refusal
+  ([notes/126](notes/126-a-yes-that-covers-the-job.md)).
 - **The browser can be one you already have.**
   `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
   — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
@@ -2221,6 +2241,11 @@ src/yantra/
 │                   the answer (a phone's hold that is gone) is refused to
 │                   the model before anyone is asked
 │                   ([notes/124](notes/124-a-question-with-no-step-behind-it.md)).
+│                   Grant / parse_grant(): an answer given ahead of time,
+│                   a tool name or glob maybe fixed to exact argument
+│                   values -- tool(key=value, ...) -- which allow_named and
+│                   Dvara both match with; a grant typed wrong is an error
+│                   ([notes/126](notes/126-a-yes-that-covers-the-job.md)).
 │                   with_deadline() puts a clock on a gate that suspends
 │                   and REFUSES to guess what the silence meant --
 │                   on_timeout has no default; refuse() writes a machine
@@ -2263,7 +2288,9 @@ src/yantra/
 │                   found busy, what it was refused -- the lists --json
 │                   prints; scope() gives one turn its own record, for a
 │                   host running many at once; NobodyChannel for ask_user
-│                   ([notes/114](notes/114-nobody-watching.md))
+│                   ([notes/114](notes/114-nobody-watching.md)); Reach, the
+│                   gate that still asks the person through a Dvara
+│                   (YANTRA_ASK_URL) ([notes/126](notes/126-a-yes-that-covers-the-job.md))
 ├── session.py      SQLite checkpoints: append-only versions, /save /load --resume.
 │                   A checkpoint holds the conversation AND the agent's
 │                   identity; apply_payload(history_only=True) restores only
@@ -2438,7 +2465,11 @@ src/yantra/
 │                   ([notes/115](notes/115-what-a-yes-covers.md)); a host
 │                   whose turn has the phone (Dvara) starts it `--phone`,
 │                   and the card says IT WORKS YOUR PHONE, each step it may
-│                   do there unasked, and how long its questions wait
+│                   do there unasked, and how long its questions wait;
+│                   a grant fixed to arguments said as "only with ...", a
+│                   job nothing listed can do said in capitals, where its
+│                   questions go (asks_go), and allow_for_schedule's card
+│                   ([notes/126](notes/126-a-yes-that-covers-the-job.md))
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and

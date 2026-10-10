@@ -190,7 +190,11 @@ Without it, that was a glob inside a JSON blob.
 * **Narrowing what the model asked for.** The card could offer to drop
   `send_message` from the glob. That's approve-with-edits, which the
   page already has (*edit* on the card). A second, schedule-only way to
-  do the same thing would be a dialect of its own.
+  do the same thing would be a dialect of its own. What did get built
+  is the other half: a grant can be fixed to what it acts on
+  (`call_service(entity_id=switch.lights_2)`), the model is told to
+  write it that way, and a card for a job nothing listed can do says so
+  in capitals ([note 126](126-a-yes-that-covers-the-job.md)).
 * **A guarantee that the run has the same tools as the card.** The card
   matches globs against *this* session. The scheduled run is a fresh
   process with the same environment and the same package, so it

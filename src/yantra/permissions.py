@@ -286,27 +286,162 @@ def allow_read_only(request: PermissionRequest) -> bool:
         code=REFUSED_UNATTENDED)
 
 
+@dataclass(frozen=True, slots=True)
+class Grant:
+    """One answer given ahead of time: a tool, and maybe what it is for.
+
+    ``browser_*`` is the whole tool, any call. A grant can also fix
+    arguments, in brackets after the name:
+
+        mcp__homeassistant-home__call_service(domain=switch, service=turn_off,
+                                              entity_id=switch.lights_2)
+
+    and then only a call with exactly those values is covered. A tool
+    like Home Assistant's ``call_service`` does anything to anything in
+    the house; "turn off the stairs light at 4" was a yes to one switch,
+    not to the front door's lock, and the bare name would have been the
+    second.
+
+    THE NAME MAY BE A GLOB, A VALUE MAY NOT. Dvara's standing rules
+    learned this first: ``entity_id=switch.*`` looks narrow and covers
+    every switch in the house, and a glob in an argument describes a
+    shape nobody can check in advance. So values are matched exactly, as
+    written; a value with a comma or a bracket in it is written in double
+    quotes (``entity_id="switch.a,switch.b"``). Arguments the grant does
+    not name are not fixed -- ``data`` on a light's ``turn_on`` may still
+    carry a brightness.
+    """
+
+    tool: str
+    args: tuple[tuple[str, str], ...] = ()
+
+    def allows(self, tool_name: str, arguments: dict[str, Any] | None) -> bool:
+        if not fnmatch.fnmatchcase(tool_name, self.tool):
+            return False
+        given = arguments or {}
+        return all(key in given and _same(given[key], want)
+                   for key, want in self.args)
+
+    def words(self) -> str:
+        """The fixed arguments as a person reads them ("" for none)."""
+        return ", ".join(f"{k}={v}" for k, v in self.args)
+
+    def __str__(self) -> str:
+        if not self.args:
+            return self.tool
+        return f"{self.tool}(" + ", ".join(
+            f"{k}={_quoted(v)}" for k, v in self.args) + ")"
+
+
+_GRANT_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*\Z")
+
+
+def parse_grant(text: str) -> Grant:
+    """``name`` or ``name(key=value, ...)`` as a Grant; ValueError, in
+    words, for anything else -- a grant that silently meant "the whole
+    tool" because its brackets were mistyped is the mistake this form
+    exists to prevent."""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("an empty grant names no tool")
+    name, bracket, rest = text.partition("(")
+    name = name.strip()
+    if not name or any(c.isspace() for c in name) or ")" in name:
+        raise ValueError(f"{text!r}: a grant is a tool name, then maybe "
+                         f"(key=value, ...)")
+    if not bracket:
+        return Grant(name)
+    if not rest.rstrip().endswith(")"):
+        raise ValueError(f"{text!r}: the bracket is not closed")
+    body = rest.rstrip()[:-1]
+    pairs: list[tuple[str, str]] = []
+    i, n = 0, len(body)
+    while i < n:
+        eq = body.find("=", i)
+        if eq < 0:
+            raise ValueError(f"{text!r}: each argument is key=value")
+        key = body[i:eq].strip()
+        if not _GRANT_KEY.match(key):
+            raise ValueError(f"{text!r}: {key!r} is not an argument name")
+        j = eq + 1
+        while j < n and body[j] == " ":
+            j += 1
+        if j < n and body[j] == '"':
+            end = body.find('"', j + 1)
+            if end < 0:
+                raise ValueError(f"{text!r}: a quote is not closed")
+            value, j = body[j + 1:end], end + 1
+            while j < n and body[j] == " ":
+                j += 1
+            if j < n and body[j] != ",":
+                raise ValueError(f"{text!r}: a comma goes after a quoted value")
+        else:
+            end = body.find(",", j)
+            end = n if end < 0 else end
+            value, j = body[j:end].strip(), end
+            if '"' in value or "(" in value or ")" in value:
+                raise ValueError(f"{text!r}: quote a value with brackets or "
+                                 f"quotes in it")
+        if any(k == key for k, _ in pairs):
+            raise ValueError(f"{text!r}: {key} is named twice")
+        pairs.append((key, value))
+        i = j + 1
+    if not pairs:
+        raise ValueError(f"{text!r}: empty brackets fix nothing; leave them out "
+                         f"for the whole tool")
+    return Grant(name, tuple(pairs))
+
+
+def parse_grants(patterns: Sequence[str]) -> tuple[Grant, ...]:
+    return tuple(parse_grant(p) for p in patterns if p and p.strip())
+
+
+def granted(grants: Sequence[Grant], request: PermissionRequest) -> bool:
+    """A grant covers this call -- never an ``always_ask`` one."""
+    return not request.always_ask and any(
+        g.allows(request.tool_name, request.arguments) for g in grants)
+
+
+def _same(given: Any, want: str) -> bool:
+    if isinstance(given, str):
+        return given.strip() == want
+    if isinstance(given, bool):
+        return want.lower() == ("true" if given else "false")
+    if isinstance(given, (int, float)):
+        return want == str(given)
+    import json
+    return want == json.dumps(given, sort_keys=True, separators=(",", ":"))
+
+
+def _quoted(value: str) -> str:
+    return f'"{value}"' if any(c in value for c in ',()" ') else value
+
+
 def allow_named(patterns: Sequence[str],
                 inner: PermissionFn = allow_read_only) -> PermissionFn:
-    """Approve the tools ``patterns`` name (fnmatch globs); hand every
-    other call to ``inner``.
+    """Approve the calls ``patterns`` cover (grants: a tool-name glob,
+    maybe with fixed arguments); hand every other call to ``inner``.
 
     This is the answer a person gave AHEAD of time, for a run they will
     not be watching: "every morning, check x.com" was accepted with the
     browser in it, so at 08:00 the browser runs without asking anybody.
-    Anything the patterns do not name falls through -- to
-    ``allow_read_only`` by default, which refuses it out loud.
+    Anything the patterns do not cover falls through -- to
+    ``allow_read_only`` by default, which refuses it out loud. A call
+    to a narrowed tool with other arguments falls through the same way:
+    the stairs light was allowed, not the front door.
 
     ALWAYS-ASK STILL ASKS. A name in the list is approval given before
     the call existed, which is exactly the blanket yes ``always_ask``
     tools (a purchase, a send) refuse to count. They go to ``inner``
     like anything unnamed.
+
+    A pattern that is not a grant is a ValueError here, at startup, not
+    a silent "the whole tool" at three in the morning.
     """
-    globs = tuple(p for p in (s.strip() for s in patterns) if p)
+    grants = parse_grants(patterns)
 
     def gate(request: PermissionRequest) -> bool | Awaitable[bool]:
-        if not request.always_ask and any(
-                fnmatch.fnmatchcase(request.tool_name, g) for g in globs):
+        if granted(grants, request):
             return True
         return inner(request)
     return gate

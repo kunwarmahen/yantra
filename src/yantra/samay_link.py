@@ -43,6 +43,14 @@ makes tool names up; and what it can read without anybody asking,
 which includes every account connected through Setu. A scheduled run
 reaches what this agent reaches; the card is where a person hears that.
 
+A YES THAT DOES NOT COVER THE JOB IS SAID BEFORE IT IS GIVEN. A grant
+may be fixed to what it acts on (``call_service(entity_id=...)``, the
+``Grant`` form) and the card says *only with ...*; a tool that changes
+things listed bare says WITH ANY ARGUMENTS; and a prompt that reads like
+a change with nothing listed that can make one is said in capitals.
+Where a run's questions go (``asks_go``: through Dvara, when the running
+clock knows one) is said at the foot, instead of "refused".
+
 THE MODEL IS TOLD, BRIEFLY. A ``schedules`` prompt layer says the tools
 exist, to preview first and say the sentence, and to create only after a
 yes. When to offer is the model's call -- this is plumbing, and the
@@ -75,6 +83,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from yantra.mcp import MCPServerConfig
+from yantra.permissions import Grant, parse_grant
 
 ENV = "YANTRA_SAMAY"
 FORMAT = "samay.status.v1"
@@ -93,7 +102,8 @@ NOTIFY_WORDS = {"when_new": "only when there is something new",
                 "always": "after every run",
                 "never": "never -- it is kept for you to read here"}
 #: Run outcomes with something for the person to read (``Samay.answers``).
-ANSWERED = ("ok", "needs_person", "failed", "timed_out", "held", "interrupted")
+ANSWERED = ("ok", "needs_person", "failed", "timed_out", "held", "interrupted",
+            "refused")
 #: How much of a schedule's prompt its card shows.
 PROMPT_SHOWN = 240
 #: How many matched tools the card names before it counts the rest.
@@ -223,8 +233,13 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "searching or reading mail run anyway: leave them out. Going on the internet is "
         "NOT reading and does not run unless listed: a job that visits a website, checks "
         "one is up, or reads a page must list `web_fetch` (or `browser_open`) if you have "
-        "them. Never list a tool that sends, posts, fills in a form (`browser_fill`) or "
-        "runs a command unless the person asked for exactly that. Use exact tool names.",
+        "them. IF THE JOB ITSELF CHANGES SOMETHING -- turns a light off, sends the "
+        "message, writes the file -- list the tool that does it, or it is refused at its "
+        "time and the job fails. Fix what it acts on in brackets, with the exact values "
+        "you will pass: `mcp__x__call_service(domain=switch, service=turn_off, "
+        "entity_id=switch.lights_2)` allows that one switch, not every device. Never list "
+        "a tool that sends, posts, fills in a form (`browser_fill`) or runs a command "
+        "unless the person asked for exactly that. Use exact tool names.",
         "4. `notify`: `when_new` for a check that may find nothing; `always` for a "
         "digest, a summary or a reminder.",
         seen_at,
@@ -238,10 +253,44 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
 
 
 def match_tools(patterns: list[str], registry: Any) -> list[tuple[str, list[str]]]:
-    """Each allow_tools entry, with the tools of this agent it matches."""
+    """Each allow_tools entry, with the tools of this agent it matches
+    (by its name; a grant's fixed arguments are said beside it)."""
     names = list(registry.names())
-    return [(str(p), [n for n in names if fnmatch.fnmatchcase(n, str(p))])
-            for p in patterns]
+    out = []
+    for p in patterns:
+        tool = _grant(p).tool if _grant(p) is not None else str(p)
+        out.append((str(p), [n for n in names if fnmatch.fnmatchcase(n, tool)]))
+    return out
+
+
+def _grant(pattern: Any) -> Grant | None:
+    try:
+        return parse_grant(str(pattern))
+    except ValueError:
+        return None
+
+
+#: Words in a schedule's prompt that say the job changes something.
+CHANGE_WORDS = re.compile(
+    r"\b(turn(?:s|ing)? (?:on|off)|switch(?:es)? (?:on|off)|dim|send|post|reply|"
+    r"delete|remove|buy|order|book|pay|lock|unlock|open|close|start|stop|create|"
+    r"write|move|rename|archive|mark|set|call_service)\b", re.IGNORECASE)
+
+
+def would_change(prompt: str, registry: Any) -> str:
+    """What in ``prompt`` says the job changes something: a word, or a
+    tool of this agent that changes things named in it; "" when nothing
+    does. A guess, and a warning is all it is used for -- a false one
+    costs a line on a card, a missed one cost a light left on."""
+    for name in registry.names():
+        tool = registry.get(name)
+        if getattr(tool, "read_only", False):
+            continue
+        short = name.rsplit("__", 1)[-1]
+        if len(short) > 3 and short in prompt:
+            return short
+    found = CHANGE_WORDS.search(prompt)
+    return found.group(0).lower() if found else ""
 
 
 def _setu_reach(setu: Any) -> tuple[list[str], dict[str, str]]:
@@ -279,7 +328,7 @@ def _setu_reach(setu: Any) -> tuple[list[str], dict[str, str]]:
 
 def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
                    sentence: str = "", problem: str = "", phone: bool = False,
-                   where: str = "") -> str:
+                   where: str = "", asked: str = "") -> str:
     """The permission card for ``create_schedule``, in plain words.
 
     LAID OUT LIKE SAMAY'S OWN NEW-SCHEDULE FORM: what it does each time,
@@ -291,9 +340,19 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
 
     ``sentence`` is Samay's own reading of ``when`` (preview_schedule);
     ``problem`` is why it could not read it, if it could not; ``where``
-    is where an answer goes (``Samay.answers_go``). A LONG PROMPT IS CUT
+    is where an answer goes (``Samay.answers_go``), and ``asked`` where a
+    call nothing allowed is asked about at its time (``Samay.asks_go``;
+    "" when it is simply refused). A LONG PROMPT IS CUT
     on the card: read first, it would push what the run may do unasked
     off the bottom. The whole prompt is under the raw arguments.
+
+    A JOB THAT CANNOT WORK IS SAID BEFORE THE YES. "Turn off the stairs
+    light" was accepted with nothing allowed that changes anything, and
+    the card said so only in the general words at its foot; the run was
+    refused at four o'clock. When the prompt reads like a change and
+    nothing listed can make one, the card says it in capitals. A tool
+    that changes things and is listed WITH NO ARGUMENTS FIXED is said
+    too, because "call_service" is every device in the house.
     """
     when = args.get("when")
     raw_when = json.dumps(when) if not isinstance(when, str) else when
@@ -317,17 +376,24 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
                                         else "")]
     reach, prefixes = _setu_reach(setu)
     lines.append("May use without asking")
+    can_change = False
     if allow:
         changes: dict[str, list[str]] = {}
         for pattern, hits in match_tools(allow, registry):
+            grant = _grant(pattern)
+            if grant is None:
+                lines.append(f"  {pattern}: NOT A TOOL NAME OR tool(key=value) -- it "
+                             f"will be refused")
+                continue
             if not hits:
                 lines.append(f"  {pattern}: NO TOOL BY THIS NAME in this agent -- it "
                              f"matches nothing")
                 continue
             shown = ", ".join(hits[:SHOWN]) + (f" +{len(hits) - SHOWN} more"
                                                if len(hits) > SHOWN else "")
-            lines.append(f"  {pattern}: {shown}" if pattern not in hits
-                         else f"  {pattern}")
+            only = f" -- only with {grant.words()}" if grant.args else ""
+            lines.append(f"  {grant.tool}: {shown}{only}" if grant.tool not in hits
+                         else f"  {grant.tool}{only}")
             for name in hits:
                 tool = registry.get(name)
                 if getattr(tool, "always_ask", False):
@@ -336,14 +402,27 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
                     continue
                 if getattr(tool, "read_only", False):
                     continue
+                can_change = True
+                verb = name.rsplit("__", 1)[-1]
                 prefix = next((p for p in prefixes if name.startswith(p)), None)
                 if prefix is not None:
-                    changes.setdefault(prefixes[prefix], []).append(name[len(prefix):])
+                    changes.setdefault(prefixes[prefix], []).append(
+                        f"{name[len(prefix):]} ({grant.words()})" if grant.args
+                        else name[len(prefix):])
+                if not grant.args and "__" in name:
+                    lines.append(f"    {verb} WITH ANY ARGUMENTS -- whatever it can "
+                                 f"reach, not one thing")
         for label, verbs in changes.items():
             lines.append(f"  THIS CHANGES THINGS IN YOUR {label} WITHOUT ASKING: "
                          f"{', '.join(dict.fromkeys(verbs))}")
     else:
         lines.append("  only tools that read")
+    change = "" if can_change else would_change(str(args.get("prompt") or ""), registry)
+    if change and not phone:
+        lines.append(f"  IT SAYS \"{change}\", BUT NOTHING ALLOWED HERE CAN CHANGE "
+                     f"ANYTHING: at its time that step will be "
+                     + (f"asked {asked}, and refused if nobody answers."
+                        if asked else "refused, and the job will not get done."))
     if reach:
         lines.append("  through Setu, it can read: " + "; ".join(reach))
     if phone:
@@ -357,6 +436,10 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
             lines.append(f"  ON YOUR PHONE, WITHOUT ASKING: {step}")
         lines.append(f"  Anything else held on the phone is asked in your chat; it waits "
                      f"{wait} minutes in all, then it's refused.")
+    elif asked:
+        wait = args.get("wait") or 30
+        lines += ["", f"Anything else that changes something is asked {asked}; it "
+                      f"waits {wait} minutes in all, then it's refused."]
     else:
         lines += ["", "Anything else that changes something is refused while nobody "
                       "is there."]
@@ -375,8 +458,34 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
     return head + (f"\n  {found}" if found else "")
 
 
+def explain_allow(args: dict[str, Any], registry: Any, listing: str = "") -> str:
+    """The card for ``allow_for_schedule``: the schedule, in its words,
+    and what it may now do unasked -- each grant with what it matches
+    here, the way the new-schedule card says it."""
+    schedule = str(args.get("id") or "?")
+    found = next((line for line in listing.splitlines() if line.startswith(f"{schedule} ")),
+                 "")
+    allow = args.get("allow_tools") or []
+    allow = [allow] if isinstance(allow, str) else list(allow)
+    lines = [f"Let schedule {schedule} use without asking, from its next run"]
+    if found:
+        lines.append(f"  {found}")
+    for pattern, hits in match_tools(allow, registry):
+        grant = _grant(pattern)
+        if grant is None:
+            lines.append(f"  {pattern}: NOT A TOOL NAME OR tool(key=value)")
+        elif not hits:
+            lines.append(f"  {pattern}: NO TOOL BY THIS NAME in this agent")
+        else:
+            changes = [n for n in hits if not getattr(registry.get(n), "read_only", False)]
+            only = (f" -- only with {grant.words()}" if grant.args
+                    else " -- WITH ANY ARGUMENTS" if changes else "")
+            lines.append(f"  {grant.tool}{only}" + (" (CHANGES THINGS)" if changes else ""))
+    return "\n".join(lines)
+
+
 def explain(tool: Any, registry: Any, setu_of: Any, phone: bool = False,
-            where: Any = None) -> Any:
+            where: Any = None, asked: Any = None) -> Any:
     """The ``explain`` hook for one of Samay's write tools (mcp.py), or
     None for the reads, which are never asked about."""
     verb = tool.raw_name
@@ -397,8 +506,14 @@ def explain(tool: Any, registry: Any, setu_of: Any, phone: bool = False,
             return explain_create(args, registry=registry, setu=setu_of(),
                                   sentence="" if failed else said,
                                   problem=said if failed else "", phone=phone,
-                                  where=where() if where is not None else "")
+                                  where=where() if where is not None else "",
+                                  asked=asked() if asked is not None else "")
         return card
+    if verb == "allow_for_schedule":
+        def allowing(args: dict[str, Any]) -> str:
+            listing, failed = ask("list_schedules", {})
+            return explain_allow(args, registry, "" if failed else listing)
+        return allowing
     if verb in ("pause_schedule", "resume_schedule", "delete_schedule"):
         def change(args: dict[str, Any]) -> str:
             listing, failed = ask("list_schedules", {})
@@ -462,7 +577,7 @@ class Samay:
         for name in self.tools:
             tool = agent.registry.get(name)
             hook = explain(tool, agent.registry, lambda: getattr(agent, "setu", None),
-                           self.phone, self.answers_go)
+                           self.phone, self.answers_go, self.asks_go)
             if hook is not None:
                 tool.explain = hook
                 tool.run = self._then_refresh(tool.run)
@@ -485,6 +600,19 @@ class Samay:
             return ("on Yantra's page, and to you through Dvara (Telegram, "
                     "Sarathi's page)")
         return "on Yantra's page (its answers chip)"
+
+    def asks_go(self) -> str:
+        """Where a scheduled run's question reaches its person, for the
+        card; "" when nowhere, and the call is refused. A person behind
+        Dvara is asked in their chat. At this computer, only when the
+        running clock knows a Dvara to ask through (``local_to``): the
+        direct road then carries the question there (Yantra's
+        ``unattended.Reach``)."""
+        if self.person != LOCAL:
+            return "in your chat"
+        if (self.data or {}).get("local_to"):
+            return "through Dvara (Telegram, Sarathi's page)"
+        return ""
 
     def _then_refresh(self, run: Any) -> Any:
         """A write's run, followed by a fresh look -- so the page's count
