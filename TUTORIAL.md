@@ -451,8 +451,10 @@ works the same, and the memories live there instead
 ([notes/102](notes/102-kept-somewhere-else.md)). Setting up Smritikosh,
 step by step on either road, is in [SMRITIKOSH.md](SMRITIKOSH.md). If you
 start Yantra through [Sarathi](https://github.com/kunwarmahen/sarathi),
-`sarathi smritikosh` does all of it in about a minute, and
-`sarathi smritikosh --off` goes back to the file.
+`sarathi smritikosh` does all of it in about a minute, and also starts
+Smritikosh's own dashboard at http://localhost:3000, where you can read
+and correct everything it remembers. `sarathi smritikosh --off` goes back
+to the file.
 
 The same tradeoff as `--env-context`: on a cloud model, what it
 remembers about you rides inside every request to your provider. On

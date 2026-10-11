@@ -408,7 +408,8 @@ knows you by ([notes/102](notes/102-kept-somewhere-else.md)).
 `YANTRA_MEMORY=NAME` in `.env`, with the server saved in
 `.yantra/mcp.json`, makes it every session's store.
 [SMRITIKOSH.md](SMRITIKOSH.md) sets one up from start to finish, or
-Sarathi does it in one command (`sarathi smritikosh`). A service that
+Sarathi does it in one command (`sarathi smritikosh`), and runs
+Smritikosh's dashboard beside it. A service that
 serves many people names whose memories each agent reads
 (`build_async(memory_user=...)`): Dvara passes each person's own, and
 opens Smritikosh with that person's own key (Dvara's note 37).
