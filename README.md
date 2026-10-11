@@ -2036,6 +2036,12 @@ reply = agent.run("what changed in notes/30?")
 print(reply.message.text())
 ```
 
+A service that serves many people names whose memories each agent
+reads: `spec.build_async(memory_user="priya")`. Left out, it is the
+person at this computer (`$YANTRA_USER`, else the login name), which in
+a service would file everyone's memories under the owner's
+([notes/100](notes/100-what-it-knows-about-you.md)).
+
 `AgentSpec` owns the assembly order — admission policy before any tool is
 registered, prompt layers before `env_context` appends to them, skills
 before the tool catalog. `Agent.__init__` still takes its seventeen

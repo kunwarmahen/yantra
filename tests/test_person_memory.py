@@ -219,6 +219,18 @@ class TestBuild:
         assert agent.memory.user == "asha"
         assert {"remember", "recall_memory"} <= set(agent.registry.names())
 
+    def test_a_service_names_whose_memories_not_the_login_it_runs_as(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_USER", "owner-of-the-machine")
+        for build in ("build", "build_async"):
+            agent = getattr(AgentSpec(memory="local"), build)(
+                provider=ScriptedProvider([]), provider_name="anthropic", model="m",
+                memory_user="priya")
+            assert agent.memory.user == "priya"
+        agent = AgentSpec(memory="smritikosh").build_async(
+            provider=ScriptedProvider([]), provider_name="anthropic", model="m",
+            memory_user="priya")
+        assert agent.memory.user == "priya"
+
     def test_a_library_build_that_did_not_say_reads_nothing(self):
         agent = AgentSpec().build(provider=ScriptedProvider([]),
                                   provider_name="anthropic", model="m")

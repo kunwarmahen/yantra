@@ -84,7 +84,9 @@ one already in the conversation, which knows why it mattered.
 ## Whose memories
 
 On your own terminal or page, the memories are yours: `$YANTRA_USER`,
-else your login name. A service passes each end user's identity instead.
+else your login name. A service passes each end user's identity instead
+(`spec.build_async(memory_user=...)`; Dvara passes the id of the person
+behind each turn, its note 37).
 With **no identity, there is no memory**: nothing is read and nothing is
 written, so one person's RDU can never reach somebody else's session by
 default. Every read and delete in the store is scoped by that identity.

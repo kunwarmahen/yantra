@@ -23,7 +23,16 @@ missing things you know you told it.
 the look back when you finish a conversation, and the bookmark chip on
 the page all work the same. Only where the memories are kept changes.
 
-**Time:** about 30 minutes, once.
+**Time:** about 30 minutes, once. Or about a minute with Sarathi:
+
+> **The short road.** If you run Yantra through
+> [Sarathi](https://github.com/kunwarmahen/sarathi), `sarathi smritikosh`
+> does every step below for you: the database, the `.env`, the tables,
+> the accounts and the key, then starts Smritikosh before Yantra on
+> every `sarathi up`. It also gives each person behind Dvara an account of
+> their own. `sarathi smritikosh --off` goes back to the built-in file.
+> Already done it by hand? It uses what you made and replaces nothing.
+> The rest of this page is the long road, and what that command does.
 
 There are two roads, the same as for Yantra itself. Each step says when
 they differ.
@@ -65,7 +74,10 @@ uv sync --extra mcp
 ```
 
 `--extra mcp` matters: it installs `smritikosh-mcp`, the small program
-Yantra talks to. Check that it's there:
+Yantra talks to. (A clone from before Smritikosh pinned `mcp<2` gets
+`mcp` 2.x here, and `smritikosh-mcp` stops with `No module named
+'mcp.server.fastmcp'`; `git pull`, then `uv sync --extra mcp` again.)
+Check that it's there:
 
 ```
 ls .venv/bin/smritikosh-mcp

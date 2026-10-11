@@ -251,6 +251,7 @@ class AgentSpec:
         provider_name: str | None = None,
         model: str | None = None,
         max_parallel_children: int | None = None,
+        memory_user: str | None = None,
     ) -> Agent:
         """A wired Agent, assembled in the one order that works.
 
@@ -265,12 +266,18 @@ class AgentSpec:
         mode and to print a banner), so without this it would read the
         environment twice and could, with a concurrent edit to .env,
         disagree with itself about which model it just announced.
+
+        ``memory_user`` is whose memories this agent reads and writes, for
+        a service that serves many people. Omitted, it is the person at
+        this computer ($YANTRA_USER, else the login name) -- which, in a
+        service, would file every person's memories under its owner's.
         """
         return self._assemble(
             Agent, permissions=permissions, sandbox=sandbox, cwd=cwd,
             registry=registry, provider=provider,
             provider_name=provider_name, model=model,
             max_parallel_children=max_parallel_children,
+            memory_user=memory_user,
         )
 
     def build_async(
@@ -285,6 +292,7 @@ class AgentSpec:
         model: str | None = None,
         max_parallel_tools: int | None = None,
         max_parallel_children: int | None = None,
+        memory_user: str | None = None,
     ) -> AsyncAgent:
         """The async twin, for hosts that drive several turns at once.
 
@@ -301,12 +309,13 @@ class AgentSpec:
             AsyncAgent, permissions=permissions, sandbox=sandbox, cwd=cwd,
             registry=registry, provider=provider,
             provider_name=provider_name, model=model,
-            max_parallel_children=max_parallel_children, **extra,
+            max_parallel_children=max_parallel_children,
+            memory_user=memory_user, **extra,
         )
 
     def _assemble(self, agent_cls, *, permissions, sandbox, cwd, registry,
                   provider, provider_name, model,
-                  max_parallel_children=None, **extra):
+                  max_parallel_children=None, memory_user=None, **extra):
         """The assembly itself. ONE body, so the sync and async agents can
         never drift into being configured differently."""
         name = provider_name or self.provider or guess_provider()
@@ -454,7 +463,7 @@ class AgentSpec:
                 agent.memory = None
                 agent.memory_problem = f"cannot open the local store ({exc})"
             else:
-                enable_memory(agent, store, package=(
+                enable_memory(agent, store, user=memory_user, package=(
                     self.name if self.root is not None else None))
         elif self.memory is not None and self.memory != "off":
             # A store behind an MCP server. The server connects later, in
@@ -463,6 +472,7 @@ class AgentSpec:
             from yantra.memory import enable_memory
             from yantra.memory.mcp import McpStore
             enable_memory(agent, McpStore(self.memory, dict(self.memory_verbs)),
+                          user=memory_user,
                           package=(self.name if self.root is not None else None))
 
         # Last, because it appends to a prompt the layers above must already

@@ -253,6 +253,8 @@ is measured in [note 103](103-said-once-found-later.md).
 * **A verb map from the command line.** `--memory NAME` uses the default
   tool names. A store that needs a map is reached through a package's
   `[memory] verbs`.
-* **Scoped keys per end user.** A service that passes each end user's id
-  needs a store credential allowed to act for them. How a store grants
-  that (an admin key, or a key per user) is decided on the store's side.
+* ~~**Scoped keys per end user.**~~ Decided on the store's side, and
+  done there: Dvara starts the store's server for each turn with that
+  person's own key (Smritikosh's keys open only their own account), and
+  Sarathi makes an account and key for each person (Dvara's note 37,
+  Sarathi's note 13).
