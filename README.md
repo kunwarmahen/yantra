@@ -2335,10 +2335,14 @@ src/yantra/
 │                   verb it lacks reported rather than fatal
 │                   ([notes/102](notes/102-kept-somewhere-else.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (agent / base / env /
-│                   memory / connections / schedules / skills):
+│                   memory / connections / schedules / phone / skills):
 │                   each owner writes one named layer, attach_prompt captures
 │                   the operator's --system exactly once, recompose() rebuilds
 │                   after a /load restores a stale composed string
+├── env_context.py  the env layer: time zone, host, working dir, city from one
+│                   ipinfo lookup -- frozen at session start so --cache holds;
+│                   the CURRENT time instead rides with each request, sent and
+│                   never stored ([notes/29](notes/29-environment-awareness.md))
 ├── skills/         procedural knowledge on disk: a folder + SKILL.md (flat
 │                   frontmatter, hand-parsed). Three cost tiers -- description
 │                   in the prompt every turn, body via the load_skill tool,

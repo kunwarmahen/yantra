@@ -294,7 +294,9 @@ Sessions don't start blind anymore: the system prompt carries
 auto-detected context — time and timezone, user@host + OS, working
 directory, and at the top level your city from ONE public-IP lookup to
 ipinfo.io ([29-environment-awareness.md](29-environment-awareness.md)).
-The terminal face:
+The sheet's time is when the session STARTED; the current time rides
+with each message instead, so a long session never counts "in ten
+minutes" from the morning. The terminal face:
 
 ```
 /env                        # show the level + the exact fact sheet

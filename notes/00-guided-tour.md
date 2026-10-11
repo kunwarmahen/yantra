@@ -542,7 +542,7 @@ prompt without complaint. That recovery path is §10 made visible.
 | hook | an observer clipped onto tool executions — it watches and records, it can never forbid |
 | ask_user | a tool that pauses the turn to ask *you* a question, then continues on your answer (§8) |
 | web UI | `--web`: a local browser page driving the same loop — streaming, approval buttons, agent questions as modals (notes/22) |
-| env context | the fact sheet injected at session start — date/timezone, host, working dir, your city — so the agent answers for where you are instead of asking (notes/29) |
+| env context | the fact sheet injected at session start — date/timezone, host, working dir, your city — so the agent answers for where you are instead of asking; the current time rides with each message, not from startup (notes/29) |
 | skill | a folder + `SKILL.md` of instructions you wrote; its one-line description rides in the prompt, the body arrives only when the model calls `load_skill` (notes/30) |
 | learned skill | a skill the agent wrote down after solving a task — tested, shown to you, and saved only on a yes, in its own `learned/` folder (notes/96); offered as an update when it breaks, set aside after three failures in a row (notes/97) |
 | prompt layer | one named slice of the system prompt (`base` / `env` / `skills`) — each owner writes its own, so a flip of one can't erase another (notes/30) |
