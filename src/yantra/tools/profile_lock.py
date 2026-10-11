@@ -26,6 +26,16 @@ browser on it, and gives it back when that browser closes:
 * A BUSY PROFILE IS NOT A FAILURE OF THE RUN. Unattended, the refusal is
   also written down (unattended.py) so a scheduler can tell "the browser
   was busy, try at the next time" from "this went wrong".
+* CHROME'S OWN LOCK, LEFT BEHIND, IS CLEARED. A Chrome that is killed
+  rather than closed leaves ``SingletonLock`` in the profile, naming its
+  computer and pid. Chrome clears that itself when the computer is this
+  one and the pid is gone -- but inside a container the computer name is
+  the container's, so a lock left by a Chrome on the host (or in an
+  older container) reads as "another computer has this profile" and
+  every launch is refused, for good. Holding our lock, we know no
+  Yantra and no Setu window is on the profile (Setu takes the same
+  file), so a lock naming another computer, whose socket does not
+  answer, is a leftover: it is removed and a line says so.
 
 On a platform without ``fcntl`` the lock is a no-op and Chromium's own
 refusal is all there is, as before.
@@ -34,6 +44,8 @@ refusal is all there is, as before.
 from __future__ import annotations
 
 import os
+import socket
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -47,7 +59,11 @@ except ImportError:  # pragma: no cover -- not POSIX
     fcntl = None
 
 #: The file, inside the profile. Chromium ignores names it does not own.
+#: Setu takes the same file around its sign-in windows.
 LOCK_NAME = "yantra.lock"
+
+#: Chrome's own lock and its two companions, all symlinks.
+CHROME_LOCKS = ("SingletonLock", "SingletonCookie", "SingletonSocket")
 
 #: How long a launch waits for a busy profile ($YANTRA_BROWSER_WAIT
 #: overrides both). A person is watching a spinner; a schedule is not.
@@ -108,6 +124,10 @@ class ProfileLock:
         os.pwrite(fd, (f"{os.getpid()}\n{datetime.now():%H:%M}\n{who}\n")
                   .encode(), 0)
         self._fd = fd
+        left = clear_left_chrome_lock(self.profile)
+        if left:
+            print(f"yantra: removed a browser lock left in {self.profile} "
+                  f"by {left}, which is no longer running", file=sys.stderr)
 
     def release(self) -> None:
         if self._fd is None:
@@ -122,7 +142,8 @@ class ProfileLock:
     def _busy(self, holder: tuple[str, str, str] | None, wait: float) -> str:
         if holder:
             pid, since, who = holder
-            whose = f"another Yantra (pid {pid}, since {since}, for {who})"
+            program = "Setu" if who.startswith("Setu") else "another Yantra"
+            whose = f"{program} (pid {pid}, since {since}, for {who})"
         else:
             whose = "another Yantra"
         unattended.note_busy(f"browser profile {self.profile} in use by {whose}")
@@ -134,6 +155,45 @@ class ProfileLock:
             "finding it busy: give them a profile of their own and sign in "
             "there once with `yantra --browse-login URL`. Do not retry now; "
             "say in your answer that the browser was busy.")
+
+
+def clear_left_chrome_lock(profile: Path) -> str | None:
+    """Remove Chrome's lock from ``profile`` when it was left by a Chrome
+    on another computer name that is no longer listening; say whose it
+    was ("LINUX-BOX pid 123"), or None when there was nothing to remove.
+
+    Only call this holding the profile's lock. A lock naming THIS
+    computer is left to Chrome, which checks the pid itself; a socket
+    that answers is a live Chrome, wherever it runs."""
+    try:
+        target = os.readlink(profile / "SingletonLock")
+    except OSError:
+        return None
+    host, _, pid = target.rpartition("-")
+    if not host or host == socket.gethostname() or _answers(profile):
+        return None
+    for name in CHROME_LOCKS:
+        try:
+            (profile / name).unlink()
+        except FileNotFoundError:
+            pass
+    return f"{host} pid {pid}"
+
+
+def _answers(profile: Path) -> bool:
+    """A live Chrome listens on the socket its SingletonSocket names
+    (when that path is visible from here at all)."""
+    try:
+        path = os.readlink(profile / "SingletonSocket")
+    except OSError:
+        return False
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(1.0)
+        try:
+            sock.connect(path)
+        except OSError:
+            return False
+    return True
 
 
 def _read_holder(fd: int) -> tuple[str, str, str] | None:

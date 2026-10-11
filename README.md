@@ -1026,8 +1026,10 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   not allowed). Every Yantra also takes a lock in the browser profile
   before launching on it, so a second one waits (10 s for a person, 2
   minutes unattended, `YANTRA_BROWSER_WAIT`) and is then told who holds
-  it, instead of Chromium's `SingletonLock` error
-  ([notes/114](notes/114-nobody-watching.md)). A grant can be fixed to
+  it, instead of Chromium's `SingletonLock` error. A `SingletonLock` left
+  by a killed Chrome under another computer name (the host's, seen from
+  a container) is removed once the lock is held, so it can't refuse the
+  profile for good ([notes/114](notes/114-nobody-watching.md)). A grant can be fixed to
   what it acts on — `--allow-tools 'call_service(domain=switch,
   entity_id=switch.lights_2)'` covers that switch and nothing else; values
   match exactly, and a grant typed wrong is an error, not the whole
@@ -2800,7 +2802,8 @@ src/yantra/
 │   │               ([notes/114](notes/114-nobody-watching.md))
 │   ├── profile_lock.py one browser per profile across processes: flock on
 │   │               yantra.lock, waited on (10 s / 2 min unattended), the
-│   │               holder named; the kernel releases it with the process
+│   │               holder named; the kernel releases it with the process;
+│   │               Chrome's lock left under another computer name cleared
 │   │               ([notes/114](notes/114-nobody-watching.md))
 │   ├── site.py     a Setu browser-road connection as tools: <site>_open/
 │   │               follow/scroll/search (press nothing, run unasked) and,

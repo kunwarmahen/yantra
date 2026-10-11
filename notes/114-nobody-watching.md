@@ -200,6 +200,50 @@ keep finding it busy. The refusal says so, and says what to do about
 it: give scheduled runs a profile of their own and sign in there once
 with `yantra --browse-login URL`.
 
+## Chrome's own lock, left behind
+
+Chrome keeps a lock of its own in the profile: `SingletonLock`, a
+symlink naming the computer and the pid that has the profile open. A
+Chrome that is killed rather than closed leaves it there. Chrome cleans
+that up by itself when the name is this computer's and the pid is gone.
+
+Inside a container, the computer name is the container's. A lock left
+by a Chrome on the host (or in an older container) then reads as
+"another computer has this profile", so Chrome refuses it. It refuses
+every launch, for good, because nothing on the other side will ever let
+go. A Yahoo run from Sarathi's Yantra container hit exactly this: a
+lock from a Chrome on the host, killed a week earlier.
+
+**HOLDING OUR LOCK, A FOREIGN CHROME LOCK IS A LEFTOVER.** Once Yantra
+holds `yantra.lock`, no other Yantra is on the profile, and neither is
+a Setu sign-in window: Setu takes the same file around its windows. So
+a `SingletonLock` naming another computer is removed, together with
+its two companion links, and Yantra prints one line saying whose lock
+it was. Two cases are never touched: a lock naming this computer (Chrome
+checks that pid itself), and a lock whose `SingletonSocket` still
+answers (that's a live Chrome, wherever it runs).
+
+**THE TRADEOFF.** A Chrome that nobody in this family started (a person
+opening the profile by hand, inside a container that can't see the
+host's `/tmp`) would look like a leftover. The profiles live under
+Setu's state directory, where nobody browses by hand, so that risk was
+accepted. Making every container share the host's pids and `/tmp`
+would be the alternative, and it costs more than the case it closes.
+
+Receipt, with real Google Chrome under a different computer name
+(`unshare --uts`, named like the container), on a scratch profile
+carrying the old lock:
+
+```
+without the lock step:  REFUSED: BrowserType.launch_persistent_context: Target page, context or browser has been closed
+with it:                yantra: removed a browser lock left in .../prof by LINUX-AL-ML-BEAST pid 1702273, which is no longer running
+                        LAUNCHED
+```
+
+Playwright's bundled headless Chromium doesn't check this lock, so the
+fault only shows with a real Chrome, which is the browser a Setu
+connection opens.
+
 ## Receipt
 
 Local model `qwen3.8:latest` through Ollama, browser headless on a

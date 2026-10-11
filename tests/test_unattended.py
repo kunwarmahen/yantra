@@ -34,7 +34,7 @@ from yantra.errors import ToolError, UserUnavailable
 from yantra.permissions import PermissionRequest, allow_named, allow_read_only
 from yantra.tools.base import ToolContext
 from yantra.tools.browser import BrowserHandoff
-from yantra.tools.profile_lock import LOCK_NAME, ProfileLock
+from yantra.tools.profile_lock import LOCK_NAME, ProfileLock, clear_left_chrome_lock
 
 
 @pytest.fixture(autouse=True)
@@ -256,6 +256,47 @@ class TestProfileLock:
         second.acquire(wait=5)
         assert second.held and time.monotonic() - started < 4
         second.release()
+
+    def test_a_chrome_lock_from_another_computer_name_is_cleared(
+            self, tmp_path, capsys):
+        """A container's name is not the host's: Chrome would refuse this
+        profile for good, so the leftover is removed once we hold it."""
+        (tmp_path / "SingletonLock").symlink_to("SOME-OTHER-BOX-1702273")
+        (tmp_path / "SingletonCookie").symlink_to("123")
+        (tmp_path / "SingletonSocket").symlink_to(str(tmp_path / "gone" / "sock"))
+        lock = ProfileLock(tmp_path)
+        lock.acquire(wait=0)
+        lock.release()
+        assert not any(tmp_path.glob("Singleton*"))
+        assert "SOME-OTHER-BOX pid 1702273" in capsys.readouterr().err
+
+    def test_a_chrome_lock_of_this_computer_is_left_to_chrome(self, tmp_path):
+        import socket
+        (tmp_path / "SingletonLock").symlink_to(f"{socket.gethostname()}-1")
+        assert clear_left_chrome_lock(tmp_path) is None
+        assert (tmp_path / "SingletonLock").is_symlink()
+
+    def test_a_chrome_that_answers_is_left_alone(self, tmp_path):
+        import socket
+        path = tmp_path / "s"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as live:
+            live.bind(str(path))
+            live.listen(1)
+            (tmp_path / "SingletonLock").symlink_to("SOME-OTHER-BOX-5")
+            (tmp_path / "SingletonSocket").symlink_to(str(path))
+            assert clear_left_chrome_lock(tmp_path) is None
+        assert (tmp_path / "SingletonLock").is_symlink()
+
+    def test_a_setu_holder_is_named_as_setu(self, tmp_path):
+        (tmp_path / LOCK_NAME).write_text("42\n09:15\nSetu sign-in window\n")
+        import fcntl
+        fd = os.open(tmp_path / LOCK_NAME, os.O_RDWR)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            with pytest.raises(ToolError, match="in use by Setu \\(pid 42"):
+                ProfileLock(tmp_path).acquire(wait=0)
+        finally:
+            os.close(fd)
 
     def test_the_wait_is_longer_for_a_schedule(self, monkeypatch):
         from yantra.tools import profile_lock
