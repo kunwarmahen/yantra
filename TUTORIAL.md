@@ -452,7 +452,7 @@ works the same, and the memories live there instead
 step by step on either road, is in [SMRITIKOSH.md](SMRITIKOSH.md). If you
 start Yantra through [Sarathi](https://github.com/kunwarmahen/sarathi),
 `sarathi smritikosh` does all of it in about a minute, and also starts
-Smritikosh's own dashboard at http://localhost:3000, where you can read
+Smritikosh's own dashboard at http://localhost:3000/dashboard/memories, where you can read
 and correct everything it remembers. `sarathi smritikosh --off` goes back
 to the file.
 

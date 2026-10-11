@@ -35,7 +35,7 @@ the page all work the same. Only where the memories are kept changes.
 > replaces nothing. `--full` adds Neo4j, MongoDB and Redis too, using
 > the containers you already run for them.
 > It also builds and starts Smritikosh's own dashboard at
-> http://localhost:3000, and keeps the keys for you: yours in
+> http://localhost:3000/dashboard/memories, and keeps the keys for you: yours in
 > `~/.config/sarathi/secrets.env`, each Dvara person's in
 > `~/dvara/state/memory.json`. You put none anywhere yourself.
 > The rest of this page is the long road, and what that command does.
@@ -393,8 +393,9 @@ printf "SMRITIKOSH_API_URL=http://localhost:8080\nAUTH_SECRET=%s\n" "$(openssl r
 npm run build && npx next start --hostname 127.0.0.1 --port 3000
 ```
 
-Open **http://localhost:3000** (say `localhost`, not `127.0.0.1`: the
-sign-in is kept for the name it uses) and sign in with your account from
+Open **http://localhost:3000/dashboard/memories** (say `localhost`, not `127.0.0.1`: the
+sign-in is kept for the name it uses; the bare `localhost:3000` can open
+blank) and sign in with your account from
 Step 7, its username and password. **Memories** is what Yantra remembers
 about you. The build needs a Smritikosh from after its dashboard's type
 fixes: `git pull` if `npm run build` stops on a type error.
