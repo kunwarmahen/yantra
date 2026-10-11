@@ -27,7 +27,9 @@ and grades, per message, what a person would care about:
                 machine (send_message, bash, file writes) on a job that
                 only reads; and MISSING ones -- a site check allowed
                 neither web_fetch nor browser_open, so at its time it is
-                refused. Reads need no entry: they run unasked anyway
+                refused. Reads need no entry: they run unasked anyway.
+                A grant fixed to arguments (``write_file(path=x)``) is
+                matched by its tool, and kept as ``narrow_grants``
 
 NOTHING REAL IS TOUCHED. Samay's state is a fresh folder per message, the
 person's mail is four stub tools named the way Setu names a merged Gmail
@@ -68,7 +70,7 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 
-from yantra import get_provider, load_settings
+from yantra import get_provider, load_settings, parse_grant
 from yantra.mcp import MCPManager
 from yantra.samay_link import Samay, SamayLinkError, load
 from yantra.spec import AgentSpec
@@ -79,6 +81,20 @@ CASES = Path(__file__).resolve().parent / "schedule_offer_cases.jsonl"
 #: tuned against: what a change to that layer is judged on (notes/117).
 SITES = CASES.with_name("schedule_offer_sites.jsonl")
 
+
+def _tool(pattern) -> str:
+    """The tool a grant names: the glob before any (key=value) bracket."""
+    try:
+        return parse_grant(str(pattern)).tool
+    except ValueError:
+        return str(pattern)
+
+
+def _narrow(pattern) -> bool:
+    try:
+        return bool(parse_grant(str(pattern)).args)
+    except ValueError:
+        return False
 
 def every_case() -> dict[str, dict]:
     """Both sets, by id, so a saved row is graded whichever set it came from."""
@@ -247,11 +263,16 @@ class Trial:
             allow = [allow] if isinstance(allow, str) else list(allow)
             row["allow_tools"] = allow
             names = [n for n in registry.names() if not n.startswith(SAMAY)]
+            # a grant may fix arguments (call_service(entity_id=...)): its
+            # tool is the name before the bracket, and the fixed part is
+            # kept apart so a narrow grant can be counted as one
             row["unknown_tools"] = [p for p in allow
-                                    if not any(fnmatch.fnmatchcase(n, str(p)) for n in names)]
+                                    if not any(fnmatch.fnmatchcase(n, _tool(p))
+                                               for n in names)]
             row["write_tools"] = sorted({n for p in allow for n in names
-                                         if fnmatch.fnmatchcase(n, str(p))
+                                         if fnmatch.fnmatchcase(n, _tool(p))
                                          and not registry.get(n).read_only})
+            row["narrow_grants"] = [str(p) for p in allow if _narrow(p)]
             row["prompt_chars"] = len(str(args.get("prompt") or ""))
         expected = case.get("when")
         if expected and row["when"] is not None:
