@@ -31,7 +31,9 @@ the page all work the same. Only where the memories are kept changes.
 > the accounts and the key, then starts Smritikosh before Yantra on
 > every `sarathi up`. It also gives each person behind Dvara an account of
 > their own. `sarathi smritikosh --off` goes back to the built-in file.
-> Already done it by hand? It uses what you made and replaces nothing.
+> Already done it by hand? It finds what you made by its database and
+> replaces nothing. `--full` adds Neo4j, MongoDB and Redis too, using
+> the containers you already run for them.
 > The rest of this page is the long road, and what that command does.
 
 There are two roads, the same as for Yantra itself. Each step says when
