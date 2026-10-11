@@ -34,6 +34,10 @@ the page all work the same. Only where the memories are kept changes.
 > Already done it by hand? It finds what you made by its database and
 > replaces nothing. `--full` adds Neo4j, MongoDB and Redis too, using
 > the containers you already run for them.
+> It also builds and starts Smritikosh's own dashboard at
+> http://localhost:3000, and keeps the keys for you: yours in
+> `~/.config/sarathi/secrets.env`, each Dvara person's in
+> `~/dvara/state/memory.json`. You put none anywhere yourself.
 > The rest of this page is the long road, and what that command does.
 
 There are two roads, the same as for Yantra itself. Each step says when
@@ -378,6 +382,22 @@ loginctl enable-linger "$USER"     # keep it running when you're logged out
 ```
 
 ## Good to know
+
+**See your memories in a browser.** Smritikosh has a dashboard of its own,
+in its `ui/` folder. It needs Node.js 20 or newer:
+
+```
+cd ~/src/smritikosh/ui
+npm install
+printf "SMRITIKOSH_API_URL=http://localhost:8080\nAUTH_SECRET=%s\n" "$(openssl rand -hex 32)" > .env.local
+npm run build && npx next start --hostname 127.0.0.1 --port 3000
+```
+
+Open **http://localhost:3000** (say `localhost`, not `127.0.0.1`: the
+sign-in is kept for the name it uses) and sign in with your account from
+Step 7, its username and password. **Memories** is what Yantra remembers
+about you. The build needs a Smritikosh from after its dashboard's type
+fixes: `git pull` if `npm run build` stops on a type error.
 
 **Bring what Yantra already knows about you.** What the built-in file
 holds doesn't move by itself. Once `/memory` says `smritikosh`, type:
