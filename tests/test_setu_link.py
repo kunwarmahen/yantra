@@ -680,6 +680,15 @@ class TestAnExpiredSignIn:
         line = setu_link.announce(self.expired(), {})
         assert "sign-in expired, not started: gmail:personal" in line
 
+    def test_a_handle_never_stamped_counts_as_moved_not_as_unchanged(self, tmp_path):
+        vault = tmp_path / "vault.json"
+        vault.write_text("{}")
+        link = self.expired()
+        link.data["watch"] = [str(vault)]
+        handle = setu_link.Setu(mode="on", link=link)
+        assert handle.moved() is True          # first look: ask Setu, don't assume
+        assert handle.moved() is False         # and then only when files move
+
     def test_signed_in_again_it_is_a_connection_again(self):
         link = self.expired()
         del link.data["connections"][0]["expired"]

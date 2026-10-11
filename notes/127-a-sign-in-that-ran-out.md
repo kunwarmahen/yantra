@@ -94,6 +94,17 @@ marks `gmail:personal` and the page's next turn has no Gmail tools and the
 command in its prompt; clearing the mark brings the tools back on the
 turn after, with nothing restarted.
 
+**THE FIRST LOOK IS A LOOK.** The first real run found a hole. Yantra
+started at 15:47 with Gmail expired; the person signed in again at 15:53;
+the next turn still said the sign-in was refused. Nothing had recorded
+Setu's file times when the report was first read, so the first check took
+the times *after* the renewal as its starting point and saw no change.
+Now the times are taken the moment Yantra first reads Setu, before any
+connector starts, and a handle that was never stamped counts as moved: a
+look too many costs one report, a look too few costs the account. The
+test that missed it had made one check before changing anything; the
+new one doesn't.
+
 ## The cure, which is not code
 
 The seven days are Google's rule for apps in Testing. Publishing the app

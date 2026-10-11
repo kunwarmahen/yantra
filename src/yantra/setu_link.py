@@ -928,8 +928,12 @@ class Setu:
         look. Only file times are read; ``refresh`` is the real look."""
         now = self._stamp()
         if self.watched is None:
+            # never stamped: NOT "unchanged". Taking now as the baseline
+            # would swallow whatever happened since the report was read
+            # -- a sign-in renewed before the first turn stayed expired.
+            # One look too many costs a report; one too few, the account.
             self.watched = now
-            return False
+            return now is not None
         return now != self.watched
 
     def refresh(self) -> Link | None:

@@ -2036,6 +2036,9 @@ def _connect_setu(args, mcp_manager, agent, console: Console, spec=None,
     agent.setu = setu
     try:
         setu.link = setu_link.load(mode, path)
+        # the times as of THIS report, before any connector starts: a
+        # refusal it writes, or a sign-in renewed later, is then a change
+        setu.watched = setu._stamp()
     except setu_link.SetuLinkError as exc:
         setu.error = str(exc)
         if mode == "on":

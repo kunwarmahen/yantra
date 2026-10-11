@@ -458,6 +458,26 @@ class TestThePageCatchesUp:
             manager.shutdown()
 
 
+    def test_started_expired_and_signed_in_again_before_the_first_turn(self, setu,
+                                                                       tmp_path):
+        """What happened on a real machine: Yantra started with Gmail
+        expired, the person ran `setu connect` a few minutes later, and
+        the first turn after it still said "refused" -- the first look
+        had taken the renewed files as its starting point."""
+        setu.set(expired={"gmail:personal": {"since": "2026-10-11T19:36:00Z",
+                                             "why": "HTTP 400 expired"}})
+        session, agent, manager, _ = served(tmp_path, setu.path)
+        try:
+            assert self.tools(agent) == []
+            time.sleep(0.01)
+            setu.set(expired={})                        # `setu connect`, before any turn
+            session._setu_catch_up()                    # the first turn after it
+            assert self.tools(agent)
+            assert "refused the sign-in" not in (agent.prompt.get("connections") or "")
+        finally:
+            manager.shutdown()
+
+
 class TestInstallingFromTheCatalog:
     def test_a_listed_connector_is_installed_through_setu(self, setu, tmp_path):
         setu.set(catalog=CATALOG)
