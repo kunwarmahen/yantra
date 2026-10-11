@@ -25,7 +25,7 @@ anywhere. So the page doesn't need anything sent to it. It reads.
 `Samay.answers()` asks Samay for its latest runs (`samay runs --json`)
 and keeps those that belong to this session's person and have something
 to read: a reply, a failure, something only the person can fix, a held
-step. A quiet run (*nothing new*), a skipped one and a missed one are
+step, a run refused because nothing allowed what the job needed. A quiet run (*nothing new*), a skipped one and a missed one are
 left out, since there's nothing in them to read. `GET
 /api/schedules/answers` hands the list to the page.
 

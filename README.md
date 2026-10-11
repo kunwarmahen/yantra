@@ -3025,7 +3025,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2746 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2784 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
