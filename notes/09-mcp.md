@@ -262,8 +262,10 @@ refused before anything spawns, with the parser's own complaint
 * **Relative paths resolve against the portal's working directory**,
   not this repo. Started from the repo root, `examples/tiny_mcp_server.py`
   is right; started anywhere else it surfaces as
-  `exited unexpectedly (code 2) during 'initialize'` -- which does not
-  obviously mean "wrong path". Absolute paths always work.
+  `exited unexpectedly (code 2) during 'initialize'`, followed by the
+  server's own last line (Python's "can't open file …"), which says it:
+  a server that dies at start is reported with its last stderr line
+  ([note 127](127-a-sign-in-that-ran-out.md)). Absolute paths always work.
 * **remember is ticked by default.** Leave it on for a test server and
   it lands in `.yantra/mcp.json` and reconnects on every future
   launch; the row grows a **saved** badge when that has happened.
