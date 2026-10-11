@@ -412,7 +412,10 @@ Sarathi does it in one command (`sarathi smritikosh`), and runs
 Smritikosh's dashboard beside it. A service that
 serves many people names whose memories each agent reads
 (`build_async(memory_user=...)`): Dvara passes each person's own, and
-opens Smritikosh with that person's own key (Dvara's note 37).
+opens Smritikosh with that person's own key (Dvara's note 37). Behind
+Dvara the look back runs when a person sends `/new`, and what it finds
+is kept only when they send `/remember`; `/memory` shows them what is
+kept (Dvara's note 38).
 
 Measured on `qwen3.8:latest`: a fact said once, in passing, changed the
 answer in a fresh conversation 6 of 7 times on `local` and 7 of 7 on

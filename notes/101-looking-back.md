@@ -139,6 +139,16 @@ never ended isn't looked back over for the turns before the save.
 loaded turns already count as seen. The fix is to run `/remember`
 *before* you save.
 
+## Behind a door
+
+A service that serves many people has no terminal and no page to offer
+the candidates on, and a chat has no end anybody marks. Dvara looks back
+when a person sends `/new`, and offers the candidates, and whatever
+waits on `memory.pending` after a turn, as a numbered list in their
+chat. They keep the ones they choose with `/remember 1 3`. Nothing is
+kept until they do, which is this note's rule in a chat's words (Dvara's
+note 38).
+
 ## Receipt
 
 `qwen3.8:latest` on Ollama, a scratch store, identity `asha`.

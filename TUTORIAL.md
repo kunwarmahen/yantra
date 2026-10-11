@@ -453,7 +453,8 @@ step by step on either road, is in [SMRITIKOSH.md](SMRITIKOSH.md). If you
 start Yantra through [Sarathi](https://github.com/kunwarmahen/sarathi),
 `sarathi smritikosh` does all of it in about a minute, and also starts
 Smritikosh's own dashboard at http://localhost:3000/dashboard/memories, where you can read
-and correct everything it remembers. `sarathi smritikosh --off` goes back
+and correct everything it remembers. The schedules Samay runs for you
+use the same memories as the page. `sarathi smritikosh --off` goes back
 to the file.
 
 The same tradeoff as `--env-context`: on a cloud model, what it
