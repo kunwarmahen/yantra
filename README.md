@@ -407,7 +407,11 @@ identity goes on every call, so set `YANTRA_USER` to the name the store
 knows you by ([notes/102](notes/102-kept-somewhere-else.md)).
 `YANTRA_MEMORY=NAME` in `.env`, with the server saved in
 `.yantra/mcp.json`, makes it every session's store.
-[SMRITIKOSH.md](SMRITIKOSH.md) sets one up from start to finish.
+[SMRITIKOSH.md](SMRITIKOSH.md) sets one up from start to finish, or
+Sarathi does it in one command (`sarathi smritikosh`). A service that
+serves many people names whose memories each agent reads
+(`build_async(memory_user=...)`): Dvara passes each person's own, and
+opens Smritikosh with that person's own key (Dvara's note 37).
 
 Measured on `qwen3.8:latest`: a fact said once, in passing, changed the
 answer in a fresh conversation 6 of 7 times on `local` and 7 of 7 on
