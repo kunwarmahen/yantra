@@ -286,6 +286,22 @@ class TestLifecycleAndConfig:
         with pytest.raises(MCPError, match="exited unexpectedly.*code 7"):
             connect_mcp(write_server(tmp_path, body), timeout=5.0)
 
+    def test_a_server_that_dies_at_start_is_reported_with_its_last_words(self, tmp_path):
+        """setu's Gmail connector says why on stderr ("could not refresh ...
+        run `setu connect gmail` again") and exits 2 before it answers;
+        "exited unexpectedly (code 2)" alone sent the person hunting."""
+        body = """\
+            import sys
+            print("starting up", file=sys.stderr)
+            print("gmail:mine could not refresh: run `setu connect gmail --as mine`",
+                  file=sys.stderr)
+            sys.exit(2)
+        """
+        from yantra.mcp import connect_mcp
+        with pytest.raises(MCPError, match=r"code 2\) during 'initialize': gmail:mine "
+                                           r"could not refresh: run `setu connect gmail"):
+            connect_mcp(write_server(tmp_path, body), timeout=5.0)
+
     def test_spawn_failure_names_the_command(self, tmp_path):
         from yantra.mcp import connect_mcp
         cfg = MCPServerConfig(name="ghost", command="/no/such/binary")

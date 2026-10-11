@@ -158,9 +158,22 @@ class Link:
 
     @property
     def connections(self) -> list[dict[str, Any]]:
-        """The usable ones: installed, and not sealed in a locked folder."""
+        """The usable ones: installed, not sealed in a locked folder, and
+        not refused by their site (``expired``)."""
         return [row for row in self.data.get("connections") or []
-                if row.get("installed", True) and not row.get("locked")]
+                if row.get("installed", True) and not row.get("locked")
+                and not row.get("expired")]
+
+    @property
+    def expired(self) -> list[dict[str, Any]]:
+        """Connections whose site refused their sign-in (Google expires a
+        Testing app's after seven days): named to the model with how the
+        person signs in again, never started -- a connector that can only
+        fail is not a set of tools. Signing in again moves Setu's files,
+        and the next look starts it (``Setu.moved``)."""
+        return [row for row in self.data.get("connections") or []
+                if row.get("installed", True) and not row.get("locked")
+                and row.get("expired")]
 
     @property
     def locked(self) -> list[dict[str, Any]]:
@@ -442,9 +455,10 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
     connectors = link.connectors
     rows = [r for r in link.connections if ceiling_of(allow, r)]
     shut = [r for r in link.locked if ceiling_of(allow, r)]
+    gone = [r for r in link.expired if ceiling_of(allow, r)]
     idle = [c for c in connectors.values() if not c.get("connected")
             and (connector_allowed(allow, c["id"]) or c["id"] in mention)]
-    if not rows and not idle and not shut:
+    if not rows and not idle and not shut and not gone:
         return None
     lines = ["# Connected accounts (through Setu)",
              "The person has signed in to these; their tools are prefixed "
@@ -497,6 +511,18 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
         lines.append(f"Connected but locked right now, so not usable ({locked_how}):")
         lines += [f"- {(connectors.get(r.get('connector', '')) or {}).get('name', '')} "
                   f"`{r.get('ref')}`" for r in shut]
+    if gone:
+        # at a keyboard the command; behind a service, the host's own way
+        # (Dvara: /connect from the chat, or the owner does it)
+        here = connect_how == CONNECT_HERE
+        lines.append("Connected, but the site refused the sign-in, so not usable until "
+                     "the person signs in again (tell them so"
+                     + (", with the command; you cannot do it):" if here else
+                        f"; signing in again is like connecting: {connect_how}):"))
+        lines += [f"- {(connectors.get(r.get('connector', '')) or {}).get('name', '')} "
+                  f"`{r.get('ref')}`"
+                  + (f": `setu connect {r.get('connector')} --as {account_of(r)}`"
+                     if here else "") for r in gone]
     if idle:
         lines.append(f"Installed but not connected ({connect_how}):")
         lines += [f"- {c.get('name', c['id'])} (`{c['id']}`)" for c in idle]
@@ -511,12 +537,16 @@ def announce(link: Link, connected: dict[str, int],
     the apps on the phone (no tools of their own: rules for the phone's)."""
     phones = [f"{r.get('ref')} (on the phone)" for r in link.connections
               if r.get("phone") and ceiling_of(allow, r)]
+    gone = [r.get("ref") for r in link.expired if ceiling_of(allow, r)]
+    tail = (f"; sign-in expired, not started: {', '.join(gone)} (setu connect <id> --as "
+            "<account>)" if gone else "")
     if not connected and not phones and allow is not None and link.connections:
-        return f"setu: none of your connections for this agent ({link.road})"
+        return f"setu: none of your connections for this agent ({link.road}){tail}"
     if not connected and not phones:
-        return f"setu: no connections yet ({link.road})"
+        return (f"setu: no connections ready ({link.road}){tail}" if gone
+                else f"setu: no connections yet ({link.road})")
     parts = [f"{name} ({count} tool(s))" for name, count in connected.items()] + phones
-    return f"setu: {', '.join(parts)} -- via {link.road}"
+    return f"setu: {', '.join(parts)} -- via {link.road}{tail}"
 
 
 # ---- what a learned skill needs ---------------------------------------------

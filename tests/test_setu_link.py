@@ -650,6 +650,42 @@ class TestAHostsOwnWords:
         assert "`setu connect <id>`" in setu_link.prompt_text(link)
 
 
+class TestAnExpiredSignIn:
+    """Google expires a Testing app's sign-in after seven days, and Setu
+    marks the connection (its ``expired``). The bias: A REFUSED SIGN-IN IS
+    NAMED WITH HOW TO FIX IT, NEVER STARTED -- a connector that can only
+    fail is a startup error, not a tool -- and it comes back by itself
+    once the person signs in again."""
+
+    def expired(self) -> setu_link.Link:
+        data = status(["connector"])
+        data["connections"][0]["expired"] = {"since": "2026-10-11T12:00:00Z",
+                                             "why": "HTTP 400 Token has been expired"}
+        return setu_link.Link(data=data, road="test")
+
+    def test_it_is_not_started_and_the_model_is_told_the_command(self):
+        link = self.expired()
+        assert link.connections == [] and setu_link.mcp_configs(link) == []
+        said = setu_link.prompt_text(link)
+        assert "the site refused the sign-in" in said
+        assert "`gmail:personal`: `setu connect gmail --as personal`" in said
+
+    def test_behind_a_service_the_host_says_how_not_a_terminal_command(self):
+        said = setu_link.prompt_text(self.expired(),
+                                     connect_how="they send /connect gmail themselves")
+        assert "signing in again is like connecting: they send /connect gmail" in said
+        assert "setu connect" not in said
+
+    def test_the_startup_line_says_it(self):
+        line = setu_link.announce(self.expired(), {})
+        assert "sign-in expired, not started: gmail:personal" in line
+
+    def test_signed_in_again_it_is_a_connection_again(self):
+        link = self.expired()
+        del link.data["connections"][0]["expired"]
+        assert [row["ref"] for row in link.connections] == ["gmail:personal"]
+
+
 class TestALockedFolder:
     """A person may lock their Setu folder with a passphrase (Setu's
     seal.py). The bias: A LOCKED ACCOUNT IS NAMED, NEVER STARTED, and the

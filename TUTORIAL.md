@@ -567,7 +567,13 @@ UI, the **connections** chip opens a page of cards:
 
 Connect shows an *open the sign-in* button. That's Google's own page.
 Sign in there, come back, and the agent has the account's tools from
-your next message. Disconnect takes them away again. This works when
+your next message. Disconnect takes them away again. **If Gmail stops working
+after a week,** Google has expired the sign-in (it does that every seven
+days for an app still in *Testing*). The startup line says `sign-in
+expired, not started: gmail:mine`, `setu list` says `SIGN-IN EXPIRED`,
+and the agent tells you the command: run `setu connect gmail --as mine`,
+and your next message has Gmail again, with nothing to restart. Publish
+your Google app once (Setu's README) and it stops expiring. This works when
 the page is open on the computer running Yantra. From a phone, the card
 shows the command to run on that computer instead. For now, Google
 sign-in also needs a "Desktop app" client file you make once in

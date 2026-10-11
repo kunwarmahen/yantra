@@ -27,7 +27,11 @@ Transport rules that make it small:
   newline-delimited, never embedded newlines (unlike LSP's
   Content-Length framing);
 * stderr belongs to the SERVER's logs and passes straight through to
-  ours -- piping it would risk a full buffer deadlocking the protocol;
+  ours, drained line by line by a thread of its own (an undrained pipe
+  would fill and deadlock the protocol). The last few lines are kept:
+  a server that dies before it answers is reported with its own last
+  words ("could not refresh ... run `setu connect gmail` again"), not
+  only "exited (code 2)";
 * requests carry an integer id; responses quote it back; notifications
   (no id, no reply expected) are dropped except for logging;
 * servers may send REQUESTS of their own (``ping``, ``roots/list``).
@@ -340,6 +344,10 @@ def _reply_for_server_request(method: str) -> tuple[bool, dict[str, Any]]:
     return False, {"code": -32601, "message": f"method not found: {method}"}
 
 
+#: How many of a server's last stderr lines are kept for its error.
+STDERR_KEPT = 5
+
+
 class MCPSession:
     """One spawned server process, spoken to over newline-delimited JSON."""
 
@@ -353,6 +361,8 @@ class MCPSession:
         self._pending: dict[int, queue.Queue[dict[str, Any]]] = {}
         self._wlock = threading.Lock()  # reader thread replies + main requests share stdin
         self._reader: threading.Thread | None = None
+        self._said: list[str] = []     # its last stderr lines (STDERR_KEPT)
+        self._stderr: threading.Thread | None = None
 
     # ---- lifecycle ---------------------------------------------------------
 
@@ -368,8 +378,9 @@ class MCPSession:
             self._proc = subprocess.Popen(
                 [self.config.command, *self.config.args],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                # stderr inherits: server logs flow to ours, and we can't
-                # deadlock on a pipe nobody drains
+                # piped and drained by its own thread, which passes every
+                # line on to ours and keeps the last few (module docstring)
+                stderr=subprocess.PIPE,
                 text=True, bufsize=1, env=env,
             )
         except OSError as exc:
@@ -381,6 +392,10 @@ class MCPSession:
         self._reader = threading.Thread(
             target=self._read_loop, name=f"mcp-{self.config.name}", daemon=True)
         self._reader.start()
+        self._stderr = threading.Thread(
+            target=self._pass_stderr, args=(self._proc.stderr,),
+            name=f"mcp-{self.config.name}-stderr", daemon=True)
+        self._stderr.start()
 
         try:
             result = self._request("initialize", {
@@ -432,6 +447,32 @@ class MCPSession:
                 proc.stdout.close()
         except OSError:
             pass
+
+    def _pass_stderr(self, stream) -> None:
+        """Every line on to our stderr, as before; the last few kept."""
+        try:
+            for line in stream:
+                try:
+                    sys.stderr.write(line)
+                    sys.stderr.flush()
+                except (OSError, ValueError):
+                    pass
+                if line.strip():
+                    self._said = (self._said + [line.strip()])[-STDERR_KEPT:]
+        except (OSError, ValueError):
+            pass
+        finally:
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+    def last_words(self) -> str:
+        """Its last stderr line, waited for briefly: a server that died
+        has usually just said why."""
+        if self._stderr is not None:
+            self._stderr.join(timeout=1.0)
+        return self._said[-1][:400] if self._said else ""
 
     def healthy(self) -> bool:
         """Cheap liveness probe for status displays: the child process
@@ -486,10 +527,11 @@ class MCPSession:
             ) from None
         del self._pending[msg_id]
         if response.get("__eof__"):
+            code = self._proc.poll() if self._proc else "?"
+            said = self.last_words()
             raise MCPError(
                 f"mcp server {self.config.name!r} exited unexpectedly "
-                f"(code {self._proc.poll() if self._proc else '?'}) "
-                f"during {method!r}"
+                f"(code {code}) during {method!r}" + (f": {said}" if said else "")
             )
         if "error" in response:
             err = response["error"]

@@ -717,6 +717,19 @@ client file, and Setu remembers the path. For Home Assistant it asks once
 for your server's address instead
 ([notes/99](notes/99-the-connections-page.md)).
 
+**A sign-in the site refused.** Google expires a Testing app's sign-ins
+after seven days. Setu marks such a connection (`setu list` says
+`SIGN-IN EXPIRED`), and Yantra doesn't start its server. The startup line
+says `sign-in expired, not started: gmail:mine`, and the model is told to
+ask you to run `setu connect gmail --as mine`. Sign in again anywhere (a
+terminal, Setu's page, the panel) and the account is back on the next
+turn, in the terminal and on the page alike: before each turn Yantra
+checks whether Setu's files moved, and connects what is new, nothing
+restarted. Any MCP server that dies while starting is reported with its
+own last words (`exited unexpectedly (code 2) during 'initialize':
+gmail:mine could not refresh … run setu connect gmail --as mine`), not
+only its exit code ([notes/127](notes/127-a-sign-in-that-ran-out.md)).
+
 **Doing things later, through Samay.** [Samay](https://github.com/kunwarmahen/samay)
 is a separate clock and logbook for an agent's work: "check my mail every
 two hours and tell me if anything needs me". When `samay` is on `PATH`,
@@ -2433,7 +2446,9 @@ src/yantra/
 │                   card ([notes/123](notes/123-a-tap-you-say-yes-to-by-looking.md)).
 │                   A tool's `explain` hook gives its approval card plain
 │                   words -- the host's, never the server's
-│                   ([notes/115](notes/115-what-a-yes-covers.md))
+│                   ([notes/115](notes/115-what-a-yes-covers.md)).
+│                   A server that dies at start is reported with its last
+│                   stderr line ([notes/127](notes/127-a-sign-in-that-ran-out.md))
 ├── mcp_oauth.py    OAuth 2.1 for authenticated HTTP servers, by hand:
 │                   RFC 9728/8414 discovery, RFC 7591 dynamic
 │                   registration, PKCE + a localhost redirect listener,
@@ -2448,6 +2463,9 @@ src/yantra/
 │                   match Setu's report, SignIn relays `setu connect --json`
 │                   for the page's Connections panel -- same computer only,
 │                   never under a running turn ([notes/99](notes/99-the-connections-page.md)).
+│                   A sign-in Setu marked expired: named with its command,
+│                   never started; the page checks Setu before each turn
+│                   ([notes/127](notes/127-a-sign-in-that-ran-out.md)).
 │                   resolve_needs: a learned skill's `setu:<id>` against the
 │                   report ([notes/106](notes/106-what-the-recipe-leaves-out.md)).
 │                   AccountTool: several accounts, one tool set with

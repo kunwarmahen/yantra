@@ -182,3 +182,8 @@ list.
 
 The same move for a phone, where the rules see the screen rather than a
 manifest: [note 119](119-a-phone-and-what-asks.md).
+
+A sign-in that stops working -- Google's seven-day expiry for apps in
+Testing -- is [note 127](127-a-sign-in-that-ran-out.md): Setu marks it,
+Yantra names it with its command instead of starting it, and it returns
+on the next turn once signed in again.

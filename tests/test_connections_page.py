@@ -57,7 +57,7 @@ FAKE_SETU = """\
         return {{"ref": ref, "connector": connector, "account": account,
                  "email": account + "@example.com", "level": level,
                  "level_label": level.title(), "scopes": [], "last_used": None,
-                 "installed": True,
+                 "installed": True, "expired": load().get("expired", {{}}).get(ref),
                  "mcp": {{"name": ref.replace(":", "-"), "command": {python!r},
                          "args": [CONNECTOR]}}}}
     def emit(**e):
@@ -428,6 +428,34 @@ CATALOG = {"source": "https://catalog.test", "key": "k", "issued": "2026-10-04",
                                       "line": "certified by 1 you trust (Acme Labs)"},
                         "bundle": {"url": "https://catalog.test/files/x.json",
                                    "sha256": "0" * 64}}]}
+
+
+class TestThePageCatchesUp:
+    """A sign-in Google expired, and the person signing in again in a
+    terminal: the page's next turn has both, with nothing restarted."""
+
+    def tools(self, agent):
+        return [n for n in agent.registry.names() if "gmail" in n]
+
+    def test_an_expired_sign_in_leaves_and_comes_back_without_a_restart(self, setu,
+                                                                       tmp_path):
+        session, agent, manager, _ = served(tmp_path, setu.path)
+        try:
+            assert self.tools(agent)
+            session._setu_catch_up()                    # nothing moved: nothing done
+            time.sleep(0.01)
+            setu.set(expired={"gmail:personal": {"since": "2026-10-11T12:00:00Z",
+                                                 "why": "HTTP 400 expired"}})
+            session._setu_catch_up()                    # Setu marked it
+            assert self.tools(agent) == []
+            layer = agent.prompt.get("connections")
+            assert "`setu connect gmail --as personal`" in layer
+            time.sleep(0.01)
+            setu.set(expired={})                        # `setu connect` in a terminal
+            session._setu_catch_up()
+            assert self.tools(agent)
+        finally:
+            manager.shutdown()
 
 
 class TestInstallingFromTheCatalog:

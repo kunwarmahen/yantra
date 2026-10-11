@@ -536,6 +536,7 @@ class WebSession:
     def _begin(self, stream_of, task: str, resumes: str | None = None
                ) -> None:
         self._cancel.clear()
+        self._setu_catch_up()
         self.turn_active = True
         # The allowance is per TURN, and this is the one place a turn
         # starts -- no inferring it from gaps between questions. A resume
@@ -1019,6 +1020,21 @@ class WebSession:
         self.broadcast({"type": "connections", **self.connections_state(), "sync": result})
         self.broadcast({"type": "state", **self.state()})
         return result
+
+    def _setu_catch_up(self) -> None:
+        """Before a turn, as the terminal does: an account signed in to
+        again in a terminal, a sign-in Setu found expired, a level
+        changed -- the turn has it, with no restart. Only file times are
+        read unless one moved. Never costs the turn it comes before."""
+        setu = getattr(self.agent, "setu", None)
+        if setu is None or self.mcp is None:
+            return
+        try:
+            if setu.moved():
+                self.setu_sync()
+        except Exception as exc:  # noqa: BLE001 -- a look, never the turn
+            self.broadcast({"type": "setu_signin", "event": "error",
+                            "message": f"could not look at Setu again: {exc}"})
 
     def _setu_settle(self) -> None:
         """A sign-in that finished during a turn reaches the tools now."""
