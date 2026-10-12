@@ -728,7 +728,9 @@ ask you to run `setu connect gmail --as mine`. Sign in again anywhere (a
 terminal, Setu's page, the panel) and the account is back on the next
 turn, in the terminal and on the page alike: before each turn Yantra
 checks whether Setu's files moved, and connects what is new, nothing
-restarted. Any MCP server that dies while starting is reported with its
+restarted. `setu check` finds a stopped sign-in before anything uses it,
+and Dvara runs it daily and tells the person
+([notes/127](notes/127-a-sign-in-that-ran-out.md)). Any MCP server that dies while starting is reported with its
 own last words (`exited unexpectedly (code 2) during 'initialize':
 gmail:mine could not refresh … run setu connect gmail --as mine`), not
 only its exit code ([notes/127](notes/127-a-sign-in-that-ran-out.md)).

@@ -115,8 +115,9 @@ in place of "leave the app in Testing".
 
 ## What is not here yet
 
-* **A look before it's needed.** A sign-in is found expired when it is
-  next refreshed, at the next use. An idle account can be dead for days
-  before anyone sees the mark.
-* **Telling the person unasked.** The model mentions it when asked about
-  mail; nothing pings the person the day it expires.
+* ~~**A look before it's needed.**~~ `setu check` refreshes every
+  sign-in that can run out, now, and marks the refused ones (Setu's
+  README); a refusal keeps the time it was first seen.
+* ~~**Telling the person unasked.**~~ Dvara runs that check daily and
+  tells each new refusal once to whoever can fix it, with the words that
+  do (Dvara's note 39).

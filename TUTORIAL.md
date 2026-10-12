@@ -574,7 +574,9 @@ days for an app still in *Testing*). The startup line says `sign-in
 expired, not started: gmail:mine`, `setu list` says `SIGN-IN EXPIRED`,
 and the agent tells you the command: run `setu connect gmail --as mine`,
 and your next message has Gmail again, with nothing to restart. Publish
-your Google app once (Setu's README) and it stops expiring. This works when
+your Google app once (Setu's README) and it stops expiring. To find a
+stopped sign-in before you need it, run `setu check`; behind Dvara it
+runs daily and messages you. This works when
 the page is open on the computer running Yantra. From a phone, the card
 shows the command to run on that computer instead. For now, Google
 sign-in also needs a "Desktop app" client file you make once in
