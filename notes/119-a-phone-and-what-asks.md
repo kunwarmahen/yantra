@@ -199,6 +199,11 @@ has the rest.
 
 * A phone for scheduled runs, which needs an answer to "held, with
   nobody to ask" better than refusing.
+* ~~A Wi-Fi phone that stopped answering vanished from the panel.~~ A
+  Nexus 6P switched off and on stopped listening, and the panel said
+  "No phone yet". Sparsh now lists the address as offline with a `note`
+  ("plug it in and run `sparsh tcpip`"), and the panel and `/phone`
+  show it under the phone (Sparsh's note 11).
 * ~~The page: Yantra's browser UI shows the confirm card like any other,
   but has no phone panel (which phone, the rules in force).~~ Done:
   *The panel peeks*, above. Live on the emulator, a peek with its

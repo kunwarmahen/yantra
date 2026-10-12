@@ -2175,7 +2175,9 @@ anyway, it is shown nothing on that screen.
 
 **The phone panel.** In `yantra --web`, the **phone** chip opens a panel:
 
-* the phones the computer sees, and whether each is ready;
+* the phones the computer sees, and whether each is ready, or why
+  not, in Sparsh's words (*"not answering over Wi-Fi -- … run `sparsh
+  tcpip`"*);
 * **see the screen**: a picture of the phone now, beside the list the
   agent reads. Opening it while the agent works is safe: looking from
   the panel never changes what the agent's numbers mean;
@@ -2276,9 +2278,17 @@ is told to do the step again and ask properly
 wireless debugging (Sparsh's SETUP.md, B4: `sparsh pair` once, then
 `export SPARSH_CONNECT=<its address>` so it's found again by itself).
 Android 10 and older have no wireless debugging page: plug the phone in
-once and run `adb tcpip 5555`, then `sparsh connect <its Wi-Fi
-address>:5555` (until the phone restarts). Sarathi's containers reach
-the phone this way (`sarathi phone`).
+and run `sparsh tcpip`. It finds the phone's Wi-Fi address, tells the
+phone to listen and connects, then prints the address to use. It lasts
+until the phone restarts. Sarathi's containers reach the phone this way
+(`sarathi phone tcpip`, or **Turn on Wi-Fi from the cable** on
+Sarathi's home page).
+
+**A Wi-Fi phone that restarted.** A phone switched off and on stops
+listening over Wi-Fi, and its address can change. The phone panel
+lists the old address as *not answering over Wi-Fi*, with what to do:
+plug it in, run `sparsh tcpip` (or Sarathi's button), then **use this
+phone**.
 
 **Test it on your own phone.** The trial in `examples/phone_trial.py`
 gives the agent everyday tasks and checks the phone afterwards, not the
@@ -2541,5 +2551,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 2802 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 2803 offline tests passing (1 skipped) — no network, no key.
 Copyright 2026 Mahen Singh, Apache License 2.0.*

@@ -1326,8 +1326,9 @@ class Repl:
             return
         d = sparsh.describe()
         for phone in d["phones"]:
+            note = f"  ({phone['note']})" if phone.get("note") else ""
             self.console.print(f"phone: {phone.get('serial')}  {phone.get('model') or '?'}  "
-                               f"{phone.get('state')}")
+                               f"{phone.get('state')}{note}", markup=False)
         if not d["phones"]:
             self.console.print("phone: none attached")
         self.console.print("in use: " + (f"yes, {d['tools']} tool(s)" if d["connected"] else

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2802 tests. The
+The harness underneath is complete and covered by 2803 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -828,7 +828,9 @@ each did twelve, every text was held for a yes, and a "no" was never
 gone round ([notes/120](notes/120-thirteen-tasks-on-a-phone.md),
 `examples/phone_trial.py`); on a real Nexus 6P (Android 8.1),
 `qwen3.8:latest` did eleven of the twelve that phone can do. In the browser UI a
-**phone** chip opens the phone panel: the phones `adb` sees, **see the
+**phone** chip opens the phone panel: the phones `adb` sees (a Wi-Fi
+phone that stopped answering is listed with why, and `sparsh tcpip` from
+its cable brings it back), **see the
 screen** for a screenshot beside the exact lines the agent reads, and
 the rules in force (the words that need a yes, the apps kept out, the
 file that holds them). Looking there never changes what the agent's
@@ -3022,7 +3024,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2802 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2803 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -3054,7 +3056,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2802 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2803 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

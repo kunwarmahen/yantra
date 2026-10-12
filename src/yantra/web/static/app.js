@@ -1967,6 +1967,9 @@ function renderPhone() {
       b.textContent = "use this phone";
       b.onclick = usePhone;
       box.append(b);
+    } else if ((d.phones || []).length) {
+      box.innerHTML = "<span>A phone is named, but not ready: what to do is under it, "
+        + "below. Then refresh.</span>";
     } else {
       box.innerHTML = "<span>No phone yet. Plug one in with USB debugging on (and allow it "
         + "on the phone), or start the emulator, then refresh.</span>";
@@ -1991,7 +1994,7 @@ function renderPhone() {
     dot.title = ph.state;
     const main = document.createElement("div");
     main.innerHTML = `<div class="conn-title">${esc(ph.model || ph.serial)}</div>
-      <div class="conn-sub"><code>${esc(ph.serial)}</code> · ${esc(PHONE_STATE[ph.state] || ph.state)}</div>`;
+      <div class="conn-sub"><code>${esc(ph.serial)}</code> · ${esc(ph.note || PHONE_STATE[ph.state] || ph.state)}</div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";
     if (ph.state === "device") {

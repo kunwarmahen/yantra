@@ -329,6 +329,15 @@ class TestWhenNot:
         finally:
             manager.shutdown()
 
+    def test_a_wifi_phone_that_stopped_listening_is_not_ready_and_says_why(self):
+        # a real Nexus 6P, switched off and on: its address listed offline
+        # by Sparsh with the fix, which the panel shows under it
+        why = "not answering over Wi-Fi -- ... plug it in and run `sparsh tcpip`"
+        data = {"phones": [{"serial": "192.168.1.161:5555", "state": "offline", "note": why}]}
+        assert sparsh_link.ready_phones(data) == []
+        link = sparsh_link.Sparsh("auto", data=data)
+        assert link.describe()["phones"][0]["note"] == why
+
     def test_a_phone_waiting_for_its_usb_yes_is_not_ready(self):
         data = {"phones": [{"serial": "R58", "state": "unauthorized"}]}
         assert sparsh_link.ready_phones(data) == []
