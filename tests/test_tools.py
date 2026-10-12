@@ -374,6 +374,26 @@ class TestRegistryEnableDisable:
         assert registry.disabled_names() == ["read_file", "write_file"]
 
 
+class TestAdmitAlso:
+    """A narrowed allow list widened by the host for tools only it can
+    name (a Setu connection the package needs) -- and nothing else."""
+
+    def test_it_widens_a_narrowed_list_and_deny_still_wins(self):
+        registry = ToolRegistry()
+        registry.admit_only(allow=["read_file"], deny=["mcp__ha-home__call_*"])
+        registry.admit_also(["mcp__ha-home__*"])
+        assert registry.admits("mcp__ha-home__get_state")
+        assert not registry.admits("mcp__ha-home__call_service")
+        assert not registry.admits("mcp__other__get_state")
+        assert registry.admits("read_file")
+
+    def test_with_no_allow_list_it_changes_nothing(self):
+        registry = ToolRegistry()
+        registry.admit_only(allow=None, deny=["bash"])
+        registry.admit_also(["mcp__ha-home__*"])
+        assert registry.admits("anything") and not registry.admits("bash")
+
+
 class TestArgumentCoercion:
     """Models -- local ones especially -- emit non-scalars as JSON STRINGS:
     {"symbols": "[\\"AAPL\\"]"} instead of {"symbols": ["AAPL"]}. Nothing

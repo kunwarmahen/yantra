@@ -106,6 +106,20 @@ classes as read. `write` adds writes, and `spend` everything. With
 `gmail:read`, the package above sees `mcp__gmail__search_threads` and no
 way to send.
 
+**A NEED BRINGS ITS OWN TOOLS.** A package that narrows its tools
+(`[tools] allow = ["web_fetch", "read_file"]`) still gets the tools of
+the accounts it needs, without naming them there. It used to have to,
+and the names are Setu's, not the author's: with one account they're
+`mcp__homeassistant-home__get_state` (connector, a dash, the account),
+with two `mcp__homeassistant__…`, and a browser-road site's are
+`amazon_open`. A Dvara agent that needed `homeassistant:write` and
+allowed `mcp__homeassistant__*` got none of the six tools. It told its
+person to connect Home Assistant, which was connected all along. Now
+Setu widens the allow list by exactly the servers it starts for a need
+(the registry's `admit_also`), so the need is the one place a package
+says it. `[tools] deny` still wins, and an account the package didn't
+need stays out, however its tools are named.
+
 **NOBODY AT THE TERMINAL MEANS THE PAGE ASKS.** Without a terminal
 (stdin is not a TTY, as when the page is started by a script), nothing
 is granted at launch. The question waits on the Connections panel

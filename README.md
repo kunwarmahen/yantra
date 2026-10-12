@@ -1424,7 +1424,8 @@ verbs = { list = "all_memories" }   # only for a server: its tool per verb,
 [connections]
 needs = ["gmail:read"]          # your Setu accounts it may use: connector,
                                 # then read | write | spend; asked once, and
-                                # none at all without this (notes/110)
+                                # none at all without this; their tools come
+                                # with them, past [tools] allow (notes/110)
 ```
 
 A package may also declare the MCP servers it needs. Every session

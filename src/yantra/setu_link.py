@@ -978,6 +978,12 @@ class Setu:
             self.servers.discard(name)
             self.started.pop(name, None)
             done.dropped.append(name)
+        if self.allow is not None:
+            # A NEED ADMITS ITS OWN TOOLS. The package named the account
+            # in [connections]; the tools' names are the server's, which
+            # only Setu knows, so a narrowed [tools] allow is widened by
+            # exactly these servers (and deny still wins).
+            agent.registry.admit_also([f"mcp__{cfg.name}__*" for _, cfg in wanted])
         for row, cfg in wanted:
             existing = manager.sessions.get(cfg.name)
             stamp = (str(row.get("level") or ""), str(row.get("email") or ""))
@@ -1096,10 +1102,12 @@ class Setu:
             if taken:
                 done.notes.append(f"{ref}: {', '.join(taken)} already a tool; not connected")
                 continue
+            if self.allow is not None:    # a need admits its own tools (sync)
+                registry.admit_also([f"{prefix}_*"])
             names = []
             for tool in tools:
                 registry.register(tool)
-                if tool.name in registry:     # a package's allow list may refuse it
+                if tool.name in registry:     # a package's deny may still refuse it
                     names.append(tool.name)
             self.sites[ref] = SiteLink(prefix=prefix, names=names, session=session,
                                        stamp=stamp)
@@ -1213,10 +1221,12 @@ class Setu:
                     continue
                 for original in accounts.values():
                     registry.unregister(original.name)
+                if self.allow is not None:   # a need admits its own tools (sync)
+                    registry.admit_also([f"mcp__{cid}__*"])
                 registry.register(tool)
                 if tool.name in registry:
                     self.merged[tool.name] = tool
-                else:                      # refused by a package's allow list
+                else:                      # refused by a package's deny
                     for original in accounts.values():
                         registry.register(original)
 

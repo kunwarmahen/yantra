@@ -439,9 +439,12 @@ class TestSeveralAccounts:
 # ---- a package gets what it asked for -------------------------------------------
 
 
-def start_package(program, tmp_path, monkeypatch, needs=(), ask=None, name="helper"):
+def start_package(program, tmp_path, monkeypatch, needs=(), ask=None, name="helper",
+                  allow=None, deny=()):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     agent, manager, console = session(tmp_path)
+    if allow is not None or deny:
+        agent.registry.admit_only(allow, deny)       # the package's [tools]
     args = SimpleNamespace(setu=str(program))
     spec = SimpleNamespace(name=name, root=tmp_path / name,
                            connections=tuple(setu_link.parse_need(n) for n in needs))
@@ -480,6 +483,40 @@ class TestPackageNeeds:
             # the count the page shows is what the package got, not the server's
             assert manager.servers()[0]["tools"] == 1
             assert "Outlook" not in agent.prompt.get("connections")
+        finally:
+            manager.shutdown()
+
+    def test_a_need_admits_its_own_tools_past_a_narrowed_allow_list(
+            self, fake_setu, tmp_path, monkeypatch):
+        # The trap this closes: a package that narrows [tools] to
+        # ["read_file"] and needs gmail got none of Gmail's tools, because
+        # they are named after a server (mcp__gmail-personal__...) that no
+        # package author can be expected to spell.
+        _, agent, manager, _ = start_package(
+            fake_setu[0], tmp_path, monkeypatch, needs=["gmail:read"],
+            ask=lambda q: True, allow=["read_file"])
+        try:
+            assert mcp_names(agent) == ["mcp__gmail-personal__search_threads"]
+        finally:
+            manager.shutdown()
+
+    def test_a_packages_deny_still_wins_over_a_need(self, fake_setu, tmp_path, monkeypatch):
+        _, agent, manager, _ = start_package(
+            fake_setu[0], tmp_path, monkeypatch, needs=["gmail:read"],
+            ask=lambda q: True, allow=["read_file"], deny=["mcp__gmail-personal__*"])
+        try:
+            assert mcp_names(agent) == []
+        finally:
+            manager.shutdown()
+
+    def test_a_connection_not_needed_is_not_admitted_by_another_need(
+            self, fake_setu, tmp_path, monkeypatch):
+        _, agent, manager, _ = start_package(
+            fake_setu[0], tmp_path, monkeypatch, needs=["gmail:read"],
+            ask=lambda q: True, allow=["read_file"])
+        try:
+            assert not any(n.startswith("mcp__outlook") for n in agent.registry.names())
+            assert not agent.registry.admits("mcp__outlook-work__search")
         finally:
             manager.shutdown()
 

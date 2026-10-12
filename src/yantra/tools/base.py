@@ -186,7 +186,10 @@ class ToolRegistry:
         a COMPLETE whitelist, which includes MCP tools -- a package that
         both narrows its tools and declares an MCP server has to say so
         ('mcp__*'), because guessing either way would be wrong half the
-        time. Returns the names dropped right now, for the host to report.
+        time. The one exception is a Setu connection the package NEEDS:
+        the need is the package saying so, and ``admit_also`` lets that
+        connection's tools in (setu_link). Returns the names dropped right
+        now, for the host to report.
         """
         self._allow = tuple(allow) if allow is not None else None
         self._deny = tuple(deny)
@@ -194,6 +197,18 @@ class ToolRegistry:
         for name in dropped:
             self.unregister(name)
         return dropped
+
+    def admit_also(self, patterns) -> None:
+        """Widen a narrowed allow list by ``patterns``; deny still wins.
+
+        For tools whose names only the host knows when they arrive: a
+        package's ``[connections] needs`` asks for an account, and the
+        tools Setu starts for it are named after a server
+        (``mcp__homeassistant-home__get_state``) that no package author
+        can be expected to spell. Nothing changes with no allow list."""
+        if self._allow is None:
+            return
+        self._allow = self._allow + tuple(p for p in patterns if p not in self._allow)
 
     def refused_names(self) -> list[str]:
         """Tools the policy turned away after construction, in arrival
