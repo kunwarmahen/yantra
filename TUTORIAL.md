@@ -2535,5 +2535,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 2801 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 2802 offline tests passing (1 skipped) — no network, no key.
 Copyright 2026 Mahen Singh, Apache License 2.0.*
