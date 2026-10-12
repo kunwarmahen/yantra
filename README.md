@@ -2503,7 +2503,8 @@ src/yantra/
 │                   through `samay list|runs|pause|resume|rm --json`
 │                   ([notes/115](notes/115-what-a-yes-covers.md)); a host
 │                   whose turn has the phone (Dvara) starts it `--phone`,
-│                   and the card says IT WORKS YOUR PHONE, each step it may
+│                   and for a job that works the phone (`phone`, or steps)
+│                   the card says IT WORKS YOUR PHONE, each step it may
 │                   do there unasked, and how long its questions wait;
 │                   a grant fixed to arguments said as "only with ...", a
 │                   job nothing listed can do said in capitals, where its

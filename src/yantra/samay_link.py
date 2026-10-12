@@ -181,7 +181,8 @@ def server_config(data: dict[str, Any], person: str = LOCAL,
     """The MCP server, as Samay says to start it, for one person. A host
     that serves people through itself (Dvara) names its road with
     ``runner``; left out, Samay picks. ``phone``: this turn has the
-    person's phone, so a schedule made in it works the phone too."""
+    person's phone, so a schedule made in it may work the phone, when the
+    job says so (Samay's ``phone``, or steps on the phone)."""
     if not WORD_RE.match(person):
         raise SamayLinkError(f"{person!r} is not a person Samay can keep schedules for")
     mcp = data["mcp"]
@@ -353,7 +354,13 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     nothing listed can make one, the card says it in capitals. A tool
     that changes things and is listed WITH NO ARGUMENTS FIXED is said
     too, because "call_service" is every device in the house.
+
+    ``phone`` is whether this turn HAS the phone; the schedule works it
+    only when it says so (``phone``, or steps on it), as Samay decides.
+    A Home Assistant job made in a chat with the phone is not a phone
+    schedule, and its card doesn't say it is.
     """
+    phone = phone and bool(args.get("phone") or args.get("phone_steps"))
     when = args.get("when")
     raw_when = json.dumps(when) if not isinstance(when, str) else when
     notify = str(args.get("notify") or "when_new")

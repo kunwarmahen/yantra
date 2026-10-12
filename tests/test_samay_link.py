@@ -341,6 +341,16 @@ class TestTheCardIsWords:
                                           registry=ToolRegistry())
         assert "PHONE" not in plain
 
+    def test_a_job_in_a_chat_with_the_phone_is_not_a_phone_schedule_unless_it_says(self):
+        lights = samay_link.explain_create(
+            {"prompt": "turn off the stairs switch", "when": "in 5 minutes"},
+            registry=ToolRegistry(), phone=True)
+        assert "PHONE" not in lights
+        texts = samay_link.explain_create(
+            {"prompt": "read my texts", "when": "every day at 8", "phone": True},
+            registry=ToolRegistry(), phone=True)
+        assert "IT WORKS YOUR PHONE" in texts
+
     def test_a_turn_with_the_phone_starts_samays_tools_with_it(self):
         data = {"mcp": {"command": "samay", "args": ["mcp"]}}
         assert samay_link.server_config(data, "raj", phone=True).args[-1] == "--phone"
