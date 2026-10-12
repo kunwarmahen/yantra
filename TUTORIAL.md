@@ -2030,6 +2030,10 @@ sarathi up
 `sarathi road podman` or `sarathi road process` switches between the two
 at any time; your accounts, schedules and memories are the same files
 either way.
+After that, every setting (the people behind Dvara, each agent, the
+standing rules, Setu's settings, the model, keys) is changed on
+Sarathi's home page under **Settings**, each checked by the program
+whose file it is before it's saved. There's no file to open.
 
 The rest of this section is what Sarathi does for you, by hand: useful
 if you want to understand the wiring, or to set it up differently. Each
