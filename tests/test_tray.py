@@ -63,6 +63,14 @@ class TestTheFile:
         tray.save(tmp_path, {}, [], {})
         assert not tray.path_for(tmp_path).exists()
 
+    def test_a_host_may_keep_it_in_its_own_state(self, tmp_path):
+        # A service serving several people keeps each person's tray in
+        # its own state folder, not in whatever $XDG_STATE_HOME it got.
+        mine = tmp_path / "state" / "skills" / "maya" / "helper.json"
+        tray.save(tmp_path, {"a1": (LEARNER, offer(tmp_path))}, [], {}, path=mine)
+        assert mine.is_file() and not tray.path_for(tmp_path).exists()
+        assert "a1" in tray.load(tmp_path, AGENT, LEARNER, path=mine)[0]
+
     def test_each_workspace_has_its_own(self, tmp_path):
         tray.save(tmp_path / "a", {}, [Candidate("in a")], {})
         assert tray.load(tmp_path / "b", AGENT, LEARNER)[1] == []

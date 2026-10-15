@@ -133,6 +133,20 @@ The offers were about turns that no longer exist, which is why this was
 left out at first. But an offer stands on its own: the recipe, its
 test, its output. Nothing in it points back at the turn.
 
+## Behind a service
+
+A service that serves several people on an event loop (Dvara) runs the
+same look behind its own answers, on an `AsyncAgent`. Two small seams
+make that possible. The `Learner` takes `execute=`, how a test call is
+run: the sync agent's own `_execute` unless the host says otherwise, and
+on an async agent (which now has an `_execute` of its own, gate then
+tool) the host hands in one that runs the call on its loop and waits, since
+the learner works in a thread. And `tray.save`/`tray.load` take `path=`,
+so a host keeping its own state names the file: Dvara keeps one per
+person per agent, beside the rest of what it knows about them. Both
+default to what this page does, so nothing here changed. Dvara's
+side is its notes/42.
+
 ## A turn cut in two
 
 On a small context window, compaction can run in the middle of a turn.

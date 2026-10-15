@@ -593,6 +593,15 @@ class AsyncAgent:
 
     # ---- execution ---------------------------------------------------------
 
+    async def _execute(self, call: ToolCall) -> ToolResult:
+        """Gate + run one tool call, outside any turn -- the sync twin's
+        ``_execute``. A host's skill learner tests a recipe through it
+        (skills/learn.py), on the loop this agent lives on."""
+        denied = await self._gate(call)
+        if denied is not None:
+            return denied
+        return await self._run_one(call)
+
     async def _execute_batch(self, calls: list[ToolCall]) -> list[ToolResult]:
         """Run a whole batch; returned list aligns with ``calls`` positionally.
 

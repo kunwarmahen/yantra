@@ -1301,3 +1301,43 @@ class TestCatalogUses:
     def test_a_recipe_from_elsewhere_is_never_reported(self, tmp_path):
         from yantra.skills.share import catalog_origin
         assert catalog_origin("greet-someone", tmp_path) is None
+
+
+class TestOnAnAsyncAgent:
+    """A host on an event loop (a service like Dvara) runs an AsyncAgent.
+    The learner runs in a worker thread; its test call must still go
+    through that agent's own gate and bash, on the agent's loop."""
+
+    def test_a_recipe_is_tested_through_the_async_agents_gate(self, tmp_path):
+        import asyncio
+
+        from yantra.async_agent import AsyncAgent
+
+        asked = []
+
+        def gate(request):
+            asked.append(request.arguments.get("command", ""))
+            return True
+
+        registry = ToolRegistry()
+        registry.register(Bash())
+        agent = AsyncAgent(ScriptedProvider([*solved_turn(), assistant_text(reply())]),
+                           model="m", tools=registry, cwd=tmp_path, permissions=gate)
+        enable_skills(agent, tmp_path, home=tmp_path / "home")
+
+        async def go():
+            end = None
+            async for event in agent.run_streaming("greet world"):
+                if isinstance(event, TurnEnd):
+                    end = event
+            loop = asyncio.get_running_loop()
+            learner = Learner(agent, "ask", home=tmp_path / "home",
+                              execute=lambda call: asyncio.run_coroutine_threadsafe(
+                                  agent._execute(call), loop).result())
+            learner.after_turn(end)
+            return await asyncio.to_thread(learner.consider)
+
+        offer = asyncio.run(go())
+        assert offer is not None and offer.tested is True
+        assert "greeted world" in offer.test_output
+        assert "SKILL_DIR" in asked[-1]     # the gate saw the test call

@@ -63,9 +63,11 @@ def _offer_data(offer: Any) -> dict[str, Any]:
 
 
 def save(cwd: Path, recipes: dict[str, tuple[Any, Any]], memories: list[Any],
-         guides: dict[str, Any]) -> None:
-    """The whole tray, written atomically; an empty tray removes the file."""
-    target = path_for(cwd)
+         guides: dict[str, Any], *, path: Path | None = None) -> None:
+    """The whole tray, written atomically; an empty tray removes the file.
+    ``path``: a host that keeps its own state (a service serving several
+    people) names the file; otherwise it is ``path_for(cwd)``."""
+    target = Path(path) if path is not None else path_for(cwd)
     if not recipes and not memories and not guides:
         target.unlink(missing_ok=True)
         return
@@ -89,14 +91,16 @@ def save(cwd: Path, recipes: dict[str, tuple[Any, Any]], memories: list[Any],
         raise
 
 
-def load(cwd: Path, agent: Any, learner: Any) -> tuple[dict[str, tuple[Any, Any]],
-                                                       list[Any], dict[str, Any], list[str]]:
+def load(cwd: Path, agent: Any, learner: Any, *,
+         path: Path | None = None) -> tuple[dict[str, tuple[Any, Any]],
+                                            list[Any], dict[str, Any], list[str]]:
     """(recipes, memories, guides, notes) as they were left. ``learner``
-    is the one recipes are saved through; notes say what was dropped."""
+    is the one recipes are saved through; notes say what was dropped.
+    ``path`` as for ``save``."""
     from yantra.memory.reflect import Candidate
     from yantra.site_guide import GuideOffer
 
-    target = path_for(cwd)
+    target = Path(path) if path is not None else path_for(cwd)
     notes: list[str] = []
     try:
         data = json.loads(target.read_text(encoding="utf-8"))

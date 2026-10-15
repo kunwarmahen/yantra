@@ -823,7 +823,8 @@ class Learner:
     """
 
     def __init__(self, agent: Any, mode: str = "ask",
-                 *, home: Path | None = None) -> None:
+                 *, home: Path | None = None,
+                 execute: Callable[[ToolCall], ToolResult] | None = None) -> None:
         if mode not in MODES:
             raise ValueError(f"unknown learn mode {mode!r} "
                              f"(want one of {', '.join(MODES)})")
@@ -834,6 +835,12 @@ class Learner:
         # from the roster it was meant to join.
         skills = getattr(agent, "skills", None)
         self.home = home if home is not None else getattr(skills, "home", None)
+        #: How a test call is run: through the session's own gate and tool.
+        #: The sync agent's ``_execute`` unless the host says otherwise -- a
+        #: host whose agent lives on an event loop (an async agent) hands in
+        #: one that runs the call there and waits for it, since the learner
+        #: itself runs in a worker thread.
+        self.execute = execute or (lambda call: self.agent._execute(call))
         #: Why the last ``consider`` offered nothing, for ``/learn``.
         self.last_skip: str | None = None
         #: What ``after_turn`` counted last: (name, worked) pairs.
@@ -1234,7 +1241,7 @@ class Learner:
                         arguments={"command": command, "timeout": TEST_TIMEOUT})
         could_hold, agent.can_hold = agent.can_hold, False
         try:
-            result = agent._execute(call)
+            result = self.execute(call)
         finally:
             agent.can_hold = could_hold
             # Refusal codes are drained onto a turn's events; this call
@@ -1376,7 +1383,7 @@ class Learner:
                         name=offer.tool.name, arguments=dict(offer.test_args))
         could_hold, agent.can_hold = agent.can_hold, False
         try:
-            result = agent._execute(call)
+            result = self.execute(call)
         finally:
             agent.can_hold = could_hold
             agent.registry.unregister(offer.tool.name)

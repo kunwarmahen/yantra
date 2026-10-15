@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2813 tests. The
+The harness underneath is complete and covered by 2815 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -2916,7 +2916,9 @@ src/yantra/
 │                   tray.py keeps that tray on disk, in the state
 │                   directory (facts about you wait there too), per
 │                   workspace: a restart brings back what still can be
-│                   saved, and says what was dropped
+│                   saved, and says what was dropped; a host serving
+│                   several people names its own file (path=), and gives
+│                   the learner execute= to test on an async agent
 └── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per
@@ -3036,7 +3038,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2813 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2815 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -3068,7 +3070,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2813 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2815 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The
