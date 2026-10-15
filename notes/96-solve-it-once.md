@@ -177,6 +177,12 @@ The test runs from the working folder, as the solve did, with
 `$SKILL_DIR` pointing at the staged draft
 (`.yantra/learning/NAME/`, under the gitignored folder).
 
+An agent with no `bash` at all (a package that only browses, or only
+calls its accounts) could never test a script, so a draft with one would
+always be dropped. The write-up is told so: *this agent has no shell to
+run a script with*, and its skill is the numbered steps alone, offered
+with nothing to test.
+
 ## Where they live
 
 | | |

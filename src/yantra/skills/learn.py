@@ -467,6 +467,13 @@ standard library only (or bash), taking the inputs as command-line \
 arguments, printing what it did, and exiting non-zero when it failed. \
 Otherwise write no script."""
 
+#: Added when the agent has no bash tool (a package that only browses or
+#: calls its accounts): a script it could never test would be dropped.
+NO_SHELL = """
+
+This agent has no shell to run a script with: write SCRIPT: none and \
+TEST: none, and keep the skill to its numbered steps."""
+
 #: The reply's shape. ``{verdict}`` and ``{name}`` differ between a new
 #: skill and an update; everything else is one format, one parser.
 SHAPE = """\
@@ -981,6 +988,10 @@ class Learner:
                 set_aside=self._set_aside(), connectors=self._connectors_hint(),
                 digest=digest(turn, found))
             say("looking at what worked, to see if it is worth keeping")
+        if not self._has_shell():
+            # A script here could never be tested, so it would never be
+            # offered: an agent with no shell keeps written steps only.
+            prompt += NO_SHELL
         spent = Usage()
         reply = self._complete(prompt, spent)
         try:
@@ -1224,6 +1235,11 @@ class Learner:
                 return
             draft.script = fixed
             (offer.staging / draft.script_name).write_text(fixed, encoding="utf-8")
+
+    def _has_shell(self) -> bool:
+        registry = getattr(self.agent, "registry", None)
+        return (registry is not None and "bash" in registry
+                and not registry.is_disabled("bash"))
 
     def run_test(self, draft: Draft, staging: Path) -> tuple[bool, str]:
         """One run through the session's bash tool and permission gate.

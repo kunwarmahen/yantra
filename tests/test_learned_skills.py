@@ -1341,3 +1341,28 @@ class TestOnAnAsyncAgent:
         assert offer is not None and offer.tested is True
         assert "greeted world" in offer.test_output
         assert "SKILL_DIR" in asked[-1]     # the gate saw the test call
+
+
+class TestNoShell:
+    """A package with no bash (one that browses, or calls its accounts) can
+    never test a script, so a script draft would always be dropped. The
+    write-up is told so, and asks for steps only."""
+
+    def test_an_agent_without_bash_is_asked_for_steps_only(self, tmp_path):
+        registry = ToolRegistry()
+        from yantra.tools.fs import ReadFile
+        registry.register(ReadFile())
+        script = [*(assistant_tool_call(f"c{i}", "read_file", {"path": "x"},
+                                        usage=Usage(10, 5)) for i in range(1, 5)),
+                  assistant_text("Read it.", usage=Usage(10, 5)),
+                  assistant_text(reply(test="none").replace("SCRIPT: scripts/greet.py",
+                                                            "SCRIPT: none"))]
+        (tmp_path / "x").write_text("hi")
+        agent = Agent(ScriptedProvider(script), model="m", tools=registry,
+                      cwd=tmp_path, permissions=yolo)
+        enable_skills(agent, tmp_path, home=tmp_path / "home")
+        learner = learner_after(agent)
+        offer = learner.consider()
+        asked = agent.provider.last_request()["messages"][0].text()
+        assert "no shell to run a script with" in asked
+        assert offer is not None and offer.tested is None
