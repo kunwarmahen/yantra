@@ -185,6 +185,62 @@ class TestReadingPressesNothing:
         assert s._page.scrolls == 1 and s._page.opts[-1]["from_view"] is True
 
 
+class TestScriptLinks:
+    """A site whose pages open by script (Yahoo Mail's message list) has
+    links with no address; ``follow`` presses them only where the
+    manifest says ``script_links``, and never one that changes things."""
+
+    LINKS = [
+        {"ref": "e1", "kind": "link", "label": "Unread message Bank You sent money with "
+         "Zelle · You sent $165.00 to a friend, delete this if it was not you",
+         "goes": "https://mail.shop.test/n/inbox/message/1"},
+        {"ref": "e2", "kind": "link", "label": "Delete"},
+        {"ref": "e3", "kind": "link", "label": "Buy now"},
+        {"ref": "e4", "kind": "button", "label": "Open"},
+        {"ref": "e5", "kind": "link", "label": "Leave", "goes": "https://evil.test/"},
+    ]
+    ON = SiteRules(name="Shop", hosts=("shop.test",), home=HOME, spend_pages=("/checkout/*",),
+                   spend_words=("buy now",), pace=0.0, script_links=True)
+
+    def test_off_unless_the_site_says_so_and_the_refusal_names_the_switch(self):
+        s = session(Page(elements=self.LINKS))
+        with pytest.raises(ToolError, match="script_links = true"):
+            s._follow("e1")
+        assert s._page.clicks == []
+
+    def test_a_long_label_is_content_and_its_link_is_pressed(self):
+        s = session(Page(elements=self.LINKS), rules=self.ON)
+        s._follow("e1")
+        assert s._page.clicks == ["e1"] and s.actions == 0     # a read, not counted
+        assert s._page.url.endswith("/message/1")
+
+    def test_a_short_label_that_changes_things_is_not_followed(self):
+        s = session(Page(elements=self.LINKS), rules=self.ON)
+        with pytest.raises(ToolError, match="'delete' link"):
+            s._follow("e2")
+        with pytest.raises(ToolError, match="buy now"):
+            s._follow("e3")
+        with pytest.raises(ToolError, match="not a link"):
+            s._follow("e4")
+        assert s._page.clicks == []
+
+    def test_nothing_is_pressed_on_a_spending_page_or_off_the_site(self):
+        s = session(Page(url="https://www.shop.test/checkout/1", elements=self.LINKS),
+                    rules=self.ON)
+        with pytest.raises(ToolError, match="spends money"):
+            s._follow("e1")
+        s = session(Page(elements=self.LINKS), rules=self.ON)
+        with pytest.raises(ToolError, match="went back"):
+            s._follow("e5")
+
+    def test_the_switch_comes_from_the_card_and_only_when_true(self):
+        card = {"name": "Mail", "hosts": ["shop.test"],
+                "browser": {"start_url": HOME, "script_links": True}}
+        assert rules_from(card, {}).script_links is True
+        card["browser"]["script_links"] = "yes"
+        assert rules_from(card, {}).script_links is False
+
+
 class TestSpendingIsThePersons:
     def test_a_buy_button_is_refused_before_it_is_pressed(self):
         s = session()

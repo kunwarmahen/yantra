@@ -73,7 +73,11 @@ says ``[connections] needs = ["gmail:read"]``, and you said yes once to
 that package at that level (``load_approved``). The level is a ceiling:
 ``read`` keeps only the manifest's read tools, ``write`` adds writes,
 ``spend`` everything. Your own sessions see every connection, as
-before. A need whose account is not connected yet waits on the session
+before. A need of ``*`` (``"*:read"``) is every account the person has
+connected, now or later, at that level -- for a household's own agent,
+which should read what its person reads; it is asked about once, like
+any other need, and a connector named on its own still sets its level.
+A need whose account is not connected yet waits on the session
 (``Setu.needs``), and the first look that finds it connected asks then
 (``Setu.offer``) -- sign in on the page mid-session and the question
 follows, rather than the next launch.
@@ -368,17 +372,23 @@ def ceiling_of(allow: dict[str, str] | None, row: dict[str, Any]) -> str | None:
     """How far ``allow`` lets this connection reach: its level, or None
     when it may not be used at all. A key may name one account
     (``gmail:personal``) or every account of a connector (``gmail``); the
-    account's own key wins. No ``allow`` (your own session): no limit,
-    which is the highest level."""
+    account's own key wins. ``*`` reaches every connector; where a
+    connector is named too, the higher of the two. No ``allow`` (your
+    own session): no limit, which is the highest level."""
     if allow is None:
         return VERB_CLASSES[-1]
     cid = row.get("connector", "")
-    return allow.get(f"{cid}:{account_of(row)}") or allow.get(cid)
+    own = allow.get(f"{cid}:{account_of(row)}")
+    if own:
+        return own
+    found = [k for k in (allow.get(cid), allow.get(EVERY)) if k in CLASS_RANK]
+    return max(found, key=CLASS_RANK.__getitem__) if found else None
 
 
 def connector_allowed(allow: dict[str, str] | None, cid: str) -> bool:
     """Whether any key of ``allow`` reaches this connector at all."""
-    return allow is None or cid in allow or any(k.startswith(f"{cid}:") for k in allow)
+    return (allow is None or cid in allow or EVERY in allow
+            or any(k.startswith(f"{cid}:") for k in allow))
 
 
 def phone_rules(link: Link | None, allow: dict[str, str] | None = None) -> dict[str, Any]:
@@ -458,7 +468,13 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
     gone = [r for r in link.expired if ceiling_of(allow, r)]
     idle = [c for c in connectors.values() if not c.get("connected")
             and (connector_allowed(allow, c["id"]) or c["id"] in mention)]
-    if not rows and not idle and not shut and not gone:
+    # the person's own, kept from this agent: named, so a missing tool is
+    # not taken for a missing account and worked around -- a door's agent
+    # once went to the phone for one. Only to a package that asked for
+    # some: one that asked for none hears of none.
+    apart = ([r for r in link.connections if not ceiling_of(allow, r)]
+             if allow is not None and (allow or mention) else [])
+    if not rows and not idle and not shut and not gone and not apart:
         return None
     lines = ["# Connected accounts (through Setu)",
              "The person has signed in to these; their tools are prefixed "
@@ -507,6 +523,13 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
         lines.append(f"- {name} `{row['mcp']['name']}`{who}: {level}")
     if allow is not None:
         lines.append("This agent may use only these, at the level the person allowed.")
+        if apart:
+            names = ", ".join(f"{(connectors.get(r.get('connector', '')) or {}).get('name', '')}"
+                              f" (`{r.get('ref')}`)" for r in apart)
+            lines.append(f"The person also has {names} connected, but this agent was not "
+                         "given it: its package's [connections] needs does not name it "
+                         "(\"*:read\" there names every account). If asked, say so; do "
+                         "not reach it another way, such as the phone or a browser.")
     if shut:
         lines.append(f"Connected but locked right now, so not usable ({locked_how}):")
         lines += [f"- {(connectors.get(r.get('connector', '')) or {}).get('name', '')} "
@@ -644,12 +667,15 @@ def connectors_hint(link: Link | None) -> str:
 # ---- what a package asks for -------------------------------------------------
 
 #: One ``[connections] needs`` entry: a connector id, then the level.
-NEED_SPEC_RE = re.compile(r"^([a-z0-9][a-z0-9_-]*)(?::([a-z]+))?$")
+NEED_SPEC_RE = re.compile(r"^([a-z0-9][a-z0-9_-]*|\*)(?::([a-z]+))?$")
+#: The need that names every connector: ``"*:read"``.
+EVERY = "*"
 
 
 def parse_need(text: str) -> str:
     """``gmail`` or ``gmail:write`` -> ``gmail:write``; read when no level
-    is said, since a package asking for less is the safe misreading."""
+    is said, since a package asking for less is the safe misreading.
+    ``*`` is every connector (``EVERY``)."""
     found = NEED_SPEC_RE.match(str(text).strip().lower())
     if not found or (found.group(2) or "read") not in VERB_CLASSES:
         raise ValueError(f"{text!r}: expected a connector id, optionally with a level "
@@ -1120,10 +1146,11 @@ class Setu:
         if link is None:
             return None
         cid, _, klass = need.partition(":")
-        rows = [r for r in link.connections if r.get("connector") == cid]
+        rows = [r for r in link.connections if cid in (EVERY, r.get("connector"))]
         if not rows:
             return None
-        name = (link.connectors.get(cid) or {}).get("name", cid)
+        name = ("connected accounts, and any you connect later" if cid == EVERY
+                 else (link.connectors.get(cid) or {}).get("name", cid))
         who = ", ".join(r.get("email") or r.get("ref", cid) for r in rows)
         return {"need": need, "connector": cid, "name": name, "level": klass,
                 "question": f"{self.package} wants to {CLASS_WORDS[klass]} your "

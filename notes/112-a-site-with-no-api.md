@@ -69,7 +69,10 @@ asking:
 * **`follow` loads the link's address. It does not click.** No script on
   the page runs for it, so a "link" that is really a buy button gets
   nothing. A link with no address of its own is refused and pointed at
-  `click`.
+  `click`, unless the site's file says its links are scripts
+  (`script_links = true`, Yahoo Mail's inbox): then `follow` presses the
+  link, and still never one whose words spend, delete or send
+  ([note 128](128-a-link-that-runs-a-script.md)).
 * **`search` types only into a search box**, meaning an input whose type,
   role, label or surrounding form says *search*, and never one inside a
   form that posts. That matters more than it sounds: on X, Enter in the

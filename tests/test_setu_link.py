@@ -569,6 +569,48 @@ def test_a_need_reads_as_connector_and_level():
     assert setu_link.needs_allow(["gmail:read", "gmail:spend"]) == {"gmail": "spend"}
 
 
+def test_a_need_of_every_connector_reads_as_a_star():
+    assert setu_link.parse_need("*") == "*:read"
+    assert setu_link.parse_need("*:write") == "*:write"
+    with pytest.raises(ValueError):
+        setu_link.parse_need("gm*il")
+
+
+class TestEveryAccount:
+    """``"*:read"`` is a household's own agent reading what its person
+    reads. The bias: A STAR THAT REACHES PAST ITS LEVEL, or a named
+    connector's own level lost under it."""
+
+    ROW = {"connector": "yahoo", "account": "personal"}
+
+    def test_a_star_reaches_every_connector_at_its_level(self):
+        assert setu_link.ceiling_of({"*": "read"}, self.ROW) == "read"
+        assert setu_link.connector_allowed({"*": "read"}, "yahoo")
+
+    def test_a_named_connector_keeps_the_higher_of_the_two(self):
+        assert setu_link.ceiling_of({"*": "read", "yahoo": "write"}, self.ROW) == "write"
+        assert setu_link.ceiling_of({"*": "write", "yahoo": "read"}, self.ROW) == "write"
+        assert setu_link.ceiling_of({"*": "write", "yahoo:personal": "read"},
+                                    self.ROW) == "read"
+
+    def test_the_question_names_every_account(self):
+        setu = setu_link.Setu(mode="on", allow={})
+        setu.package = "minder"
+        setu.link = setu_link.Link(data=status(["connector"]), road="test")
+        asked = setu.question("*:read")
+        assert asked is not None and "connected accounts, and any you connect later" \
+            in asked["question"]
+
+
+def test_a_connection_the_package_was_not_given_is_named_so_it_is_not_worked_around():
+    # a door's agent without Yahoo's tools went to the phone for Yahoo
+    link = setu_link.Link(data=status(["connector"]), road="test")
+    said = setu_link.prompt_text(link, allow={"outlook": "read"})
+    assert "but this agent was not given it" in said and "Gmail" in said
+    assert "not reach it another way" in said
+    assert "not given" not in (setu_link.prompt_text(link, allow={"gmail": "read"}) or "")
+
+
 def test_recipes_are_listed_under_the_connector_they_need():
     def skill(name, needs, learned=True, shared=""):
         return SimpleNamespace(name=name, needs=needs, is_learned=learned, shared=shared)

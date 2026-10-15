@@ -22,6 +22,16 @@ wrote down, because a generic browser cannot tell reading from buying:
   types into a box only when it is a search box, and presses Enter
   there. With ``scroll`` and ``open`` that is the whole Read only level,
   and none of it is asked about.
+* UNLESS THE SITE'S LINKS ARE SCRIPTS. Some sites open a page with a
+  script and no address (Yahoo Mail's message list: ``role="link"`` with
+  no ``href``), so reading them means pressing. A manifest that says
+  ``script_links = true`` lets ``follow`` press such a link -- a link,
+  never a button -- after the same refusals ``click`` makes (a spending
+  page, a word that spends) and a few of its own: a short label that
+  deletes, sends, moves or posts. Short, because a long label is the
+  link's content (a mail row carries its preview, and "You sent money"
+  in one is a message to read, not a button). Off unless the manifest
+  says so; the press is a read, like the opening of a message it is.
 * ACTING IS ASKED, AND COUNTED. ``click`` and ``fill`` exist at the write
   level only, are asked about every time (their class is write), and
   stop after the manifest's ``max_actions`` in one session.
@@ -68,6 +78,14 @@ ROBOT_HINTS = ("captcha", "are you a robot", "not a robot", "are you human",
 #: How long a page that builds itself in the browser (X) gets to put
 #: some text on the screen before the snapshot is taken anyway.
 PAINT_TIMEOUT_MS = 8_000
+#: Words in a script link's label that mean it changes something:
+#: ``follow`` never presses one, even where the site's links are scripts.
+ACT_WORDS = ("delete", "remove", "trash", "archive", "spam", "block", "report",
+             "unsubscribe", "send", "post", "reply", "forward", "move", "mark",
+             "like", "follow", "share", "sign out", "log out", "logout", "empty")
+#: A label up to this many words is a control's name, checked for
+#: ACT_WORDS and spending words; a longer one is the link's content.
+SHORT_LABEL_WORDS = 6
 #: A scroll's wait for the next part of an endless page to load.
 SCROLL_SETTLE_MS = 1_200
 
@@ -114,6 +132,7 @@ class SiteRules:
     max_actions: int = 20
     headed: bool = False
     guide: str = ""
+    script_links: bool = False
 
     def allowed(self, url: str) -> bool:
         host = (urlparse(url).hostname or "").lower()
@@ -271,8 +290,12 @@ class SiteSession(BrowserSession):
         href = self._locator(page, ref).evaluate(
             "el => el.href || (el.closest('a') || {}).href || ''")
         if not href or not str(href).startswith(("http://", "https://")):
+            if self.rules.script_links:
+                return self._press_link(ref, element)
             raise ToolError(f"{ref} has no address to load (a link that runs a script); "
-                            "it needs click, which is asked about")
+                            "it needs click, which is asked about. (A site whose links "
+                            "are all like this can let reading press them: "
+                            "script_links = true in its Setu site file)")
         self._check_address(href)
         self._pace()
         try:
@@ -280,6 +303,30 @@ class SiteSession(BrowserSession):
         except Exception as exc:
             raise ToolError(f"could not load {href}: {type(exc).__name__}: {exc}") from exc
         self._settle()
+        return self._snapshot()
+
+    def _press_link(self, ref: str, element: dict[str, Any]) -> str:
+        """A link with no address, pressed as a read (``script_links``)."""
+        page = self._require_page()
+        self._refuse_spending(ref)
+        label = str(element.get("label") or "")
+        if len(label.split()) <= SHORT_LABEL_WORDS:
+            text = label.lower()
+            word = next((w for w in ACT_WORDS
+                         if re.search(r"(?<!\w)" + re.escape(w) + r"(?!\w)", text)), None)
+            if word:
+                self._note("refused", ref)
+                raise ToolError(f"{ref} ({label!r}) is a '{word}' link -- it changes "
+                                "something, so following it is not reading. It needs "
+                                "click, which is asked about")
+        before = page.url
+        self._pace()
+        try:
+            self._locator(page, ref).click(timeout=10_000)
+        except Exception as exc:
+            raise ToolError(f"could not open {ref}: {type(exc).__name__}: {exc}") from exc
+        self._settle()
+        self._landed(before)
         return self._snapshot()
 
     def _scroll(self) -> str:
@@ -372,8 +419,9 @@ VERBS: dict[str, tuple[str, dict[str, Any]]] = {
                                      "/account/orders. Omit for its home page, or to "
                                      "re-read the page already open."}}),
     "follow": ("Go to a link on the open {site} page by its [eN] ref -- the way to page "
-               "through orders, posts and results. Loads the link's address; presses "
-               "nothing.",
+               "through orders, posts and results, or to open one. Loads the link's "
+               "address; presses nothing (on a site whose links run scripts, presses "
+               "the link itself -- never a button).",
                {"ref": {"type": "string", "description": "A link's ref, e.g. 'e12'."}}),
     "scroll": ("Scroll the open {site} page down one screen and read what comes into view "
                "-- endless pages (a timeline) load more as they scroll.", {}),
@@ -539,4 +587,5 @@ def rules_from(card: dict[str, Any], row: dict[str, Any]) -> SiteRules:
         max_actions=int(spec.get("max_actions", 20)),
         headed=bool(spec.get("headed", False)),
         guide=str(spec.get("guide") or "").replace("{home}", home.rstrip("/")),
+        script_links=spec.get("script_links") is True,
     )

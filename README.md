@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2803 tests. The
+The harness underneath is complete and covered by 2813 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -671,8 +671,11 @@ own (Home Assistant's), and then it is asked about
 one service share one set of tools with an `account` argument, which
 anything that sends must fill. An agent package gets none of your
 accounts unless its `agent.toml` asks (`[connections] needs =
-["gmail:read"]`) and you say yes once, in the terminal or on the
-Connections panel. An account it needs that you connect while it runs
+["gmail:read"]`, or `"*:read"` for every account you have) and you say
+yes once, in the terminal or on the Connections panel. One you have but
+it didn't ask for is named to it as not given, so it says so instead of
+reaching the account some other way
+([notes/128](notes/128-a-link-that-runs-a-script.md)). An account it needs that you connect while it runs
 is asked about then, on the panel. The panel's **forget** (or `--forget-connections`)
 takes it back. With a signed Setu catalog, each card also says who wrote
 the connector (by Setu, a reviewed partner, or sideloaded; a site you added
@@ -689,7 +692,11 @@ browser road: `setu connect amazon` opens a window of your own Chrome on a
 profile kept for that connection, you sign in and close it, and the agent
 gets `amazon_open`, `amazon_follow`, `amazon_scroll` and `amazon_search`.
 None of them press anything, so they run unasked; the write level adds
-`click` and `fill`, asked every time. The tools keep to the site's own
+`click` and `fill`, asked every time. A site whose pages open by script,
+with no address to load (Yahoo Mail's inbox), says `script_links = true`
+in its site file, and then `follow` presses such a link, never a button
+and never one whose words spend, delete or send
+([notes/128](notes/128-a-link-that-runs-a-script.md)). The tools keep to the site's own
 hosts, refuse anything that buys, pays or can't be undone (that page is
 handed to you), never type a password or card number, and keep the
 manifest's pace (X: 3 seconds a page, 10 actions a session, a real window
@@ -1429,7 +1436,8 @@ verbs = { list = "all_memories" }   # only for a server: its tool per verb,
 needs = ["gmail:read"]          # your Setu accounts it may use: connector,
                                 # then read | write | spend; asked once, and
                                 # none at all without this; their tools come
-                                # with them, past [tools] allow (notes/110)
+                                # with them, past [tools] allow (notes/110);
+                                # "*:read" is every account (notes/128)
 ```
 
 A package may also declare the MCP servers it needs. Every session
@@ -2483,7 +2491,9 @@ src/yantra/
 │                   [connections] needs, allowed once (terminal or page,
 │                   or the panel when the account arrives mid-session),
 │                   as a level ceiling, forgotten with one click
-│                   ([notes/110](notes/110-which-account-and-who-may-use-it.md)).
+│                   ([notes/110](notes/110-which-account-and-who-may-use-it.md));
+│                   `*` is every connector, and one it wasn't given is
+│                   named as not given ([notes/128](notes/128-a-link-that-runs-a-script.md)).
 │                   A browser-road connection (no `mcp`, a profile) gets
 │                   its own site tools instead of a server
 │                   ([notes/112](notes/112-a-site-with-no-api.md)).
@@ -2816,7 +2826,9 @@ src/yantra/
 │   │               at the write level, click/fill (asked) on that
 │   │               connection's own profile -- kept to the site's hosts,
 │   │               spending pages and buttons refused, no password typed,
-│   │               the manifest's pace and action limit ([notes/112](notes/112-a-site-with-no-api.md))
+│   │               the manifest's pace and action limit ([notes/112](notes/112-a-site-with-no-api.md));
+│   │               script_links: follow presses a link with no address,
+│   │               never one that spends, deletes or sends ([notes/128](notes/128-a-link-that-runs-a-script.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,
@@ -3024,7 +3036,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2803 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2813 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -3056,7 +3068,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2803 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2813 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

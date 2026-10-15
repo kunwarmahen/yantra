@@ -251,3 +251,9 @@ connected, and the next look asks once.
   `mcp__gmail-personal__…` to `mcp__gmail__…` even with one account
   would keep names stable when a second arrives. It would also rename
   every one-account setup that works today, recipes included.
+
+A package that should read everything its person has connected (a
+household's own agent) asks for `"*:read"`, and an account a package
+was not given is now named to it as not given, so the agent says so
+instead of reaching the account some other way:
+[note 128](128-a-link-that-runs-a-script.md).
