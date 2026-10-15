@@ -98,13 +98,18 @@ class SkillRegistry:
 
     def __init__(self, found: SkillSet | None = None,
                  *, cwd: Path | None = None, home: Path | None = None,
+                 only: tuple[Path, ...] | None = None,
                  roster_limit: int = ROSTER_LIMIT) -> None:
         self.cwd = (cwd or Path.cwd()).resolve()
         #: Injectable for the same reason discover() takes it: a test (or a
         #: container) must be able to scan roots that are not $HOME.
         self.home = home
+        #: The package's own folders, when the host keeps this agent to
+        #: them and its working folder (loader.skill_roots); kept for every
+        #: rescan, so a reload never widens what it sees.
+        self.only = tuple(only) if only is not None else None
         self.found = (found if found is not None
-                      else discover(self.cwd, home=self.home))
+                      else discover(self.cwd, home=self.home, only=self.only))
         self.roster_limit = roster_limit
         #: Names the model actually pulled this session, in order. Cheap
         #: observability: it answers "did the skill even fire?", which is
@@ -532,7 +537,7 @@ class SkillRegistry:
         duplicates and history may reference them); only the SET and the
         roster change.
         """
-        self.found = discover(self.cwd, home=self.home)
+        self.found = discover(self.cwd, home=self.home, only=self.only)
         self.loaded = [n for n in self.loaded if self.found.get(n)]
         # A disable survives a rescan (the operator pulled that NAME, not
         # that file), but a deleted skill stops being disabled-and-absent.
@@ -598,7 +603,8 @@ def write_atomic(path: Path, text: str) -> None:
 
 def enable_skills(agent: Any, cwd: Path | None = None,
                   *, found: SkillSet | None = None,
-                  home: Path | None = None) -> SkillRegistry:
+                  home: Path | None = None,
+                  only: tuple[Path, ...] | None = None) -> SkillRegistry:
     """Discover, compose, register -- the one call a host makes.
 
     Factored like enable_subagents so embedders and tests can turn
@@ -606,4 +612,4 @@ def enable_skills(agent: Any, cwd: Path | None = None,
     empty one: ``/skills`` on a project with none should explain where
     they go, not report that the feature is missing.
     """
-    return SkillRegistry(found, cwd=cwd, home=home).attach(agent)
+    return SkillRegistry(found, cwd=cwd, home=home, only=only).attach(agent)

@@ -572,25 +572,38 @@ def render_skill_md(name: str, description: str, body: str, *,
 
 
 def skill_roots(cwd: Path | None = None,
-                *, home: Path | None = None) -> list[tuple[Path, str]]:
+                *, home: Path | None = None,
+                only: tuple[Path, ...] | None = None) -> list[tuple[Path, str]]:
     """Every directory to scan, NEAREST FIRST (see ENV_PATH's note).
 
     Paths are returned whether or not they exist -- callers that report
     roots (``/skills``) want to say "no skills yet, put them in X".
+
+    ``only``: a host serving several people (Dvara) names the package's own
+    skill folders, and the scan is those plus the working folder's -- no
+    $YANTRA_SKILLS_PATH and no home folder. Both of those belong to whoever
+    runs the process, and in a process serving many people they would
+    reach every one of them (and one package's folder, put in the
+    environment, would reach every other package).
     """
     cwd = (cwd or Path.cwd()).resolve()
     roots: list[tuple[Path, str]] = []
-    for entry in os.environ.get(ENV_PATH, "").split(os.pathsep):
-        entry = entry.strip()
-        if entry:
-            roots.append((Path(entry).expanduser(), "path"))
+    if only is None:
+        for entry in os.environ.get(ENV_PATH, "").split(os.pathsep):
+            entry = entry.strip()
+            if entry:
+                roots.append((Path(entry).expanduser(), "path"))
+    else:
+        roots += [(Path(d), "package") for d in only]
     roots.append((cwd.joinpath(*PROJECT_PRIVATE), "local"))
     roots.append((cwd.joinpath(*PROJECT_SHARED), "project"))
     home = home or Path.home()
-    roots.append((home.joinpath(*USER_ROOT), "user"))
+    if only is None:
+        roots.append((home.joinpath(*USER_ROOT), "user"))
     # Learned roots last: a hand-written skill wins its name (see top).
     roots.append((cwd.joinpath(*LEARNED_LOCAL), LEARNED_SOURCES["project"]))
-    roots.append((home.joinpath(*LEARNED_USER), LEARNED_SOURCES["user"]))
+    if only is None:
+        roots.append((home.joinpath(*LEARNED_USER), LEARNED_SOURCES["user"]))
     return roots
 
 
@@ -626,7 +639,8 @@ def prepend_skill_path(dirs) -> None:
 
 
 def discover(cwd: Path | None = None,
-             *, home: Path | None = None) -> SkillSet:
+             *, home: Path | None = None,
+             only: tuple[Path, ...] | None = None) -> SkillSet:
     """Scan every root and return what is loadable, broken, or shadowed.
 
     Never raises for bad CONTENT -- that is what SkillSet.broken is for.
@@ -636,7 +650,7 @@ def discover(cwd: Path | None = None,
     """
     found = SkillSet()
     claimed: dict[str, Path] = {}
-    for root, source in skill_roots(cwd, home=home):
+    for root, source in skill_roots(cwd, home=home, only=only):
         try:
             entries = sorted(p for p in root.iterdir() if p.is_dir())
         except OSError:

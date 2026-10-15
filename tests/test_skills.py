@@ -901,3 +901,55 @@ class TestSkillFoldersOutsideTheWorkspace:
         # and each one, copied as given, is readable
         for line in listed.splitlines():
             assert ReadFile().run({"path": line.strip()}, agent.ctx)
+
+
+class TestOwnSkillsOnly:
+    """A host serving several people from one process (Dvara) keeps each
+    agent to its package's skills and its own working folder. The BIAS is
+    the owner's skills reaching everybody: the home folder's, the ones
+    learned at the owner's page, and $YANTRA_SKILLS_PATH -- and one
+    package's folder, once put in the environment, reaching every other
+    package in the process."""
+
+    @staticmethod
+    def skill(root, name):
+        return write_skill(root, name, GOOD.replace("pr-review", name))
+
+    def build(self, tmp_path, monkeypatch, *, package="minder"):
+        import os
+
+        from conftest import ScriptedProvider
+        from yantra.spec import AgentSpec
+
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        self.skill(tmp_path / "home" / ".yantra" / "skills", "owners-own")
+        self.skill(tmp_path / "home" / ".yantra" / "skills" / "learned", "owners-learned")
+        self.skill(tmp_path / "elsewhere", "from-the-path")
+        monkeypatch.setenv("YANTRA_SKILLS_PATH", str(tmp_path / "elsewhere"))
+        self.skill(tmp_path / package / "skills", f"{package}-recipe")
+        work = tmp_path / "work" / package
+        self.skill(work / ".yantra" / "skills" / "learned", "kept-by-this-person")
+        spec = AgentSpec(name=package, skills=True,
+                         skill_dirs=(tmp_path / package / "skills",))
+        before = os.environ["YANTRA_SKILLS_PATH"]
+        agent = spec.build_async(cwd=work, provider=ScriptedProvider([]),
+                                 provider_name="anthropic", model="m",
+                                 own_skills_only=True)
+        assert os.environ["YANTRA_SKILLS_PATH"] == before   # nothing put there
+        return agent
+
+    def test_the_package_and_the_person_only(self, tmp_path, monkeypatch):
+        names = set(self.build(tmp_path, monkeypatch).skills.names())
+        assert names == {"minder-recipe", "kept-by-this-person"}
+
+    def test_a_rescan_never_widens_it(self, tmp_path, monkeypatch):
+        agent = self.build(tmp_path, monkeypatch)
+        agent.skills.reload()
+        assert "owners-own" not in agent.skills.names()
+
+    def test_without_it_nothing_changed(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        self.skill(tmp_path / "home" / ".yantra" / "skills", "owners-own")
+        work = tmp_path / "work"
+        work.mkdir()
+        assert "owners-own" in enable_skills(_agent(), work).names()

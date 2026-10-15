@@ -293,6 +293,7 @@ class AgentSpec:
         max_parallel_tools: int | None = None,
         max_parallel_children: int | None = None,
         memory_user: str | None = None,
+        own_skills_only: bool = False,
     ) -> AsyncAgent:
         """The async twin, for hosts that drive several turns at once.
 
@@ -302,6 +303,11 @@ class AgentSpec:
         concurrently); it is an argument here rather than a spec field
         because it describes the HOST's appetite for parallelism, not the
         agent's character.
+
+        ``own_skills_only``: skills from this package's folders and the
+        working folder only -- never the home folder's or
+        $YANTRA_SKILLS_PATH, which belong to whoever runs the process. For
+        a host serving several people from one process (Dvara).
         """
         extra = ({} if max_parallel_tools is None
                  else {"max_parallel_tools": max_parallel_tools})
@@ -310,12 +316,13 @@ class AgentSpec:
             registry=registry, provider=provider,
             provider_name=provider_name, model=model,
             max_parallel_children=max_parallel_children,
-            memory_user=memory_user, **extra,
+            memory_user=memory_user, own_skills_only=own_skills_only, **extra,
         )
 
     def _assemble(self, agent_cls, *, permissions, sandbox, cwd, registry,
                   provider, provider_name, model,
-                  max_parallel_children=None, memory_user=None, **extra):
+                  max_parallel_children=None, memory_user=None,
+                  own_skills_only=False, **extra):
         """The assembly itself. ONE body, so the sync and async agents can
         never drift into being configured differently."""
         name = provider_name or self.provider or guess_provider()
@@ -408,9 +415,15 @@ class AgentSpec:
         # that declares skills AND excludes load_skill is rejected by
         # load_package; this branch covers the host-enabled-by-default case.
         if self.skills and tools.admits("load_skill"):
-            if self.skill_dirs:
-                prepend_skill_path([str(d) for d in self.skill_dirs])
-            registered = enable_skills(agent, root)
+            if own_skills_only:
+                # Named, never put in the environment: one process serving
+                # many packages must not hand one package's folder to all.
+                registered = enable_skills(agent, root,
+                                           only=tuple(self.skill_dirs or ()))
+            else:
+                if self.skill_dirs:
+                    prepend_skill_path([str(d) for d in self.skill_dirs])
+                registered = enable_skills(agent, root)
             if self.skills_disabled:
                 present = registered.names()
                 doomed = sorted({n for pat in self.skills_disabled

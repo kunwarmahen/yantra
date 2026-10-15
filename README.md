@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2816 tests. The
+The harness underneath is complete and covered by 2819 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -241,6 +241,11 @@ because someone got bitten by it once and wrote it down.
 | `.yantra/skills/` | private overrides (gitignored) |
 | `~/.yantra/skills/` | yours, on every project |
 | `--skills-dir` / `$YANTRA_SKILLS_PATH` | explicit, wins over all of them |
+
+A host that serves several people from one process (Dvara) builds with
+`own_skills_only=True`: the package's own skill folders and the working
+folder only, never the home folder or `$YANTRA_SKILLS_PATH`, which are
+whoever runs the process's ([notes/30](notes/30-skills.md)).
 
 A skill can also declare `mode: subagent`, and then its `allowed-tools`
 stop being advice: the instructions run in a **fresh child agent** built
@@ -3038,7 +3043,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2816 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2819 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -3070,7 +3075,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2816 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2819 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

@@ -325,6 +325,16 @@ travel with the repo, so the committed set lives in a plain top-level
 `skills/`, and `.yantra/skills/` becomes the place to override one
 locally without touching what your team sees.
 
+**A host serving several people** narrows this. `~/.yantra/skills/` and
+`$YANTRA_SKILLS_PATH` belong to whoever runs the process. In a service
+like Dvara, where one process runs agents for everybody in a house, they
+would reach everyone: the owner's own learned skills offered to a guest,
+and one package's folder, once put in the environment, handed to every
+other package. So `build_async(own_skills_only=True)` scans only the
+package's own skill folders (named to the registry, never put in the
+environment) and the working folder's roots, and a rescan keeps to the
+same roots. A skill meant for everybody goes into the package's `skills/`.
+
 ## What a bad skill file costs you
 
 Nothing but a line of output. Discovery never raises into a session: a
