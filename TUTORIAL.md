@@ -2316,7 +2316,10 @@ tutorial, §18): if the phone is locked with a PIN, it asks you on
 Telegram and waits; unlock it and the run goes.
 
 **Not yet:** a schedule run by Yantra alone (`--unattended`, no Dvara)
-gets no phone: nobody would be there to say yes to a held step. Letters
+gets no phone: nobody would be there to say yes to a held step. So a
+schedule that works the phone is asked for from Telegram or Sarathi's
+home page chat (through Dvara); asked here, Samay says so and doesn't
+save it. Letters
 beyond plain English (é, Hindi, emoji) need a small keyboard app on an
 Android phone, which you install once (Sparsh's SETUP.md, Part G). An iPhone needs a Mac to set up once (Sparsh's
 SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
