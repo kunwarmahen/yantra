@@ -2086,6 +2086,10 @@ def _connect_samay(args, mcp_manager, agent, console: Console, spec=None) -> int
     data, program = found
     samay = samay_link.Samay(mode=mode, path=path, data=data, program=program,
                              agent=str(spec.root) if spec is not None and spec.root else "")
+    # A schedule made here may work the phone when this session has Sparsh
+    # and the running clock can ask its person through Dvara: its run is
+    # checked by Dvara first, and its held Sends are asked in their chat.
+    samay.phone = getattr(agent, "sparsh", None) is not None and bool(data.get("local_to"))
     try:
         count = samay.connect(mcp_manager, agent)
     except (MCPError, samay_link.SamayLinkError) as exc:
@@ -2097,6 +2101,10 @@ def _connect_samay(args, mcp_manager, agent, console: Console, spec=None) -> int
     return None
 
 
+#: Set by Samay for a scheduled run that works the phone (its runners.py).
+PHONE_RUN = "YANTRA_PHONE_RUN"
+
+
 def _connect_sparsh(args, mcp_manager, agent, console: Console,
                     model_road: tuple[str, str, str] = ("", "", "")) -> int | None:
     """Start Sparsh's phone tools (sparsh_link.py).
@@ -2105,14 +2113,20 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console,
     could not be used; in auto mode no Sparsh, or no phone attached, is
     silence -- with Sparsh there, a dormant handle is left on
     ``agent.sparsh`` for a phone attached later. Never for a run nobody
-    watches. ``model_road`` is (provider, base url, model): whether the
-    model may be shown screenshots of screens the list can't read.
+    watches -- unless whoever started it said it works the phone
+    (``$YANTRA_PHONE_RUN``: Samay, after Dvara found the phone free) AND
+    its person can be asked (``unattended.Reach``), so a held Send is a
+    question in their chat, not a yes nobody gave. ``model_road`` is
+    (provider, base url, model): whether the model may be shown
+    screenshots of screens the list can't read.
     """
-    from yantra import sparsh_link
+    from yantra import sparsh_link, unattended
 
     mode, path = sparsh_link.resolve_mode(getattr(args, "sparsh", None))
     agent.sparsh = None
-    if mode == "off" or is_unattended():
+    phone_run = (os.environ.get(PHONE_RUN, "").strip() == "1"
+                 and unattended.Reach.from_env() is not None)
+    if mode == "off" or (is_unattended() and not phone_run):
         return None
     try:
         found = sparsh_link.load(mode, path, need_phone=False)
@@ -2967,14 +2981,15 @@ def main(argv: list[str] | None = None) -> int:
                          _ask_yes if sys.stdin.isatty() else None) is not None:
             return 2
 
+        # The person's phone, through Sparsh -- before Samay, whose
+        # schedules may work the phone only when this session has it.
+        if _connect_sparsh(args, mcp_manager, agent, console,
+                           (provider_name, getattr(settings, "base_url", ""), model)) is not None:
+            return 2
+
         # Doing things later, through Samay -- after Setu, so the cards
         # it writes can say which accounts a scheduled run reaches.
         if _connect_samay(args, mcp_manager, agent, console, spec) is not None:
-            return 2
-
-        # The person's phone, through Sparsh.
-        if _connect_sparsh(args, mcp_manager, agent, console,
-                           (provider_name, getattr(settings, "base_url", ""), model)) is not None:
             return 2
 
         _connect_package_mcp(spec.mcp, mcp_manager, console)

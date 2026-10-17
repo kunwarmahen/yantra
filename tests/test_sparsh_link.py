@@ -12,7 +12,9 @@ a real one uses.
 Also designed against:
 
 * **A phone worked with nobody watching.** An unattended run gets no
-  Sparsh tools at all.
+  Sparsh tools at all -- unless whoever started it said it works the
+  phone (``$YANTRA_PHONE_RUN``, Samay after Dvara's check) AND its
+  person can be asked through Dvara; then ``confirm`` still asks.
 * **Tools nobody asked for.** In auto mode, no attached phone means no
   tools and no prompt; asked for by name, it connects and says so.
 * **A Sparsh that speaks another format.** Refused, never guessed at.
@@ -349,6 +351,29 @@ class TestWhenNot:
         try:
             assert code is None and agent.sparsh is None
             assert not (tmp_path / "sparsh-calls.log").exists()
+        finally:
+            manager.shutdown()
+
+    def test_a_scheduled_phone_run_gets_it_only_with_someone_to_ask(
+            self, clean, tmp_path, monkeypatch):
+        # Made on Yantra's page, a phone schedule ran with no phone and read
+        # the battery from Home Assistant instead.
+        monkeypatch.setenv("YANTRA_UNATTENDED", "1")
+        monkeypatch.setenv("YANTRA_PHONE_RUN", "1")
+        for key in ("YANTRA_ASK_URL", "YANTRA_ASK_ACTOR"):
+            monkeypatch.delenv(key, raising=False)
+        code, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
+        try:
+            assert agent.sparsh is None                 # nobody to ask: no phone
+        finally:
+            manager.shutdown()
+        monkeypatch.setenv("YANTRA_ASK_URL", "http://dvara:8765")
+        monkeypatch.setenv("YANTRA_ASK_ACTOR", "owner")
+        code, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
+        try:
+            assert code is None and agent.sparsh is not None
+            assert tool(agent, "tap").read_only         # Sparsh holds what's risky
+            assert tool(agent, "confirm").always_ask    # a held Send is asked
         finally:
             manager.shutdown()
 

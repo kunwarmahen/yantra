@@ -58,7 +58,7 @@ FAKE_SAMAY = """\
              "upcoming": [], "last_run": None}}
     if args == ["status", "--json"]:
         print(json.dumps({{"format": {fmt!r}, "version": "0.1.0", "state": {state!r},
-                          "serving": {serving!r}, "url": None,
+                          "serving": {serving!r}, "url": None, "local_to": {local_to!r},
                           "schedules": {{"active": 1, "paused": 0, "done": 0}},
                           "dvara": None,
                           "mcp": {{"command": {python!r},
@@ -113,12 +113,13 @@ FAKE_SAMAY = """\
 """
 
 
-def make_samay(tmp_path: Path, *, fmt: str = samay_link.FORMAT, serving: bool = False):
+def make_samay(tmp_path: Path, *, fmt: str = samay_link.FORMAT, serving: bool = False,
+               local_to: str = ""):
     log = tmp_path / "samay-calls.log"
     program = tmp_path / "samay"
     program.write_text(f"#!{sys.executable}\n" + textwrap.dedent(FAKE_SAMAY).format(
         log=str(log), state=str(tmp_path / "state"), fmt=fmt, serving=serving,
-        python=sys.executable))
+        python=sys.executable, local_to=local_to))
     program.chmod(0o755)
     return program, log
 
@@ -151,11 +152,12 @@ class Named(Tool):
         return "ran"
 
 
-def start(program, tmp_path, flag=None, spec=None, tools=()):
+def start(program, tmp_path, flag=None, spec=None, tools=(), sparsh=None):
     registry = ToolRegistry()
     for tool in tools:
         registry.register(tool)
     agent = Agent(ScriptedProvider([]), model="m", tools=registry)
+    agent.sparsh = sparsh
     manager = MCPManager(agent.registry, agent=agent,
                          memory_path=tmp_path / ".yantra" / "mcp.json")
     console = Console(file=io.StringIO(), width=200)
@@ -518,3 +520,22 @@ class TestThePanel:
         assert client.get("/api/state").json()["samay"] is None
         answer = client.get("/api/schedules")
         assert answer.status_code == 400 and "samay" in answer.json()["detail"]
+
+
+# A schedule made on Yantra's page may work the phone only when this
+# session has Sparsh AND the running clock can ask its person through Dvara
+# (whose check, and whose chat, a direct phone run then gets).
+@pytest.mark.parametrize("has_sparsh, local_to, phone", [
+    (True, "owner", True), (True, "", False), (False, "owner", False)])
+def test_a_schedule_here_may_work_the_phone_only_with_sparsh_and_a_dvara(
+        tmp_path, monkeypatch, has_sparsh, local_to, phone):
+    monkeypatch.setattr(samay_link.shutil, "which", lambda _name: None)
+    monkeypatch.delenv(samay_link.ENV, raising=False)
+    monkeypatch.delenv("YANTRA_UNATTENDED", raising=False)
+    program, log = make_samay(tmp_path, local_to=local_to)
+    code, agent, manager, _ = start(program, tmp_path,
+                                    sparsh=object() if has_sparsh else None)
+    try:
+        assert code is None and agent.samay.phone is phone
+    finally:
+        manager.shutdown()

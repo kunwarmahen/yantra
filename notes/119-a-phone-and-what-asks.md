@@ -92,6 +92,19 @@ nobody watching, everything an act may do by itself would be done on
 a phone nobody is looking at, and every held step could only be
 refused.
 
+**UNLESS ITS PERSON CAN STILL BE ASKED.** A schedule made on Yantra's
+page ("every morning at 8, read my iPhone's Battery row") ran on
+Samay's direct road with no phone, and read the battery from Home
+Assistant instead. A run like that can already reach its person:
+Samay hands it Dvara's `/ask` (`YANTRA_ASK_URL`). So when Samay starts it
+for a phone schedule (`YANTRA_PHONE_RUN`), after Dvara's own check that
+the phone is free (`POST /phone/ready`: in use, waited on; locked, its
+person asked to unlock it; asleep, woken), it gets the phone, and
+`confirm` is asked in the person's chat like any other question, never
+covered by a schedule's grants. A schedule made here may work the phone
+only when this session has Sparsh and the running Samay names a Dvara
+to ask through (`local_to`).
+
 The `phone` prompt layer sits between `schedules` and `skills`. It
 says: act by number, read the screen each action returns instead of
 looking again, and on "NOT DONE" say in a sentence what will happen

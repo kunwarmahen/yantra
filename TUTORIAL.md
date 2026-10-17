@@ -2315,11 +2315,13 @@ did every task Android 8.1 has
 tutorial, §18): if the phone is locked with a PIN, it asks you on
 Telegram and waits; unlock it and the run goes.
 
-**Not yet:** a schedule run by Yantra alone (`--unattended`, no Dvara)
-gets no phone: nobody would be there to say yes to a held step. So a
-schedule that works the phone is asked for from Telegram or Sarathi's
-home page chat (through Dvara); asked here, Samay says so and doesn't
-save it. Letters
+**A schedule on the phone, from here.** A schedule runs later with
+nobody at it, so it gets the phone only when you can still be asked:
+with Dvara running beside Samay (Sarathi sets that up), a schedule made
+on this page that works the phone is checked by Dvara before it runs
+(in your hand: it waits; locked: you're asked in your chat to unlock
+it; asleep: woken), and a held Send is asked in your chat. With no
+Dvara, Samay says so and doesn't save it. Letters
 beyond plain English (é, Hindi, emoji) need a small keyboard app on an
 Android phone, which you install once (Sparsh's SETUP.md, Part G). An iPhone needs a Mac to set up once (Sparsh's
 SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
