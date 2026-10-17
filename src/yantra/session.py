@@ -117,16 +117,27 @@ class SessionStore:
             if held is not None and still_current(held, agent.history):
                 payload["history"].pop()   # the question, kept below
                 payload["held"] = _dump_held(held, agent.history[-1])
-            latest = self._latest_version(session_id)
-            self._db.execute(
-                "INSERT INTO checkpoints (session_id, version, created_at, payload) "
-                "VALUES (?, ?, ?, ?)",
-                (session_id, latest + 1,
-                 datetime.now(UTC).isoformat(timespec="seconds"),
-                 json.dumps(payload)),
-            )
-            self._db.commit()
-            return latest + 1
+            return self._append(session_id, payload)
+
+    def save_payload(self, payload: dict, *, session_id: str = "default") -> int:
+        """A payload ``load_latest`` gave, appended as the next version of
+        ``session_id``: a conversation carried from one id to another (a
+        host that keeps finished conversations and opens one again)."""
+        with self._lock:
+            return self._append(session_id, payload)
+
+    def _append(self, session_id: str, payload: dict) -> int:
+        """Caller holds the lock."""
+        latest = self._latest_version(session_id)
+        self._db.execute(
+            "INSERT INTO checkpoints (session_id, version, created_at, payload) "
+            "VALUES (?, ?, ?, ?)",
+            (session_id, latest + 1,
+             datetime.now(UTC).isoformat(timespec="seconds"),
+             json.dumps(payload)),
+        )
+        self._db.commit()
+        return latest + 1
 
     def load_latest(self, session_id: str = "default") -> dict | None:
         """The newest payload for ``session_id``, or None if never saved."""

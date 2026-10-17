@@ -2343,6 +2343,8 @@ src/yantra/
 │                   gate that still asks the person through a Dvara
 │                   (YANTRA_ASK_URL) ([notes/126](notes/126-a-yes-that-covers-the-job.md))
 ├── session.py      SQLite checkpoints: append-only versions, /save /load --resume.
+│                   save_payload carries a conversation to another id (a host
+│                   that keeps finished ones and opens one again: Dvara's /chats).
 │                   A checkpoint holds the conversation AND the agent's
 │                   identity; apply_payload(history_only=True) restores only
 │                   the first, for a host that rebuilds its agent each turn

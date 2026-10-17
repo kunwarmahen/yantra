@@ -282,3 +282,16 @@ class TestForget:
 
     def test_forgetting_a_session_that_was_never_saved_is_nothing(self, store):
         assert store.forget("never") == 0
+
+
+class TestCarried:
+    """A conversation moved from one id to another comes back the same."""
+
+    def test_a_payload_saved_under_another_id_loads_as_it_was(self, store):
+        agent = make_agent([Message("user", [TextBlock("the school letter")])])
+        store.save(agent, provider_name="anthropic", session_id="old")
+        payload = store.load_latest("old")
+        assert store.save_payload(payload, session_id="new") == 1
+        assert store.load_latest("new") == payload
+        store.save(agent, provider_name="anthropic", session_id="new")
+        assert store.latest_version("new") == 2        # it carries on from there
