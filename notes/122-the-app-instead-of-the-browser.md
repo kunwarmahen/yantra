@@ -127,4 +127,7 @@ skipped, as before).
 ## What is not here yet
 
 * The real X and Amazon apps, on a real phone.
-* An iPhone: the rules are written for its bundle ids, untried.
+* An iPhone: the rules are written for its bundle ids, untried there.
+  Sparsh itself now reads and taps a real iPhone
+  ([its note 12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md)),
+  so what's left is the X and Amazon apps on one.

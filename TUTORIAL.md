@@ -2321,8 +2321,12 @@ beyond plain English (é, Hindi, emoji) need a small keyboard app on an
 Android phone, which you install once (Sparsh's SETUP.md, Part G). An iPhone needs a Mac to set up once (Sparsh's
 SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
 starting Yantra. When its free 7-day signature is two days from running
-out, Yantra's first line says so. That road hasn't been run on a real
-iPhone yet.
+out, Yantra's first line says so. Sparsh has read and tapped a real
+iPhone 17 on iOS 26 (its
+[notes/12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md));
+an agent's task through Yantra on one hasn't been run yet. Two things
+an iPhone does differently: a home-screen widget is one line that opens
+its app, and the phone has to stay unlocked while the agent works.
 
 ---
 
