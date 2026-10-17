@@ -154,6 +154,7 @@ class ToolRegistry:
         self._allow: tuple[str, ...] | None = None
         self._deny: tuple[str, ...] = ()
         self._refused: list[str] = []
+        self._turned_away: dict[str, Tool] = {}
 
     def register(self, tool: Tool) -> None:
         if tool.name in self._tools:
@@ -164,6 +165,7 @@ class ToolRegistry:
             # wants them absent, not a crash on startup. The names are
             # recorded so a host can say what it dropped.
             self._refused.append(tool.name)
+            self._turned_away.setdefault(tool.name, tool)
             return
         self._tools[tool.name] = tool
 
@@ -214,6 +216,12 @@ class ToolRegistry:
         """Tools the policy turned away after construction, in arrival
         order -- what a host prints so a missing tool is never a mystery."""
         return list(self._refused)
+
+    def turned_away(self) -> list[Tool]:
+        """The refused tools themselves, so a host can say what each one
+        does -- a page offering a server's tools to a package that left
+        them out (Dvara's settings) needs more than their names."""
+        return list(self._turned_away.values())
 
     def unregister(self, name: str) -> bool:
         """Remove a tool by exact name; False when it was not registered."""

@@ -2869,6 +2869,11 @@ src/yantra/
 │   │               ([notes/60](notes/60-the-tool-that-explained-itself.md));
 │   │               a picked tool brings its requires along, in the same k,
 │   │               never displacing a pin ([notes/92](notes/92-the-window-that-stayed-open.md))
+│   ├── catalog.py  every built-in a package could name, in plain words,
+│   │               each marked asks/runs unasked from its class's read_only
+│   │               (nothing started), for a host page that draws checkboxes
+│   │               (Dvara's toolbox.py); the registry's turned_away() keeps
+│   │               what an allow list refused, so a host can offer it back
 │   ├── search.py   grep — ripgrep subprocess when available, pure-python
 │   │               walker fallback (identical output contract)
 │   ├── memory.py   scratchpad: write_note / recall_notes — JSON store under
