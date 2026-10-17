@@ -284,3 +284,17 @@ class TestCliImageFlag:
 
         assert rc == 2
         assert not called  # usage error: the turn never started
+
+
+def test_a_cloud_model_is_sent_pictures_without_asking_anything():
+    from yantra.images import is_local, sees_pictures
+
+    assert not is_local("anthropic", "https://api.anthropic.com")
+    assert sees_pictures("anthropic", "https://api.anthropic.com", "any") is True
+
+
+def test_a_local_server_that_does_not_answer_is_not_sent_pictures():
+    from yantra.images import is_local, sees_pictures
+
+    assert is_local("openai", "http://127.0.0.1:9/v1")
+    assert sees_pictures("openai", "http://127.0.0.1:9/v1", "m") is False

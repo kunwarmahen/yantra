@@ -84,3 +84,33 @@ def image_block_from_bytes(filename: str, raw: bytes) -> ImageBlock:
     _capped(raw, filename)
     return ImageBlock(media_type=media_type,
                       data=base64.b64encode(raw).decode("ascii"))
+
+
+#: How long asking a local server whether a model can see may take.
+SEE_TIMEOUT = 5.0
+
+
+def is_local(provider: str, base_url: str) -> bool:
+    """Ollama, or any server on this machine."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(base_url or "").hostname or "").lower()
+    return provider == "ollama" or host in ("localhost", "127.0.0.1", "::1")
+
+
+def sees_pictures(provider: str, base_url: str, model: str) -> bool:
+    """Whether a picture may go to this model. A cloud model takes them.
+    A local one only when Ollama lists "vision" among its capabilities;
+    unknown (another server, no answer) is no, because a picture sent to
+    a model that can't take one fails the whole turn."""
+    import httpx
+
+    if not is_local(provider, base_url):
+        return True
+    root = (base_url or "http://localhost:11434").rstrip("/").removesuffix("/v1")
+    try:
+        response = httpx.post(f"{root}/api/show", json={"model": model},
+                              timeout=SEE_TIMEOUT)
+        return "vision" in (response.json().get("capabilities") or [])
+    except (httpx.HTTPError, ValueError, AttributeError, TypeError):
+        return False

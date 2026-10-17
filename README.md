@@ -956,7 +956,11 @@ in the REPL, `/image PATH...` stages them onto your *next* message
 base64-encodes before any turn starts — a bad path errors at attach
 time, never mid-conversation; both adapters carry the resulting
 `ImageBlock` in their own dialect, and compaction bills images by
-decoded size.
+decoded size. `sees_pictures(provider, base_url, model)` says whether a
+picture may go to a model at all: a cloud model yes, a local one only
+when Ollama lists "vision" for it, since a picture sent to a model that
+can't take one fails the turn (a host taking pictures from people, like
+Dvara, asks it first).
 
 Self-reliance tools — the difference between an agent that answers
 and one that finishes ([notes/23](notes/23-glob.md)–
