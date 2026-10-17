@@ -219,4 +219,6 @@ has the rest.
   two days from running out. Sparsh itself has read and tapped a real
   iPhone 17 on iOS 26
   ([its note 12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md));
-  a task through Yantra on one is not yet run.
+  a task through Yantra on one has run as well, asked in Yantra's
+  container and from Telegram through Dvara, with `qwen3.8-64k:latest`
+  on Ollama.

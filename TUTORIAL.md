@@ -2324,7 +2324,9 @@ starting Yantra. When its free 7-day signature is two days from running
 out, Yantra's first line says so. Sparsh has read and tapped a real
 iPhone 17 on iOS 26 (its
 [notes/12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md));
-an agent's task through Yantra on one hasn't been run yet. Two things
+an agent's task through Yantra on one has too, from Yantra's own
+container and from Telegram through Dvara, with `qwen3.8-64k:latest` on
+Ollama (Sarathi's `sarathi phone iphone` gives it out). Two things
 an iPhone does differently: a home-screen widget is one line that opens
 its app, and the phone has to stay unlocked while the agent works.
 
