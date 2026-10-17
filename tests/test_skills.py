@@ -942,6 +942,19 @@ class TestOwnSkillsOnly:
         names = set(self.build(tmp_path, monkeypatch).skills.names())
         assert names == {"minder-recipe", "kept-by-this-person"}
 
+    def test_the_sync_agent_takes_it_too(self, tmp_path, monkeypatch):
+        from conftest import ScriptedProvider
+        from yantra.spec import AgentSpec
+
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        self.skill(tmp_path / "home" / ".yantra" / "skills", "owners-own")
+        work = tmp_path / "work"
+        self.skill(work / ".yantra" / "skills" / "learned", "kept-by-this-person")
+        agent = AgentSpec(name="m", skills=True).build(
+            cwd=work, provider=ScriptedProvider([]), provider_name="anthropic",
+            model="m", own_skills_only=True)
+        assert set(agent.skills.names()) == {"kept-by-this-person"}
+
     def test_a_rescan_never_widens_it(self, tmp_path, monkeypatch):
         agent = self.build(tmp_path, monkeypatch)
         agent.skills.reload()

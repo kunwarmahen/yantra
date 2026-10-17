@@ -427,8 +427,9 @@ class SkillRegistry:
             if mine is not None:          # renamed: the old name goes dark
                 registry.disable(mine.name)
             tool = ScriptTool(self, skill, definition)
+            admit_promoted(registry, tool.name)
             registry.register(tool)
-            if tool.name in registry:     # an admission policy may refuse it
+            if tool.name in registry:     # a deny may still refuse it
                 self._script_tools[skill.name] = tool
                 memory = getattr(self._agent, "memory", None)
                 if memory is not None and memory.primed:
@@ -613,3 +614,17 @@ def enable_skills(agent: Any, cwd: Path | None = None,
     they go, not report that the feature is missing.
     """
     return SkillRegistry(found, cwd=cwd, home=home, only=only).attach(agent)
+
+
+def admit_promoted(registry: Any, name: str) -> None:
+    """A PACKAGE THAT LETS SKILLS IN LETS THEIR TOOLS IN. A promoted tool is
+    a learned skill's own script as one call (notes/98), made on a
+    person's yes and gated like any write -- so a package whose allow list
+    admits ``load_skill`` admits the tools its skills became, as a need
+    admits its connection's tools (``admit_also``). Without it a package
+    with an allow list (every one behind Dvara) could never use one, and
+    could not even test one being made. A deny still wins."""
+    admits = getattr(registry, "admits", None)
+    widen = getattr(registry, "admit_also", None)
+    if admits is not None and widen is not None and admits("load_skill"):
+        widen([name])

@@ -218,6 +218,25 @@ A promoted tool is called without `load_skill`, so the facts that fill
 its recipe's inputs reach it another way: through its description
 ([note 108](108-where-the-model-reads.md)).
 
+## A package with an allow list
+
+A host whose packages name their tools (every one behind Dvara) found
+that a promoted tool never arrived: its name is on no allow list, so the
+registry turned it away, and even the test of one being made answered
+*"no such tool"*. The rule now (`admit_promoted`): A PACKAGE THAT LETS
+SKILLS IN LETS THEIR TOOLS IN. A package whose allow list admits
+`load_skill` admits the tools its skills became, the way a Setu need
+admits its connection's tools. It is the same script the recipe already
+ran, made a tool on a person's yes, and still gated like any write; a
+deny still wins.
+
+Receipt, a scratch Dvara package with `allow = ["bash", "read_file",
+"load_skill"]`, `qwen3.8:latest`: `dvara settings tool helper --person
+raj --skill greet-someone` wrote `greet_someone(name)`, its test said
+*"Hello, Alice!"*, and it was kept; "Please greet Bob." then ran
+`greet_someone` once and answered *"Hello, Bob!"*. Before the rule, the
+same test said `no such tool: 'greet_someone'`.
+
 ## What was deliberately not built
 
 * **Promoting without asking.** Five in a row makes the suggestion.

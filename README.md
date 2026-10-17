@@ -2423,7 +2423,9 @@ src/yantra/
 │                   gated test run, then the question. argv list, no shell,
 │                   no secret-shaped parameter, bash's sandbox and gate; a
 │                   repair keeps the tool only when its test still fits
-│                   ([notes/98](notes/98-one-call.md)); called without
+│                   ([notes/98](notes/98-one-call.md)); admitted wherever
+│                   load_skill is (admit_promoted), a deny still winning;
+│                   called without
 │                   load_skill, so its recipe's remembered inputs ride in
 │                   its description, looked up with each new conversation
 │                   ([notes/108](notes/108-where-the-model-reads.md))

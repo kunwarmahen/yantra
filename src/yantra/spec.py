@@ -252,6 +252,7 @@ class AgentSpec:
         model: str | None = None,
         max_parallel_children: int | None = None,
         memory_user: str | None = None,
+        own_skills_only: bool = False,
     ) -> Agent:
         """A wired Agent, assembled in the one order that works.
 
@@ -271,13 +272,17 @@ class AgentSpec:
         a service that serves many people. Omitted, it is the person at
         this computer ($YANTRA_USER, else the login name) -- which, in a
         service, would file every person's memories under its owner's.
+
+        ``own_skills_only`` is ``build_async``'s: for a host that builds
+        one person's agent in a process of its own (Dvara's settings, a
+        skill made a tool), the same skills its service would give it.
         """
         return self._assemble(
             Agent, permissions=permissions, sandbox=sandbox, cwd=cwd,
             registry=registry, provider=provider,
             provider_name=provider_name, model=model,
             max_parallel_children=max_parallel_children,
-            memory_user=memory_user,
+            memory_user=memory_user, own_skills_only=own_skills_only,
         )
 
     def build_async(

@@ -1394,6 +1394,8 @@ class Learner:
         probe = ScriptTool(agent.skills, skill, offer.tool)
         probe.script = script_name          # not promoted yet: no tool: line
         probe.run_checks = False
+        from yantra.skills.registry import admit_promoted
+        admit_promoted(agent.registry, offer.tool.name)
         agent.registry.register(probe)
         call = ToolCall(id=f"promote-{uuid.uuid4().hex[:12]}",
                         name=offer.tool.name, arguments=dict(offer.test_args))

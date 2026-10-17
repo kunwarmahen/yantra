@@ -595,3 +595,35 @@ class TestFits:
 def test_the_record_type_still_round_trips_without_a_streak():
     record = LearnedRecord(since="2026-09-28", worked=PROMOTE_AFTER)
     assert parse_learned(record.render()) == record
+
+
+class TestAdmission:
+    """A package with an allow list: its skills' tools come with load_skill."""
+
+    def registry(self, allow, deny=()):
+        from yantra.tools.base import ToolRegistry
+
+        registry = ToolRegistry()
+        registry.admit_only(allow, deny)
+        return registry
+
+    def test_a_package_that_admits_skills_admits_their_tools(self):
+        from yantra.skills.registry import admit_promoted
+
+        registry = self.registry(["bash", "load_skill"])
+        admit_promoted(registry, "greet_person")
+        assert registry.admits("greet_person")
+
+    def test_one_that_left_skills_out_gets_none(self):
+        from yantra.skills.registry import admit_promoted
+
+        registry = self.registry(["bash"])
+        admit_promoted(registry, "greet_person")
+        assert not registry.admits("greet_person")
+
+    def test_a_deny_still_wins(self):
+        from yantra.skills.registry import admit_promoted
+
+        registry = self.registry(["load_skill"], deny=["greet_*"])
+        admit_promoted(registry, "greet_person")
+        assert not registry.admits("greet_person")
