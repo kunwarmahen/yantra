@@ -103,7 +103,9 @@ person asked to unlock it; asleep, woken), it gets the phone, and
 `confirm` is asked in the person's chat like any other question, never
 covered by a schedule's grants. A schedule made here may work the phone
 only when this session has Sparsh and the running Samay names a Dvara
-to ask through (`local_to`).
+to ask through (`local_to`). Run for real from Yantra's page in
+Sarathi's containers, on an iPhone 17, with `qwen3.8-64k:latest` on
+Ollama.
 
 The `phone` prompt layer sits between `schedules` and `skills`. It
 says: act by number, read the screen each action returns instead of
