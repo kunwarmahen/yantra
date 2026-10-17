@@ -171,6 +171,14 @@ class TestReadingPressesNothing:
         with pytest.raises(ToolError, match="keep to Shop"):
             s._follow("e6")
 
+    def test_a_link_off_the_site_says_read_this_page_first_then_gives_the_address(self):
+        s = session()
+        with pytest.raises(ToolError) as refused:
+            s._follow("e6")
+        said = str(refused.value)
+        assert "Answer from the page you already have first" in said
+        assert "browser_open" in said and said.endswith("https://evil.test/x")
+
     def test_search_types_only_into_a_search_box(self):
         s = session()
         s._search("e2", "kettle")

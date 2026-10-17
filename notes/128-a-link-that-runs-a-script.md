@@ -135,6 +135,29 @@ The page `follow` returned held the message itself ("Monitoring your
 transactions can pay off in the long run… Reviewing your transactions
 helps you catch anything unexpected…"), not the list.
 
+## A link out of the mail
+
+Reading a Yahoo message worked; its "View Reservation Details" didn't.
+The link went to the hotel through a tracking address
+(`email-marriott.com`), and `follow` keeps to the site it signed in to,
+so the agent said it couldn't click through -- true, and no help. The
+person wanted the reservation, and the message itself held the dates and
+the confirmation number.
+
+The refusal now says what to do instead (`elsewhere` in
+`tools/site.py`), in order: ANSWER FROM THE PAGE YOU ALREADY HAVE, which
+usually says what its link would; then `browser_open`, when the package
+has it, said plainly to have no sign-in there; then the address itself,
+for the person to open where they are signed in. Dvara's minder says the
+same in its prompt. A page behind the person's hotel account still needs
+that account: connected in Setu as a site of its own, read only like the
+others.
+
+Receipt: `browser_open` on a public page, `qwen3.8:latest`, headless:
+opened IANA's "Example Domains" and summed it up in one sentence. The
+refusal's wording is held by `tests/test_site_tools.py` (a link off the
+site says read this page first, then gives the address).
+
 ## Not a connector of its own, yet
 
 Yahoo Mail also speaks IMAP, with an app password made on Yahoo's

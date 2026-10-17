@@ -16,7 +16,10 @@ wrote down, because a generic browser cannot tell reading from buying:
   plain ``browser_*`` tools use.
 * ONLY ITS SITE. ``open`` and ``follow`` refuse an address outside the
   manifest's hosts, and an action that lands elsewhere is taken back.
-  Another site is ``browser_open``'s, without this sign-in.
+  The refusal says what to do instead (``elsewhere``): answer from the
+  page already open, which usually says what its link would; then
+  ``browser_open``, without this sign-in; then the address, for the
+  person to open where they are signed in.
 * READING CANNOT PRESS ANYTHING. ``follow`` takes a link's address and
   loads it -- no click, so no script on the page runs for it; ``search``
   types into a box only when it is a search box, and presses Enter
@@ -119,6 +122,23 @@ _IS_SECRET_JS = """
 """
 
 
+def elsewhere(url: str) -> str:
+    """What to do about a link that leaves the site.
+
+    A mail's "View reservation" goes to the hotel, through a tracking
+    address; the site tools can't follow it, and the plain browser has
+    none of the person's sign-ins there. Most often the person didn't
+    need the page at all -- the mail already says the dates and the
+    number -- so the first answer is to read what is open. After that,
+    the plain browser (asked) for a public page, and the address itself
+    for the person to open where they are signed in."""
+    return ("Answer from the page you already have first: a message usually says "
+            "what its link would (dates, numbers, amounts). If they need that page "
+            "itself, open it with browser_open if you have it (no sign-in there, so "
+            "a page behind their account will ask them to sign in), or give them "
+            f"the address to open themselves: {url}")
+
+
 @dataclass(frozen=True, slots=True)
 class SiteRules:
     """What the manifest says about keeping to a site."""
@@ -215,7 +235,7 @@ class SiteSession(BrowserSession):
             raise ToolError(
                 f"{url} is not {self.rules.name} ({', '.join(self.rules.hosts[:3])}"
                 f"{'…' if len(self.rules.hosts) > 3 else ''}); these tools keep to "
-                f"{self.rules.name} -- another site is browser_open's, without this sign-in")
+                f"{self.rules.name}. {elsewhere(url)}")
 
     def _snapshot(self, **opts: bool) -> str:
         text = super()._snapshot(chrome_last=True, **opts)
@@ -265,7 +285,7 @@ class SiteSession(BrowserSession):
             except Exception:
                 pass
             raise ToolError(f"that went to {url}, outside {self.rules.name}; went back. "
-                            "Another site is browser_open's, without this sign-in")
+                            f"{elsewhere(url)}")
 
     def _open(self, url: str) -> str:
         if not url and self._page is None:
