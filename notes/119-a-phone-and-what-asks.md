@@ -216,4 +216,7 @@ has the rest.
   ([its note 03](https://github.com/kunwarmahen/sparsh/blob/main/notes/03-an-iphone-through-a-mac.md));
   here the model is told it's an iPhone (Back is a swipe from the
   edge), and the startup line says when the iPhone's 7-day signature is
-  two days from running out. Not yet run on a real iPhone.
+  two days from running out. Sparsh itself has read and tapped a real
+  iPhone 17 on iOS 26
+  ([its note 12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md));
+  a task through Yantra on one is not yet run.
