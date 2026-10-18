@@ -222,7 +222,14 @@ update question shows is the script's error, not the `ls`.
 
 A recipe with no script has no calls of its own to look at, and neither
 does a turn that never ran the script. Those are judged the old way, on
-every call after the load.
+every call after the load, with one exception: a call the model got
+wrong and then right. A tool refused for an argument it doesn't take
+(`type_text {"content": …}`), or one missing, or a tool that isn't
+there, followed by a call to the same tool that worked, is the model's
+slip, not the recipe's. A taught phone recipe was followed to the
+answer on a real Nexus and counted failed over exactly that
+([note 129](129-taught-step-by-step.md)). A slip never put right still
+counts, because the step it was for never happened.
 
 The script is recognised by its full folder path in the command, which
 is how `load_skill` hands it over. Three more reuses on `qwen3.8:latest`,

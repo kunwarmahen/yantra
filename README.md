@@ -2436,7 +2436,9 @@ src/yantra/
 │                   matching ones back under a learned recipe's steps, and
 │                   says whether each `needs: setu:<id>` is connected; a
 │                   use is judged on the recipe's OWN calls (its script or
-│                   tool), not a look-around `ls` that exited 1
+│                   tool), not a look-around `ls` that exited 1, nor a
+│                   call the model got wrong and then right (an argument
+│                   the tool doesn't take, fixed on the next call)
 │                   ([notes/106](notes/106-what-the-recipe-leaves-out.md))
 │                   lesson.py: a job TAUGHT one step per message, kept as
 │                   one skill -- /learn start opens it (an opening telling

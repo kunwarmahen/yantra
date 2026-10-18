@@ -50,8 +50,9 @@ learned skill loaded in a turn WORKED when the turn finished and none of
 the RECIPE'S OWN calls failed -- its script or its tool (own_steps) --
 and FAILED otherwise. A look-around ``ls`` that exits 1 is not the
 recipe failing. A recipe with no script is judged on every call after
-the load. Crude, and honest about being crude -- it is what the harness
-saw, not a grade.
+the load, except a call the model got wrong and then right (``slips``:
+an argument the tool doesn't take, fixed on the next call). Crude, and
+honest about being crude -- it is what the harness saw, not a grade.
 
 THE SAME CALL FINDS THE FACTS. Keeping the person's values out of a
 recipe means someone has to remember them: the bedroom fan's entity id
@@ -238,6 +239,32 @@ def _worked(name: str, result: ToolResult) -> bool:
         code = _exit_code(result.content)
         return code is None or code == 0
     return True
+
+
+#: A call refused before it ran, because it was called wrong: an argument
+#: the tool doesn't take (Sparsh's words), one missing or of the wrong type
+#: (tools/base.py), a tool that isn't there. The model's slip, not the
+#: recipe's.
+_SLIP = re.compile(r"has no argument `|missing required argument|"
+                   r"argument '\w+' must be|no such tool: ")
+
+
+def slips(steps: list[Step]) -> set[str]:
+    """Call ids of steps that were the model calling a tool wrong and then
+    getting it right: refused for how it was called (``_SLIP``), with a
+    later call to the same tool that worked. A recipe is not judged on
+    them -- on a real Nexus 6P, qwen3.8 followed a taught Gmail recipe
+    to the answer, and one ``type_text {"content": ...}``, fixed on the
+    next call, counted the use as failed. A slip never put right still
+    counts: the step it was for never happened."""
+    out = set()
+    for n, step in enumerate(steps):
+        first = (step.result.strip().splitlines() or [""])[0]
+        if step.ok or not _SLIP.search(first):
+            continue
+        if any(later.name == step.name and later.ok for later in steps[n + 1:]):
+            out.add(step.call_id)
+    return out
 
 
 def used_skill(step: Step, skills: Any) -> Skill | None:
@@ -919,7 +946,9 @@ class Learner:
             # promoted tool's own call is part of the use; a load is not.
             start = index + (1 if step.name == "load_skill" else 0)
             after = [s for s in turn.steps[start:] if s.call_id not in refused]
-            judged = own_steps(skill, after) or after
+            slipped = slips(after)
+            judged = [s for s in own_steps(skill, after) or after
+                      if s.call_id not in slipped]
             worked = self.last_reason == "end_turn" and all(s.ok for s in judged)
             try:
                 record_use(skill, worked)

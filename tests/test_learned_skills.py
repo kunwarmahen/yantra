@@ -485,6 +485,29 @@ class TestCounters:
         assert counted == [("greet-someone", False)]
         assert agent.skills.get("greet-someone").learned.failed == 1
 
+    def test_a_call_got_wrong_then_right_is_the_models_slip(self, tmp_path):
+        # bash called with no command, then properly: the recipe worked
+        agent, counted = self.saved(tmp_path, [
+            assistant_tool_call("g", "bash", {"cmd": "echo greeted mars"}),
+            assistant_tool_call("h", "bash", {"command": "echo greeted mars"}),
+            assistant_text("Greeted mars.")])
+        assert counted == [("greet-someone", True)]
+
+    def test_a_slip_never_put_right_still_counts(self, tmp_path):
+        _, counted = self.saved(tmp_path, [
+            assistant_tool_call("g", "bash", {"cmd": "echo greeted mars"}),
+            assistant_text("I could not run it.")])
+        assert counted == [("greet-someone", False)]
+
+    def test_a_phone_tools_wrong_argument_is_a_slip(self):
+        from yantra.skills.learn import Step, slips
+        steps = [Step("a", "mcp__sparsh__type_text", {"content": "amazon"},
+                      "Not done: type_text has no argument `content` (it takes "
+                      "`clear`, `enter`, `text`, `into`)", False),
+                 Step("b", "mcp__sparsh__type_text", {"text": "amazon"}, "App: gm", True),
+                 Step("c", "mcp__sparsh__tap", {"n": 9}, "Not done: the screen moved", False)]
+        assert slips(steps) == {"a"}       # a real failure is never excused
+
     def test_a_command_that_exits_non_zero_is_a_failure_too(self, tmp_path):
         # bash reports the exit code as data, not as a tool error; for
         # "did the recipe work" it is a failed step all the same
