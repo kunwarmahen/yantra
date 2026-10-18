@@ -207,18 +207,12 @@ class TestTheTerminal:
         repl._command("/learn stop")
         assert repl.lesson is None and "dropped the lesson" in out.getvalue()
 
-    def test_a_second_start_says_how_far_the_first_got(self, tmp_path):
-        _, repl, out = self.repl(tmp_path, [assistant_text("Ready.")])
-        repl._command("/learn start x")
-        repl._command("/learn start y")
-        assert "You're teaching me how to x" in out.getvalue()
-
     def test_done_with_no_lesson_and_start_with_no_task(self, tmp_path):
         _, repl, out = self.repl(tmp_path, [])
         repl._command("/learn done")
         repl._command("/learn start")
         assert "no lesson is open" in out.getvalue()
-        assert "/learn start <what it's for>" in out.getvalue()
+        assert "/learn start and what the job is for" in out.getvalue()
 
 
 class TestThePage:
@@ -266,3 +260,41 @@ class TestThePage:
             client.post("/api/message", json={"text": "/learn stop"})
             said = self.until(ws, "lesson")[-1]
         assert said["text"] == "No lesson is open."
+
+
+class TestTheMixUps:
+    """Met on a real iPhone through Telegram: a second start was answered
+    with the first's status (0 steps) and taken for the new one; the steps
+    were then done by hand in a lesson that learns only what it's told;
+    and /new had dropped the opening while the lesson stayed open."""
+
+    def repl(self, tmp_path, script):
+        return TestTheTerminal.repl(self, tmp_path, script)
+
+    def test_a_start_over_an_empty_lesson_replaces_it(self, tmp_path):
+        _, repl, out = self.repl(tmp_path, [assistant_text("Ready."), assistant_text("Ready.")])
+        repl._command("/learn start coinbase current portfolio value")
+        repl._command("/learn start check my Coinbase portfolio value")
+        assert repl.lesson.task == "check my Coinbase portfolio value"
+        assert "You're teaching me" not in out.getvalue()
+
+    def test_a_start_over_a_lesson_with_steps_says_so_and_how_to_restart(self, tmp_path):
+        _, repl, out = self.repl(tmp_path, WALK[:3])
+        repl._command("/learn start x")
+        repl.run_turn("open WhatsApp")
+        repl._command("/learn start y")
+        assert repl.lesson.task == "x" and "/learn stop, then start again" in out.getvalue()
+
+    def test_done_with_nothing_taught_explains_start_and_watch_and_keeps_it(self, tmp_path):
+        _, repl, out = self.repl(tmp_path, [assistant_text("Ready.")])
+        repl._command("/learn start x")
+        repl._command("/learn done")
+        said = out.getvalue()
+        assert "haven't shown me any steps" in said and "/learn watch" in said
+        assert repl.lesson is not None            # still open: they may go on
+
+    def test_clear_drops_the_lesson_its_opening_went_with(self, tmp_path):
+        _, repl, out = self.repl(tmp_path, [assistant_text("Ready.")])
+        repl._command("/learn start x")
+        repl._command("/clear")
+        assert repl.lesson is None and "lesson you'd started was dropped" in out.getvalue()

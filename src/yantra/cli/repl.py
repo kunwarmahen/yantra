@@ -789,8 +789,9 @@ class Repl:
             return
         verb, rest = lessons.parse(arg)
         if verb in ("start", "watch"):
-            if self.lesson is not None:
-                self.console.print(self.lesson.status(), markup=False, style="yellow")
+            if self.lesson is not None and not self.lesson.empty:
+                self.console.print(self.lesson.status() + " (Or /learn stop, then "
+                                   "start again.)", markup=False, style="yellow")
                 return
             if not rest:
                 self.console.print(lessons.USAGE, markup=False, style="yellow")
@@ -810,6 +811,9 @@ class Repl:
         if verb == "done" and self.lesson is None:
             self.console.print("no lesson is open: /learn start WHAT begins one",
                                style="yellow")
+            return
+        if verb == "done" and self.lesson.empty:
+            self.console.print(lessons.NOTHING_YET, markup=False, style="yellow")
             return
         lesson, self.lesson = self.lesson, None
         learner = getattr(self.agent, "learner", None)
@@ -1026,6 +1030,10 @@ class Repl:
                 self.end_conversation()
                 self.agent.history.clear()
                 self.console.print("[green]history cleared[/green]")
+                if self.lesson is not None:
+                    # its opening went with the history
+                    self.lesson = None
+                    self.console.print(lessons.DROPPED, markup=False, style="dim")
             case "yolo":
                 self._yolo_command(arg)
             case "env":

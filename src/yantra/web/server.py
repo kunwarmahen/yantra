@@ -877,8 +877,8 @@ class WebSession:
         verb, rest = lessons.parse(text.strip()[len("/learn"):])
         say = lambda words: self.broadcast({"type": "lesson", "text": words})  # noqa: E731
         if verb in ("start", "watch"):
-            if self.lesson is not None:
-                say(self.lesson.status())
+            if self.lesson is not None and not self.lesson.empty:
+                say(self.lesson.status() + " (Or /learn stop, then start again.)")
             elif not rest:
                 say(lessons.USAGE)
             else:
@@ -894,7 +894,10 @@ class WebSession:
             say(lessons.USAGE)
             return
         if verb == "done" and self.lesson is None:
-            say("No lesson is open: /learn start <what it's for> begins one.")
+            say("No lesson is open: /learn start and what it's for begins one.")
+            return
+        if verb == "done" and self.lesson.empty:
+            say(lessons.NOTHING_YET)
             return
         lesson, self.lesson = self.lesson, None
         self.start_learn(lesson)
@@ -2700,6 +2703,12 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         require_idle()
         session.agent.held = None     # nothing left to resume it into
         session.agent.history.clear()
+        if session.lesson is not None:
+            # Its opening went with the history: the agent no longer knows
+            # it is being taught.
+            from yantra.skills.lesson import DROPPED
+            session.lesson = None
+            session.broadcast({"type": "lesson", "text": DROPPED})
         return session.state()
 
     return app

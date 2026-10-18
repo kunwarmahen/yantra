@@ -100,6 +100,14 @@ class Lesson:
         is not one of them)."""
         return max(0, len(self.turns) - 1)
 
+    @property
+    def empty(self) -> bool:
+        """Nothing taught yet: only the opening. A new ``/learn start``
+        replaces such a lesson rather than reporting on it -- on Telegram a
+        person started a second, was told how far the first had got (0
+        steps), and took it for the new one."""
+        return self.told() == 0 and self.steps == 0
+
     def as_turn(self) -> Turn:
         """The whole lesson as the one turn the write-up reads: its task,
         every step in order, and the person's words where they came."""
@@ -147,10 +155,24 @@ def parse(arg: str) -> tuple[str, str]:
     return verb.lower(), rest.strip()
 
 
+#: What ``/learn done`` says to a lesson nothing was taught in. Kept open:
+#: they may have more to say. The common case, met on a real iPhone: the
+#: person did each step on the phone by hand during a ``start`` lesson,
+#: which learns only the steps it is told.
+NOTHING_YET = ("You haven't shown me any steps yet, so there's nothing to keep. With "
+               "/learn start, tell me each step in a message and I'll do it. If you'd "
+               "rather do the steps yourself on the phone, send /learn watch and what "
+               "the job is for, then next after each step.")
+
+#: What a host adds when /new or /clear ends an open lesson: the
+#: conversation that told the agent it was being taught is gone.
+DROPPED = "The lesson you'd started was dropped; nothing was kept."
+
 #: What a host says to ``/learn start`` without a task, and to a word it
 #: doesn't know.
-USAGE = ("Send /learn start <what it's for> (\"send a WhatsApp message\") and "
-         "tell me each step; or /learn watch <what it's for> and do each step "
-         "yourself on the phone, saying next after each one. /learn done keeps "
+USAGE = ("Send /learn start and what the job is for (\"/learn start send a "
+         "WhatsApp message\"), then tell me each step and I'll do it; or /learn "
+         "watch and what it's for, then do each step yourself on the phone and "
+         "send next after each one. /learn done keeps "
          "it as a skill, /learn stop drops it. Plain /learn keeps what the "
          "last answer did.")

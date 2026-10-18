@@ -226,6 +226,31 @@ refused for how it was called, and then made right, isn't counted
 way and fixed (Sparsh's notes/17): getevent's lines sat in a buffer when
 piped, and the touch reader swallowed the agent's own requests.
 
+## Found in use: telling when you meant showing
+
+The owner's first lesson of their own, on Telegram, about a Coinbase
+portfolio on the iPhone, came back as *the lesson took 0 tool call(s)*.
+Three things had joined up:
+
+1. A lesson was already open, from a first try. The second `/learn
+   start` was answered with that one's status (*You're teaching me how
+   to … 0 step(s) so far*), which reads like a confirmation of the new
+   one.
+2. `/new` came between them. It took away the conversation, and the
+   opening that told the agent it was being taught went with it, but
+   the lesson stayed open.
+3. The steps were done by hand on the iPhone, in a `start` lesson,
+   which learns only the steps it's told. Showing is `/learn watch`.
+
+So: a lesson nothing was taught in (`Lesson.empty`: the opening and no
+step) is replaced by a new start, and the status now ends *or /learn
+stop, then start again* when it isn't empty. `/learn done` on an empty
+lesson doesn't look. It says what each word is for (`NOTHING_YET`) and
+keeps the lesson open. `/clear` here, and `/new` and `/chats N` in
+Dvara, drop an open lesson and say so (`DROPPED`). The tutorials now
+say it at the point of choosing: telling is typing, showing is
+`watch`.
+
 ## What is not here yet
 
 * ~~**A model's slip counted against the recipe.**~~ A call refused for

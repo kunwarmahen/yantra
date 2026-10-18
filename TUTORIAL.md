@@ -356,7 +356,10 @@ you> /learn done
 ```
 
 While the lesson is open, the agent does only the step you said and
-doesn't offer a skill after each one. `/learn done` writes the whole
+doesn't offer a skill after each one. It learns only the steps you
+*type*. If you'd rather do them yourself on the phone, that's `/learn
+watch` (below), not `start`. `/learn done` on a lesson with nothing in
+it says so, and keeps it open. `/learn done` writes the whole
 lesson down as one skill, and you're asked to save it as usual. The
 person, and what you typed, become *inputs*, so next time "message Dad
 that I'm on my way" follows the same steps. On a phone you can also do
