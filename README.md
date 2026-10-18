@@ -925,6 +925,8 @@ agent loop at `http://127.0.0.1:8321` (`--host`/`--port` to move it):
 streamed replies and thinking rendered as markdown (headings, tables,
 code blocks — by a ~150-line escape-first renderer, no library), tool
 cards, permission prompts with approve/deny/**edit**, image attachments,
+a **history** button (every conversation kept by itself: search, read,
+carry on, delete for good — [notes/130](notes/130-every-conversation-kept.md)),
 save/load/compact/model switches, a permission-mode chip (ask ⇄ yolo,
 switchable mid-turn like the REPL's `/yolo`), a tools panel (every
 registered tool, switchable off/on mid-run like the REPL's `/tools`)
