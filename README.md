@@ -654,6 +654,14 @@ drift. For a click-by-click first run (one terminal, a local model, and
 the three traps that bite everyone once) see
 [notes/09 · trying it in the portal](notes/09-mcp.md#trying-it-in-the-portal-end-to-end).
 
+A server added here is this Yantra's. To have it everywhere (Samay's
+runs, and dvara's chat on Telegram and the Sarathi page), add it to
+Setu instead, once: `setu connect --server URL --id docs --token-stdin`,
+or **Add your own server** on Setu's page. Setu tries it, writes down
+which tools only read, keeps the token in its vault, and Yantra finds it
+at startup like any other connection
+([Setu's README](https://github.com/kunwarmahen/setu#what-you-get-your-own-mcp-servers)).
+
 **Your own accounts, through Setu.** [Setu](https://github.com/kunwarmahen/setu)
 is a separate project that keeps your sign-ins (Gmail first) and runs a
 small MCP server per connection that never holds the key. When it is
