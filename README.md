@@ -930,7 +930,10 @@ switchable mid-turn like the REPL's `/yolo`), a tools panel (every
 registered tool, switchable off/on mid-run like the REPL's `/tools`)
 with an MCP servers section above it — health dots, add by form or
 paste-JSON, per-server switches, remove; same powers as `/mcp`
-mid-session, and remembered servers auto-reconnect on future launches,
+mid-session, and remembered servers auto-reconnect on future launches;
+a box above each long list (servers, skills, tools, memory) keeps only
+the rows matching what you type, with a `4 of 129` count
+([notes/22](notes/22-web-ui.md#type-to-filter-a-long-list)),
 a live context-pressure meter (amber at 60%, red at 80% — where
 auto-compaction starts caring) with a per-turn **budget bar** beside it
 when there is a ceiling (`$0.07 left`, moving mid-turn; `free` where a

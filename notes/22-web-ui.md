@@ -355,6 +355,32 @@ A session started with `--no-skills` answers 400 on all of them, and the
 panel hides the section — the same shape the MCP section already uses
 when no manager is wired.
 
+## Type to filter a long list
+
+One Setu server can bring fifty-one tools; with Gmail, Home Assistant
+and Smritikosh beside it the tools section holds 129 rows, and the
+memory panel holds every fact kept about you. Nobody scrolls that to
+find one switch. So each long list (mcp servers, skills, tools, memory)
+gets a box above it: type a few letters and only the rows holding
+**every** word stay, matched anywhere in the row — name, badges,
+description — in any case. Beside the box a count says `4 of 129` while
+words are typed, so hidden rows are never a surprise.
+
+**The box only hides rows; it never re-asks the server.** A re-render
+(a switch flipped, a skill rescanned, a memory forgotten) runs the same
+filter over the new rows, so what you typed stays. Escape in a typed box
+empties it, and it does not stop a running turn the way Escape elsewhere
+does. A list under six rows gets no box: four servers fit on a screen.
+
+Not built: fuzzy matching or ranking. The rows already sit in the order
+the agent uses; a filter that reorders them would make the same list
+look different depending on what you typed.
+
+A run against a real setup (four servers, 129 tools, 14 skills, 32
+memories): `jyotir panchang` left `4 of 129` tools, `zzzz` left `0 of
+129`, Escape brought all 129 back, `brother` in the memory panel left `2
+of 32`, and the servers section, at four rows, showed no box.
+
 ## The surface itself: one design system
 
 The panel, the transcript and the composer are not styled one at a

@@ -206,7 +206,8 @@ person. … ask for the departure city.
   every eval get no memory;
 * `[tools] allow` can leave the two tools out while the layer stays;
 * `remember` asks first, and a refused call writes nothing;
-* `/memory` and the page list, add, and forget without a model turn.
+* `/memory` and the page list, add, and forget without a model turn
+  (the page's list takes a filter box once it's long, notes/22).
 
 ## What was deliberately not built
 

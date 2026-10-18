@@ -1498,7 +1498,7 @@ $("#btn-clear").onclick = async () => {
    a model turn, and apply from the next conversation (the prompt layer
    is filled once, so the cached prefix survives). */
 
-const memPanel = { data: null };
+const memPanel = { data: null, filter: "" };
 
 $("#chip-mem").onclick = openMemPanel;
 $("#mem-close").onclick = () => $("#mem-backdrop").classList.add("hidden");
@@ -1508,6 +1508,7 @@ $("#mem-backdrop").addEventListener("click", (e) => {
 
 async function openMemPanel() {
   $("#mem-backdrop").classList.remove("hidden");
+  memPanel.filter = "";
   $("#mem-body").innerHTML = '<div class="panel-loading">loading…</div>';
   const res = await fetch("/api/memory");
   const data = await res.json();
@@ -1586,6 +1587,13 @@ function renderMemory() {
       + "asks before keeping anything.";
     body.append(p);
   }
+  // The rows sit in their own box so the filter has one list to hide in;
+  // a forget re-renders the panel and the typed words stay.
+  const list = document.createElement("div");
+  body.append(list);
+  const filter = listFilter(list, ".mem-row", "memories",
+    (v) => { memPanel.filter = v; });
+  filter.input.value = memPanel.filter;
   for (const item of d.items) {
     const row = document.createElement("div");
     row.className = "conn-card mem-row";
@@ -1606,8 +1614,9 @@ function renderMemory() {
       actions.append(drop);
     }
     row.append(main, actions);
-    body.append(row);
+    list.append(row);
   }
+  filter.apply();
 }
 
 /* ---------- schedules panel (samay_link.py) ----------
@@ -2731,6 +2740,61 @@ $("#tools-backdrop").addEventListener("click", (e) => {
   if (e.target === $("#tools-backdrop")) closeToolsPanel();
 });
 
+/* ---- type to filter a long list ----
+
+   Fifty-one tools from one server is a list nobody scrolls. A box above
+   each long list keeps only the rows holding every word typed, matched
+   anywhere in the row (name, badges, description), any case. The count
+   says "3 of 51" while words are typed, so hidden rows are never a
+   surprise. Rows are only hidden, never re-fetched: the box costs
+   nothing and a re-render keeps what was typed. Short lists get no box. */
+
+const FILTER_MIN = 6;
+
+function listFilter(rows, rowSel, what, keep) {
+  const box = document.createElement("div");
+  box.className = "list-filter hidden";
+  const input = document.createElement("input");
+  input.type = "search";
+  input.placeholder = `type to filter ${what}`;
+  input.spellcheck = false;
+  input.setAttribute("aria-label", `filter ${what}`);
+  const count = document.createElement("span");
+  count.className = "lf-count";
+  count.setAttribute("aria-live", "polite");
+  box.append(input, count);
+  rows.before(box);
+  const apply = () => {
+    const all = [...rows.querySelectorAll(rowSel)];
+    box.classList.toggle("hidden", all.length < FILTER_MIN && !input.value);
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    for (const r of all) {
+      const text = r.textContent.toLowerCase();
+      const hit = words.every((w) => text.includes(w));
+      r.classList.toggle("filtered-out", !hit);
+      if (hit) shown++;
+    }
+    count.textContent = words.length ? `${shown} of ${all.length}` : `${all.length}`;
+    if (keep) keep(input.value);
+  };
+  input.oninput = apply;
+  // Escape in a typed box empties it, and does not stop a running turn.
+  input.onkeydown = (e) => {
+    if (e.key === "Escape" && input.value) {
+      e.stopPropagation();
+      input.value = "";
+      apply();
+    }
+  };
+  const clear = () => { input.value = ""; apply(); };
+  return { apply, clear, input };
+}
+
+const mcpFilter = listFilter($("#mcp-rows"), ".mcp-row", "servers");
+const skillFilter = listFilter($("#skills-rows"), ".mcp-row", "skills");
+const toolFilter = listFilter($("#tools-rows"), ".tool-row", "tools");
+
 async function openToolsPanel() {
   $("#tools-backdrop").classList.remove("hidden");
   const rows = $("#tools-rows");
@@ -2747,6 +2811,7 @@ async function openToolsPanel() {
     skills = skillRes.ok ? await skillRes.json() : null;
   } catch { /* all stay null -> per-section error text */ }
 
+  for (const f of [mcpFilter, skillFilter, toolFilter]) f.clear();
   $("#mcp-section").classList.toggle("hidden", servers === null);
   collapseAddForm();
   renderMCPRows(servers);
@@ -2760,6 +2825,7 @@ async function openToolsPanel() {
   }
   rows.textContent = "";
   for (const t of tools) rows.append(toolRow(t));
+  toolFilter.apply();
 }
 
 /* ---- skills ---- */
@@ -2777,6 +2843,11 @@ $("#skills-reload").onclick = async () => {
 };
 
 function renderSkillRows(skills) {
+  fillSkillRows(skills);
+  skillFilter.apply();
+}
+
+function fillSkillRows(skills) {
   const rows = $("#skills-rows");
   if (!skills) { rows.textContent = ""; return; }
   rows.textContent = "";
@@ -3019,13 +3090,14 @@ function showSkillError(text) {
 
 async function renderMCPRows(servers) {
   const rows = $("#mcp-rows");
-  if (!servers) { rows.textContent = ""; return; } // no manager / fetch failed
   rows.textContent = "";
-  if (!servers.length) {
+  if (!servers) { /* no manager / fetch failed */ }
+  else if (!servers.length) {
     rows.innerHTML = '<div class="mcp-empty">no servers connected — add one above</div>';
-    return;
+  } else {
+    for (const s of servers) rows.append(mcpRow(s));
   }
-  for (const s of servers) rows.append(mcpRow(s));
+  mcpFilter.apply();
 }
 
 // A server the package or Setu brought comes back next launch, so the
