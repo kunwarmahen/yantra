@@ -178,9 +178,11 @@ uses.
 
 ## What is not here yet
 
-* **Watching, run for real.** `/learn watch` is built on both phones and
-  tested on Sparsh's saved screens, not yet run with a person's finger
-  on the Nexus or the iPhone.
+* **Watching, run through an agent.** Sparsh's side ran on a real Nexus
+  6P with a person's finger (Sparsh's notes/17: "tapped 3 field 'Ask
+  Gmail'", three keys counted), and found a buffering bug it fixed. A
+  whole `/learn watch` lesson through an agent, and the iPhone's
+  before-and-after, haven't been run yet.
 * **A Teach button on the page.** The words work there; a button beside
   *save last turn* would start a lesson without typing one.
 * **One skill for both phones.** A lesson is taught on one phone, and its
