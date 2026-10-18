@@ -656,7 +656,7 @@ the three traps that bite everyone once) see
 
 A server added here is this Yantra's. To have it everywhere (Samay's
 runs, and dvara's chat on Telegram and the Sarathi page), add it to
-Setu instead, once: `setu connect --server URL --id docs --token-stdin`,
+Setu instead, once: `setu connect --server URL --id docs --ask-token`,
 or **Add your own server** on Setu's page. Setu tries it, writes down
 which tools only read, keeps the token in its vault, and Yantra finds it
 at startup like any other connection
