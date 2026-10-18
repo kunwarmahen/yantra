@@ -228,12 +228,16 @@ class ConversationLog:
                          road=road, folder=folder)
 
     def keep(self, conversation_id: str, payload: dict, *, road: str,
-             folder: str = "") -> bool:
-        """A payload in hand (a host that has one already), same rules."""
+             folder: str = "", at: str | None = None) -> bool:
+        """A payload in hand (a host that has one already), same rules.
+        ``at`` is when it last moved, for a conversation brought in from
+        an older record; now otherwise."""
         turns = turns_of(payload)
         if not turns:
             return False
-        now = datetime.now(UTC).isoformat(timespec="seconds")
+        # To the microsecond: two turns in one second (a page, a fast
+        # model) must still come out newest first.
+        now = at or datetime.now(UTC).isoformat(timespec="microseconds")
         title = title_of(payload)
         with self._lock:
             row = self._db.execute(
@@ -288,23 +292,28 @@ class ConversationLog:
     _COLUMNS = ("c.id, c.title, c.road, c.folder, c.model, c.turns, "
                 "c.started_at, c.updated_at")
 
-    def listed(self, words: str = "", *, limit: int = 200) -> list[Kept]:
-        """Newest first; with ``words``, only the ones that say all of them."""
+    def listed(self, words: str = "", *, folder: str | None = None,
+               limit: int = 200) -> list[Kept]:
+        """Newest first; with ``words``, only the ones that say all of them;
+        with ``folder``, only the ones held there (a host that keeps one
+        log per person and names each agent as the folder: Dvara)."""
         query = match_of(words)
+        where, args = ("AND c.folder = ? ", [folder]) if folder is not None else ("", [])
         with self._lock:
             if not query:
                 rows = self._db.execute(
                     f"SELECT {self._COLUMNS}, '' FROM conversations c "
+                    f"WHERE 1 {where}"
                     "ORDER BY c.updated_at DESC, c.n DESC LIMIT ?",
-                    (limit,)).fetchall()
+                    (*args, limit)).fetchall()
             else:
                 rows = self._db.execute(
                     f"SELECT {self._COLUMNS}, snippet(conversation_words, 1, "
                     "char(2), char(3), '…', 12) FROM conversation_words w "
                     "JOIN conversations c ON c.n = w.rowid "
-                    "WHERE conversation_words MATCH ? "
+                    f"WHERE conversation_words MATCH ? {where}"
                     "ORDER BY c.updated_at DESC, c.n DESC LIMIT ?",
-                    (query, limit)).fetchall()
+                    (query, *args, limit)).fetchall()
         return [Kept(*r) for r in rows]
 
     def count(self) -> int:

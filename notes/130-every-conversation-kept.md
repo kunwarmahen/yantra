@@ -129,9 +129,12 @@ one on into its own row, and starts a new row after clear.
 
 ## What is not here yet
 
-* **Dvara's own roads.** A conversation through Telegram or Sarathi's
-  home page is Dvara's, kept per person by Dvara (its `/chats`). It
-  uses this same log, one file per person; see Dvara's notes.
+* ~~**Dvara's own roads.**~~ A conversation through Telegram or
+  Sarathi's home page is Dvara's, and Dvara keeps it in this same log,
+  one file per person, each agent named as the row's folder
+  (`listed(folder=...)`); what its old `/new` book held came over with
+  its own dates (`keep(at=...)`). Its `/chats` searches and deletes, and
+  Sarathi's home page has a History button (Dvara's notes/50).
 * **Searching tool output.** Left out on purpose (above). If "the agent
   found it on some page" turns out to be how people remember, it is one
   more column in the index.

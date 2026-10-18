@@ -115,6 +115,23 @@ def test_what_a_person_types_is_never_read_as_search_syntax(log):
     assert log.listed("((") == log.listed()   # no words: the whole list
 
 
+def test_a_folder_narrows_the_list_and_the_search(log):
+    for cid, folder in (("a", "minder"), ("b", "greeter")):
+        agent = agent_with([assistant_text("the trip is Friday")])
+        list(agent.run_streaming("when is the trip?"))
+        log.record(cid, agent, provider_name="scripted", road="Telegram",
+                   folder=folder)
+    assert [r.id for r in log.listed(folder="minder")] == ["a"]
+    assert [r.id for r in log.listed("friday", folder="greeter")] == ["b"]
+
+
+def test_a_conversation_brought_in_keeps_when_it_happened(log):
+    payload = {"model": "m", "history": [
+        {"role": "user", "content": [{"kind": "text", "text": "old one"}]}]}
+    log.keep("x", payload, road="the page", at="2026-09-01T10:00:00+00:00")
+    assert log.listed()[0].updated_at == "2026-09-01T10:00:00+00:00"
+
+
 def test_reading_one_shows_tools_with_their_results(log):
     agent = agent_with([assistant_tool_call("c1", "echo", {"text": "hi"}),
                         assistant_text("it said hi")])

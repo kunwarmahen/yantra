@@ -2393,7 +2393,8 @@ src/yantra/
 │                   page), an FTS5 index of what was said, /chats and the
 │                   page's history panel; delete is for good (secure_delete +
 │                   index merge); ~/.local/state/yantra/conversations.sqlite,
-│                   YANTRA_HISTORY=off|PATH, --no-history
+│                   YANTRA_HISTORY=off|PATH, --no-history; a host keeping
+│                   one log per person narrows by folder (Dvara's /chats)
 │                   ([notes/130](notes/130-every-conversation-kept.md))
 ├── memory/         what the agent knows about the PERSON across conversations
 │                   (not write_note's project notes): MemoryStore is four verbs
