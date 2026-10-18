@@ -1012,19 +1012,24 @@ class Setu:
             agent.registry.admit_also([f"mcp__{cfg.name}__*" for _, cfg in wanted])
         for row, cfg in wanted:
             existing = manager.sessions.get(cfg.name)
-            stamp = (str(row.get("level") or ""), str(row.get("email") or ""))
-            if (existing is not None and cfg.name in self.servers
-                    and self.started.get(cfg.name, stamp) != stamp):
-                # signed in again at another level: the running connector
-                # still offers the old level's tools until it restarts
+            stamp = (str(row.get("level") or ""), str(row.get("email") or ""),
+                     json.dumps(link.verbs(str(row.get("connector") or "")), sort_keys=True))
+            before = self.started.get(cfg.name, stamp)
+            if (existing is not None and cfg.name in self.servers and before != stamp):
+                # signed in again at another level -- or, for a server of
+                # the person's own, its tools reclassed in its file: the
+                # running connector still offers the old tools until it
+                # restarts (it reads which ones read when it starts)
                 try:
                     manager.disconnect(cfg.name, forget=False)
                 except MCPError:
                     pass
                 self.servers.discard(cfg.name)
                 existing = None
-                done.notes.append(f"{row['ref']} restarted at "
-                                  f"{row.get('level_label') or row.get('level')}")
+                done.notes.append(
+                    f"{row['ref']} restarted at {row.get('level_label') or row.get('level')}"
+                    if before[:2] != stamp[:2] else
+                    f"{row['ref']} restarted: its tools were reclassed in Setu")
             if existing is not None and not same_server(existing.config, cfg):
                 done.notes.append(f"'{cfg.name}' is already an mcp server with a different "
                                   f"command; leaving it, and {row['ref']} unconnected")

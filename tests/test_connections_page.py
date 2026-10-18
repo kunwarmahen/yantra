@@ -74,7 +74,7 @@ FAKE_SETU = """\
             "connections": [row(r, lv) for r, lv in s["connections"].items()],
             "connectors": [{{"id": "gmail", "name": "Gmail", "summary": "Read your mail.",
                             "connected": any(r.startswith("gmail:") for r in s["connections"]),
-                            "verbs": {verbs!r}, "default_level": "read",
+                            "verbs": s.get("verbs") or {verbs!r}, "default_level": "read",
                             "levels": [{{"name": "read", "label": "Read only", "description": "",
                                         "scopes": []}},
                                        {{"name": "send", "label": "Read, draft and send",
@@ -236,6 +236,21 @@ class TestSync:
             assert "gmail:personal restarted at Send" in done.notes
             assert manager.sessions["gmail-personal"] is not before
             assert "mcp__gmail-personal__search_threads" in agent.registry
+        finally:
+            manager.shutdown()
+
+    def test_tools_reclassed_in_setu_restart_its_connector(self, setu, tmp_path):
+        """A server of your own reads which of its tools only read when it
+        starts: reclassed in its file, it must start again to show them."""
+        agent, manager = build(tmp_path, setu.path)
+        try:
+            before = manager.sessions["gmail-personal"]
+            verbs = dict(agent.setu.link.verbs("gmail"))
+            setu.set(verbs={**verbs, "send_message": "read"})
+            agent.setu.refresh()
+            done = agent.setu.sync(manager, agent)
+            assert "gmail:personal restarted: its tools were reclassed in Setu" in done.notes
+            assert manager.sessions["gmail-personal"] is not before
         finally:
             manager.shutdown()
 
