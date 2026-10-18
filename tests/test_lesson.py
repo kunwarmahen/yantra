@@ -212,7 +212,7 @@ class TestTheTerminal:
         repl._command("/learn done")
         repl._command("/learn start")
         assert "no lesson is open" in out.getvalue()
-        assert "/learn start and what the job is for" in out.getvalue()
+        assert "/learn start and what it's for" in out.getvalue()
 
 
 class TestThePage:

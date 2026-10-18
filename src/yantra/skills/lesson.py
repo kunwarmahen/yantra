@@ -170,9 +170,10 @@ DROPPED = "The lesson you'd started was dropped; nothing was kept."
 
 #: What a host says to ``/learn start`` without a task, and to a word it
 #: doesn't know.
-USAGE = ("Send /learn start and what the job is for (\"/learn start send a "
-         "WhatsApp message\"), then tell me each step and I'll do it; or /learn "
-         "watch and what it's for, then do each step yourself on the phone and "
-         "send next after each one. /learn done keeps "
-         "it as a skill, /learn stop drops it. Plain /learn keeps what the "
-         "last answer did.")
+USAGE = ("Two ways to teach me a job. TELL: /learn start and what it's for "
+         "(\"/learn start send a WhatsApp message\"), then type each step and "
+         "I'll do it -- you don't touch the phone. SHOW: /learn watch and what "
+         "it's for (\"/learn watch check my Coinbase portfolio value\"), then do "
+         "each step yourself on the phone and send next after each one -- I "
+         "don't touch it. Either way, /learn done keeps it as a skill and /learn "
+         "stop drops it. Plain /learn keeps what the last answer did.")

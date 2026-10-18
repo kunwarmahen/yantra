@@ -339,9 +339,19 @@ and full of wrong guesses, and every later run follows a recipe that is
 known to work. `/learn` saves the last turn by hand, and `--learn off`
 stops the offers. ([notes/96](notes/96-solve-it-once.md))
 
-**Teaching it a job, one step at a time.** Some jobs are easier to show
-than to describe: a WhatsApp message on your phone, a form you always
-fill the same way. Start a lesson and say each step:
+**Teaching it a job, one step at a time.** Some jobs are easier to walk
+through than to describe: a WhatsApp message on your phone, your
+portfolio in an app, a form you always fill the same way. A **lesson**
+does that, in one of two ways. Pick the one you'll actually do:
+
+| | `/learn start …`: you **tell** | `/learn watch …`: you **show** |
+|---|---|---|
+| Who touches the phone | **the agent**; you don't | **you**; the agent doesn't |
+| What you send | each step, as a message ("open Coinbase", "tap Portfolio") | **next**, after you've done each step yourself |
+| What the agent does | carries out that one step, says what's on the screen, asks what's next | looks at what changed and says what it thinks you did ("I think you opened Coinbase"); you correct it if it's wrong |
+| Good for | jobs you can describe in words | jobs easier to do than to describe |
+
+**Telling** (`start`): you type each step, and the agent does it.
 
 ```text
 you> /learn start send a WhatsApp message
@@ -355,21 +365,37 @@ you> type running late, then send it
 you> /learn done
 ```
 
-While the lesson is open, the agent does only the step you said and
-doesn't offer a skill after each one. It learns only the steps you
-*type*. If you'd rather do them yourself on the phone, that's `/learn
-watch` (below), not `start`. `/learn done` on a lesson with nothing in
-it says so, and keeps it open. `/learn done` writes the whole
-lesson down as one skill, and you're asked to save it as usual. The
-person, and what you typed, become *inputs*, so next time "message Dad
-that I'm on my way" follows the same steps. On a phone you can also do
-the steps yourself: `/learn watch send a WhatsApp message`, then do a
-step and type `next`. On Android, Sparsh tells the agent what you
-tapped. An iPhone can't show where it was touched, so the agent compares
-the screen before and after, and asks you if it isn't sure. `/learn
-stop` drops a lesson. On the web page, type the same words into the
-chat. More on phones, with what a real run looked like, in §25.
-([notes/129](notes/129-taught-step-by-step.md))
+**Showing** (`watch`): you do each step on the phone, then type `next`.
+
+```text
+you> /learn watch check my Coinbase portfolio value
+I'm watching. Do the first step and say "next".
+you> next                  (you opened Coinbase)
+I think you opened Coinbase. Am I right?
+you> yes. next             (you tapped through to your portfolio)
+I think you opened your portfolio; it shows the total value. Am I right?
+you> /learn done
+```
+
+Both end the same way: `/learn done` writes the whole lesson down as
+one skill, and you're asked to save it as usual. The parts that change
+(the person, what you typed) become *inputs*, so next time "message Dad
+that I'm on my way" follows the same steps.
+
+* **Don't mix them up.** A `start` lesson learns only the steps you
+  *type*; steps you do by hand during it aren't seen, and `/learn done`
+  will say there's nothing to keep. If you're going to touch the phone,
+  use `watch`.
+* While a lesson is open, no skill is offered after each step.
+* `/learn done` on a lesson with nothing in it says so, and keeps it
+  open. A new `/learn start` replaces a lesson that's still empty.
+* `/learn stop` drops a lesson; so does `/clear`.
+* On Android, Sparsh tells the agent what you tapped. An iPhone can't
+  show where it was touched, so the agent compares the screen before
+  and after, and asks.
+* On the web page, type the same words into the chat. More on phones,
+  with what a real run looked like, is in §25.
+  ([notes/129](notes/129-taught-step-by-step.md))
 
 On the web page, nothing asks. The answer comes back and you can type
 straight away. The check runs behind it, and anything it finds waits

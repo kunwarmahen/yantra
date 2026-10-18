@@ -299,13 +299,14 @@ local model follows a recipe that is known to work instead of
 rediscovering the API, which is the part small models do badly.
 
 `/learn` saves the last turn by hand (the page has a *save last turn*
-button). A job you'd rather walk it through, one step per message, is a
-**lesson**: `/learn start send a WhatsApp message` tells the agent it is
-being taught, so it does only the step you say and asks what's next;
+button). A job you'd rather walk it through is a **lesson**, told or
+shown. `/learn start send a WhatsApp message` is **telling**: you type
+each step, and the agent does only that step and asks what's next.
+`/learn watch check my Coinbase portfolio value` is **showing**: you do
+each step on the phone yourself and type `next`, and Sparsh tells the
+agent what you did. A `start` lesson doesn't see steps done by hand.
 `/learn done` writes every step since the start into one skill, and
-`/learn stop` drops it. On a phone, `/learn watch <what>` lets you do
-each step yourself and say "next": Sparsh tells the agent what you
-tapped ([notes/129](notes/129-taught-step-by-step.md)). `--learn off` stops the offers; `--learn auto` saves without
+`/learn stop` drops it ([notes/129](notes/129-taught-step-by-step.md)). `--learn off` stops the offers; `--learn auto` saves without
 asking, for unattended runs only. `/skills` shows each learned skill's
 record (`worked 3 · failed 0 · last ok …`), counted by Yantra from what
 happened, never by the model. Why the write-up runs in a fresh, small
