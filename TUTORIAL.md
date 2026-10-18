@@ -364,7 +364,9 @@ the steps yourself: `/learn watch send a WhatsApp message`, then do a
 step and type `next`. On Android, Sparsh tells the agent what you
 tapped. An iPhone can't show where it was touched, so the agent compares
 the screen before and after, and asks you if it isn't sure. `/learn
-stop` drops a lesson. ([notes/129](notes/129-taught-step-by-step.md))
+stop` drops a lesson. On the web page, type the same words into the
+chat. More on phones, with what a real run looked like, in §25.
+([notes/129](notes/129-taught-step-by-step.md))
 
 On the web page, nothing asks. The answer comes back and you can type
 straight away. The check runs behind it, and anything it finds waits
@@ -2152,7 +2154,7 @@ not use your own phone:
 **Use it.** Start Yantra as usual. It says one line at startup:
 
 ```
-sparsh: 10 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via …/sparsh
+sparsh: 12 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via …/sparsh
 ```
 
 Then just ask: *"On my phone, turn on airplane mode."* *"Using Messages,
@@ -2364,6 +2366,30 @@ container and from Telegram through Dvara, with `qwen3.8-64k:latest` on
 Ollama (Sarathi's `sarathi phone iphone` gives it out). Two things
 an iPhone does differently: a home-screen widget is one line that opens
 its app, and the phone has to stay unlocked while the agent works.
+
+**Teach it a phone job.** A job you do the same way every time can be
+taught once. Either tell it each step (`/learn start`, §6's *Teaching
+it a job*), or do the steps yourself while it watches:
+
+```text
+you> /learn watch check the battery percentage in Settings
+I'm watching. Do the first step and say "next".
+you> next                        (you opened Settings)
+I think you opened the Settings app. Am I right?
+you> yes. next                   (you tapped Battery)
+I think you tapped Battery: the Battery page shows 100%. Am I right?
+you> /learn done
+```
+
+On Android, Sparsh reads where you touched and names what was there
+("tapped 'Mom'"); typing is counted, and the words are read off the
+screen, never off the keys. An iPhone can't show where it was touched,
+so the agent compares the screen before and after, and asks. Either
+way, correct it in plain words when it guesses wrong. The skill it
+writes names each tap by its words and says what the screen should show
+next, so it still works when the buttons move. On a real Nexus 6P this
+became a Gmail search, and on a real iPhone 17 the battery check above
+([notes/129](notes/129-taught-step-by-step.md)).
 
 ---
 

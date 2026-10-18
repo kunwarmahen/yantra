@@ -837,7 +837,7 @@ and it answers "tap 6". That's why a local model can do it. When
 and says so in one line:
 
 ```
-sparsh: 9 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via /home/you/sparsh/.venv/bin/sparsh
+sparsh: 12 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via /home/you/sparsh/.venv/bin/sparsh
 ```
 
 Sparsh's ordinary steps (look, tap, type, scroll, open an app) run
@@ -874,7 +874,10 @@ included. With Sparsh on `PATH` but no phone at the start, a session
 says nothing and adds no tools. Attach one later and press **use this
 phone** in the panel, or type `/phone use`, to add them without a
 restart. `/phone` says what's attached, and `/phone log` shows the last
-steps. A screen the list can't describe (Settings' About page, which
+steps. To teach it a phone job, `/learn start` (tell it each step) or
+`/learn watch` (do each step yourself and say next; Sparsh's
+`watch_phone` and `watched` tell it what you did) and then `/learn done`
+([notes/129](notes/129-taught-step-by-step.md)). A screen the list can't describe (Settings' About page, which
 never goes still) comes with a **screenshot** when the model is local
 and says it can see (Ollama's `/api/show` lists "vision"); a cloud model
 gets none unless `YANTRA_PHONE_SHOTS=on`, and `off` stops them
