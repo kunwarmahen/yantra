@@ -393,8 +393,12 @@ that I'm on my way" follows the same steps.
 * On Android, Sparsh tells the agent what you tapped. An iPhone can't
   show where it was touched, so the agent compares the screen before
   and after, and asks.
-* On the web page, type the same words into the chat. More on phones,
-  with what a real run looked like, is in §25.
+* A skill taught on one phone is for that phone: the iPhone and an
+  Android phone name their apps and home screens differently. Teach it
+  on each phone you'll use it on.
+* On the web page, type the same words into the chat (there's no Teach
+  button yet). More on phones, with what a real run looked like, is in
+  §25.
   ([notes/129](notes/129-taught-step-by-step.md))
 
 **Fixing its mistakes.** The agent will sometimes get a step wrong.
@@ -1830,7 +1834,8 @@ websocket.
 
 What is in it: streamed replies and thinking rendered as markdown by a
 ~150-line escape-first renderer (no library), tool cards, permission
-prompts with approve/deny/**edit**, image attachments, save/load/compact
+prompts with approve/deny/**edit**, image attachments, a **history** of
+every conversation (search, read, carry on, delete), save/load/compact
 and model switches, a permission-mode chip (ask ⇄ yolo, switchable
 mid-turn), a tools panel with every registered tool switchable off and on
 mid-run, an MCP servers section above it with health dots and add-by-form
@@ -1934,6 +1939,13 @@ containers, see §24.
 
   That one argument is what lets a prompt you fixed this morning take
   effect this afternoon. ([notes/38](notes/38-giving-it-back.md))
+
+  Separately from checkpoints, every conversation is kept by itself to
+  read again (`/chats`, the page's **history**; §17 above,
+  [notes/130](notes/130-every-conversation-kept.md)). A host keeping
+  them per person calls the same log: `ConversationLog(path).record(id,
+  agent, provider_name=..., road=..., folder=...)`, then `listed(words,
+  folder=...)`, `read(id)`, `delete(id)`.
 
 * **Compaction.** Mask before summarize: old tool-result *output* is
   elided first (reversible, the calls stay verbatim), and only if the

@@ -291,7 +291,13 @@ line that was already there.
   how it was called, then made right, no longer counts
   ([note 106](106-what-the-recipe-leaves-out.md)).
 * **A Teach button on the page.** The words work there; a button beside
-  *save last turn* would start a lesson without typing one.
+  *save last turn* would start a lesson without typing one, choosing
+  telling or showing, with **Done** and **Stop** while it's open. The
+  same on Sarathi's home chat.
 * **One skill for both phones.** A lesson is taught on one phone, and its
-  app names (a package, a bundle id) are that phone's. Teaching it on
-  each is the way for now.
+  app names (a package, a bundle id, the iPhone's "finance folder") are
+  that phone's. A skill that opened the app by its everyday name with
+  `open_app` would work on either. Teaching it on each is the way for
+  now.
+* **`/learn clear`.** `/learn stop` is the word that drops an open
+  lesson; `clear` is the one some people reach for first.
