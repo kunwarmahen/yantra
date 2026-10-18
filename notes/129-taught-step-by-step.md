@@ -204,7 +204,17 @@ stale search text, typing the query, and letting results filter live.
 ```
 
 The clearing step came out conditional with nobody asking for it. The
-corrections in the lesson were enough. Two Sparsh bugs were found on the
+corrections in the lesson were enough.
+
+Next session, asked *search my Gmail for amazon*: `load_skill
+gmail-search` first, then one look, which found Gmail already open with
+"unit" in the box. So it went straight to the skill's conditional step
+(Clear text), typed "amazon", and answered with the one match, asking
+before opening it. Seven model calls. Yantra counted the use as
+**failed**, though, because one call was `type_text {"content": ...}`, a
+wrong argument name that the next call fixed. A recipe with no script is
+judged on every call after its load ([note 96](96-solve-it-once.md)),
+so the model's slip counted against a recipe that worked. Two Sparsh bugs were found on the
 way and fixed (Sparsh's notes/17): getevent's lines sat in a buffer when
 piped, and the touch reader swallowed the agent's own requests.
 
@@ -213,6 +223,10 @@ piped, and the touch reader swallowed the agent's own requests.
 * **Watching on an iPhone.** `/learn watch` ran whole on a real Nexus
   6P with `qwen3.8-64k` (below); the iPhone's before-and-after hasn't
   been run yet.
+* **A model's slip counted against the recipe.** A call refused for an
+  argument the tool doesn't have says nothing about the recipe, yet
+  it counts as the recipe failing, and three in a row set a working
+  one aside.
 * **A Teach button on the page.** The words work there; a button beside
   *save last turn* would start a lesson without typing one.
 * **One skill for both phones.** A lesson is taught on one phone, and its
