@@ -113,6 +113,7 @@ function route(env) {
                                break;
     case "learn_skipped":      if (env.reason) addBanner(env.reason, false, true);
                                break;
+    case "lesson":             addBanner(env.text, false, true); break;
     case "resolved":           closeModalIf(env.id); break;
 
     case "budget_warning": onBudgetWarning(env); break;

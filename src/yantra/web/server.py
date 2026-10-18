@@ -262,6 +262,9 @@ class WebSession:
         self._look_stop = threading.Event()
         self._look_status = ""
         self._last_look = ""
+        #: A job being taught step by step (``/learn start`` typed in the
+        #: chat; skills/lesson.py), or None.
+        self.lesson: Any | None = None
 
     def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
         """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
@@ -589,13 +592,19 @@ class WebSession:
             self.broadcast({"type": "turn_cancelled"})
         if end is not None and not cancelled:
             self._count(end)
+            if self.lesson is not None:
+                # A step of a walk-through: kept for /learn done, and no
+                # look after it -- one step is not a skill.
+                from yantra.skills.learn import current_turn
+                self.lesson.add(current_turn(agent))
         self._keep_pending_memories()
         self.turn_active = False
         self._cancel.clear()
         self._setu_settle()
         self.broadcast({"type": "state", **self.state()})
         self.broadcast({"type": "turn_done"})
-        if end is not None and end.reason == "end_turn" and not cancelled:
+        if (end is not None and end.reason == "end_turn" and not cancelled
+                and self.lesson is None):
             self._start_look()
 
     # ---- the tray: what the look found, waiting (notes/113) ----------------------
@@ -795,7 +804,7 @@ class WebSession:
 
     # ---- learning (notes/96) ---------------------------------------------------
 
-    def _learn(self) -> None:
+    def _learn(self, lesson: Any = None) -> None:
         """``/learn`` on the page: the person asked, so the offer is a
         question, put now -- the input is busy until it is answered.
         Nothing here may cost the answer already on the page: a failure
@@ -809,7 +818,7 @@ class WebSession:
             learner.last_reason = self._last_end
         try:
             offer = learner.consider(
-                forced=True,
+                forced=True, lesson=lesson,
                 progress=lambda text: self.broadcast(
                     {"type": "learn_status", "text": text}))
             if offer is None:
@@ -858,9 +867,42 @@ class WebSession:
                             "path": str(skill.directory)})
             return
 
-    def start_learn(self) -> None:
-        """``POST /api/learn``: save the last turn because the person asked.
-        A turn of its own for the page -- the input is busy until it ends."""
+    def learn_word(self, text: str) -> None:
+        """``/learn`` typed in the chat: plain, it saves the last turn (the
+        button's job); ``start``/``watch`` opens a lesson with its first
+        turn, ``done`` saves the lesson, ``stop`` drops it
+        (skills/lesson.py)."""
+        from yantra.skills import lesson as lessons
+
+        verb, rest = lessons.parse(text.strip()[len("/learn"):])
+        say = lambda words: self.broadcast({"type": "lesson", "text": words})  # noqa: E731
+        if verb in ("start", "watch"):
+            if self.lesson is not None:
+                say(self.lesson.status())
+            elif not rest:
+                say(lessons.USAGE)
+            else:
+                self.lesson = lessons.Lesson(task=rest, watching=verb == "watch")
+                self.start_turn(self.lesson.opening(), [])
+            return
+        if verb == "stop":
+            say("Dropped the lesson; nothing was kept." if self.lesson is not None
+                else "No lesson is open.")
+            self.lesson = None
+            return
+        if verb not in ("", "done"):
+            say(lessons.USAGE)
+            return
+        if verb == "done" and self.lesson is None:
+            say("No lesson is open: /learn start <what it's for> begins one.")
+            return
+        lesson, self.lesson = self.lesson, None
+        self.start_learn(lesson)
+
+    def start_learn(self, lesson: Any = None) -> None:
+        """``POST /api/learn``: save the last turn because the person asked
+        -- or the lesson just closed. A turn of its own for the page: the
+        input is busy until it ends."""
         self._cancel.clear()
         self.turn_active = True
         self.broadcast({"type": "turn_started"})
@@ -868,7 +910,7 @@ class WebSession:
         def work() -> None:
             self._stop_look()
             try:
-                self._learn()
+                self._learn(lesson)
                 self._keep_pending_memories()
             finally:
                 self.turn_active = False
@@ -1238,6 +1280,8 @@ class WebSession:
             # or found no phone at the start, and the phone chip stays hidden.
             "sparsh": (agent.sparsh.describe()
                        if getattr(agent, "sparsh", None) is not None else None),
+            # A job being taught step by step (/learn start): how far it got.
+            "lesson": self.lesson.status() if self.lesson is not None else None,
             "tools": agent.registry.names(),
             # Runtime-disabled subset of ``tools`` (the /api/tools panel's
             # toggles); empty for a stock session.
@@ -1447,6 +1491,10 @@ def make_app(session: WebSession, static_dir: Path | None = None,
                 images.append(image_block_from_bytes(img["filename"], raw))
             except (KeyError, TypeError, ValueError) as exc:
                 raise HTTPException(400, f"bad image: {exc}") from exc
+        first = text.strip().split(maxsplit=1)[0].lower()
+        if first == "/learn" and getattr(session.agent, "skills", None) is not None:
+            session.learn_word(text)
+            return {"ok": True}
         session.start_turn(text, images)
         return {"ok": True}
 

@@ -27,7 +27,8 @@ THE PHONE'S RULES DECIDE WHAT ASKS, NOT THE SERVER'S HINTS. Sparsh's
 taps honestly say they change things, and a card before every tap would
 be a card nobody reads by the tenth. Sparsh names three kinds instead:
 
-    read     look, list_apps, describe_hold       never asked about
+    read     look, list_apps, describe_hold,      never asked about
+             watch_phone, watched
     act      tap, type_text, scroll, press_key,   not asked about here:
              open_app                             Sparsh holds the risky
                                                   ones itself (Send, Pay,

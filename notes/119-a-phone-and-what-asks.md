@@ -42,7 +42,7 @@ sets each wrapped tool by its kind:
 
 | kind | tools | here |
 |---|---|---|
-| read | `look`, `list_apps`, `describe_hold` | never asked about |
+| read | `look`, `list_apps`, `describe_hold`, `watch_phone`, `watched` (the person showing a job, [note 129](129-taught-step-by-step.md)) | never asked about |
 | act | `tap`, `type_text`, `scroll`, `press_key`, `open_app` | not asked about |
 | confirm | `confirm` | `always_ask`: asked every time, even under `--yolo` |
 

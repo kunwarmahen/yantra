@@ -317,7 +317,7 @@ Nearest wins:
 | `.yantra/skills/` | private overrides — gitignored |
 | `skills/` | the set your repo commits |
 | `~/.yantra/skills/` | yours, everywhere |
-| `.yantra/skills/learned/`, `~/.yantra/skills/learned/` | written by the agent after solving a task, and approved by you — searched last, so a skill a person wrote always wins its name ([notes/96](96-solve-it-once.md)) |
+| `.yantra/skills/learned/`, `~/.yantra/skills/learned/` | written by the agent after solving a task (or after you taught it one, step by step: [notes/129](129-taught-step-by-step.md)), and approved by you — searched last, so a skill a person wrote always wins its name ([notes/96](96-solve-it-once.md)) |
 
 `.yantra/` is machine state — a sqlite session store, job logs, a Chrome
 profile — and it is gitignored. Skills are hand-written source meant to

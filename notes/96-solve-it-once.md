@@ -313,6 +313,10 @@ small models do well. Rediscovering an API is something they do badly.
   Built: `--skill-share` reads every file for secrets, addresses, your
   paths and values from memory, and stops on any; `--skill-install`
   shows every file and asks ([note 111](111-a-recipe-for-somebody-else.md)).
+* ~~**A job taught one step at a time.** `/learn` reads the last turn, so
+  a walk-through of five messages is learned as its fifth.~~ Built: a
+  lesson reads every turn since `/learn start` as one task
+  ([note 129](129-taught-step-by-step.md)).
 * **Choosing which learned skills to show.** Every learned skill's
   description is in the roster, like a hand-written one. At two
   hundred skills, that's about 5,000 tokens a session. Picking learned

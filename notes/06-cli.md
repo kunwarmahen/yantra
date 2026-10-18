@@ -323,6 +323,9 @@ face is four commands, and the last one is the one people actually use:
 /skills reload              # re-scan after writing or editing one
 /NAME <task>                # run a skill directly: /new-tool add a count_lines tool
 /learn                      # write the last turn down as a skill, tested, then asked
+/learn start WHAT           # a lesson: it does only the step you say, then asks
+/learn watch WHAT           # a lesson you show on the phone; say next after each step
+/learn done | stop          # the whole lesson as one skill, or dropped (notes/129)
 ```
 
 `/skills off` shares `/tools off`'s matching rule (globs), its soft

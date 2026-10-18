@@ -299,7 +299,13 @@ local model follows a recipe that is known to work instead of
 rediscovering the API, which is the part small models do badly.
 
 `/learn` saves the last turn by hand (the page has a *save last turn*
-button); `--learn off` stops the offers; `--learn auto` saves without
+button). A job you'd rather walk it through, one step per message, is a
+**lesson**: `/learn start send a WhatsApp message` tells the agent it is
+being taught, so it does only the step you say and asks what's next;
+`/learn done` writes every step since the start into one skill, and
+`/learn stop` drops it. On a phone, `/learn watch <what>` lets you do
+each step yourself and say "next": Sparsh tells the agent what you
+tapped ([notes/129](notes/129-taught-step-by-step.md)). `--learn off` stops the offers; `--learn auto` saves without
 asking, for unattended runs only. `/skills` shows each learned skill's
 record (`worked 3 · failed 0 · last ok …`), counted by Yantra from what
 happened, never by the model. Why the write-up runs in a fresh, small
@@ -2432,6 +2438,14 @@ src/yantra/
 │                   use is judged on the recipe's OWN calls (its script or
 │                   tool), not a look-around `ls` that exited 1
 │                   ([notes/106](notes/106-what-the-recipe-leaves-out.md))
+│                   lesson.py: a job TAUGHT one step per message, kept as
+│                   one skill -- /learn start opens it (an opening telling
+│                   the agent to do only the step it's told), every turn
+│                   after is copied in as it ends, no look runs halfway,
+│                   /learn done hands the whole walk to the same write-up
+│                   with the person's words above their steps; /learn
+│                   watch is the same with the person's own hand on the
+│                   phone ([notes/129](notes/129-taught-step-by-step.md))
 │                   promote.py: a learned script promoted to a TOOL -- suggested
 │                   after 5 successes in a row, never automatic; one fresh
 │                   call writes tool.json (parameters + an argv template), one

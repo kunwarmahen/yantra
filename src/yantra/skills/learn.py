@@ -213,6 +213,9 @@ class Turn:
     task: str
     steps: list[Step]
     answer: str
+    #: A lesson's turns joined as one (lesson.py): the person's words, and
+    #: the step they came before -- ``(index into steps, words)``.
+    said: list[tuple[int, str]] = field(default_factory=list)
 
     def skills_loaded(self, tools: dict[str, str] | None = None) -> list[str]:
         """Skills the turn followed. ``tools`` maps a promoted tool's name
@@ -435,7 +438,12 @@ def digest(turn: Turn, found: set[str] | None = None) -> str:
     "pitfalls" section out of.
     """
     lines = [f"TASK: {turn.task}", "", "STEPS:"]
+    said: dict[int, list[str]] = {}
+    for at, words in turn.said:
+        said.setdefault(at, []).append(words)
     for n, step in enumerate(turn.steps, start=1):
+        for words in said.pop(n - 1, []):
+            lines.append(f"PERSON: {_clip(words, MAX_ANSWER_CHARS)}")
         args = json.dumps(step.arguments, ensure_ascii=False)
         lines.append(f"{n}. {step.name} {args}")
         if step.ok:
@@ -444,6 +452,8 @@ def digest(turn: Turn, found: set[str] | None = None) -> str:
         else:
             first = step.result.strip().splitlines()[:1] or [""]
             lines.append(f"   -> FAILED: {_clip(first[0], MAX_FAILED_CHARS)}")
+    for at in sorted(said):            # words after the last step
+        lines += [f"PERSON: {_clip(w, MAX_ANSWER_CHARS)}" for w in said[at]]
     lines += ["", "FINAL ANSWER TO THE PERSON:", _clip(turn.answer, MAX_ANSWER_CHARS)]
     return scrub("\n".join(lines), found)
 
@@ -562,6 +572,23 @@ First decide. Reply "VERDICT: skip" if either of these is false:
   2. It will come again with different inputs (another device, another \
 city, another invoice). A one-off question, or a fact about this code, \
 is not a recipe."""
+
+DECIDE_LESSON = """\
+The person TAUGHT you this task, one step at a time, and asked for it to \
+be saved. Each PERSON line is what they said to do next; the steps under \
+it are what was done. Reply "VERDICT: skip" only if the steps show the \
+task did not get done.
+- The person's steps ARE the recipe, in their order. Leave out looks that \
+changed nothing and steps they took back.
+- What in their words will differ next time (who to message, what to \
+type, which item) is an INPUT; the rest is the recipe.
+- On a phone, name what to tap by the words on it and the app it is in, \
+and say what the screen should show after each step, so the next run can \
+check it is on the right screen. Never write a line number, a position or \
+coordinates: they change every time the screen is read.
+- A step that waited for the person's yes (a hold) still waits for it \
+next time: write it as a step that asks.
+- Write no script: a phone is worked one step at a time."""
 
 DECIDE_FORCED = """\
 The person asked for this to be saved. Reply "VERDICT: skip" only if the \
@@ -932,7 +959,8 @@ class Learner:
 
     def consider(self, *, forced: bool = False,
                  progress: Callable[[str], None] | None = None,
-                 stop: Callable[[], bool] | None = None) -> Offer | None:
+                 stop: Callable[[], bool] | None = None,
+                 lesson: Any = None) -> Offer | None:
         """Look at the last turn; return an Offer, or None with ``last_skip``
         saying why not. ``forced`` is the person asking (``/learn``): the
         effort count and the will-it-recur question are theirs to waive.
@@ -941,10 +969,14 @@ class Learner:
         write-up's stream and between steps, and true means give way --
         None comes back, nothing staged is left. Nothing is asked: a test
         that needs a yes comes back as an offer with ``waiting`` set.
+
+        ``lesson`` (lesson.py) is a walk-through: the turns since
+        ``/learn start``, read as one task in place of the last turn. It
+        is always the person asking, and never a repair.
         """
         self._stop = stop
         try:
-            return self._consider(forced, progress)
+            return self._consider(forced or lesson is not None, progress, lesson)
         except Stopped:
             self.last_skip = "stopped: a new message came first"
             return None
@@ -956,21 +988,31 @@ class Learner:
             raise Stopped
 
     def _consider(self, forced: bool,
-                  progress: Callable[[str], None] | None) -> Offer | None:
+                  progress: Callable[[str], None] | None,
+                  lesson: Any = None) -> Offer | None:
         say = progress or (lambda text: None)
         self.last_skip = None
-        turn = current_turn(self.agent)
-        repairs, failure = self._repair_target(turn)
+        if lesson is not None:
+            # Every turn of the walk, as one; a skill followed along the
+            # way is one of the steps they showed, not a recipe to repair.
+            turn, repairs, failure = lesson.as_turn(), None, ""
+            reason = "end_turn"
+        else:
+            turn = current_turn(self.agent)
+            repairs, failure = self._repair_target(turn)
+            reason = self.last_reason
         if repairs is None and failure:
             self.last_skip = failure
             return None
         # Asked for by name, two steps are still a recipe: the person has
         # answered "was it worth it" already. A repair is a load, a failure
         # and a recovery -- the effort question does not apply.
-        skip = why_not(turn, self.last_reason,
+        skip = why_not(turn, reason,
                        min_steps=1 if forced or repairs else MIN_STEPS,
-                       repairing=repairs is not None,
+                       repairing=repairs is not None or lesson is not None,
                        tools=self._tool_names())
+        if skip and lesson is not None:
+            skip = skip.replace("the last turn", "the lesson")
         if skip:
             self.last_skip = skip
             return None
@@ -984,11 +1026,13 @@ class Learner:
                 f"updating")
         else:
             prompt = DISTIL_PROMPT.format(
-                decide=DECIDE_FORCED if forced else DECIDE_ASKED,
+                decide=(DECIDE_LESSON if lesson is not None
+                        else DECIDE_FORCED if forced else DECIDE_ASKED),
                 set_aside=self._set_aside(), connectors=self._connectors_hint(),
                 digest=digest(turn, found))
-            say("looking at what worked, to see if it is worth keeping")
-        if not self._has_shell():
+            say("writing down what you taught me" if lesson is not None
+                else "looking at what worked, to see if it is worth keeping")
+        if not self._has_shell() and lesson is None:
             # A script here could never be tested, so it would never be
             # offered: an agent with no shell keeps written steps only.
             prompt += NO_SHELL

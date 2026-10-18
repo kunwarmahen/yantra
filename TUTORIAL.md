@@ -339,6 +339,33 @@ and full of wrong guesses, and every later run follows a recipe that is
 known to work. `/learn` saves the last turn by hand, and `--learn off`
 stops the offers. ([notes/96](notes/96-solve-it-once.md))
 
+**Teaching it a job, one step at a time.** Some jobs are easier to show
+than to describe: a WhatsApp message on your phone, a form you always
+fill the same way. Start a lesson and say each step:
+
+```text
+you> /learn start send a WhatsApp message
+I'm ready. What's first?
+you> open WhatsApp
+WhatsApp is open on the Chats list. What's next?
+you> tap Mom
+Mom's chat is open. What's next?
+you> type running late, then send it
+...
+you> /learn done
+```
+
+While the lesson is open, the agent does only the step you said and
+doesn't offer a skill after each one. `/learn done` writes the whole
+lesson down as one skill, and you're asked to save it as usual. The
+person, and what you typed, become *inputs*, so next time "message Dad
+that I'm on my way" follows the same steps. On a phone you can also do
+the steps yourself: `/learn watch send a WhatsApp message`, then do a
+step and type `next`. On Android, Sparsh tells the agent what you
+tapped. An iPhone can't show where it was touched, so the agent compares
+the screen before and after, and asks you if it isn't sure. `/learn
+stop` drops a lesson. ([notes/129](notes/129-taught-step-by-step.md))
+
 On the web page, nothing asks. The answer comes back and you can type
 straight away. The check runs behind it, and anything it finds waits
 under a **to keep** chip at the top, along with any facts about you it

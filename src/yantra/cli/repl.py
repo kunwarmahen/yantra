@@ -45,7 +45,8 @@ from yantra.permissions import (REFUSED_USER, PermissionRequest,
 from yantra.providers import get_provider
 from yantra.sandbox import ToolSandbox
 from yantra.session import SessionStore, apply_payload
-from yantra.skills.learn import SCOPES, Learner, Offer
+from yantra.skills import lesson as lessons
+from yantra.skills.learn import SCOPES, Learner, Offer, current_turn
 from yantra.skills.loader import PROMOTE_AFTER, SKILL_FILE, skill_roots
 from yantra.tools import default_registry
 
@@ -73,6 +74,10 @@ HELP = """[bold]commands[/bold]
   /NAME ...          run a skill directly: /pr-review the auth branch
   /learn             save what the last turn did as a skill (it is tested
                      and shown to you first; --learn off stops the offers)
+  /learn start WHAT  teach a job one step at a time: it does only the
+                     step you say, then asks what's next
+  /learn watch WHAT  show it on the phone yourself; say next after each step
+  /learn done|stop   keep the whole lesson as one skill, or drop it
   /memory            what the agent remembers about you across
                      conversations (* = in this conversation's prompt)
   /memory forget ID  remove one -- a fact that stopped being true
@@ -304,6 +309,8 @@ class Repl:
         #: The last turn's end event, whole: one-shot --json reads the
         #: answer and the reason from it.
         self.last_turn: TurnEnd | None = None
+        #: A job being taught step by step (/learn start), or None.
+        self.lesson: lessons.Lesson | None = None
 
     # ---- main loop ---------------------------------------------------------
 
@@ -439,6 +446,11 @@ class Repl:
         cancelled turn.
         """
         learner = getattr(self.agent, "learner", None)
+        if self.lesson is not None:
+            # A step of a walk-through: kept for /learn done, never
+            # offered as a skill of its own.
+            self.lesson.add(current_turn(self.agent))
+            learn = False
         try:
             if learner is not None:
                 for name, worked in learner.after_turn(end):
@@ -762,8 +774,10 @@ class Repl:
         else:
             self.console.print("[dim]nothing kept[/dim]")
 
-    def _learn_command(self) -> None:
-        """``/learn``: the person asks for the last turn to be saved.
+    def _learn_command(self, arg: str = "") -> None:
+        """``/learn``: the person asks for the last turn to be saved --
+        or, with a word after it, for a lesson (skills/lesson.py) to start,
+        end or be dropped.
 
         Works with learning off (the flag stops OFFERS; asking is still
         allowed) -- a Learner is made for the one request.
@@ -773,19 +787,45 @@ class Repl:
                                "(--no-skills), so there is nowhere to save "
                                "one[/yellow]")
             return
+        verb, rest = lessons.parse(arg)
+        if verb in ("start", "watch"):
+            if self.lesson is not None:
+                self.console.print(self.lesson.status(), markup=False, style="yellow")
+                return
+            if not rest:
+                self.console.print(lessons.USAGE, markup=False, style="yellow")
+                return
+            self.lesson = lessons.Lesson(task=rest, watching=verb == "watch")
+            self.run_turn(self.lesson.opening(), learn=False)
+            return
+        if verb == "stop":
+            said = ("dropped the lesson; nothing was kept" if self.lesson is not None
+                    else "no lesson is open")
+            self.lesson = None
+            self.console.print(said, style="dim")
+            return
+        if verb and verb != "done":
+            self.console.print(lessons.USAGE, markup=False, style="yellow")
+            return
+        if verb == "done" and self.lesson is None:
+            self.console.print("no lesson is open: /learn start WHAT begins one",
+                               style="yellow")
+            return
+        lesson, self.lesson = self.lesson, None
         learner = getattr(self.agent, "learner", None)
         if learner is None:
             learner = Learner(self.agent, "ask")
             learner.last_reason = self._last_end
         try:
-            self._offer_skill(learner, forced=True)
+            self._offer_skill(learner, forced=True, lesson=lesson)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](not saved)[/yellow]")
         self._offer_pending_memories()
 
-    def _offer_skill(self, learner: Learner, *, forced: bool) -> None:
+    def _offer_skill(self, learner: Learner, *, forced: bool,
+                     lesson: lessons.Lesson | None = None) -> None:
         offer = learner.consider(
-            forced=forced,
+            forced=forced, lesson=lesson,
             progress=lambda text: self.console.print(f"[dim]· {text}[/dim]"))
         if offer is None:
             if forced and learner.last_skip:
@@ -999,7 +1039,7 @@ class Repl:
             case "skills":
                 self._skills_command(arg)
             case "learn":
-                self._learn_command()
+                self._learn_command(arg)
             case "memory":
                 self._memory_command(arg)
             case "remember":
