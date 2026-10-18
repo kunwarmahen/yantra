@@ -280,7 +280,8 @@ The kept skill's description was rewritten that way by hand. Asked the
 same words again, on the host with the minder package and
 `qwen3.8-64k`: *"There's a skill called check-coinbase-portfolio. Let's
 load that."* It opened the app and stopped at Coinbase's own Face ID,
-asking the person to look at the phone. The roster is still frozen per
+asking the person to look at the phone. Rebuilt and asked through
+Telegram, the owner's own agent used the skill without a push. The roster is still frozen per
 session, with no per-message ranking: the mark is one more word on a
 line that was already there.
 
