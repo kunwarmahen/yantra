@@ -176,13 +176,43 @@ which isn't one of `s/e/c`, and the default is no), so nothing was
 written to disk. Writing it is the same `learner.save` every other offer
 uses.
 
+### Shown, on a real Nexus 6P
+
+`/learn watch search my Gmail for an email`, `qwen3.8-64k`, the person
+doing each step and saying next. The agent called `watch_phone` by
+itself and never touched the phone. On the first next, Sparsh named
+the Google folder and said the tap inside it couldn't be named. The
+agent guessed *"you opened Gmail and started typing 'uni'"*: wrong, the
+word was left from an earlier test. The person corrected it, and the
+agent took the correction (*"Got it -- you opened the Google folder and
+then Gmail, and 'uni' was pre-existing"*). On the second, Sparsh named
+Clear text and counted four keys, and the field said "unit". `/learn
+done`, then save:
+
+```
+gmail-search -- Search for a term in Gmail on the phone by clearing any
+stale search text, typing the query, and letting results filter live.
+  inputs: search_term; folder_name (default: "Google")
+1. Home screen ... Tap the item labelled Folder: <folder_name>.
+   Check: the screen now shows the folder's contents, including Gmail.
+2. Open Gmail. Tap Gmail.
+3. Clear stale text. IF the search field already contains text, tap the
+   Clear text button.
+4. Tap the search field.
+5. Type the full search_term.
+6. Done. Tell the person what matched.
+```
+
+The clearing step came out conditional with nobody asking for it. The
+corrections in the lesson were enough. Two Sparsh bugs were found on the
+way and fixed (Sparsh's notes/17): getevent's lines sat in a buffer when
+piped, and the touch reader swallowed the agent's own requests.
+
 ## What is not here yet
 
-* **Watching, run through an agent.** Sparsh's side ran on a real Nexus
-  6P with a person's finger (Sparsh's notes/17: "tapped 3 field 'Ask
-  Gmail'", three keys counted), and found a buffering bug it fixed. A
-  whole `/learn watch` lesson through an agent, and the iPhone's
-  before-and-after, haven't been run yet.
+* **Watching on an iPhone.** `/learn watch` ran whole on a real Nexus
+  6P with `qwen3.8-64k` (below); the iPhone's before-and-after hasn't
+  been run yet.
 * **A Teach button on the page.** The words work there; a button beside
   *save last turn* would start a lesson without typing one.
 * **One skill for both phones.** A lesson is taught on one phone, and its
