@@ -138,7 +138,7 @@ comes back as one JSON object that says what the run needed from you
 ([notes/114](notes/114-nobody-watching.md)).
 
 Type something that needs a file and watch it reach for one. The REPL's
-commands are `/help /model /provider /tools /history /usage /save /load
+commands are `/help /model /provider /tools /history /chats /usage /save /load
 /compact /clear /image /build /quit`, plus `/mcp`, `/skills`, `/learn`, `/env` and
 `/yolo` as those features arrive below. Ctrl-C cancels the current turn,
 not the session.
@@ -1844,6 +1844,34 @@ One token-driven design system across the whole surface, light and dark
 from your OS or from the appearance button, in-page dialogs rather than
 the browser's own, and a layout that reflows to one column on a phone.
 ([notes/22](notes/22-web-ui.md))
+
+### Your old conversations, to read again
+
+Every conversation you have with Yantra, in the terminal or on the page,
+is kept by itself as it goes. You don't have to save anything. Later,
+when you want that answer from last week again:
+
+```
+/chats                 every conversation kept, newest first
+/chats boiler          only the ones that mention "boiler"
+/chats 2               read number 2 from the list
+/chats open 2          go on with it from where it stopped
+/chats delete 2        delete it for good (it asks first)
+```
+
+On the page, press **history** in the top bar. Type a word you remember
+into the box and the list shrinks to the conversations that say it, with
+the word marked. Click one to read it the way it looked (the tools it
+used are folded under small grey lines). **carry on here** puts it back
+into the chat, and **delete** removes it for good: from the list, from
+the search, and from the file on disk.
+
+They are kept in one file on your computer,
+`~/.local/state/yantra/conversations.sqlite`, wherever you started
+Yantra. Nothing is sent anywhere. Start with `--no-history` (or set
+`YANTRA_HISTORY=off`) and nothing is kept. Runs a schedule starts
+by itself aren't conversations and aren't kept here
+([notes/130](notes/130-every-conversation-kept.md)).
 
 ## 18 · One-command starts, and a container
 

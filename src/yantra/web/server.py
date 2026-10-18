@@ -85,6 +85,7 @@ from yantra.prompt import recompose
 from yantra.providers import get_provider
 from yantra.session import SessionStore, apply_payload
 from yantra.skills.loader import SkillError
+from yantra.history import new_id
 from yantra.hold import check_answers, held_task
 from yantra.trace import flagged, watch, why_flagged
 from yantra.types import (
@@ -265,6 +266,10 @@ class WebSession:
         #: A job being taught step by step (``/learn start`` typed in the
         #: chat; skills/lesson.py), or None.
         self.lesson: Any | None = None
+        #: Every conversation, kept to read again (history.py), and the
+        #: row this one is written to. None when nothing is kept.
+        self.log: Any | None = None
+        self.conversation_id = new_id()
 
     def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
         """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
@@ -598,6 +603,7 @@ class WebSession:
                 from yantra.skills.learn import current_turn
                 self.lesson.add(current_turn(agent))
         self._keep_pending_memories()
+        self._keep_conversation()
         self.turn_active = False
         self._cancel.clear()
         self._setu_settle()
@@ -1107,6 +1113,19 @@ class WebSession:
                     self._setu_settle()
 
         self.signin = SignIn(setu.program, connector, account, level, relay, site=site)
+
+    def _keep_conversation(self) -> None:
+        """This conversation as it is now, into the log -- after every
+        turn, however it ended. A log that fails costs the turn nothing."""
+        if self.log is None or self.agent is None:
+            return
+        try:
+            self.log.record(self.conversation_id, self.agent,
+                            provider_name=self.agent.provider.name,
+                            road="page", folder=str(self.agent.ctx.cwd))
+        except Exception as exc:
+            self.broadcast({"type": "memory_notice",
+                            "text": f"conversation not kept: {exc}"})
 
     def _record(self, trajectory) -> None:
         """The recorder's sink: write the line, then tell the page its id.
@@ -2690,7 +2709,70 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         # system, so rebuild it from the live prompt layers.
         recompose(session.agent)
         mark_reviewed(session.agent)
+        session.conversation_id = new_id()
         return session.state()
+
+    # ---- every conversation, kept (history.py) ---------------------------
+
+    def require_log():
+        if session.log is None:
+            raise HTTPException(404, "conversations are not kept in this "
+                                     "session (--no-history or "
+                                     "YANTRA_HISTORY=off)")
+        return session.log
+
+    @app.get("/api/chats")
+    def chats(q: str = "") -> dict[str, Any]:
+        """The History view's list: newest first, or the ones whose words
+        match ``q`` (each with the matching words marked)."""
+        require_ready()
+        if session.log is None:
+            return {"kept": False, "rows": [], "current": None, "total": 0}
+        log = session.log
+        return {"kept": True, "current": session.conversation_id,
+                "total": log.count(),
+                "rows": [r.as_dict() for r in log.listed(q)]}
+
+    @app.get("/api/chats/{conversation_id}")
+    def chat(conversation_id: str) -> dict[str, Any]:
+        require_ready()
+        kept = require_log().read(conversation_id)
+        if kept is None:
+            raise HTTPException(404, "that conversation is gone")
+        return kept
+
+    @app.post("/api/chats/{conversation_id}/open")
+    def open_chat(conversation_id: str) -> dict[str, Any]:
+        """Carry an old conversation on here; the one open now stays kept."""
+        require_idle()
+        payload = require_log().payload(conversation_id)
+        if payload is None:
+            raise HTTPException(404, "that conversation is gone")
+        session.agent.held = None
+        try:
+            apply_payload(session.agent, payload, history_only=True)
+        except Exception as exc:
+            raise HTTPException(400, f"could not open it: {exc}") from exc
+        recompose(session.agent)
+        mark_reviewed(session.agent)
+        session.conversation_id = conversation_id
+        if session.lesson is not None:
+            from yantra.skills.lesson import DROPPED
+            session.lesson = None
+            session.broadcast({"type": "lesson", "text": DROPPED})
+        return session.state()
+
+    @app.delete("/api/chats/{conversation_id}")
+    def delete_chat(conversation_id: str) -> dict[str, Any]:
+        """Gone for good. Not the one open now: it would be written again
+        at the end of the next turn, which is not what delete means."""
+        require_ready()
+        if conversation_id == session.conversation_id:
+            raise HTTPException(409, "that is the conversation open now -- "
+                                     "start a new one first, then delete it")
+        if not require_log().delete(conversation_id):
+            raise HTTPException(404, "that conversation is gone")
+        return {"deleted": conversation_id}
 
     @app.post("/api/compact")
     def compact() -> dict[str, Any]:
@@ -2703,6 +2785,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         require_idle()
         session.agent.held = None     # nothing left to resume it into
         session.agent.history.clear()
+        session.conversation_id = new_id()
         if session.lesson is not None:
             # Its opening went with the history: the agent no longer knows
             # it is being taught.

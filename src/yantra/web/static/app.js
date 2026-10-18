@@ -1491,6 +1491,229 @@ $("#btn-clear").onclick = async () => {
   }
 };
 
+/* ---------- history: every conversation, kept ----------
+
+   Each conversation is written down by itself after every turn
+   (history.py). Here it is searched by any words in it, read the way it
+   looked (tools and all, read only), carried on, or deleted for good.
+   The search is the server's (SQLite full-text, every conversation, not
+   only the rows on screen), asked a moment after typing stops. */
+
+const chats = { q: "", rows: [], current: null, timer: null, reading: null };
+
+$("#btn-chats").onclick = openChats;
+$("#chats-close").onclick = closeChats;
+$("#chats-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#chats-backdrop")) closeChats();
+});
+$("#chats-q").oninput = () => {
+  clearTimeout(chats.timer);
+  chats.timer = setTimeout(() => { chats.q = $("#chats-q").value; listChats(); }, 180);
+};
+$("#chats-q").onkeydown = (e) => {
+  if (e.key === "Escape" && $("#chats-q").value) {
+    e.stopPropagation();
+    $("#chats-q").value = chats.q = "";
+    listChats();
+  }
+};
+
+function closeChats() { $("#chats-backdrop").classList.add("hidden"); }
+
+async function openChats() {
+  $("#chats-backdrop").classList.remove("hidden");
+  showChatList();
+  await listChats();
+  $("#chats-q").focus();
+}
+
+function showChatList() {
+  chats.reading = null;
+  $("#chats-read").classList.add("hidden");
+  $("#chats-rows").classList.remove("hidden");
+  $(".chats-search").classList.remove("hidden");
+}
+
+// The folder it was in, by its own name; the whole path on hover.
+function folderName(path) {
+  if (!path) return "";
+  const name = path.replace(/\/+$/, "").split("/").pop() || path;
+  return ` · <span title="${esc(path)}">${esc(name)}</span>`;
+}
+
+function chatWhen(stamp) {
+  const d = new Date(stamp);
+  return isNaN(d) ? stamp : d.toLocaleString(undefined, {
+    weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+// The server puts each match between \u0002 and \u0003; drawn as <mark>.
+function snippetHtml(snip) {
+  return esc(snip).replace(/\u0002([^\u0003]*)\u0003/g, '<mark class="hit">$1</mark>');
+}
+
+async function listChats() {
+  const rows = $("#chats-rows");
+  const res = await fetch(`/api/chats?q=${encodeURIComponent(chats.q)}`);
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    rows.innerHTML = `<div class="conn-box warn"><span>${esc(d.detail || res.statusText)}</span></div>`;
+    return;
+  }
+  if (!d.kept) {
+    $(".chats-search").classList.add("hidden");
+    rows.innerHTML = `<div class="conn-foot">conversations are not kept in this
+      session (started with --no-history, or YANTRA_HISTORY=off).</div>`;
+    return;
+  }
+  chats.rows = d.rows;
+  chats.current = d.current;
+  $("#chats-count").textContent = chats.q ? `${d.rows.length} of ${d.total}` : `${d.total}`;
+  rows.textContent = "";
+  if (!d.rows.length) {
+    rows.innerHTML = `<div class="conn-foot">${chats.q
+      ? `no conversation says “${esc(chats.q)}”`
+      : "nothing kept yet — every conversation here is kept by itself as it goes."}</div>`;
+    return;
+  }
+  for (const r of d.rows) {
+    const row = document.createElement("div");
+    row.className = "conn-card chat-row";
+    row.tabIndex = 0;
+    const now = r.id === chats.current ? '<span class="chat-now">● open now</span>' : "";
+    row.innerHTML = `<div>
+        <div class="conn-title">${esc(r.title)}${now}</div>
+        <div class="conn-sub">${esc(chatWhen(r.updated_at))} · ${esc(r.road)} ·
+          ${r.turns} message${r.turns === 1 ? "" : "s"}${folderName(r.folder)}</div>
+        ${r.snippet ? `<div class="chat-snip">${snippetHtml(r.snippet)}</div>` : ""}
+      </div>`;
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    actions.append(chatDeleteButton(r));
+    row.append(actions);
+    row.onclick = (e) => { if (!e.target.closest("button")) readChat(r.id); };
+    row.onkeydown = (e) => { if (e.key === "Enter") readChat(r.id); };
+    rows.append(row);
+  }
+}
+
+function chatDeleteButton(r) {
+  const drop = document.createElement("button");
+  drop.className = "m-btn danger";
+  drop.textContent = "delete";
+  if (r.id === chats.current) {
+    drop.disabled = true;
+    drop.title = "this is the conversation open now — clear it first, then delete it";
+  }
+  drop.onclick = async (e) => {
+    e.stopPropagation();
+    const ok = await confirmDialog({
+      title: "delete this conversation for good?",
+      body: `“${r.title}” goes from the history and its search, and cannot be `
+        + "brought back. A checkpoint you saved by hand is kept.",
+      confirm: "delete for good",
+      tone: "danger",
+    });
+    if (!ok) return;
+    const res = await fetch(`/api/chats/${encodeURIComponent(r.id)}`, { method: "DELETE" });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(d.detail || res.statusText); return; }
+    toast("deleted for good");
+    showChatList();
+    await listChats();
+  };
+  return drop;
+}
+
+// Every place the search words appear in what is drawn, marked -- walked
+// over text nodes, so markdown the agent wrote stays intact.
+function markWords(el, q) {
+  const words = q.toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [];
+  if (!words.length) return;
+  const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "giu");
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walk.nextNode()) nodes.push(walk.currentNode);
+  for (const node of nodes) {
+    if (!re.test(node.nodeValue)) continue;
+    re.lastIndex = 0;
+    const span = document.createElement("span");
+    span.innerHTML = esc(node.nodeValue).replace(re, '<mark class="hit">$1</mark>');
+    node.replaceWith(...span.childNodes);
+  }
+}
+
+async function readChat(id) {
+  const res = await fetch(`/api/chats/${encodeURIComponent(id)}`);
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(d.detail || res.statusText); return; }
+  chats.reading = id;
+  $("#chats-rows").classList.add("hidden");
+  $(".chats-search").classList.add("hidden");
+  const view = $("#chats-read");
+  view.classList.remove("hidden");
+  view.textContent = "";
+  const head = document.createElement("div");
+  head.className = "chats-head";
+  const back = document.createElement("button");
+  back.className = "ghost icon-only";
+  back.title = "back to the list";
+  back.setAttribute("aria-label", "back to the list");
+  back.innerHTML = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-back"/></svg>`;
+  back.onclick = () => { showChatList(); };
+  const title = document.createElement("div");
+  title.className = "grow";
+  title.innerHTML = `<div class="conn-title">${esc(d.title)}</div>
+    <div class="conn-sub">${esc(chatWhen(d.started_at))} · ${esc(d.road)}
+      ${d.model ? " · " + esc(d.model) : ""}${folderName(d.folder)}</div>`;
+  const carry = document.createElement("button");
+  carry.className = "m-btn primary";
+  carry.textContent = d.id === chats.current ? "open now" : "carry on here";
+  carry.disabled = d.id === chats.current;
+  carry.title = "put this conversation back into the chat and go on from it; the one open now stays kept";
+  carry.onclick = () => carryOnChat(d.id);
+  head.append(back, title, carry, chatDeleteButton(d));
+  view.append(head);
+  const lines = document.createElement("div");
+  for (const e of d.entries) {
+    if (e.who === "tool") {
+      const t = document.createElement("div");
+      t.className = "chat-tool";
+      t.innerHTML = `<details><summary>· ${esc(e.name)}${e.error ? ' <span class="fail">(failed)</span>' : ""}</summary>
+        <pre>${esc(e.args)}</pre>${e.result ? `<pre>→ ${esc(e.result)}</pre>` : ""}</details>`;
+      lines.append(t);
+      continue;
+    }
+    const line = document.createElement("div");
+    line.className = `chat-line ${e.who}`;
+    line.innerHTML = `<div class="who">${e.who === "you" ? "you" : "agent"}</div>`;
+    const text = document.createElement("div");
+    text.className = e.who === "you" ? "chat-text" : "chat-text md";
+    if (e.who === "you") text.textContent = e.text;
+    else { text.style.whiteSpace = "normal"; text.innerHTML = renderMarkdown(e.text); }
+    line.append(text);
+    lines.append(line);
+  }
+  view.append(lines);
+  markWords(lines, chats.q);
+  lines.querySelector("mark.hit")?.scrollIntoView({ block: "center" });
+}
+
+async function carryOnChat(id) {
+  if (ui.turnActive) { toast("wait for this turn to finish"); return; }
+  await lookBack(true);   // switching conversations ends this one
+  const d = await post(`/api/chats/${encodeURIComponent(id)}/open`);
+  if (!d) return;
+  applyHeader(d);
+  transcript.textContent = "";
+  forgetAssistant();
+  ui.currentThinking = ui.openToolCard = null;
+  await fetchHistory();
+  closeChats();
+  toast("back in that conversation — it carries on from here");
+}
+
 /* ---------- memory panel ----------
 
    What is remembered about the person, newest first; the ones this

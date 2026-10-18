@@ -99,25 +99,7 @@ class SessionStore:
     def save(self, agent, *, provider_name: str, session_id: str = "default") -> int:
         """Snapshot ``agent`` as the next version; returns its version number."""
         with self._lock:
-            payload = {
-                "format": 1,
-                "provider": provider_name,
-                "model": agent.model,
-                "system": agent.system,
-                "max_iterations": agent.max_iterations,
-                "total_usage": {
-                    "input_tokens": agent.total_usage.input_tokens,
-                    "output_tokens": agent.total_usage.output_tokens,
-                    "cache_read_tokens": agent.total_usage.cache_read_tokens,
-                    "cache_write_tokens": agent.total_usage.cache_write_tokens,
-                },
-                "history": [_dump_message(m) for m in agent.history],
-            }
-            held = getattr(agent, "held", None)
-            if held is not None and still_current(held, agent.history):
-                payload["history"].pop()   # the question, kept below
-                payload["held"] = _dump_held(held, agent.history[-1])
-            return self._append(session_id, payload)
+            return self._append(session_id, snapshot(agent, provider_name))
 
     def save_payload(self, payload: dict, *, session_id: str = "default") -> int:
         """A payload ``load_latest`` gave, appended as the next version of
@@ -171,6 +153,30 @@ class SessionStore:
             (session_id,),
         ).fetchone()
         return row[0] if row and row[0] is not None else 0
+
+
+def snapshot(agent, provider_name: str) -> dict:
+    """``agent`` as a payload: what ``save`` appends, and what the
+    conversation log (history.py) keeps of each conversation."""
+    payload = {
+        "format": 1,
+        "provider": provider_name,
+        "model": agent.model,
+        "system": agent.system,
+        "max_iterations": agent.max_iterations,
+        "total_usage": {
+            "input_tokens": agent.total_usage.input_tokens,
+            "output_tokens": agent.total_usage.output_tokens,
+            "cache_read_tokens": agent.total_usage.cache_read_tokens,
+            "cache_write_tokens": agent.total_usage.cache_write_tokens,
+        },
+        "history": [_dump_message(m) for m in agent.history],
+    }
+    held = getattr(agent, "held", None)
+    if held is not None and still_current(held, agent.history):
+        payload["history"].pop()   # the question, kept below
+        payload["held"] = _dump_held(held, agent.history[-1])
+    return payload
 
 
 # ---- block-level (de)serialization: kind-discriminated, match-dispatched ----

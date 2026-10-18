@@ -319,6 +319,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="restore the newest checkpointed session "
                              "(.yantra/session.sqlite3 under --cwd) before "
                              "the first prompt")
+    parser.add_argument("--no-history", action="store_true", dest="no_history",
+                        help="don't keep this session's conversations to read "
+                             "again later (/chats, the page's history button). Also "
+                             "YANTRA_HISTORY=off, or YANTRA_HISTORY=PATH for "
+                             "another file than ~/.local/state/yantra/"
+                             "conversations.sqlite")
     parser.add_argument("--mcp-config", action="append", default=[],
                         metavar="FILE",
                         help='MCP config file to connect (repeatable): '
@@ -2928,7 +2934,8 @@ def main(argv: list[str] | None = None) -> int:
     mcp_manager = MCPManager(agent.registry, agent=agent,
                              memory_path=remembered_path(Path(args.cwd)))
     repl = Repl(agent, console, store=store, sandbox=sandbox,
-                mcp=mcp_manager, trace=_trace_log(args))
+                mcp=mcp_manager, trace=_trace_log(args),
+                log=_conversation_log(args, console))
     if memory is not None and repl.trace is not None:
         # What the trace would scrub, the look back scrubs too.
         memory.redact = repl.trace.redact
@@ -3060,6 +3067,7 @@ def main(argv: list[str] | None = None) -> int:
         if web_session is not None:
             from yantra.web.server import launch
             web_session.trace = repl.trace   # --trace records the browser too
+            web_session.log = repl.log       # and the page keeps its own too
             return launch(web_session, agent, store,
                           host=args.host, port=args.port, mcp=mcp_manager)
 
@@ -3101,6 +3109,21 @@ def main(argv: list[str] | None = None) -> int:
         # pool and gives it back, rather than leaving it to interpreter
         # teardown ([notes/38](../notes/38-giving-it-back.md)).
         agent.provider.close()
+
+
+def _conversation_log(args, console):
+    """Where every conversation is kept to read again (history.py), or
+    None: --no-history, YANTRA_HISTORY=off, or an unattended run -- a
+    schedule firing every half hour is Samay's logbook, not a
+    conversation anybody had."""
+    from yantra.history import open_log
+    if args.no_history or is_unattended():
+        return None
+    try:
+        return open_log()
+    except Exception as exc:  # a file that cannot open costs the session nothing
+        console.print(f"[yellow]conversations not kept: {exc}[/yellow]")
+        return None
 
 
 if __name__ == "__main__":

@@ -32,6 +32,8 @@ from yantra.cli.render import Renderer
 from yantra.config import default_model, load_settings
 from yantra.context import RED, estimate_history
 from yantra.errors import ImageError, RateLimitError, UserUnavailable
+from yantra.history import END, HIT, ConversationLog, new_id
+from yantra.history import title_of as payload_title
 from yantra.images import load_image_block
 from yantra.memory import short_id
 from yantra.memory.reflect import (Candidate, decline, keep, mark_reviewed,
@@ -100,6 +102,11 @@ HELP = """[bold]commands[/bold]
   /build SPEC        build a project from SPEC in a scratch workspace,
                      then independently verify it (BUILD GREEN/RED)
   /history           dump the conversation so far
+  /chats [WORDS]     every conversation kept (newest first), or the ones
+                     that say WORDS -- each is kept by itself as it goes
+  /chats N           read conversation N from that list
+  /chats open N      carry it on here (this one stays kept)
+  /chats delete N    delete it for good (asks first)
   /usage             session token + dollar totals (+ context pressure)
   /save [name]       checkpoint this session (SQLite, append-only versions)
   /load [name]       restore the newest checkpoint of a session
@@ -256,6 +263,15 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
     return gate
 
 
+def _when(stamp: str) -> str:
+    """A log's UTC stamp as the person's own clock: ``Sat 18 Oct 14:05``."""
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(stamp).astimezone().strftime("%a %-d %b %H:%M")
+    except ValueError:
+        return stamp
+
+
 def _chosen(answer: str, found: list[Candidate]) -> list[Candidate]:
     """``a`` keeps all; numbers keep those; anything else keeps none."""
     answer = answer.strip().lower()
@@ -276,8 +292,16 @@ class Repl:
                  input_fn: Callable[[str], str] | None = None,
                  sandbox: ToolSandbox | None = None,
                  mcp: Any | None = None,
-                 trace: Any | None = None) -> None:
+                 trace: Any | None = None,
+                 log: ConversationLog | None = None) -> None:
         self.agent = agent
+        #: Every conversation, kept by itself to read again (history.py);
+        #: None with --no-history. ``conversation_id`` is the row this one
+        #: is written to; /clear and /load start another.
+        self.log = log
+        self.conversation_id = new_id()
+        #: The last /chats list, so /chats N means what was on screen.
+        self._chats_shown: list[str] = []
         #: A TrajectoryLog when the operator asked for one (--trace), so
         #: a turn that goes wrong leaves something a regression case can
         #: be built from (notes/57). None is the usual case and costs
@@ -431,6 +455,9 @@ class Repl:
             if self._spinner is not None:
                 self._spinner.stop()
                 self._spinner = None
+            # Kept even when the turn ended badly: a conversation cut off
+            # is the one most likely to be looked for.
+            self._keep_conversation()
         if end is not None:
             self._last_end = end.reason
             self.last_turn = end
@@ -998,6 +1025,8 @@ class Repl:
                     self._build_command(arg)
             case "history":
                 self._show_history()
+            case "chats":
+                self._chats_command(arg)
             case "usage":
                 u = self.agent.total_usage
                 line = (f"session tokens: {u.input_tokens} in / {u.output_tokens} out "
@@ -1029,6 +1058,7 @@ class Repl:
             case "clear":
                 self.end_conversation()
                 self.agent.history.clear()
+                self.conversation_id = new_id()
                 self.console.print("[green]history cleared[/green]")
                 if self.lesson is not None:
                     # its opening went with the history
@@ -1667,6 +1697,133 @@ class Repl:
                 f"[blue]attached {Path(path).name} ({block.media_type}, "
                 f"~{kb} KB) -- rides your next message[/blue]")
 
+    # ---- every conversation, kept (history.py) ------------------------------
+
+    def _keep_conversation(self) -> None:
+        """This conversation as it is now, into the log. Never costs the
+        session: a log that fails says so in one yellow line."""
+        if self.log is None:
+            return
+        try:
+            self.log.record(self.conversation_id, self.agent,
+                            provider_name=self.agent.provider.name,
+                            road="terminal", folder=str(self.agent.ctx.cwd))
+        except Exception as exc:
+            self.console.print(f"[yellow]conversation not kept: {exc}[/yellow]")
+
+    def _chats_command(self, arg: str) -> None:
+        """/chats [WORDS] | N | open N | delete N -- answered here, never a
+        turn: reading your own conversations costs nothing."""
+        if self.log is None:
+            self.console.print("[yellow]conversations are not kept in this "
+                               "session (--no-history or YANTRA_HISTORY=off)"
+                               "[/yellow]")
+            return
+        verb, _, rest = arg.partition(" ")
+        if verb in ("open", "delete") and rest.strip().isdigit():
+            picked = self._chat_picked(rest.strip())
+            if picked is None:
+                return
+            if verb == "open":
+                self._open_chat(picked)
+            else:
+                self._delete_chat(picked)
+            return
+        if arg.isdigit():
+            picked = self._chat_picked(arg)
+            if picked is not None:
+                self._read_chat(picked)
+            return
+        rows = self.log.listed(arg)
+        self._chats_shown = [r.id for r in rows]
+        if not rows:
+            self.console.print(f"[dim]no kept conversation says {arg!r}[/dim]"
+                               if arg else "[dim]no conversations kept yet[/dim]")
+            return
+        head = (f"conversations that say {arg!r}, newest first:" if arg
+                else "conversations kept, newest first:")
+        self.console.print(head, markup=False)
+        for n, row in enumerate(rows, start=1):
+            now = " (this one)" if row.id == self.conversation_id else ""
+            self.console.print(
+                f"  {n:>3}. {row.title}{now} -- {_when(row.updated_at)}, "
+                f"{row.road}, {row.turns} message"
+                f"{'s' if row.turns != 1 else ''}", markup=False)
+            if row.snippet:
+                snip = row.snippet.replace(HIT, "[").replace(END, "]")
+                self.console.print(f"       {' '.join(snip.split())}",
+                                   markup=False, style="dim")
+        self.console.print("[dim]/chats N reads one · /chats open N carries it "
+                           "on · /chats delete N deletes it for good[/dim]")
+
+    def _chat_picked(self, number: str) -> str | None:
+        n = int(number)
+        if not self._chats_shown:
+            self._chats_shown = [r.id for r in self.log.listed()]
+        if not 1 <= n <= len(self._chats_shown):
+            self.console.print(f"[red]no conversation {n} -- /chats lists "
+                               "them[/red]")
+            return None
+        return self._chats_shown[n - 1]
+
+    def _read_chat(self, conversation_id: str) -> None:
+        kept = self.log.read(conversation_id)
+        if kept is None:
+            self.console.print("[red]that conversation is gone[/red]")
+            return
+        self.console.rule(f"{kept['title']} -- {_when(kept['started_at'])}, "
+                          f"{kept['road']}", style="dim")
+        for entry in kept["entries"]:
+            if entry["who"] == "tool":
+                mark = " (failed)" if entry["error"] else ""
+                self.console.print(f"  · {entry['name']}{mark} {entry['args']}",
+                                   markup=False, style="dim")
+            else:
+                self.console.print(f"{'you' if entry['who'] == 'you' else 'agent'}:",
+                                   style="bold")
+                self.console.print(entry["text"], markup=False)
+        self.console.rule(style="dim")
+
+    def _open_chat(self, conversation_id: str) -> None:
+        payload = self.log.payload(conversation_id)
+        if payload is None:
+            self.console.print("[red]that conversation is gone[/red]")
+            return
+        self.end_conversation()
+        try:
+            apply_payload(self.agent, payload, history_only=True)
+        except Exception as exc:
+            self.console.print(f"[red]could not open it: {exc}[/red]")
+            return
+        recompose(self.agent)
+        mark_reviewed(self.agent)
+        # Carried on, it is the same conversation: its row grows.
+        self.conversation_id = conversation_id
+        self.console.print(f"[green]back in: {escape(payload_title(payload))} "
+                           f"-- {len(self.agent.history)} message(s)[/green]")
+
+    def _delete_chat(self, conversation_id: str) -> None:
+        if conversation_id == self.conversation_id:
+            self.console.print("[yellow]that is this conversation -- /clear "
+                               "first, then delete it[/yellow]")
+            return
+        kept = self.log.read(conversation_id)
+        if kept is None:
+            self.console.print("[red]that conversation is gone[/red]")
+            return
+        try:
+            answer = self._input(f"delete {kept['title']!r} for good? [y/N] ")
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes"):
+            self.console.print("[dim](kept)[/dim]")
+            return
+        self.log.delete(conversation_id)
+        # Numbers keep meaning what was on screen; this one now says gone.
+        self._chats_shown = ["" if c == conversation_id else c
+                             for c in self._chats_shown]
+        self.console.print("[green]deleted for good[/green]")
+
     # ---- durable sessions ---------------------------------------------------
 
     def _save_session(self, session_id: str) -> None:
@@ -1710,6 +1867,7 @@ class Repl:
         # copy ([notes/29](../notes/29-environment-awareness.md)).
         recompose(self.agent)
         mark_reviewed(self.agent)
+        self.conversation_id = new_id()
         self.console.print(f"[green]{summary}[/green]")
 
     def _switch_provider(self, name: str) -> None:

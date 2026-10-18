@@ -1110,7 +1110,7 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   refuses you still refuses you, and the snapshot shows the check
   ([notes/58](notes/58-the-browser-you-already-have.md)).
 
-REPL commands: `/help /model /provider /tools /history /usage /save /load
+REPL commands: `/help /model /provider /tools /history /chats /usage /save /load
 /compact /clear /image /build /quit` (`//text` sends a literal leading slash; a
 trailing `\` continues the same message on the next line — paste-friendly
 multi-line input that keeps indentation). `/tools` lists the toolset;
@@ -1118,7 +1118,12 @@ multi-line input that keeps indentation). `/tools` lists the toolset;
 Ctrl-C cancels the current turn, not the session. `/build TASK` runs a child
 builder agent in its own workspace and reports BUILD GREEN/RED without
 touching this session's history. `/save`+`--resume` persist
-sessions to `.yantra/session.sqlite3` (append-only versions);
+sessions to `.yantra/session.sqlite3` (append-only versions). Apart from
+those, every conversation is kept by itself as it goes, to read again:
+`/chats` lists them newest first, `/chats WORDS` searches what was said,
+`/chats N` reads one, `/chats open N` carries it on and `/chats delete N`
+deletes it for good; the page's **history** button is the same list
+([notes/130](notes/130-every-conversation-kept.md));
 `/compact` force-clears context pressure — auto-compaction also fires by
 itself at 80% of the window (`--context-window` to set it; the web UI's
 meter shows the same number live).
@@ -2381,7 +2386,15 @@ src/yantra/
 │                   saved as the turn BEFORE it asked, the question in a
 │                   separate held block -- an older reader loads a valid
 │                   conversation, this one resumes it
-│                   ([notes/88](notes/88-not-yet.md))
+│                   ([notes/88](notes/88-not-yet.md)); snapshot() is the
+│                   payload a save appends, shared with history.py
+├── history.py      every conversation kept by itself, to read again: one row
+│                   per conversation rewritten after each turn (terminal and
+│                   page), an FTS5 index of what was said, /chats and the
+│                   page's history panel; delete is for good (secure_delete +
+│                   index merge); ~/.local/state/yantra/conversations.sqlite,
+│                   YANTRA_HISTORY=off|PATH, --no-history
+│                   ([notes/130](notes/130-every-conversation-kept.md))
 ├── memory/         what the agent knows about the PERSON across conversations
 │                   (not write_note's project notes): MemoryStore is four verbs
 │                   (remember/recall/forget/list), identity is passed in (no
