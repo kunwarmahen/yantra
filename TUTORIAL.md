@@ -2324,10 +2324,13 @@ it; asleep: woken), and a held Send is asked in your chat. With no
 Dvara, Samay says so and doesn't save it. Letters
 beyond plain English (é, Hindi, emoji) need a small keyboard app on an
 Android phone, which you install once (Sparsh's SETUP.md, Part G). An iPhone needs a Mac to set up once (Sparsh's
-SETUP.md, Part C), then `export SPARSH_WDA=http://127.0.0.1:8100` before
-starting Yantra. When its free 7-day signature is two days from running
+SETUP.md, Part C). After that, plug the iPhone into this computer,
+run `sparsh iphone` in Sparsh's folder, and
+`export SPARSH_WDA=http://127.0.0.1:8100` before starting Yantra. If you
+unplug the phone, restart it or update iOS, plug it back in and unlock
+it: while `sparsh iphone` runs, it starts everything again by itself. When its free 7-day signature is two days from running
 out, Yantra's first line says so. Sparsh has read and tapped a real
-iPhone 17 on iOS 26 (its
+iPhone 17 on iOS 26 and again on iOS 27 (its
 [notes/12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md));
 an agent's task through Yantra on one has too, from Yantra's own
 container and from Telegram through Dvara, with `qwen3.8-64k:latest` on

@@ -811,7 +811,10 @@ works an Android phone (or the emulator on this computer) through `adb`,
 or an iPhone once a Mac has signed its helper app (Sparsh's
 [SETUP.md](https://github.com/kunwarmahen/sparsh/blob/main/SETUP.md)
 covers all three; a real iPhone 17 has been read and tapped, its
-[notes/12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md)).
+[notes/12](https://github.com/kunwarmahen/sparsh/blob/main/notes/12-a-real-iphone.md);
+`sparsh iphone` starts its helper app, and starts it again after an
+unplug or an iOS update, its
+[notes/14](https://github.com/kunwarmahen/sparsh/blob/main/notes/14-an-iphone-that-comes-back.md)).
 The model doesn't get a screenshot. It gets the phone's own description
 of the screen as numbered lines (`6 item "Airplane mode" [tap, off]`),
 and it answers "tap 6". That's why a local model can do it. When
