@@ -81,6 +81,14 @@ TOOL_FOOTER = (
     "directly -- one call, no load_skill needed."
 )
 
+#: Appended only when some skill is the person's own (loader.is_theirs).
+YOURS_FOOTER = (
+    "Skills marked [yours] are how THIS person does that job: they taught or "
+    "approved it. When one fits what they ask, load it and follow it instead "
+    "of finding another way (a website, a search, other tools) -- even when "
+    "they don't say where or how."
+)
+
 NAMES_ONLY_FOOTER = (
     "Call list_skills for what each one covers, then load_skill to use it."
 )
@@ -197,12 +205,15 @@ class SkillRegistry:
         tools = self.live_tools()
         if self.names_only:
             lines.append(", ".join(
-                s.name + (f" [tool: {tools[s.name]}]" if s.name in tools else "")
+                s.name + (" [yours]" if s.is_theirs else "")
+                + (f" [tool: {tools[s.name]}]" if s.name in tools else "")
                 for s in active))
             lines.append(NAMES_ONLY_FOOTER)
         else:
             lines.extend(skill.roster_line(tools.get(skill.name, ""))
                          for skill in active)
+        if any(s.is_theirs for s in active):
+            lines.append(YOURS_FOOTER)
         if self.delegated_names():
             lines.append(DELEGATED_FOOTER)
         if tools:

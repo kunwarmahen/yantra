@@ -217,7 +217,7 @@ class TestRunning:
         agent = self.agent(tmp_path)
         assert "greet_person" in agent.registry
         roster = agent.skills.render_roster()
-        assert "- greet-someone [tool: greet_person]:" in roster
+        assert "- greet-someone [yours] [tool: greet_person]:" in roster
         assert "call NAME directly" in roster
 
     def test_one_call_runs_the_script_with_no_shell(self, tmp_path):

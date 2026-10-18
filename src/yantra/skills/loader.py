@@ -284,14 +284,27 @@ class Skill:
         """True when this skill runs in a scoped sub-agent, not inline."""
         return self.mode == "subagent"
 
+    @property
+    def is_theirs(self) -> bool:
+        """Found in a learned/ folder: this person's own way of doing a job,
+        kept on their yes -- not a package's skill that came with the agent,
+        whatever its ``origin`` says."""
+        return self.source in LEARNED_SOURCES.values()
+
     def roster_line(self, tool: str = "") -> str:
         """The tier-1 cost: one line in the system prompt, per session.
 
         A delegated skill is MARKED, because the model has to reach for a
         different tool to use it -- an unmarked roster would promise
         load_skill for something load_skill deliberately refuses.
+
+        The person's own skill is marked [yours]: on a real phone, asked
+        about a Coinbase portfolio the person had just taught from the
+        phone, qwen3.8 went to coinbase.com because its package's prompt
+        said "you check web pages", and an unmarked line didn't outweigh it.
         """
-        mark = " [delegated]" if self.delegated else ""
+        mark = " [yours]" if self.is_theirs else ""
+        mark += " [delegated]" if self.delegated else ""
         mark += f" [tool: {tool}]" if tool else ""
         return f"- {self.name}{mark}: {self.description}"
 

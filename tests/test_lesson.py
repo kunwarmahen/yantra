@@ -298,3 +298,36 @@ class TestTheMixUps:
         repl._command("/learn start x")
         repl._command("/clear")
         assert repl.lesson is None and "lesson you'd started was dropped" in out.getvalue()
+
+
+class TestYours:
+    """A taught Coinbase skill sat in the roster unmarked, and qwen3.8 went
+    to coinbase.com, as its package's prompt ("you check web pages") said."""
+
+    def test_the_persons_own_skill_is_marked_and_preferred(self, tmp_path):
+        agent = make_agent(tmp_path, [*WALK, assistant_text(LESSON_REPLY)])
+        lesson = Lesson(task="send a WhatsApp message")
+        taught(agent, lesson)
+        learner = Learner(agent, "ask", home=tmp_path / "home")
+        learner.save(learner.consider(lesson=lesson))
+        agent.skills.reload()
+        roster = agent.skills.render_roster()
+        assert "- send-a-whatsapp-message [yours]:" in roster
+        assert "instead of finding another way (a website" in roster
+
+    def test_a_skill_that_came_with_the_agent_is_not_marked(self, tmp_path):
+        folder = tmp_path / "skills" / "x-latest-post"
+        folder.mkdir(parents=True)
+        (folder / "SKILL.md").write_text(
+            "---\nname: x-latest-post\ndescription: The newest post of an X account. "
+            "Use when asked for one.\norigin: learned\n---\n\nSteps.\n")
+        roster = make_agent(tmp_path, []).skills.render_roster()
+        assert "- x-latest-post:" in roster and "[yours]" not in roster
+
+    def test_a_lesson_asks_for_where_and_the_ways_they_ask(self, tmp_path):
+        agent = make_agent(tmp_path, [*WALK, assistant_text(LESSON_REPLY)])
+        lesson = Lesson(task="x")
+        taught(agent, lesson)
+        Learner(agent, "ask", home=tmp_path / "home").consider(lesson=lesson)
+        prompt = agent.provider.requests[-1]["messages"][0].text()
+        assert "The DESCRIPTION says where the job is done" in prompt

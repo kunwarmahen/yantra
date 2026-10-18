@@ -221,6 +221,10 @@ Two rules keep the fence from leaking:
 - **`load_skill` refuses a delegated skill.** Handing the body over
   inline would quietly undo the thing the author asked for. It answers
   with a pointer to `run_skill` instead — data, not a failed turn.
+- **A skill of the person's own is marked `[yours]`** (one found in a
+  `learned/` folder), under a line that says to prefer it over finding
+  another way: a taught phone skill was passed over for a website until
+  it was ([notes/129](129-taught-step-by-step.md)).
 - **The roster marks it `[delegated]`** and adds one line telling the
   model which tool to reach for. An unmarked roster would promise
   `load_skill` for a skill `load_skill` deliberately refuses.

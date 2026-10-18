@@ -615,7 +615,12 @@ check it is on the right screen. Never write a line number, a position or \
 coordinates: they change every time the screen is read.
 - A step that waited for the person's yes (a hold) still waits for it \
 next time: write it as a step that asks.
-- Write no script: a phone is worked one step at a time."""
+- Write no script: a phone is worked one step at a time.
+- The DESCRIPTION says where the job is done (on the person's phone, in \
+which app) and, after "Use when", the ways they might ask for it, in their \
+own words and close variants ("check my Coinbase portfolio", "what's my \
+Coinbase balance", "how is my portfolio looking"). It is how the next run \
+finds this skill instead of going to a website."""
 
 DECIDE_FORCED = """\
 The person asked for this to be saved. Reply "VERDICT: skip" only if the \

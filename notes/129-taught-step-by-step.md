@@ -251,6 +251,39 @@ Dvara, drop an open lesson and say so (`DROPPED`). The tutorials now
 say it at the point of choosing: telling is typing, showing is
 `watch`.
 
+## Found in use: a skill of theirs, passed over
+
+Taught on Telegram by showing (`/learn watch check my Coinbase portfolio
+value`, on the iPhone), kept as `check-coinbase-portfolio`. Asked after
+`/new`, *"hey can you find what my current coinbase portfolio looks
+like"*, the agent opened coinbase.com in the browser. It loaded the
+skill only when pushed (*"did you check all skills"*), and then worked
+the phone to the answer.
+
+The skill had been in the roster all along. Two things outweighed it.
+The package's own prompt starts *"You check web pages for people"* and
+sends the person to the phone tools only *"if they ask for something
+done on their phone"*. And the skill's line (*"Open the Coinbase
+Advanced app and read the total portfolio value…"*) said neither that
+it was the phone nor that it was the person's.
+
+* THE PERSON'S OWN SKILL IS MARKED. A skill found in a `learned/` folder
+  (`Skill.is_theirs`, never a package's, whatever its `origin` says) is
+  `[yours]` in the roster, under one line: *how THIS person does that
+  job … load it and follow it instead of finding another way (a website,
+  a search, other tools) — even when they don't say where or how*.
+* A LESSON'S DESCRIPTION SAYS WHERE AND HOW THEY ASK. The lesson's
+  decide section asks for the place (the phone, the app) and, after
+  "Use when", the ways the person might put it, in their own words.
+
+The kept skill's description was rewritten that way by hand. Asked the
+same words again, on the host with the minder package and
+`qwen3.8-64k`: *"There's a skill called check-coinbase-portfolio. Let's
+load that."* It opened the app and stopped at Coinbase's own Face ID,
+asking the person to look at the phone. The roster is still frozen per
+session, with no per-message ranking: the mark is one more word on a
+line that was already there.
+
 ## What is not here yet
 
 * ~~**A model's slip counted against the recipe.**~~ A call refused for
