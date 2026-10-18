@@ -203,6 +203,12 @@ stale search text, typing the query, and letting results filter live.
 6. Done. Tell the person what matched.
 ```
 
+On a real iPhone 17, `/learn watch check the battery percentage in
+Settings` went through on the two screens alone. The agent said *"I
+think you opened the Settings app"*, then *"I think you tapped
+Battery"*, both right, and `/learn done` wrote `check-battery-settings`
+(Sparsh's notes/17).
+
 The clearing step came out conditional with nobody asking for it. The
 corrections in the lesson were enough.
 
@@ -222,9 +228,6 @@ piped, and the touch reader swallowed the agent's own requests.
 
 ## What is not here yet
 
-* **Watching on an iPhone.** `/learn watch` ran whole on a real Nexus
-  6P with `qwen3.8-64k` (below); the iPhone's before-and-after hasn't
-  been run yet.
 * ~~**A model's slip counted against the recipe.**~~ A call refused for
   how it was called, then made right, no longer counts
   ([note 106](106-what-the-recipe-leaves-out.md)).
