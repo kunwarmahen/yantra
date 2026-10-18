@@ -538,7 +538,9 @@ It's on for your own sessions and kept in one file,
 `~/.local/state/yantra/memory.sqlite`, across every project. An agent
 package gets it only if its `agent.toml` asks (`[memory] via = "local"`).
 `--memory off` turns it off. On the web page, the bookmark chip in the
-header opens the same list.
+header opens the same list. Once it's long, type a word in the box above
+it (`brother`, say) and only the memories with that word stay, with a
+count like `2 of 32`.
 
 The file is simple on purpose: it matches words, not meanings. If you
 run a memory server with real search (Smritikosh is one), connect it as
@@ -1832,7 +1834,9 @@ prompts with approve/deny/**edit**, image attachments, save/load/compact
 and model switches, a permission-mode chip (ask ⇄ yolo, switchable
 mid-turn), a tools panel with every registered tool switchable off and on
 mid-run, an MCP servers section above it with health dots and add-by-form
-or paste-JSON, a live context-pressure meter (amber at 60%, red at 80% —
+or paste-JSON, a box above each long list (servers, skills, tools,
+memory) that keeps only the rows matching what you type — `jyotir`
+finds one server's tools among 129 — a live context-pressure meter (amber at 60%, red at 80% —
 where auto-compaction starts caring), the budget bar beside it, and a
 ■ Stop button that lands mid-sentence rather than between tool calls.
 

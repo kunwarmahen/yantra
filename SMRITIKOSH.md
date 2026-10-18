@@ -334,7 +334,9 @@ To remove a memory, give its id as `/memory` shows it: `/memory forget
 eight characters, and any start that names one memory is enough.
 
 On the page (`yantra --web`), the bookmark chip in the header shows the
-same list.
+same list. When it's long, type in the box above it: only the memories
+holding every word you typed stay, and a count like `2 of 32` says how
+many are hidden.
 
 Smritikosh's program keeps quiet in Yantra's terminal and prints only
 warnings. To watch every request it makes while you track a problem down,
