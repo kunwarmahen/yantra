@@ -397,6 +397,45 @@ that I'm on my way" follows the same steps.
   with what a real run looked like, is in §25.
   ([notes/129](notes/129-taught-step-by-step.md))
 
+**Fixing its mistakes.** The agent will sometimes get a step wrong.
+In a `watch` lesson it only *guesses* what you did from the screen, and
+an iPhone gives it nothing but two screens to compare. You fix it the
+same way at every point, in your own words:
+
+```mermaid
+flowchart TD
+    S["/learn start … (you tell)<br/>or /learn watch … (you show)"] --> STEP
+    STEP["A step<br/>tell: you type it, the agent does it<br/>show: you do it, then send next"] --> SAYS["The agent says what happened<br/>(or what it thinks you did)"]
+    SAYS --> OK{"Right?"}
+    OK -- yes --> MORE{"More steps?"}
+    OK -- "no" --> FIX["Say so in your own words<br/>'No, I tapped Battery, not Wi-Fi'<br/>'That's wrong, go back'"]
+    FIX --> MORE
+    MORE -- yes --> STEP
+    MORE -- "it's gone off the rails" --> STOP["/learn stop, then start again"]
+    MORE -- "no, that's the job" --> DONE["/learn done:<br/>the skill is written and shown to you"]
+    DONE --> READ{"Does it read right?"}
+    READ -- yes --> KEEP["Keep"]
+    READ -- "a step is wrong" --> EDIT["Edit it first (terminal: e, Yantra's page: the text box)<br/>or Not now, and teach it again"]
+    KEEP --> NEXT["Next time it follows the skill"]
+    NEXT -- "a step stopped working" --> UPD["It finishes another way<br/>and offers to update the skill"]
+```
+
+* **It guessed wrong** ("I think you typed 'uni'", when that word was
+  already there): reply with what really happened, as your next
+  message: *"No, I tapped the Google folder, then Gmail. 'uni' was
+  already there."* Your correction becomes part of the lesson. The
+  write-up reads your words next to the steps, so the skill follows what
+  you said, not its guess. In a real lesson a correction like that one
+  turned "clear the box" into "clear the box *only if* old text is in it".
+* **It did the wrong thing, or more than you said** (a `start` lesson):
+  *"That's wrong, go back"* or *"Stop, only do the step I say."* Steps it
+  took back are left out of the skill.
+* **It went quite wrong:** `/learn stop`, then start again. Nothing is kept.
+* **Before saving**, read the skill it shows you. In the terminal, `e` opens it to edit before it's saved. On the web page, the save box is editable. Or say no and teach it again.
+* **After saving**, a wrong step can be fixed in the skill's `SKILL.md` (its path is printed when it's saved), or the skill turned off with `/skills off NAME`. If a step stops working later, say because an app changed, the next run finishes another way and asks *"Update this skill?"*, showing the change ([notes/97](notes/97-when-the-recipe-breaks.md)).
+* A Send, a Pay or a password still waits for your yes every time the skill runs. Teaching it never gives that yes ahead of time.
+
+
 On the web page, nothing asks. The answer comes back and you can type
 straight away. The check runs behind it, and anything it finds waits
 under a **to keep** chip at the top, along with any facts about you it
