@@ -259,6 +259,9 @@ class WebSession:
         #: The look running after the last turn, what stops it, what it
         #: is doing, and how the last one ended.
         self._look: threading.Thread | None = None
+        #: Taken to start a look, and by a look deciding it is done: a
+        #: conversation set aside in between is never missed.
+        self._look_lock = threading.Lock()
         self.looking = False
         self._look_stop = threading.Event()
         self._look_status = ""
@@ -741,14 +744,28 @@ class WebSession:
             self.broadcast({"type": "learn_skipped",
                             "reason": f"learning skipped: {exc}"})
 
-    def _start_look(self) -> None:
-        """Look at the turn that just ended, behind the person's back."""
+    def _start_look(self, *, turn: bool = True) -> None:
+        """Look at the turn that just ended, behind the person's back --
+        or, ``turn=False``, only back over the conversations a clear or a
+        restore set aside (memory/reflect.py, notes/131). One already
+        running takes those at its end, checked under the lock it ends
+        under, so none is left waiting for a look that has just gone."""
         learner = getattr(self.agent, "learner", None)
-        learning = learner is not None and learner.mode != "off"
+        learning = turn and learner is not None and learner.mode != "off"
         from yantra import site_guide
-        sites = site_guide.worth_a_look(self.agent)
-        if not learning and not sites:
-            return
+        sites = site_guide.worth_a_look(self.agent) if turn else []
+        memory = getattr(self.agent, "memory", None)
+        with self._look_lock:
+            if self._look is not None:
+                return
+            if not learning and not sites and not (memory and memory.ended):
+                return
+            self._look_begin(learner, learning, sites, memory)
+
+    def _look_begin(self, learner: Any, learning: bool, sites: Any,
+                    memory: Any) -> None:
+        from yantra import site_guide
+
         stop = self._look_stop = threading.Event()
         self.looking = True
 
@@ -769,9 +786,33 @@ class WebSession:
             except Exception as exc:
                 self._last_look = f"site guide skipped: {exc}"
 
-        def work() -> None:
+        def memories() -> None:
+            # back over what a clear set aside; stopped, the rest wait
+            from yantra.memory.reflect import LookFailed, keep, look_back_ended
+            from yantra.skills.learn import Stopped
+            says("looking back over the conversation")
             try:
-                guides()
+                found = look_back_ended(self.agent, stop=stop.is_set)
+            except Stopped as exc:
+                found = exc.args[0] if exc.args else []
+            except LookFailed as exc:
+                found = exc.found
+                self._last_look = f"looking back skipped: {exc}"
+            if not found:
+                return
+            if memory.reflect == "auto":
+                try:
+                    kept = keep(memory, found)
+                except Exception as exc:
+                    self._last_look = f"memory ({memory.store.name}): {exc}"
+                    return
+                self._last_look = f"remembered {len(kept)} about you"
+                self.broadcast({"type": "remembered", "kept": len(kept)})
+                return
+            self.keep_memories(found)
+
+        def recipe() -> None:
+            try:
                 if not learning or stop.is_set():
                     return
                 offer = learner.consider(progress=says, stop=stop.is_set)
@@ -787,7 +828,21 @@ class WebSession:
                     self._keep_offer(learner, offer)
             except Exception as exc:
                 self._last_look = f"learning skipped: {exc}"
+
+        def work() -> None:
+            try:
+                guides()
+                recipe()
+                while True:
+                    with self._look_lock:
+                        if stop.is_set() or memory is None or not memory.ended:
+                            self._look = None
+                            break
+                    memories()
             finally:
+                with self._look_lock:
+                    if self._look is threading.current_thread():
+                        self._look = None
                 self._look_status = ""
                 self.looking = False
                 self._keep_pending_memories()
@@ -796,6 +851,18 @@ class WebSession:
         self._look = threading.Thread(target=work, daemon=True,
                                       name="yantra-look")
         self._look.start()
+
+    def end_conversation(self, *, stop: bool = True) -> None:
+        """A clear, a restore, a conversation carried on from History: the
+        one open now is copied for a look back behind the next message,
+        not looked at while the person waits (notes/131). ``stop=False``
+        (a clear) lets a skill look already running finish: it read its
+        turn when it started. The look over the copy starts after the
+        history is swapped -- the caller's ``_start_look(turn=False)``."""
+        from yantra.memory.reflect import set_aside
+        if stop:
+            self._stop_look()
+        set_aside(self.agent)
 
     def _stop_look(self) -> None:
         """The person wants the agent: the look gives way, and is waited
@@ -1954,22 +2021,34 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     async def memory_reflect(req: Request) -> dict[str, Any]:
         """Look back over this conversation (memory/reflect.py).
 
-        ``ending`` is the page ending a conversation -- clear, or restoring
-        another -- and follows --reflect: off looks at nothing, auto keeps
-        what it finds. Without it this is the person's button, which looks
-        whatever the mode and always asks. The candidates go to the tray
-        (``found`` counts them); nothing is kept until /api/memory/keep.
+        Without ``ending`` this is the person's button: it looks now,
+        whatever the mode, over any conversation a clear set aside and this
+        one, and always asks. ``ending`` is a caller ending a conversation
+        itself, and follows --reflect: off looks at nothing, auto keeps what
+        it finds (the page's own clear no longer waits for this: it sets the
+        conversation aside and the look runs behind, notes/131). The
+        candidates go to the tray (``found`` counts them); nothing is kept
+        until /api/memory/keep.
         """
-        from yantra.memory.reflect import keep, reflect
+        from yantra.memory.reflect import (LookFailed, keep, look_back_ended,
+                                           reflect)
         require_idle()
         memory = require_memory()
         ending = bool((await req.json()).get("ending"))
         if ending and memory.reflect == "off":
             return {**memory_view(memory), "found": 0, "kept": 0}
+        # the look behind the page gives way: one model call at a time
+        await asyncio.to_thread(session._stop_look)
         found, memory.pending = list(memory.pending), []
+
+        def look() -> list:
+            try:
+                ended = look_back_ended(session.agent)
+            except LookFailed as exc:
+                ended = exc.found
+            return ended + [c for c in reflect(session.agent) if c not in ended]
         try:
-            found += [c for c in await asyncio.to_thread(reflect, session.agent)
-                      if c not in found]
+            found += [c for c in await asyncio.to_thread(look) if c not in found]
         except Exception as exc:
             raise HTTPException(503, f"looking back failed: {exc}") from None
         if ending and memory.reflect == "auto":
@@ -2699,6 +2778,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         session.agent.held = None
         if payload is None:
             raise HTTPException(404, f"no checkpoint named '{name}'")
+        session.end_conversation()      # looked back over behind, not now
         try:
             apply_payload(session.agent, payload,
                           settings_loader=settings_loader or load_settings,
@@ -2710,6 +2790,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         recompose(session.agent)
         mark_reviewed(session.agent)
         session.conversation_id = new_id()
+        session._start_look(turn=False)
         return session.state()
 
     # ---- every conversation, kept (history.py) ---------------------------
@@ -2749,6 +2830,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         if payload is None:
             raise HTTPException(404, "that conversation is gone")
         session.agent.held = None
+        session.end_conversation()      # looked back over behind, not now
         try:
             apply_payload(session.agent, payload, history_only=True)
         except Exception as exc:
@@ -2756,6 +2838,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         recompose(session.agent)
         mark_reviewed(session.agent)
         session.conversation_id = conversation_id
+        session._start_look(turn=False)
         if session.lesson is not None:
             from yantra.skills.lesson import DROPPED
             session.lesson = None
@@ -2799,6 +2882,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     def clear() -> dict[str, Any]:
         require_idle()
         session.agent.held = None     # nothing left to resume it into
+        session.end_conversation(stop=False)
         session.agent.history.clear()
         session.conversation_id = new_id()
         if session.lesson is not None:
@@ -2807,6 +2891,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             from yantra.skills.lesson import DROPPED
             session.lesson = None
             session.broadcast({"type": "lesson", "text": DROPPED})
+        session._start_look(turn=False)   # behind the empty page (notes/131)
         return session.state()
 
     return app

@@ -139,7 +139,7 @@ comes back as one JSON object that says what the run needed from you
 
 Type something that needs a file and watch it reach for one. The REPL's
 commands are `/help /model /provider /tools /history /chats /usage /save /load
-/compact /clear /image /build /quit`, plus `/mcp`, `/skills`, `/learn`, `/env` and
+/compact /clear /keep /image /build /quit`, plus `/mcp`, `/skills`, `/learn`, `/env` and
 `/yolo` as those features arrive below. Ctrl-C cancels the current turn,
 not the session.
 
@@ -305,10 +305,20 @@ or more tool calls? Will it come up again with different inputs? The
 first two are counted. The third goes to the model in one short, fresh
 request. That request sees only the task and the steps, never the whole
 conversation. If the answer is yes, the same request writes the skill
-and a small script. Yantra runs the script once to test it, and then
-asks you:
+and a small script. Yantra runs the script once to test it.
+
+All of that happens in the background, after the answer. Your prompt
+comes back straight away, and when the look has found something, a
+line before your next prompt says so:
 
 ```
+· found a skill worth keeping: ha-set-fan-percentage -- /keep to see it
+```
+
+Type `/keep` and it asks you:
+
+```
+> /keep
 Save this as a skill?
   ha-set-fan-percentage -- Turn a Home Assistant fan entity on at a given percentage …
   scope:  you, in every project -> ~/.yantra/skills/learned/ha-set-fan-percentage
@@ -319,7 +329,10 @@ Save this as a skill?
 [s]ave  [e]dit first  [c]hange scope to project  [N]o >
 ```
 
-Press `s` and it is saved. Press Enter and nothing is. Next session,
+Press `s` and it is saved. Press Enter and nothing is. If you send
+another message while it's still looking, your message goes first and
+that look is dropped: one model answers one thing at a time
+([notes/131](notes/131-cleared-at-once.md)). Next session,
 *"set the living room fan to 30%"* loads the skill and runs the script:
 two or three tool calls instead of six to nine, and about 10k tokens
 instead of about 26k.
@@ -579,7 +592,30 @@ remembered 1
 ```
 
 Press Enter to keep none. Type `/remember` to have it look back at any
-time. It uses the same model you're already talking to, so on Ollama
+time.
+
+`/clear` doesn't make you wait for this. It clears straight away, and
+the look runs in the background. When it has found something, a line
+shows up before your next prompt (*· a thing worth remembering about
+you -- /keep to see*). Or type `/keep` straight away, and it waits for
+the look to finish and then asks:
+
+```
+> /clear
+history cleared
+> /keep
+worth remembering about you, for later conversations?
+  1. fact: Lives near RDU (Raleigh-Durham International Airport).
+  2. preference: Prefers concise, one-line answers.
+keep [a]ll, numbers (1 3), or [N]one > a
+remembered 2
+```
+
+On a local model there's one catch. Ollama answers one question at a
+time, so if you send a message while the look is still going, your
+message wins and the look stops. It picks up again after your answer,
+or when you `/quit`. Nothing it was going to find is lost
+([notes/131](notes/131-cleared-at-once.md)). It uses the same model you're already talking to, so on Ollama
 nothing new is needed and nothing leaves the machine. `--reflect off`
 stops it looking by itself. `--reflect auto` keeps what it finds without
 asking, for runs where nobody is at the keyboard.

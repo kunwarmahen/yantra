@@ -273,7 +273,8 @@ to it, get the payload right. The second time should take two.
 So when a turn solves something that took real work (it finished, it
 made four or more tool calls, and the model judges it will come up again
 with different inputs), the agent writes the **working** path down as a
-skill, runs its script once to test it, and asks:
+skill, runs its script once to test it, and, when you type `/keep`,
+asks:
 
 ```
 Save this as a skill?
@@ -287,11 +288,14 @@ Save this as a skill?
 [s]ave  [e]dit first  [c]hange scope to project  [N]o >
 ```
 
-Nothing is saved without a yes, and the default is no. The web page
-doesn't ask at all. It hands the input back first and looks behind the
-answer. What it finds waits under a **to keep** chip, with both files
-editable when you review it, and a message you send meanwhile stops the
-look ([notes/113](notes/113-after-the-answer.md)). A saved
+Nothing is saved without a yes, and the default is no. That question
+doesn't come in the middle of anything: the prompt comes back first and
+the look runs behind the answer. In the terminal a line before the next
+prompt says *found a skill worth keeping: … -- /keep to see it*, and
+`/keep` asks it as above ([notes/131](notes/131-cleared-at-once.md)). On
+the web page it waits under a **to keep** chip, with both files
+editable when you review it. Either way, a message you send meanwhile
+stops the look ([notes/113](notes/113-after-the-answer.md)). A saved
 skill never holds a secret or a personal fact: the token and the fan's
 id are **inputs**, and the model never saw the token in the first place.
 Next session the skill is in the roster like any other, and a small
@@ -382,8 +386,13 @@ keep [a]ll, numbers (1 3), or [N]one > a
 ```
 
 Nothing is kept without a yes, and a dropped one isn't asked again.
-On the page they wait under the **to keep** chip instead of asking
-([notes/113](notes/113-after-the-answer.md)). `/remember` (or *remember
+`/clear` and `/load` don't wait for it: the conversation is copied and
+cleared at once, and the look runs behind your next prompt, which says
+*a thing worth remembering about you -- /keep to see*. A message you
+send meanwhile stops it, and it runs again when the model is free
+([notes/131](notes/131-cleared-at-once.md)). `/quit` still asks before
+it exits. On the page they wait under the **to keep** chip instead of
+asking ([notes/113](notes/113-after-the-answer.md)). `/remember` (or *remember
 from this conversation* on the page) looks back on demand. `--reflect auto` keeps them without asking, and
 `--reflect off` never looks by itself (`YANTRA_REFLECT`). The
 conversation is scrubbed of secrets and your `--trace-redact` patterns
@@ -1113,7 +1122,7 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   ([notes/58](notes/58-the-browser-you-already-have.md)).
 
 REPL commands: `/help /model /provider /tools /history /chats /usage /save /load
-/compact /clear /image /build /quit` (`//text` sends a literal leading slash; a
+/compact /clear /keep /image /build /quit` (`//text` sends a literal leading slash; a
 trailing `\` continues the same message on the next line — paste-friendly
 multi-line input that keeps indentation). `/tools` lists the toolset;
 `/tools off|on NAME|GLOB` pulls tools out (and back) mid-session.
@@ -2413,7 +2422,11 @@ src/yantra/
 │                   layer is twenty lines, search first, then the newest
 │                   ([notes/109](notes/109-fewer-lines-fewer-facts.md));
 │                   reflect.py looks back ONCE when a conversation ends
-│                   (/quit, /clear, /load, before compaction, /remember):
+│                   (/quit, /clear, /load, before compaction, /remember);
+│                   set_aside copies one the session goes on from, so a
+│                   clear is instant and the look runs BEHIND it, reading
+│                   the copy, stoppable mid-stream by the next message
+│                   ([notes/131](notes/131-cleared-at-once.md)):
 │                   one plain call to the session's own model, scrubbed
 │                   first, reading what was said (no reasoning, tool calls
 │                   by name only), proposing facts the person keeps or drops
@@ -2995,7 +3008,10 @@ src/yantra/
 │                   saved, and says what was dropped; a host serving
 │                   several people names its own file (path=), and gives
 │                   the learner execute= to test on an async agent
-└── cli/            main.py (argparse) · repl.py (input loop) · render.py (rich:
+└── cli/            main.py (argparse) · repl.py (input loop; the look after
+                    a turn or a /clear runs behind the prompt, news in one
+                    line before the next one, /keep to answer it
+                    ([notes/131](notes/131-cleared-at-once.md))) · render.py (rich:
                     a refused call reads as a DECISION, not a crash --
                     yellow, the gate's code in the title, and one tally per
                     turn grouped by cause

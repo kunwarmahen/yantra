@@ -87,7 +87,9 @@ the command and the output, and it runs once more. Then Yantra stops.
 A draft that still fails is **not offered**: the person is told why,
 and nothing is left behind.
 
-**The person decides.** In the terminal:
+**The person decides.** In the terminal, after `/keep` (the look runs
+behind the prompt and says in one line that it found something, [note
+131](131-cleared-at-once.md)):
 
 ```
 Save this as a skill?

@@ -106,6 +106,7 @@ function route(env) {
                                break;
     case "learn_status":       setStatus(`· ${env.text}`); break;
     case "learn_counted":      /* the skills panel shows the new counts */ break;
+    case "remembered":         toast(`remembered ${env.kept} about you`); break;
     case "learned":            toast(`saved skill ${env.name}`);
                                addBanner(`saved skill ${env.name} — next time `
                                  + `the model follows it instead of finding `
@@ -1451,7 +1452,6 @@ $("#btn-load").onclick = async () => {
     confirm: "restore",
   });
   if (name === null) return;
-  await lookBack(true);   // switching conversations ends this one
   const d = await post("/api/load", { name: name || "default" });
   if (d) {
     applyHeader(d);
@@ -1480,7 +1480,8 @@ $("#btn-clear").onclick = async () => {
     tone: "danger",
   });
   if (!ok) return;
-  await lookBack(true);
+  // Cleared at once; the look back over it runs behind (notes/131), and
+  // what it finds waits under “to keep”.
   const d = await post("/api/clear");
   if (d) {
     applyHeader(d);
@@ -1799,7 +1800,6 @@ function printChat(d) {
 
 async function carryOnChat(id) {
   if (ui.turnActive) { toast("wait for this turn to finish"); return; }
-  await lookBack(true);   // switching conversations ends this one
   const d = await post(`/api/chats/${encodeURIComponent(id)}/open`);
   if (!d) return;
   applyHeader(d);
@@ -1880,7 +1880,7 @@ function renderMemory() {
     + "you keep or drop each";
   look.onclick = async () => {
     $("#mem-backdrop").classList.add("hidden");
-    await lookBack(false);
+    await lookBack();
   };
   body.append(look);
   section(body, `${d.items.length} remembered`,
@@ -2394,26 +2394,24 @@ function phoneScreen(seen) {
 /* ---------- the look back (memory/reflect.py) ----------
 
    When a conversation ends here -- clear, or restoring another -- the
-   same model looks back over it for facts about the person said in
-   passing. Each candidate is shown unticked: nothing is kept without a
-   yes. `ending` follows --reflect (off: nothing, auto: kept without
-   asking); the panel's button always looks, and always asks. What it
-   finds waits in the tray below, not in a question. */
+   server copies it and the same model looks back over the copy behind
+   the empty page, for facts about the person said in passing (notes/131):
+   nothing here waits for it. What it finds waits in the tray, each
+   candidate unticked: nothing is kept without a yes. This is the panel's
+   button, which looks now, whatever --reflect says, and always asks. */
 
-async function lookBack(ending) {
+async function lookBack() {
   if (!ui.lastState?.memory) return;
   setStatus("· looking back over the conversation");
   const res = await fetch("/api/memory/reflect", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ending }),
+    body: JSON.stringify({}),
   });
   hideStatus();
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { addBanner(data.detail || "looking back failed", false, true); return; }
-  if (data.kept) toast(`remembered ${data.kept} about you`);
-  if (data.found && ending) toast(`${data.found} worth remembering — waiting under “to keep”`);
-  else if (data.found) openKeptPanel();
-  else if (!ending) toast("nothing new worth remembering in this conversation");
+  if (data.found) openKeptPanel();
+  else toast("nothing new worth remembering in this conversation");
 }
 
 /* ---------- connections panel (notes/99) ----------

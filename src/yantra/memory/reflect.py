@@ -61,16 +61,29 @@ prompt's own rule is the guard.
 LOOKED AT ONCE. ``Memory.reviewed`` counts the history messages already
 looked back over, so /remember followed by /quit asks about the new
 turns only, and a conversation compacted twice is not read twice.
+
+CLEARED AT ONCE, LOOKED AT BEHIND. Ending a conversation that the
+session goes on from (/clear, /load, a page's clear) used to wait for
+the look: a whole model call between the word and the empty screen.
+Now the host takes a copy (``set_aside``), clears, and the look runs
+over the copy behind whatever the person does next
+([notes/131](../../notes/131-cleared-at-once.md)). What it finds waits
+where the skill look's offers wait, never a question. One model answers
+one call at a time on most local setups, so a look running when the
+person sends something gives way (``stop``) -- the copy stays set aside
+and is looked at the next time the model is free, or at /quit.
 """
 
 from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from yantra.context import render_segment
+from yantra.providers.base import collect
 from yantra.types import (Message, RedactedThinkingBlock, TextBlock,
                           ThinkingBlock, ToolCall, Usage)
 
@@ -256,13 +269,36 @@ def parse_reply(text: str, remembered: list[str],
 # ---- the look back -------------------------------------------------------------
 
 
-def _prepare(agent: Any) -> tuple[Any, str, list[str]] | None:
+def set_aside(agent: Any) -> bool:
+    """The conversation ends and the session goes on: the part of it not
+    yet looked back over is copied to ``memory.ended`` for a look that
+    runs later, and ``reviewed`` starts over for what comes next. The
+    host clears the history right after. False when there is nothing to
+    look at (no memory, --reflect off, nothing the person said)."""
+    memory = getattr(agent, "memory", None)
+    if memory is None or memory.reflect == "off":
+        return False
+    tail = unreviewed(memory, agent.history)
+    memory.reviewed = 0
+    if not tail:
+        return False
+    memory.ended.append(list(tail))
+    return True
+
+
+def _prepare(agent: Any, messages: list[Message] | None = None
+             ) -> tuple[Any, str, list[str]] | None:
     memory = getattr(agent, "memory", None)
     if memory is None:
         return None
-    tail = unreviewed(memory, agent.history)
+    if messages is not None:
+        # a conversation set aside: already the part not looked at
+        tail = unreviewed(_Fresh(), messages)
+    else:
+        tail = unreviewed(memory, agent.history)
     if not tail:
-        memory.reviewed = len(agent.history)
+        if messages is None:
+            memory.reviewed = len(agent.history)
         return None
     remembered = [item.statement for item in memory.list(100)]
     transcript = _clip(scrub(render_segment(spoken(tail)), memory.redact),
@@ -280,23 +316,96 @@ def _account(agent: Any, response: Any) -> None:
         by_model.setdefault(response.model or agent.model, Usage()).add(response.usage)
 
 
-def reflect(agent: Any) -> list[Candidate]:
-    """Look back over what this conversation has not been looked at for.
+class _Fresh:
+    """Stands in for a Memory whose conversation has nothing looked at."""
+    reviewed = 0
 
-    Raises what the store or provider raises; the hosts turn that into a
-    line, because a look back must never cost the conversation it ends.
+
+def _ask(agent: Any, prompt: str, stop: Callable[[], bool] | None) -> Any:
+    request = dict(messages=[Message("user", [TextBlock(prompt)])],
+                   system=None, tools=[], model=agent.model,
+                   max_tokens=REFLECT_MAX_TOKENS)
+    if stop is None:
+        return agent.provider.complete(**request)
+    from yantra.skills.learn import Stopped
+
+    # Streamed so it can be closed mid-answer, as the skill look's is: a
+    # local model stops generating when the connection goes, and the
+    # person's next turn does not queue behind a look nobody waits for.
+    events = agent.provider.stream(**request)
+
+    def until_stopped():
+        for event in events:
+            if stop():
+                raise Stopped
+            yield event
+    try:
+        if stop():
+            raise Stopped
+        return collect(until_stopped())
+    finally:
+        close = getattr(events, "close", None)
+        if close is not None:
+            close()
+
+
+def reflect(agent: Any, messages: list[Message] | None = None, *,
+            stop: Callable[[], bool] | None = None) -> list[Candidate]:
+    """Look back over what this conversation has not been looked at for
+    -- or, given ``messages``, over that conversation set aside, leaving
+    ``reviewed`` to the one going on now.
+
+    ``stop`` runs it behind the person: polled through the streamed
+    answer, and true raises ``Stopped`` (skills/learn.py) with nothing
+    marked looked at. Raises what the store or provider raises; the
+    hosts turn that into a line, because a look back must never cost the
+    conversation it ends.
     """
-    prepared = _prepare(agent)
+    prepared = _prepare(agent, messages)
     if prepared is None:
         return []
     memory, prompt, remembered = prepared
     end = len(agent.history)
-    response = agent.provider.complete(
-        messages=[Message("user", [TextBlock(prompt)])], system=None,
-        tools=[], model=agent.model, max_tokens=REFLECT_MAX_TOKENS)
+    response = _ask(agent, prompt, stop)
     _account(agent, response)
-    memory.reviewed = end
+    if messages is None:
+        memory.reviewed = end
     return parse_reply(response.message.text(), remembered, memory.declined)
+
+
+def look_back_ended(agent: Any, *, stop: Callable[[], bool] | None = None
+                    ) -> list[Candidate]:
+    """Look back over each conversation set aside, oldest first. One that
+    is looked at leaves ``memory.ended``; one stopped stays there, with
+    those after it, and ``Stopped`` goes up. One that fails leaves too
+    (a model that cannot read it now is no reason to pay again after
+    every turn) and its failure goes up after the rest are looked at."""
+    memory = getattr(agent, "memory", None)
+    if memory is None:
+        return []
+    found: list[Candidate] = []
+    failed: Exception | None = None
+    while memory.ended:
+        try:
+            found += [c for c in reflect(agent, memory.ended[0], stop=stop)
+                      if c not in found]
+        except Exception as exc:
+            from yantra.skills.learn import Stopped
+            if isinstance(exc, Stopped):
+                raise Stopped(found) from None
+            failed = failed or exc
+        memory.ended.pop(0)
+    if failed is not None:
+        raise LookFailed(found, failed)
+    return found
+
+
+class LookFailed(Exception):
+    """A set-aside look back failed; ``found`` is what the others found."""
+
+    def __init__(self, found: list[Candidate], cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.found = found
 
 
 async def areflect(agent: Any) -> list[Candidate]:
@@ -382,14 +491,17 @@ async def abefore_compaction(agent: Any) -> None:
 __all__ = [
     "Candidate",
     "ENV_MODE",
+    "LookFailed",
     "MODES",
     "abefore_compaction",
     "areflect",
     "before_compaction",
     "decline",
     "keep",
+    "look_back_ended",
     "mark_reviewed",
     "parse_reply",
     "reflect",
     "reflect_mode",
+    "set_aside",
 ]

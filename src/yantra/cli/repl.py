@@ -5,6 +5,14 @@ Ctrl-C contract (the part every interactive harness gets wrong once):
   * during a turn      -> cancel the TURN, never the session; the agent's
                           resumable-history cleanup runs via stream.close()
   * Ctrl-D / /quit     -> exit
+
+What happens after an answer runs behind the prompt (notes/131): the
+look at whether the turn is worth a skill, at a site's guide, and back
+over a conversation /clear ended. The prompt comes back first; the look
+works on a thread of its own, says in one line at the next prompt what
+it found, and waits for /keep. Whatever the person types next stops it
+(one model answers one call at a time on most local setups), except
+/keep and /quit, which wait for it.
 """
 
 from __future__ import annotations
@@ -15,6 +23,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -37,8 +46,9 @@ from yantra.history import title_of as payload_title
 from yantra.history import export_markdown, export_name
 from yantra.images import load_image_block
 from yantra.memory import short_id
-from yantra.memory.reflect import (Candidate, decline, keep, mark_reviewed,
-                                   reflect)
+from yantra.memory.reflect import (Candidate, LookFailed, decline, keep,
+                                   look_back_ended, mark_reviewed, reflect,
+                                   set_aside)
 from yantra.pricing import is_free, session_cost
 from yantra.prompt import recompose
 from yantra.trace import watch
@@ -49,7 +59,7 @@ from yantra.providers import get_provider
 from yantra.sandbox import ToolSandbox
 from yantra.session import SessionStore, apply_payload
 from yantra.skills import lesson as lessons
-from yantra.skills.learn import SCOPES, Learner, Offer, current_turn
+from yantra.skills.learn import SCOPES, Learner, Offer, Stopped, current_turn
 from yantra.skills.loader import PROMOTE_AFTER, SKILL_FILE, skill_roots
 from yantra.tools import default_registry
 
@@ -90,6 +100,10 @@ HELP = """[bold]commands[/bold]
   /remember          look back over this conversation now for things
                      worth keeping about you (it also happens by itself on
                      /quit, /clear and /load; you keep or drop each)
+  /keep              what the look after a turn found, waiting: a skill
+                     worth saving, a site's guide, things about you (it
+                     runs behind the prompt and says in one line when it
+                     found something)
   /phone             the phone the agent can work through Sparsh: what is
                      attached, whether it is in use, the rules in force
   /phone use         start the phone tools for a phone attached since the
@@ -116,7 +130,8 @@ HELP = """[bold]commands[/bold]
   /save [name]       checkpoint this session (SQLite, append-only versions)
   /load [name]       restore the newest checkpoint of a session
   /compact           force context compaction now (auto-fires at 80%)
-  /clear             reset history (keeps provider/model)
+  /clear             reset history (keeps provider/model); the look back
+                     over it runs behind the next prompt
   /yolo [on|off]     flip permission prompts: bypass everything, or ask
                      again (bare /yolo toggles; applies mid-turn)
   /image PATH...     stage image(s) onto your NEXT message ("clear" unstages)
@@ -291,6 +306,16 @@ def _chosen(answer: str, found: list[Candidate]) -> list[Candidate]:
     return picked
 
 
+#: Typed while the look runs, these wait for it instead of stopping it:
+#: /keep and /quit want what it finds, /clear only adds to its work.
+_LOOK_WAITERS = ("/keep", "/quit", "/exit", "/clear", "/help")
+
+
+def _waits_for_look(line: str) -> bool:
+    word = line.split(maxsplit=1)[0] if line.strip() else ""
+    return word in _LOOK_WAITERS
+
+
 class Repl:
     def __init__(self, agent: Agent, console: Console,
                  store: SessionStore | None = None,
@@ -340,17 +365,33 @@ class Repl:
         self.last_turn: TurnEnd | None = None
         #: A job being taught step by step (/learn start), or None.
         self.lesson: lessons.Lesson | None = None
+        #: The look after a turn runs behind the prompt (notes/131) when
+        #: true -- the interactive loop sets it. A one-shot run, or a test
+        #: driving run_turn by hand, looks in line as it always did.
+        self.behind = False
+        self._look: threading.Thread | None = None
+        self._look_stop = threading.Event()
+        self._look_lock = threading.Lock()
+        #: What the look found, for /keep, and the lines it left for the
+        #: next prompt.
+        self._found_skills: list[tuple[Learner, Offer]] = []
+        self._found_guides: list[Any] = []
+        self._found_said: list[tuple[str, str]] = []
+        #: How many waiting memories the person was already told about.
+        self._told_pending = 0
 
     # ---- main loop ---------------------------------------------------------
 
     def run(self) -> None:
+        self.behind = True
         self._banner()
         while True:
             try:
+                self._say_found()
                 line = self._read_line()
             except EOFError:
                 self.console.print()
-                self.end_conversation()
+                self._finish()
                 return
             except KeyboardInterrupt:
                 self.console.print()  # clear the line, keep the session
@@ -358,6 +399,8 @@ class Repl:
 
             if not line:
                 continue
+            if not _waits_for_look(line):
+                self._stop_look()
             if line.startswith("//"):  # escape hatch for literal slashes
                 pass
             elif line.startswith("/"):
@@ -489,8 +532,16 @@ class Repl:
                     self.console.print(self._counted_line(name, worked),
                                        markup=False, style="dim")
                     self._suggest_tool(name, worked)
-                if learn and learner.mode != "off" and end.reason == "end_turn":
-                    self._offer_skill(learner, forced=False)
+            if self.behind:
+                # The prompt first; the look behind it (notes/131).
+                self._start_look(
+                    skill=(learn and learner is not None
+                           and learner.mode != "off" and end.reason == "end_turn"),
+                    sites=end.reason == "end_turn")
+                return
+            if (learner is not None and learn and learner.mode != "off"
+                    and end.reason == "end_turn"):
+                self._offer_skill(learner, forced=False)
         except KeyboardInterrupt:
             self.console.print("\n[yellow](not saved)[/yellow]")
         except Exception as exc:
@@ -498,6 +549,240 @@ class Repl:
         self._offer_pending_memories()
         if end.reason == "end_turn":
             self._offer_site_guides()
+
+    # ---- the look behind the prompt (notes/131) ---------------------------------
+
+    def _start_look(self, *, skill: bool = False, sites: bool = False) -> None:
+        """Start the look after a turn, or after /clear, on a thread of its
+        own. One already running takes the conversations set aside since
+        it started, at its end -- checked under the same lock it ends
+        under, so none is left waiting for a look that has just gone."""
+        from yantra import site_guide
+
+        agent = self.agent
+        learner = getattr(agent, "learner", None)
+        memory = getattr(agent, "memory", None)
+        sites = sites and site_guide.worth_a_look(agent)
+        with self._look_lock:
+            if self._look is not None:
+                return
+            if not (skill or sites or (memory is not None and memory.ended)):
+                return
+            stop = self._look_stop = threading.Event()
+
+            def say(text: str, style: str = "dim") -> None:
+                with self._look_lock:
+                    self._found_said.append((text, style))
+
+            def work() -> None:
+                try:
+                    if sites:
+                        self._look_at_sites(stop, say)
+                    if skill and not stop.is_set():
+                        self._look_at_turn(learner, stop, say)
+                    while True:
+                        with self._look_lock:
+                            if (stop.is_set() or memory is None
+                                    or not memory.ended):
+                                self._look = None
+                                return
+                        self._look_back_behind(memory, stop, say)
+                except BaseException as exc:  # never takes the session down
+                    say(f"the look after the turn stopped: {exc}", "yellow")
+                    with self._look_lock:
+                        self._look = None
+
+            self._look = threading.Thread(target=work, daemon=True,
+                                          name="yantra-look")
+            self._look.start()
+
+    def _look_at_sites(self, stop: threading.Event,
+                       say: Callable[..., None]) -> None:
+        from yantra import site_guide
+        try:
+            offers = site_guide.look(self.agent, stop=stop.is_set)
+        except Exception as exc:
+            say(f"site guide skipped: {exc}", "yellow")
+            return
+        if stop.is_set():
+            return
+        with self._look_lock:
+            self._found_guides += offers
+        for offer in offers:
+            say(f"a guide to {offer.name} is waiting -- /keep to see it")
+
+    def _look_at_turn(self, learner: Learner, stop: threading.Event,
+                      say: Callable[..., None]) -> None:
+        try:
+            offer = learner.consider(stop=stop.is_set)
+            if offer is None:
+                return
+            if learner.mode == "auto" and not offer.waiting:
+                skill = learner.save(offer)
+                say(f"saved skill {skill.name} ({skill.directory})", "green")
+                return
+        except Exception as exc:
+            say(f"learning skipped: {exc}", "yellow")
+            return
+        with self._look_lock:
+            # an older offer of the same name shares the staging folder
+            self._found_skills = [(lr, o) for lr, o in self._found_skills
+                                  if o.draft.name != offer.draft.name]
+            self._found_skills.append((learner, offer))
+        say(f"found a skill worth keeping: {offer.draft.name} -- /keep to see it")
+
+    def _look_back_behind(self, memory: Any, stop: threading.Event,
+                          say: Callable[..., None]) -> None:
+        """Back over each conversation /clear or /load set aside. Stopped,
+        the rest stay set aside for the next free moment."""
+        try:
+            found = look_back_ended(self.agent, stop=stop.is_set)
+        except Stopped as exc:
+            found = exc.args[0] if exc.args else []
+        except LookFailed as exc:
+            found = exc.found
+            say(f"looking back skipped: {exc}", "yellow")
+        if not found:
+            return
+        if memory.reflect == "auto":
+            try:
+                ids = keep(memory, found)
+            except Exception as exc:
+                say(f"memory ({memory.store.name}): {exc}; nothing kept", "red")
+                return
+            if ids:
+                say(f"remembered {len(ids)} about you (#{', #'.join(ids)} -- "
+                    f"/memory to see or forget)", "green")
+            return
+        memory.pending.extend(c for c in found if c not in memory.pending)
+
+    def _stop_look(self) -> None:
+        """The person wants the agent: the look gives way, and is waited
+        for -- it gives way at its next streamed word, and the agent runs
+        one call at a time."""
+        look = self._look
+        if look is None:
+            return
+        self._look_stop.set()
+        look.join()
+
+    def _wait_look(self) -> None:
+        """/keep and /quit want what the look finds: wait for it, with a
+        spinner; Ctrl-C stops it instead."""
+        look = self._look
+        if look is None or not look.is_alive():
+            return
+        try:
+            with self.console.status("[dim]… still looking at the last "
+                                     "turn[/dim]", spinner="dots"):
+                while look.is_alive():
+                    look.join(0.2)
+        except KeyboardInterrupt:
+            self._stop_look()
+
+    def _say_found(self, *, pointing: bool = True) -> None:
+        """The look's news, one line each, just before the prompt.
+        ``pointing=False`` is /quit, which asks instead of pointing at
+        /keep."""
+        with self._look_lock:
+            said, self._found_said = self._found_said, []
+        for text, style in said:
+            if pointing or "/keep" not in text:
+                self.console.print(f"· {text}", markup=False, style=style)
+        memory = getattr(self.agent, "memory", None)
+        if not pointing:
+            return
+        waiting = len(memory.pending) if memory is not None else 0
+        if waiting > self._told_pending:
+            things = "a thing" if waiting == 1 else f"{waiting} things"
+            self.console.print(f"· {things} worth remembering about you -- "
+                               f"/keep to see", markup=False, style="dim")
+        self._told_pending = waiting
+
+    def _keep_command(self) -> None:
+        """``/keep``: what the look behind the prompt found, asked now --
+        each skill as its save question, each guide, then the facts."""
+        self._wait_look()
+        with self._look_lock:
+            skills, self._found_skills = self._found_skills, []
+            guides, self._found_guides = self._found_guides, []
+        memory = getattr(self.agent, "memory", None)
+        if not skills and not guides and not (memory and memory.pending):
+            self.console.print("nothing waiting -- what the look after a turn "
+                               "finds waits here", style="dim")
+            return
+        for learner, offer in skills:
+            try:
+                if offer.waiting and not self._test_waiting(learner, offer):
+                    continue
+                self._ask_to_save(learner, offer)
+            except (EOFError, KeyboardInterrupt):
+                learner.discard(offer)
+                self.console.print("\n[dim]not saved[/dim]")
+        setu = getattr(self.agent, "setu", None)
+        for offer in guides:
+            try:
+                self._ask_guide(setu, offer)
+            except (EOFError, KeyboardInterrupt):
+                self.console.print("\n[dim]not kept[/dim]")
+        self._offer_pending_memories()
+        self._told_pending = 0
+
+    def _test_waiting(self, learner: Learner, offer: Offer) -> bool:
+        """The test a look left waiting for a yes, run now the person is
+        here. False drops the offer, saying why."""
+        learner.test_waiting(offer, progress=lambda text: self.console.print(
+            f"[dim]· {escape(text)}[/dim]"))
+        if offer.waiting:
+            self.console.print(f"{offer.draft.name}: its test was not run, so "
+                               f"it was not saved", markup=False, style="yellow")
+        elif not offer.tested:
+            self.console.print(f"{offer.draft.name} failed its test, so it was "
+                               f"dropped:\n{offer.test_output[:600]}",
+                               markup=False, style="yellow")
+        else:
+            return True
+        learner.discard(offer)
+        return False
+
+    def _finish(self) -> None:
+        """/quit and Ctrl-D: the look behind the prompt finishes, its finds
+        are asked, then the look back over this conversation (and any set
+        aside) -- nothing is left behind for a session that is ending."""
+        self._wait_look()
+        self._say_found(pointing=False)
+        with self._look_lock:
+            waiting = bool(self._found_skills or self._found_guides)
+        if waiting:
+            self._keep_command()
+        self.end_conversation()
+
+    def _set_aside(self, *, stop: bool = True) -> None:
+        """This conversation ends and the session goes on (/clear, /load,
+        /chats open): behind the prompt, it is copied for a look back that
+        runs after; in line, it is looked back over now, as before.
+
+        /clear passes ``stop=False``: a skill look already running read its
+        turn when it started, so the history going does not touch it. A
+        load replaces the provider and settings too, so the look stops."""
+        if self.behind:
+            if stop:
+                self._stop_look()
+            set_aside(self.agent)
+        else:
+            self.end_conversation()
+
+    def _loaded(self) -> None:
+        """A conversation put back counts as looked at (mark_reviewed) --
+        but what waits for /keep was found in the one that ended, and
+        stays; and the one set aside is looked back over now, behind."""
+        memory = getattr(self.agent, "memory", None)
+        waiting = list(memory.pending) if memory is not None else []
+        mark_reviewed(self.agent)
+        if memory is not None:
+            memory.pending.extend(waiting)
+        if self.behind:
+            self._start_look()
 
     # ---- Setu, between turns (notes/110) ---------------------------------------
 
@@ -759,9 +1044,18 @@ class Repl:
         if memory.reflect == "off" and not forced:
             return
         found, memory.pending = list(memory.pending), []
+        self._told_pending = 0
         try:
             with self.console.status("[dim]… looking back over the "
                                      "conversation[/dim]", spinner="dots"):
+                try:
+                    # any /clear set aside first, then this one
+                    found += [c for c in look_back_ended(self.agent)
+                              if c not in found]
+                except LookFailed as exc:
+                    found += [c for c in exc.found if c not in found]
+                    self.console.print(f"[yellow]looking back skipped: "
+                                       f"{exc}[/yellow]")
                 found += [c for c in reflect(self.agent) if c not in found]
         except KeyboardInterrupt:
             self.console.print("[yellow](not looked back over)[/yellow]")
@@ -1061,7 +1355,7 @@ class Repl:
                                  "segment")
                 self.console.print(" · ".join(parts))
             case "clear":
-                self.end_conversation()
+                self._set_aside(stop=False)
                 self.agent.history.clear()
                 self.conversation_id = new_id()
                 self.console.print("[green]history cleared[/green]")
@@ -1069,6 +1363,8 @@ class Repl:
                     # its opening went with the history
                     self.lesson = None
                     self.console.print(lessons.DROPPED, markup=False, style="dim")
+                if self.behind:
+                    self._start_look()   # the model is free right now
             case "yolo":
                 self._yolo_command(arg)
             case "env":
@@ -1087,8 +1383,13 @@ class Repl:
                 self._memory_command(arg)
             case "remember":
                 self.end_conversation(forced=True)
+            case "keep":
+                self._keep_command()
             case "quit" | "exit":
-                self.end_conversation()
+                if self.behind:
+                    self._finish()
+                else:
+                    self.end_conversation()
                 return True
             case _:
                 # A skill name is a command: /pr-review <anything> runs a
@@ -1801,14 +2102,14 @@ class Repl:
         if payload is None:
             self.console.print("[red]that conversation is gone[/red]")
             return
-        self.end_conversation()
+        self._set_aside()
         try:
             apply_payload(self.agent, payload, history_only=True)
         except Exception as exc:
             self.console.print(f"[red]could not open it: {exc}[/red]")
             return
         recompose(self.agent)
-        mark_reviewed(self.agent)
+        self._loaded()
         # Carried on, it is the same conversation: its row grows.
         self.conversation_id = conversation_id
         self.console.print(f"[green]back in: {escape(payload_title(payload))} "
@@ -1887,7 +2188,7 @@ class Repl:
             self.console.print(f"[red]no checkpoint named '{session_id}'[/red]")
             return
         # Switching conversations ends this one (memory/reflect.py).
-        self.end_conversation()
+        self._set_aside()
         try:
             summary = apply_payload(
                 self.agent, payload,
@@ -1902,7 +2203,7 @@ class Repl:
         # fresh context and this session's skill roster, not last Tuesday's
         # copy ([notes/29](../notes/29-environment-awareness.md)).
         recompose(self.agent)
-        mark_reviewed(self.agent)
+        self._loaded()
         self.conversation_id = new_id()
         self.console.print(f"[green]{summary}[/green]")
 

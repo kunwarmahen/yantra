@@ -28,6 +28,13 @@ The look back runs once, at the end:
 And whenever you ask: `/remember` in the terminal, or *remember from
 this conversation* in the page's memory panel.
 
+When the session goes on after the end (`/clear`, `/load`, the page's
+*clear* and *restore*, Dvara's `/new`), nothing waits for the look. The
+conversation is copied, cleared at once, and looked back over behind
+whatever you do next ([note 131](131-cleared-at-once.md)). What it
+finds waits for `/keep` in the terminal, under *to keep* on the page,
+and comes as a message through Dvara.
+
 **Once per conversation, not once per turn.** A look after every turn
 would pay for a model call on *"thanks"* and *"try again"*. The end is
 where everything the conversation will say has been said. The cost is

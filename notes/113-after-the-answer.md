@@ -39,7 +39,9 @@ one of three things has happened:
 
 Facts about you that the write-up found go to the same tray. So do the
 ones the end-of-conversation look back finds when you clear or restore
-a conversation, and the ones found just before compaction. Nothing on
+a conversation (that look runs behind the clear too, [note
+131](131-cleared-at-once.md)), and the ones found just before
+compaction. Nothing on
 the page asks about them in a dialog any more.
 
 ## A new message stops the look
@@ -104,12 +106,12 @@ the newer one replaces it, because the two share a staging folder.
 
 ## The terminal
 
-The terminal still asks right after the turn, as before. It has no
-place for a question to wait. Text printed while you type would end
-up in the middle of your next prompt. The REPL asks once, and Enter
-means no. After a turn on a site you added by its address, it
-also offers that site's guide the same way: the guide printed, then
-*[k]eep, [e]dit first, [N]o*.
+The terminal does the same now ([note 131](131-cleared-at-once.md)).
+The prompt comes back first, and the look runs behind it. Text printed
+while you type would end up in the middle of your next prompt, so
+what it found is one line before the next prompt, and `/keep` asks
+about each: a recipe as its save question, a site's guide as *[k]eep,
+[e]dit first, [N]o*, then the facts. Enter still means no.
 
 ## The tray, on disk
 
@@ -228,8 +230,9 @@ about a specific file's contents*. That reason went to the panel's
 
 * ~~**A tray that outlives the server.**~~ Built: see *The tray, on
   disk* above.
-* **Waiting in the terminal.** See above. A terminal tray would be a
-  `/kept` command, and it can be added the day someone wants one.
+* ~~**Waiting in the terminal.** See above. A terminal tray would be a
+  `/kept` command, and it can be added the day someone wants one.~~
+  Built as `/keep` ([note 131](131-cleared-at-once.md)).
 * **Looking at every turn in a fast exchange.** A look stopped by your
   next message isn't retried later. Retrying would mean deciding which
   past turn to look at once the history has moved on.

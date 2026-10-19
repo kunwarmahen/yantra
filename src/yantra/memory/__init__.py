@@ -215,6 +215,10 @@ class Memory:
         self.pending: list[Any] = []
         #: Candidates the person dropped: not offered again this session.
         self.declined: set[str] = set()
+        #: Conversations that ended (/clear, /load) before they were looked
+        #: back over: copies, each a message list, oldest first. The look
+        #: runs behind whatever the person does next (reflect.set_aside).
+        self.ended: list[list[Any]] = []
         #: The trace's redaction pattern, when the session has one.
         self.redact: Any = None
 

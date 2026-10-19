@@ -326,7 +326,17 @@ face is four commands, and the last one is the one people actually use:
 /learn start WHAT           # a lesson: it does only the step you say, then asks
 /learn watch WHAT           # a lesson you show on the phone; say next after each step
 /learn done | stop          # the whole lesson as one skill, or dropped (notes/129)
+/keep                       # what the look after a turn found, asked now (notes/131)
 ```
+
+The look at whether a turn is worth a skill runs on a thread of its
+own after the prompt comes back, never between an answer and your next
+message ([131-cleared-at-once.md](131-cleared-at-once.md)). `input()`
+owns the line while you type, so the look never prints; it leaves one
+line for the next prompt, and `/keep` asks about each thing it found.
+Whatever you type next stops it, except `/keep` and `/quit`, which wait
+for it, and `/clear`, which only hands it another conversation to look
+back over.
 
 `/skills off` shares `/tools off`'s matching rule (globs), its soft
 semantics (the skill stays on disk, marked `[off]`, and refuses to load
