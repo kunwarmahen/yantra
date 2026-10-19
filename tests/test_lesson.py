@@ -12,6 +12,12 @@ the way a single turn is:
   its own way. The opening says so, in the conversation.
 * LOST ON A REBUILD -- Dvara builds its agent per message; a lesson that
   lives only in memory is gone by the second step. It round-trips a dict.
+* ONE PHONE'S NAMES -- a lesson taught on an iPhone wrote down its bundle
+  id and the home-screen folder the app sat in, so the skill could not
+  run on the Android phone. The write-up is told which phone it was, and
+  to open apps by their everyday name.
+* A WORD THAT ISN'T THERE -- people reach for ``/learn clear`` (from
+  ``/clear``) to drop a lesson. It is ``stop``, not "unknown word".
 
 Only the model is scripted; the agent, its tools and the learner are real.
 """
@@ -141,6 +147,72 @@ class TestTheLesson:
         assert parse("DONE") == ("done", "")
         assert "/learn done" in USAGE
 
+    def test_clear_is_another_word_for_stop(self):
+        assert parse("clear") == ("stop", "")
+        assert parse("CLEAR") == ("stop", "")
+        assert "/learn clear" in USAGE
+
+    def test_a_page_is_told_what_is_taught_and_how_far(self, tmp_path):
+        agent = make_agent(tmp_path, WALK)
+        lesson = Lesson(task="send a WhatsApp message", watching=True)
+        taught(agent, lesson)
+        seen = lesson.describe()
+        assert seen["task"] == "send a WhatsApp message" and seen["watching"]
+        assert seen["told"] == 3 and seen["steps"] == 3
+        assert seen["status"].startswith("You're showing me")
+
+
+def on_a_phone(agent: Agent, kind: str) -> None:
+    """The phone layer sparsh_link writes for one phone of ``kind``."""
+    from yantra.prompt import attach_prompt
+    from yantra.sparsh_link import prompt_text
+
+    serial = "http://10.0.0.5:8100" if kind == "iPhone" else "0123ABC"
+    data = {"phones": [{"serial": serial, "model": "x", "state": "device"}], "adb": "ok"}
+    prompt = attach_prompt(agent)
+    prompt.set("phone", prompt_text(data))
+    prompt.apply()
+
+
+class TestBothPhones:
+    def test_the_phone_layer_names_the_phone(self, tmp_path):
+        from yantra.sparsh_link import phone_kind
+
+        agent = make_agent(tmp_path, [])
+        assert phone_kind(agent) == ""
+        on_a_phone(agent, "iPhone")
+        assert phone_kind(agent) == "iPhone"
+        on_a_phone(agent, "Android phone")
+        assert phone_kind(agent) == "Android phone"
+
+    def test_a_lesson_keeps_the_phone_it_was_taught_on(self, tmp_path):
+        agent = make_agent(tmp_path, WALK)
+        on_a_phone(agent, "iPhone")
+        lesson = Lesson(task="send a WhatsApp message")
+        for words in (lesson.opening(), "open WhatsApp", "tap Mom", "type running late"):
+            run(agent, words)
+            lesson.add(current_turn(agent), agent)
+        assert lesson.phone == "iPhone"
+        assert Lesson.from_dict(lesson.to_dict()).phone == "iPhone"
+        assert "TAUGHT ON: the person's iPhone" in digest(lesson.as_turn())
+
+    def test_a_lesson_with_no_phone_says_nothing_of_one(self, tmp_path):
+        agent = make_agent(tmp_path, WALK)
+        lesson = Lesson(task="x")
+        for words in (lesson.opening(), "open WhatsApp"):
+            run(agent, words)
+            lesson.add(current_turn(agent), agent)
+        assert lesson.phone == "" and "TAUGHT ON" not in digest(lesson.as_turn())
+
+    def test_the_write_up_opens_apps_by_name_for_either_phone(self, tmp_path):
+        agent = make_agent(tmp_path, [*WALK, assistant_text(LESSON_REPLY)])
+        lesson = Lesson(task="x")
+        taught(agent, lesson)
+        Learner(agent, "ask", home=tmp_path / "home").consider(lesson=lesson)
+        prompt = agent.provider.requests[-1]["messages"][0].text()
+        assert "Open an app with open_app and its everyday name" in prompt
+        assert "package or bundle id" in prompt and "If TAUGHT ON names the phone" in prompt
+
 
 class TestTheWriteUp:
     def test_done_writes_one_skill_from_the_whole_walk(self, tmp_path):
@@ -207,6 +279,12 @@ class TestTheTerminal:
         repl._command("/learn stop")
         assert repl.lesson is None and "dropped the lesson" in out.getvalue()
 
+    def test_learn_clear_drops_it_too(self, tmp_path):
+        _, repl, out = self.repl(tmp_path, [assistant_text("Ready.")])
+        repl._command("/learn start x")
+        repl._command("/learn clear")
+        assert repl.lesson is None and "dropped the lesson" in out.getvalue()
+
     def test_done_with_no_lesson_and_start_with_no_task(self, tmp_path):
         _, repl, out = self.repl(tmp_path, [])
         repl._command("/learn done")
@@ -247,7 +325,9 @@ class TestThePage:
                 client.post("/api/message", json={"text": words})
                 seen = self.until(ws, "turn_done")
                 assert "look_status" not in [e["type"] for e in seen]
-            assert session.state()["lesson"].startswith("You're teaching me")
+            lesson = session.state()["lesson"]
+            assert lesson["task"] == "send a WhatsApp message" and lesson["told"] == 3
+            assert lesson["status"].startswith("You're teaching me")
             client.post("/api/message", json={"text": "/learn done"})
             offer = self.until(ws, "learn_offer")[-1]
         assert offer["name"] == "send-a-whatsapp-message"
@@ -260,6 +340,22 @@ class TestThePage:
             client.post("/api/message", json={"text": "/learn stop"})
             said = self.until(ws, "lesson")[-1]
         assert said["text"] == "No lesson is open."
+
+    def test_a_lesson_opened_shows_at_once_and_clear_hides_it(self, tmp_path):
+        # The Teach button types /learn start; the bar comes with the
+        # state sent before the opening turn, and goes with the one
+        # after /learn clear.
+        session, _, client = self.serve(tmp_path, [assistant_text("Ready.")])
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            client.post("/api/message", json={"text": "/learn watch check my battery"})
+            seen = self.until(ws, "turn_started")
+            states = [e for e in seen if e["type"] == "state"]
+            assert states and states[-1]["lesson"]["watching"]
+            self.until(ws, "turn_done")
+            client.post("/api/message", json={"text": "/learn clear"})
+            seen = self.until(ws, "state")
+        assert seen[-1]["lesson"] is None and session.lesson is None
 
 
 class TestTheMixUps:

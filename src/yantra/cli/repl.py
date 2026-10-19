@@ -91,6 +91,7 @@ HELP = """[bold]commands[/bold]
                      step you say, then asks what's next
   /learn watch WHAT  show it on the phone yourself; say next after each step
   /learn done|stop   keep the whole lesson as one skill, or drop it
+                     (/learn clear drops it too)
   /memory            what the agent remembers about you across
                      conversations (* = in this conversation's prompt)
   /memory forget ID  remove one -- a fact that stopped being true
@@ -524,7 +525,7 @@ class Repl:
         if self.lesson is not None:
             # A step of a walk-through: kept for /learn done, never
             # offered as a skill of its own.
-            self.lesson.add(current_turn(self.agent))
+            self.lesson.add(current_turn(self.agent), self.agent)
             learn = False
         try:
             if learner is not None:

@@ -1398,6 +1398,29 @@ pre.output { color: var(--ink); }
   transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
 #dialog input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); outline: none; }
+.dialog-choices { display: grid; gap: 8px; margin: 0 0 12px; font-size: 13.5px; color: var(--ink-2); }
+.dialog-choices label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+#dialog .dialog-choices input { width: auto; height: auto; margin-top: 3px; flex: none; }
+.dialog-choices b { color: var(--ink); font-weight: 600; }
+
+/* ---- a lesson open: above the composer, until done or stop ---- */
+
+#lesson-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px 8px 13px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-3);
+  background: var(--surface-2);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+#lesson-words { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.lesson-acts { display: flex; gap: 8px; margin-left: auto; }
+#lesson-bar .m-btn { height: 28px; padding: 0 12px; font-size: 12.5px; }
 
 /* ---- the anchored menu (provider picker) ---- */
 

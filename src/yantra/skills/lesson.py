@@ -34,6 +34,14 @@ SHOWN, NOT TOLD. ``watching`` marks a lesson where the person does each
 step with their own hand: the opening asks the agent to read what
 changed on the phone when they say next (Sparsh's ``watched``), and the
 calls that read it are the lesson's steps like any other.
+
+ONE SKILL FOR BOTH PHONES. A lesson is taught on one phone, and what it
+saw there is that phone's: an Android package, an iPhone bundle id, the
+folder its home screen keeps the app in. The lesson notes which phone it
+was taught on (``phone``, from the agent's phone layer: sparsh_link.py)
+and the write-up is told to open the app by its everyday name with
+``open_app`` -- which finds it on either phone -- and to say which phone
+the steps were seen on, so the other one knows which may differ.
 """
 
 from __future__ import annotations
@@ -45,7 +53,11 @@ from typing import Any
 from yantra.skills.learn import MAX_RESULT_CHARS, Step, Turn, _clip
 
 #: The word that opens, closes and drops one, after ``/learn``.
-VERBS = ("start", "watch", "done", "stop")
+VERBS = ("start", "watch", "done", "stop", "clear")
+
+#: Other words for one of them: ``clear`` is what people reach for when
+#: they mean "drop this", from ``/clear``.
+ALIASES = {"clear": "stop"}
 
 #: A lesson longer than this many turns is cut from the front: a walk
 #: that long is not one job, and the write-up's call has to fit.
@@ -73,6 +85,8 @@ class Lesson:
 
     task: str
     watching: bool = False
+    #: The phone it was taught on ("iPhone", "Android phone"), or "".
+    phone: str = ""
     started_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     #: One entry per turn: the person's words and the calls after them.
     turns: list[Turn] = field(default_factory=list)
@@ -81,11 +95,17 @@ class Lesson:
         """The message the lesson starts with, sent to the agent."""
         return (OPENING_WATCH if self.watching else OPENING).format(task=self.task)
 
-    def add(self, turn: Turn | None) -> None:
+    def add(self, turn: Turn | None, agent: Any = None) -> None:
         """Keep one finished turn -- each result clipped as the write-up
-        would clip it, so a long lesson stays a small file."""
+        would clip it, so a long lesson stays a small file. ``agent``
+        says which phone it is working, if any (the latest one wins: a
+        phone swapped mid-lesson is the one the steps were seen on)."""
         if turn is None:
             return
+        if agent is not None and turn.steps:
+            from yantra.sparsh_link import phone_kind
+
+            self.phone = phone_kind(agent) or self.phone
         steps = [Step(s.call_id, s.name, dict(s.arguments),
                       _clip(s.result, MAX_RESULT_CHARS), s.ok) for s in turn.steps]
         self.turns.append(Turn(task=turn.task, steps=steps, answer=_clip(turn.answer, 600)))
@@ -118,7 +138,8 @@ class Lesson:
                 said.append((len(steps), turn.task))
             steps.extend(turn.steps)
         answer = self.turns[-1].answer if self.turns else ""
-        return Turn(task=self.task, steps=steps, answer=answer, said=said)
+        return Turn(task=self.task, steps=steps, answer=answer, said=said,
+                    phone=self.phone)
 
     def status(self) -> str:
         """One line for the person: what is being taught, how far it got."""
@@ -127,8 +148,13 @@ class Lesson:
                 f"({self.steps} tool call(s)). Send /learn done to keep it as a "
                 f"skill, or /learn stop to drop it.")
 
+    def describe(self) -> dict[str, Any]:
+        """For a page: what is being taught, how, and how far it got."""
+        return {"task": self.task, "watching": self.watching, "told": self.told(),
+                "steps": self.steps, "phone": self.phone, "status": self.status()}
+
     def to_dict(self) -> dict[str, Any]:
-        return {"task": self.task, "watching": self.watching,
+        return {"task": self.task, "watching": self.watching, "phone": self.phone,
                 "started_at": self.started_at,
                 "turns": [{"task": t.task, "answer": t.answer,
                            "steps": [{"id": s.call_id, "name": s.name,
@@ -144,15 +170,18 @@ class Lesson:
                                   bool(s.get("ok"))) for s in t.get("steps") or []])
                  for t in data.get("turns") or []]
         return cls(task=str(data.get("task", "")), watching=bool(data.get("watching")),
+                   phone=str(data.get("phone", "")),
                    started_at=str(data.get("started_at", "")), turns=turns)
 
 
 def parse(arg: str) -> tuple[str, str]:
     """``/learn``'s argument as (verb, rest): ``("", "")`` for plain
-    ``/learn``, ``("start", "send a WhatsApp")`` and so on. An unknown
-    word is returned as the verb, for the host to answer."""
+    ``/learn``, ``("start", "send a WhatsApp")`` and so on; ``clear`` comes
+    back as ``stop`` (``ALIASES``). An unknown word is returned as the
+    verb, for the host to answer."""
     verb, _, rest = arg.strip().partition(" ")
-    return verb.lower(), rest.strip()
+    verb = verb.lower()
+    return ALIASES.get(verb, verb), rest.strip()
 
 
 #: What ``/learn done`` says to a lesson nothing was taught in. Kept open:
@@ -176,4 +205,4 @@ USAGE = ("Two ways to teach me a job. TELL: /learn start and what it's for "
          "it's for (\"/learn watch check my Coinbase portfolio value\"), then do "
          "each step yourself on the phone and send next after each one -- I "
          "don't touch it. Either way, /learn done keeps it as a skill and /learn "
-         "stop drops it. Plain /learn keeps what the last answer did.")
+         "stop (or /learn clear) drops it. Plain /learn keeps what the last answer did.")

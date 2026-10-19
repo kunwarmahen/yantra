@@ -109,8 +109,8 @@ any other, so the write-up needs nothing new.
 
 | where | how |
 |---|---|
-| terminal | `/learn start WHAT`, `/learn watch WHAT`, `/learn done`, `/learn stop` |
-| Yantra's page | the same words typed in the chat; `state.lesson` says how far it got, a banner answers the words; *save last turn* is still plain `/learn` |
+| terminal | `/learn start WHAT`, `/learn watch WHAT`, `/learn done`, `/learn stop` (or `/learn clear`) |
+| Yantra's page | the same words typed in the chat, or **teach** in the skills panel; `state.lesson` says how far it got and a bar above the message box shows it, with **done** and **stop** ([note 133](133-taught-once-for-both-phones.md)); *save last turn* is still plain `/learn` |
 | Dvara (Telegram, its web road, Sarathi's home chat) | the same words; the lesson kept in `state/skills/<person>/<agent>.lesson.json` (Dvara's notes/49) |
 
 ## Receipt
@@ -290,14 +290,12 @@ line that was already there.
 * ~~**A model's slip counted against the recipe.**~~ A call refused for
   how it was called, then made right, no longer counts
   ([note 106](106-what-the-recipe-leaves-out.md)).
-* **A Teach button on the page.** The words work there; a button beside
-  *save last turn* would start a lesson without typing one, choosing
-  telling or showing, with **Done** and **Stop** while it's open. The
-  same on Sarathi's home chat.
-* **One skill for both phones.** A lesson is taught on one phone, and its
-  app names (a package, a bundle id, the iPhone's "finance folder") are
-  that phone's. A skill that opened the app by its everyday name with
-  `open_app` would work on either. Teaching it on each is the way for
-  now.
-* **`/learn clear`.** `/learn stop` is the word that drops an open
-  lesson; `clear` is the one some people reach for first.
+* ~~**A Teach button on the page.**~~ Built, on Yantra's page and
+  Sarathi's home chat, with a bar showing the open lesson and **Done**
+  and **Stop** ([note 133](133-taught-once-for-both-phones.md)).
+* ~~**One skill for both phones.**~~ The write-up opens the app by its
+  everyday name with `open_app` and says which phone it was taught on
+  ([note 133](133-taught-once-for-both-phones.md)). Run on the other
+  phone for real: not yet.
+* ~~**`/learn clear`.**~~ Another word for `/learn stop`
+  ([note 133](133-taught-once-for-both-phones.md)).

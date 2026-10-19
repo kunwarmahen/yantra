@@ -605,7 +605,7 @@ class WebSession:
                 # A step of a walk-through: kept for /learn done, and no
                 # look after it -- one step is not a skill.
                 from yantra.skills.learn import current_turn
-                self.lesson.add(current_turn(agent))
+                self.lesson.add(current_turn(agent), agent)
         self._keep_pending_memories()
         self._keep_conversation()
         self.turn_active = False
@@ -944,8 +944,8 @@ class WebSession:
     def learn_word(self, text: str) -> None:
         """``/learn`` typed in the chat: plain, it saves the last turn (the
         button's job); ``start``/``watch`` opens a lesson with its first
-        turn, ``done`` saves the lesson, ``stop`` drops it
-        (skills/lesson.py)."""
+        turn (the Teach button types these), ``done`` saves the lesson,
+        ``stop`` or ``clear`` drops it (skills/lesson.py)."""
         from yantra.skills import lesson as lessons
 
         verb, rest = lessons.parse(text.strip()[len("/learn"):])
@@ -957,12 +957,14 @@ class WebSession:
                 say(lessons.USAGE)
             else:
                 self.lesson = lessons.Lesson(task=rest, watching=verb == "watch")
+                self.broadcast({"type": "state", **self.state()})   # the lesson bar
                 self.start_turn(self.lesson.opening(), [])
             return
         if verb == "stop":
             say("Dropped the lesson; nothing was kept." if self.lesson is not None
                 else "No lesson is open.")
             self.lesson = None
+            self.broadcast({"type": "state", **self.state()})
             return
         if verb not in ("", "done"):
             say(lessons.USAGE)
@@ -1370,8 +1372,9 @@ class WebSession:
             # or found no phone at the start, and the phone chip stays hidden.
             "sparsh": (agent.sparsh.describe()
                        if getattr(agent, "sparsh", None) is not None else None),
-            # A job being taught step by step (/learn start): how far it got.
-            "lesson": self.lesson.status() if self.lesson is not None else None,
+            # A job being taught step by step (/learn start): what for,
+            # how, and how far it got -- the page's lesson bar draws it.
+            "lesson": self.lesson.describe() if self.lesson is not None else None,
             "tools": agent.registry.names(),
             # Runtime-disabled subset of ``tools`` (the /api/tools panel's
             # toggles); empty for a stock session.

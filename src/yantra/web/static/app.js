@@ -231,6 +231,7 @@ async function fetchHistory() {
 
 function applyHeader(s) {
   ui.lastState = s;
+  renderLesson(s.lesson);
   $("#provider-name").textContent = s.provider;
   $("#model-name").textContent = s.model;
   const yolo = s.mode === "yolo";
@@ -1135,7 +1136,7 @@ function closeDialog() {
    the operator backs out -- cancel means cancel. */
 function openDialog({ title, body, value, placeholder,
                       confirm: confirmText = "ok", tone = "primary",
-                      input: wantsInput = true, files = null }) {
+                      input: wantsInput = true, files = null, choices = null }) {
   return new Promise((resolve) => {
     const box = $("#dialog");
     box.innerHTML = `<h3>${esc(title)}</h3>`
@@ -1144,6 +1145,11 @@ function openDialog({ title, body, value, placeholder,
       + (files ? Object.entries(files).map(([name, text]) =>
           `<div class="dialog-file"><div class="dialog-file-name">${esc(name)}</div>`
           + `<pre>${esc(text)}</pre></div>`).join("") : "")
+      // one of a few ways, picked before the words (the Teach dialog)
+      + (choices ? `<div class="dialog-choices">${choices.map((c, i) => `
+          <label><input type="radio" name="dialog-choice" value="${esc(c.value)}"
+                        ${i === 0 ? "checked" : ""}>
+            <span><b>${esc(c.label)}</b> ${esc(c.hint || "")}</span></label>`).join("")}</div>` : "")
       + (wantsInput ? `<input id="dialog-input" spellcheck="false">` : "")
       + `<div class="modal-actions">`
       + `<button class="m-btn" data-act="cancel">cancel</button>`
@@ -1161,15 +1167,22 @@ function openDialog({ title, body, value, placeholder,
       box.querySelector('[data-act="ok"]').focus();
     }
 
+    // With choices, the answer is { text, choice }; without, the words.
+    const answer = () => {
+      const text = field ? field.value.trim() : true;
+      if (!choices) return text;
+      const choice = box.querySelector('input[name="dialog-choice"]:checked')?.value;
+      return text ? { text, choice } : "";
+    };
     const done = (out) => { closeDialog(); resolve(out); };
     box.onclick = (e) => {
       const act = e.target.closest("[data-act]")?.dataset.act;
-      if (act === "ok") done(field ? field.value.trim() : true);
+      if (act === "ok") done(answer());
       else if (act === "cancel") done(null);
     };
     if (field) {
       field.onkeydown = (e) => {
-        if (e.key === "Enter") { e.preventDefault(); done(field.value.trim()); }
+        if (e.key === "Enter") { e.preventDefault(); done(answer()); }
       };
     }
     // capture phase + stopPropagation: esc closes THIS dialog and must not
@@ -3348,6 +3361,49 @@ function closeSkillForm() {
 }
 
 $("#skill-new-btn").onclick = () => openSkillForm(null);
+
+/* Teaching a job one step at a time (skills/lesson.py). The button types
+   what a person would: /learn start or /learn watch and what it's for,
+   so the chat shows the same line either way. */
+$("#skill-teach-btn").onclick = async () => {
+  if (ui.lastState?.lesson) {
+    toast("a lesson is open: done or stop it first, under the chat");
+    return;
+  }
+  const got = await openDialog({
+    title: "teach a job",
+    body: "It is done one step at a time, and kept as one skill when you press done.",
+    choices: [
+      { value: "start", label: "tell it", hint: "— you type each step and it does it" },
+      { value: "watch", label: "show it", hint: "— you do each step on the phone and say next" },
+    ],
+    placeholder: "what it's for, e.g. check my Coinbase portfolio value",
+    confirm: "start",
+  });
+  if (!got || !got.text) return;
+  closeToolsPanel();
+  sendWords(`/learn ${got.choice === "watch" ? "watch" : "start"} ${got.text}`);
+};
+
+function renderLesson(lesson) {
+  const bar = $("#lesson-bar");
+  bar.classList.toggle("hidden", !lesson);
+  if (!lesson) return;
+  const how = lesson.watching ? "Showing" : "Teaching";
+  const next = lesson.watching ? "do the next step on the phone, then say next"
+    : "say the next step";
+  $("#lesson-words").textContent =
+    `${how}: ${lesson.task} — ${lesson.told} step(s) so far; ${next}.`;
+}
+
+/* A word sent as if typed: the composer's own path, so it shows as yours. */
+function sendWords(text) {
+  if (ui.turnActive) { toast("wait for this step to finish"); return; }
+  input.value = text;
+  sendMessage();
+}
+$("#lesson-done").onclick = () => sendWords("/learn done");
+$("#lesson-stop").onclick = () => sendWords("/learn stop");
 
 $("#skill-learn-btn").onclick = async () => {
   // The offer itself arrives over the socket, like an approval does.

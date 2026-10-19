@@ -296,6 +296,23 @@ def _kind_words(phones: list[dict[str, Any]]) -> str:
     return kinds.pop() if len(kinds) == 1 else "phones"
 
 
+#: How the phone layer names the phone it works (``prompt_text``).
+_WORKS = "You can work the person's "
+
+
+def phone_kind(agent: Any) -> str:
+    """"iPhone" or "Android phone": the one phone this agent works now,
+    read back from its phone layer -- or "" with none, or with both. A
+    lesson keeps it (skills/lesson.py), so the skill it becomes can say
+    which phone its steps were seen on."""
+    prompt = getattr(agent, "prompt", None)
+    text = (prompt.get("phone") if hasattr(prompt, "get") else None) or ""
+    for kind in ("iPhone", "Android phone"):
+        if f"{_WORKS}{kind} (" in text:
+            return kind
+    return ""
+
+
 def announce(data: dict[str, Any], tools: int, program: str, shots: str = "") -> str:
     """The one startup line: tools, which phone, and the apps kept out."""
     never = (data.get("rules") or {}).get("never") or []
@@ -320,7 +337,7 @@ def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
                      "the emulator started, or an iPhone with WebDriverAgent running.")
         return "\n".join(lines)
     lines += [
-        f"You can work the person's {_kind_words(phones)} ({_phone_words(data)}) with the "
+        f"{_WORKS}{_kind_words(phones)} ({_phone_words(data)}) with the "
         "`mcp__sparsh__` tools, when they ask for something done on it.",
         "1. `mcp__sparsh__look` shows the screen as numbered lines. Act BY NUMBER: "
         "`tap`, `type_text` (`into` a field), `scroll` (`on` a list). Every action "

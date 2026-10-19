@@ -326,6 +326,7 @@ face is four commands, and the last one is the one people actually use:
 /learn start WHAT           # a lesson: it does only the step you say, then asks
 /learn watch WHAT           # a lesson you show on the phone; say next after each step
 /learn done | stop          # the whole lesson as one skill, or dropped (notes/129)
+/learn clear                # another word for stop (notes/133)
 /keep                       # what the look after a turn found, asked now (notes/131)
 ```
 

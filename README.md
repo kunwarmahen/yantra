@@ -304,13 +304,16 @@ rediscovering the API, which is the part small models do badly.
 
 `/learn` saves the last turn by hand (the page has a *save last turn*
 button). A job you'd rather walk it through is a **lesson**, told or
-shown. `/learn start send a WhatsApp message` is **telling**: you type
+shown (on the page, **teach** in the skills panel starts one). `/learn start send a WhatsApp message` is **telling**: you type
 each step, and the agent does only that step and asks what's next.
 `/learn watch check my Coinbase portfolio value` is **showing**: you do
 each step on the phone yourself and type `next`, and Sparsh tells the
 agent what you did. A `start` lesson doesn't see steps done by hand.
 `/learn done` writes every step since the start into one skill, and
-`/learn stop` drops it ([notes/129](notes/129-taught-step-by-step.md)). `--learn off` stops the offers; `--learn auto` saves without
+`/learn stop` (or `/learn clear`) drops it ([notes/129](notes/129-taught-step-by-step.md)).
+A skill taught on a phone opens its app by name, so it works on the
+other phone too, and says which phone it was taught on
+([notes/133](notes/133-taught-once-for-both-phones.md)). `--learn off` stops the offers; `--learn auto` saves without
 asking, for unattended runs only. `/skills` shows each learned skill's
 record (`worked 3 · failed 0 · last ok …`), counted by Yantra from what
 happened, never by the model. Why the write-up runs in a fresh, small
@@ -893,7 +896,9 @@ restart. `/phone` says what's attached, and `/phone log` shows the last
 steps. To teach it a phone job, `/learn start` (tell it each step) or
 `/learn watch` (do each step yourself and say next; Sparsh's
 `watch_phone` and `watched` tell it what you did) and then `/learn done`
-([notes/129](notes/129-taught-step-by-step.md)). A screen the list can't describe (Settings' About page, which
+([notes/129](notes/129-taught-step-by-step.md)); the skill it keeps
+opens the app by its everyday name, for either phone
+([notes/133](notes/133-taught-once-for-both-phones.md)). A screen the list can't describe (Settings' About page, which
 never goes still) comes with a **screenshot** when the model is local
 and says it can see (Ollama's `/api/show` lists "vision"); a cloud model
 gets none unless `YANTRA_PHONE_SHOTS=on`, and `off` stops them
@@ -2496,7 +2501,11 @@ src/yantra/
 │                   /learn done hands the whole walk to the same write-up
 │                   with the person's words above their steps; /learn
 │                   watch is the same with the person's own hand on the
-│                   phone ([notes/129](notes/129-taught-step-by-step.md))
+│                   phone ([notes/129](notes/129-taught-step-by-step.md));
+│                   /learn clear is another word for stop, and the
+│                   lesson keeps which phone it was taught on, for a
+│                   write-up that opens apps by name on either
+│                   ([notes/133](notes/133-taught-once-for-both-phones.md))
 │                   promote.py: a learned script promoted to a TOOL -- suggested
 │                   after 5 successes in a row, never automatic; one fresh
 │                   call writes tool.json (parameters + an argv template), one
@@ -2635,7 +2644,9 @@ src/yantra/
 │                   schedule's granted steps go to Sparsh as SPARSH_GRANTS
 │                   when its host (Dvara) gives a run the phone; a confirm
 │                   for a hold that is gone is never a card
-│                   ([notes/124](notes/124-a-question-with-no-step-behind-it.md))
+│                   ([notes/124](notes/124-a-question-with-no-step-behind-it.md));
+│                   phone_kind reads back which phone the layer names,
+│                   for a lesson ([notes/133](notes/133-taught-once-for-both-phones.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,

@@ -217,6 +217,8 @@ class Turn:
     #: A lesson's turns joined as one (lesson.py): the person's words, and
     #: the step they came before -- ``(index into steps, words)``.
     said: list[tuple[int, str]] = field(default_factory=list)
+    #: The phone a lesson was taught on ("iPhone", "Android phone"), or "".
+    phone: str = ""
 
     def skills_loaded(self, tools: dict[str, str] | None = None) -> list[str]:
         """Skills the turn followed. ``tools`` maps a promoted tool's name
@@ -464,7 +466,10 @@ def digest(turn: Turn, found: set[str] | None = None) -> str:
     -- enough to know a call failed and how, not enough to spin a
     "pitfalls" section out of.
     """
-    lines = [f"TASK: {turn.task}", "", "STEPS:"]
+    lines = [f"TASK: {turn.task}"]
+    if turn.phone:
+        lines.append(f"TAUGHT ON: the person's {turn.phone}")
+    lines += ["", "STEPS:"]
     said: dict[int, list[str]] = {}
     for at, words in turn.said:
         said.setdefault(at, []).append(words)
@@ -613,6 +618,16 @@ type, which item) is an INPUT; the rest is the recipe.
 and say what the screen should show after each step, so the next run can \
 check it is on the right screen. Never write a line number, a position or \
 coordinates: they change every time the screen is read.
+- Open an app with open_app and its everyday name, the one under its \
+icon ("Coinbase Advanced", "WhatsApp"), even where the person opened it \
+by tapping through a home screen or a folder. Never name it by its \
+package or bundle id ("com.whatsapp", "net.whatsapp.WhatsApp") or by \
+the folder it sits in: the same skill must work on an Android phone and \
+an iPhone, and open_app finds the app on either.
+- If TAUGHT ON names the phone, say so in one line under the title \
+("Taught on an iPhone; on an Android phone the screens may differ.") \
+and name a step that is that phone's own, such as an iPhone swiping back \
+or an Android Back key.
 - A step that waited for the person's yes (a hold) still waits for it \
 next time: write it as a step that asks.
 - Write no script: a phone is worked one step at a time.

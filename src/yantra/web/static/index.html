@@ -201,6 +201,14 @@
 </div>
 
 <div id="composer-wrap">
+  <!-- a lesson open (/learn start|watch): what it's for, how far, done / stop -->
+  <div id="lesson-bar" class="hidden" role="status">
+    <span id="lesson-words"></span>
+    <span class="lesson-acts">
+      <button class="m-btn primary" id="lesson-done" title="keep the whole lesson as one skill (/learn done)">done</button>
+      <button class="m-btn" id="lesson-stop" title="drop the lesson; nothing is kept (/learn stop)">stop</button>
+    </span>
+  </div>
   <div id="staged" class="hidden"></div>
   <div id="statusline" class="hidden" role="status"><span class="spinner"></span><span id="status-text">connecting…</span></div>
   <div id="composer">
@@ -308,8 +316,14 @@
                    stroke-linecap="round" aria-hidden="true"><use href="#i-plus"/></svg>
               new
             </button>
+            <button class="m-btn" id="skill-teach-btn"
+                    title="teach a job one step at a time: tell it each step, or do the steps yourself on the phone. Done keeps it as one skill">
+              <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-pencil"/></svg>
+              teach
+            </button>
             <button class="m-btn" id="skill-learn-btn"
-                    title="write the last turn down as a skill: it is tested, then shown to you before anything is saved. To teach a job one step at a time, type /learn start (what it's for) in the chat, then /learn done">
+                    title="write the last turn down as a skill: it is tested, then shown to you before anything is saved">
               <svg class="ico-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-save"/></svg>
               save last turn

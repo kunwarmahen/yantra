@@ -402,15 +402,22 @@ that I'm on my way" follows the same steps.
 * While a lesson is open, no skill is offered after each step.
 * `/learn done` on a lesson with nothing in it says so, and keeps it
   open. A new `/learn start` replaces a lesson that's still empty.
-* `/learn stop` drops a lesson; so does `/clear`.
+* `/learn stop` drops a lesson (`/learn clear` does the same); so does
+  `/clear`.
 * On Android, Sparsh tells the agent what you tapped. An iPhone can't
   show where it was touched, so the agent compares the screen before
   and after, and asks.
-* A skill taught on one phone is for that phone: the iPhone and an
-  Android phone name their apps and home screens differently. Teach it
-  on each phone you'll use it on.
-* On the web page, type the same words into the chat (there's no Teach
-  button yet). More on phones, with what a real run looked like, is in
+* Teach it on one phone and it's meant for both. Even if you opened the
+  app by tapping through a folder on your home screen, the skill opens
+  it by its name ("Coinbase Advanced"), which works on the iPhone and on
+  an Android phone. It also says which phone it was taught on, so if a
+  screen inside the app looks different on the other phone, you know
+  why. ([notes/133](notes/133-taught-once-for-both-phones.md))
+* On the web page, press **teach** in the skills panel (next to *save
+  last turn*). Pick *tell it* or *show it*, type what it's for, and
+  press start. While the lesson is open, a bar above the message box
+  shows how far it got, with **done** and **stop**. Typing the words
+  works too. More on phones, with what a real run looked like, is in
   §25.
   ([notes/129](notes/129-taught-step-by-step.md))
 
@@ -2574,7 +2581,10 @@ way, correct it in plain words when it guesses wrong. The skill it
 writes names each tap by its words and says what the screen should show
 next, so it still works when the buttons move. On a real Nexus 6P this
 became a Gmail search, and on a real iPhone 17 the battery check above
-([notes/129](notes/129-taught-step-by-step.md)).
+([notes/129](notes/129-taught-step-by-step.md)). The app is opened by
+its name, not through the folder you happened to tap, so a job taught
+on the iPhone is written for the Android phone too
+([notes/133](notes/133-taught-once-for-both-phones.md)).
 
 ---
 
