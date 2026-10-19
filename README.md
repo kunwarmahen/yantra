@@ -926,7 +926,7 @@ streamed replies and thinking rendered as markdown (headings, tables,
 code blocks — by a ~150-line escape-first renderer, no library), tool
 cards, permission prompts with approve/deny/**edit**, image attachments,
 a **history** button (every conversation kept by itself: search, read,
-carry on, delete for good — [notes/130](notes/130-every-conversation-kept.md)),
+carry on, share as a PDF or a file, delete for good — [notes/130](notes/130-every-conversation-kept.md)),
 save/load/compact/model switches, a permission-mode chip (ask ⇄ yolo,
 switchable mid-turn like the REPL's `/yolo`), a tools panel (every
 registered tool, switchable off/on mid-run like the REPL's `/tools`)
@@ -1123,8 +1123,10 @@ touching this session's history. `/save`+`--resume` persist
 sessions to `.yantra/session.sqlite3` (append-only versions). Apart from
 those, every conversation is kept by itself as it goes, to read again:
 `/chats` lists them newest first, `/chats WORDS` searches what was said,
-`/chats N` reads one, `/chats open N` carries it on and `/chats delete N`
-deletes it for good; the page's **history** button is the same list
+`/chats N` reads one, `/chats open N` carries it on, `/chats export N`
+writes it as a Markdown file to share and `/chats delete N` deletes it
+for good; the page's **history** button is the same list, with **share**
+(save as PDF, download, or the phone's share sheet)
 ([notes/130](notes/130-every-conversation-kept.md));
 `/compact` force-clears context pressure — auto-compaction also fires by
 itself at 80% of the window (`--context-window` to set it; the web UI's
@@ -2396,7 +2398,9 @@ src/yantra/
 │                   page's history panel; delete is for good (secure_delete +
 │                   index merge); ~/.local/state/yantra/conversations.sqlite,
 │                   YANTRA_HISTORY=off|PATH, --no-history; a host keeping
-│                   one log per person narrows by folder (Dvara's /chats)
+│                   one log per person narrows by folder (Dvara's /chats);
+│                   export_markdown shares one: words, answers, the tools'
+│                   NAMES, never their output
 │                   ([notes/130](notes/130-every-conversation-kept.md))
 ├── memory/         what the agent knows about the PERSON across conversations
 │                   (not write_note's project notes): MemoryStore is four verbs

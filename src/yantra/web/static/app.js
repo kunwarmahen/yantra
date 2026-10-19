@@ -1673,7 +1673,7 @@ async function readChat(id) {
   carry.disabled = d.id === chats.current;
   carry.title = "put this conversation back into the chat and go on from it; the one open now stays kept";
   carry.onclick = () => carryOnChat(d.id);
-  head.append(back, title, carry, chatDeleteButton(d));
+  head.append(back, title, carry, chatShareButton(d), chatDeleteButton(d));
   view.append(head);
   const lines = document.createElement("div");
   for (const e of d.entries) {
@@ -1698,6 +1698,103 @@ async function readChat(id) {
   view.append(lines);
   markWords(lines, chats.q);
   lines.querySelector("mark.hit")?.scrollIntoView({ block: "center" });
+}
+
+/* Sharing one: a menu of three. A PDF is the browser's own "Save as PDF"
+   over a print layout of just this conversation -- every script prints
+   right, and nothing new is installed. The file is Markdown from the
+   server (words, answers, the tools' names; never their output). Share
+   hands that file to the phone's share sheet where there is one. */
+
+function chatShareButton(d) {
+  const b = document.createElement("button");
+  b.className = "m-btn";
+  b.textContent = "share";
+  b.title = "save as PDF, download, or send it — your words, its answers and "
+    + "the names of the tools it used; never what a tool returned";
+  b.onclick = (e) => openMenu(e.currentTarget, {
+    label: "share this conversation",
+    items: [
+      { name: "save as PDF", onPick: () => printChat(d) },
+      { name: "download (.md)", onPick: () => downloadChat(d) },
+      ...(navigator.canShare ? [{ name: "send…", onPick: () => sendChat(d) }] : []),
+    ],
+  });
+  return b;
+}
+
+async function chatFile(d) {
+  const res = await fetch(`/api/chats/${encodeURIComponent(d.id)}/export`);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+  const named = /filename\*=UTF-8''([^;]+)/.exec(res.headers.get("content-disposition") || "");
+  const name = named ? decodeURIComponent(named[1]) : "conversation.md";
+  return new File([await res.blob()], name, { type: "text/markdown" });
+}
+
+async function downloadChat(d) {
+  try {
+    const file = await chatFile(d);
+    const url = URL.createObjectURL(file);
+    const a = Object.assign(document.createElement("a"), { href: url, download: file.name });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (err) { toast(`not downloaded: ${err.message}`); }
+}
+
+async function sendChat(d) {
+  try {
+    const file = await chatFile(d);
+    if (navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: d.title });
+    } else {
+      await navigator.share({ title: d.title, text: await file.text() });
+    }
+  } catch (err) {
+    if (err.name !== "AbortError") toast(`not sent: ${err.message}`);
+  }
+}
+
+// The print layout: this conversation alone, drawn into #print-chat, and
+// the browser's print dialog, where "Save as PDF" is one of the printers.
+function printChat(d) {
+  const area = $("#print-chat");
+  area.textContent = "";
+  const head = document.createElement("header");
+  head.innerHTML = `<h1>${esc(d.title)}</h1>
+    <p>${esc(chatWhen(d.started_at))} · ${esc(d.road)}${d.model ? " · " + esc(d.model) : ""}</p>`;
+  area.append(head);
+  let tools = [];
+  const flush = () => {
+    if (!tools.length) return;
+    const p = document.createElement("p");
+    p.className = "print-tools";
+    p.textContent = `Tools used: ${[...new Set(tools)].join(", ")}`;
+    area.append(p);
+    tools = [];
+  };
+  for (const e of d.entries) {
+    if (e.who === "tool") { tools.push(e.name); continue; }
+    if (e.who === "you") flush();
+    const block = document.createElement("section");
+    block.className = `print-line ${e.who}`;
+    block.innerHTML = `<h2>${e.who === "you" ? "You" : "Agent"}</h2>`;
+    const text = document.createElement("div");
+    if (e.who === "you") { text.className = "plain"; text.textContent = e.text; }
+    else text.innerHTML = renderMarkdown(e.text);
+    block.append(text);
+    area.append(block);
+  }
+  flush();
+  document.body.classList.add("printing-chat");
+  const done = () => {
+    document.body.classList.remove("printing-chat");
+    area.textContent = "";
+    window.removeEventListener("afterprint", done);
+  };
+  window.addEventListener("afterprint", done);
+  window.print();
 }
 
 async function carryOnChat(id) {

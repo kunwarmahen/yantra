@@ -32,6 +32,13 @@ can only hide is a history you cannot trust with anything. What it does
 NOT reach is a ``/save`` you made by hand: that was a separate, deliberate
 copy, and ``/load``'s store still has it.
 
+SHARED AS WORDS, NOT AS A RECORD. ``export_markdown`` writes one
+conversation as a Markdown file to send somebody, save, or print to PDF:
+the person's words, the agent's answers, and under each answer the NAMES
+of the tools it used. Never their arguments or output: a tool's output is
+where an email, a page you were signed in to, or a file's contents sit,
+and sharing a conversation is not a decision to share those.
+
     YANTRA_HISTORY=off       nothing is kept (also --no-history)
     YANTRA_HISTORY=PATH      kept in that file instead of the default
 """
@@ -185,6 +192,64 @@ def entries(payload: dict) -> list[dict]:
                     row["result"] = _short(str(block.get("content", "")))
                     row["error"] = bool(block.get("is_error"))
     return out
+
+
+# ---- one conversation, to share ------------------------------------------------
+
+
+def _local(stamp: str) -> str:
+    try:
+        return datetime.fromisoformat(stamp).astimezone().strftime("%a %-d %b %Y, %H:%M")
+    except ValueError:
+        return stamp
+
+
+def _used(names: list[str]) -> str:
+    counted: dict[str, int] = {}
+    for name in names:
+        counted[name] = counted.get(name, 0) + 1
+    return ", ".join(f"{n} ×{c}" if c > 1 else n for n, c in counted.items())
+
+
+def export_markdown(kept: dict, *, agent: str = "Agent") -> str:
+    """``read``'s result as a Markdown document: the title, when and
+    where, then each turn. Tools are named, never shown (module docstring)."""
+    road = kept.get("road") or ""
+    said = {"terminal": "in the terminal", "page": "on the page"}
+    where = [_local(kept.get("started_at", "")),
+             said.get(road, f"on {road}" if road else "")]
+    if kept.get("model"):
+        where.append(kept["model"])
+    out = [f"# {kept.get('title') or 'A conversation'}", "",
+           f"*{' · '.join(w for w in where if w)}*", ""]
+    tools: list[str] = []
+
+    def flush() -> None:
+        if tools:
+            out.extend([f"*Tools used: {_used(tools)}*", ""])
+            tools.clear()
+
+    for entry in kept.get("entries") or []:
+        if entry["who"] == "tool":
+            tools.append(entry["name"])
+            continue
+        if entry["who"] == "you":
+            flush()
+        out.extend([f"**{'You' if entry['who'] == 'you' else agent}**", "",
+                    entry["text"].strip(), ""])
+    flush()
+    return "\n".join(out).rstrip() + "\n"
+
+
+def export_name(kept: dict) -> str:
+    """A file name for it: its date and first words, ``2026-10-18-how-do-i.md``."""
+    words = re.sub(r"[^\w]+", "-", (kept.get("title") or "conversation").lower(),
+                   flags=re.UNICODE).strip("-")[:48].rstrip("-") or "conversation"
+    try:   # the date on the person's own clock, as the page shows it
+        day = datetime.fromisoformat(kept.get("started_at") or "").astimezone().date()
+    except ValueError:
+        return f"undated-{words}.md"
+    return f"{day.isoformat()}-{words}.md"
 
 
 # ---- the search box's words -> an FTS5 query ------------------------------------

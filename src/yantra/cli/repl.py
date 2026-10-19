@@ -34,6 +34,7 @@ from yantra.context import RED, estimate_history
 from yantra.errors import ImageError, RateLimitError, UserUnavailable
 from yantra.history import END, HIT, ConversationLog, new_id
 from yantra.history import title_of as payload_title
+from yantra.history import export_markdown, export_name
 from yantra.images import load_image_block
 from yantra.memory import short_id
 from yantra.memory.reflect import (Candidate, decline, keep, mark_reviewed,
@@ -107,6 +108,10 @@ HELP = """[bold]commands[/bold]
   /chats N           read conversation N from that list
   /chats open N      carry it on here (this one stays kept)
   /chats delete N    delete it for good (asks first)
+  /chats export N [FILE]
+                     write it as a Markdown file to share (your words, its
+                     answers, the tools' names -- never their output); the
+                     page's history can also save it as a PDF
   /usage             session token + dollar totals (+ context pressure)
   /save [name]       checkpoint this session (SQLite, append-only versions)
   /load [name]       restore the newest checkpoint of a session
@@ -1720,6 +1725,12 @@ class Repl:
                                "[/yellow]")
             return
         verb, _, rest = arg.partition(" ")
+        if verb == "export" and rest.split()[:1] and rest.split()[0].isdigit():
+            number, _, path = rest.strip().partition(" ")
+            picked = self._chat_picked(number)
+            if picked is not None:
+                self._export_chat(picked, path.strip())
+            return
         if verb in ("open", "delete") and rest.strip().isdigit():
             picked = self._chat_picked(rest.strip())
             if picked is None:
@@ -1754,7 +1765,8 @@ class Repl:
                 self.console.print(f"       {' '.join(snip.split())}",
                                    markup=False, style="dim")
         self.console.print("[dim]/chats N reads one · /chats open N carries it "
-                           "on · /chats delete N deletes it for good[/dim]")
+                           "on · /chats export N writes it to share · "
+                           "/chats delete N deletes it for good[/dim]")
 
     def _chat_picked(self, number: str) -> str | None:
         n = int(number)
@@ -1801,6 +1813,30 @@ class Repl:
         self.conversation_id = conversation_id
         self.console.print(f"[green]back in: {escape(payload_title(payload))} "
                            f"-- {len(self.agent.history)} message(s)[/green]")
+
+    def _export_chat(self, conversation_id: str, path: str) -> None:
+        """One conversation as a Markdown file: in this folder under its
+        date and first words, or at ``path``. Never over a file that is
+        already there."""
+        kept = self.log.read(conversation_id)
+        if kept is None:
+            self.console.print("[red]that conversation is gone[/red]")
+            return
+        target = Path(path).expanduser() if path else self.agent.ctx.cwd / export_name(kept)
+        if target.is_dir():
+            target = target / export_name(kept)
+        if target.exists():
+            self.console.print(f"[red]{target} is already there -- name another "
+                               f"file: /chats export N FILE[/red]", markup=False)
+            return
+        try:
+            target.write_text(export_markdown(kept), encoding="utf-8")
+        except OSError as exc:
+            self.console.print(f"[red]not written: {exc}[/red]")
+            return
+        self.console.print(f"[green]written to {escape(str(target))}[/green] "
+                           "[dim](your words, its answers and the tools' names; "
+                           "no tool output)[/dim]")
 
     def _delete_chat(self, conversation_id: str) -> None:
         if conversation_id == self.conversation_id:

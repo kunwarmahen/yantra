@@ -1861,6 +1861,7 @@ when you want that answer from last week again:
 /chats boiler          only the ones that mention "boiler"
 /chats 2               read number 2 from the list
 /chats open 2          go on with it from where it stopped
+/chats export 2        save it as a file to share (here, named by its date)
 /chats delete 2        delete it for good (it asks first)
 ```
 
@@ -1870,6 +1871,21 @@ the word marked. Click one to read it the way it looked (the tools it
 used are folded under small grey lines). **carry on here** puts it back
 into the chat, and **delete** removes it for good: from the list, from
 the search, and from the file on disk.
+
+To share one, press **share** while reading it:
+
+- **save as PDF** opens your browser's print window with just that
+  conversation laid out on the page; pick *Save as PDF* as the printer.
+- **download (.md)** saves it as a Markdown file, a plain-text file any
+  notes app or editor opens.
+- **send…** (on a phone) opens the phone's own share sheet, so you can
+  send it on WhatsApp, by email and so on.
+
+What goes in: your words, the agent's answers, and the *names* of the
+tools it used ("Tools used: read_file"). What a tool read or returned (a
+file, an email, a web page) is left out. The agent's answers go in as
+they were written, though, so if an answer repeated something private,
+read it before you send it.
 
 They are kept in one file on your computer,
 `~/.local/state/yantra/conversations.sqlite`, wherever you started

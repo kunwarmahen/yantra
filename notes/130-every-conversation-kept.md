@@ -78,6 +78,46 @@ AN UNATTENDED RUN IS NOT A CONVERSATION. A schedule firing every half
 hour (`--unattended`) would bury what people said under what Samay
 checked. Samay's logbook already keeps those runs.
 
+## Sharing one
+
+`/chats export N [FILE]` in the terminal, and **share** in the page's
+reading view, write one conversation out (`export_markdown`):
+
+```
+# Read the file notes.txt in this folder and tell me in one sentence what it says.
+
+*Sun 18 Oct 2026, 20:08 · on the page · qwen3.8:latest*
+
+**You**
+
+Read the file notes.txt in this folder and tell me in one sentence what it says.
+
+**Agent**
+
+It says the spare key is under the blue flowerpot and lists a Wi-Fi password ("hunter2-SECRET"). ...
+
+*Tools used: read_file*
+```
+
+TOOLS BY NAME, NEVER BY OUTPUT. The reading view shows a tool's
+arguments and what came back, folded. The shared file doesn't. A tool's
+output is where the email, the signed-in page or the file's contents
+sit, and sharing a conversation isn't a decision to share those. That
+conversation shows the limit as well: `read_file` returned the note
+with its Wi-Fi password, and the file leaves that out, but the agent's
+own answer quoted the password, and answers go in as written. The
+tutorial says to read before sending.
+
+A PDF WITHOUT A PDF LIBRARY. **save as PDF** draws the conversation into
+a print layout (`#print-chat`, shown only by `@media print` while the
+class `printing-chat` is on) and opens the browser's print window, where
+*Save as PDF* is one of the printers. Every script the browser can show
+prints correctly (Devanagari, emoji), which a server-side PDF needs a
+font for each to manage, and nothing new is installed. Markdown is the
+file Yantra itself makes, and the terminal writes it next to you, never
+over a file already there. **send…** passes that file to the phone's
+share sheet (`navigator.share`) where the browser has one.
+
 ## Live receipt
 
 `qwen3.8:latest` on Ollama, in a scratch folder with `YANTRA_HISTORY`
@@ -113,9 +153,18 @@ conversation became it; `current` moved to its id), and **delete** →
 *delete for good* on the boiler one. Afterwards the list held two, and
 `grep -c boiler` on the database file counted 0.
 
+Sharing, on the same page: **share** on the radiator conversation showed
+*save as PDF* and *download (.md)* (no *send…* on a desktop browser).
+The download came as `2026-10-18-in-one-sentence-how-do-i-bleed-a-radiator.md`.
+*save as PDF*, printed to a real A4 file through headless Chrome, held
+the title, the date line, YOU and AGENT and the answer, and nothing else
+from the page. The `notes.txt` conversation above was exported over
+HTTP: `read_file` is named, and the tool's own output line (`1	The spare
+key…`) is not in the file.
+
 ## Tests
 
-`tests/test_history.py` (26): kept with its first words as its title;
+`tests/test_history.py` (33): a shared one names its tools and never shows their output, counts a tool used twice once per answer, is named by its local date and first words, is written by `/chats export` and never over a file, and comes from the page as `text/markdown`; kept with its first words as its title;
 each turn replaces the row; nothing kept before the person says
 anything; newest first; search finds words in the answer; every word
 must match, by prefix; typed syntax is never FTS5 syntax; tools read
@@ -138,5 +187,4 @@ one on into its own row, and starts a new row after clear.
 * **Searching tool output.** Left out on purpose (above). If "the agent
   found it on some page" turns out to be how people remember, it is one
   more column in the index.
-* **Export.** Reading is here; saving one conversation as a file to send
-  somebody is not.
+* ~~**Export.**~~ Built: see *Sharing one* above.

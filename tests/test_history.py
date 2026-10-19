@@ -21,8 +21,8 @@ from conftest import ScriptedProvider, assistant_text, assistant_tool_call
 
 from yantra.agent import Agent
 from yantra.cli.repl import Repl
-from yantra.history import (ConversationLog, default_path, entries, match_of,
-                            open_log)
+from yantra.history import (ConversationLog, default_path, entries, export_markdown,
+                            export_name, match_of, open_log)
 from yantra.permissions import allow_read_only
 from yantra.tools.base import Tool, ToolRegistry
 
@@ -183,6 +183,38 @@ def test_the_log_is_off_when_asked_and_beside_memory_by_default(monkeypatch, tmp
     assert default_path() == tmp_path / "x.sqlite"
 
 
+# ---- sharing one ------------------------------------------------------------------
+
+
+def test_a_shared_conversation_names_its_tools_and_never_shows_their_output(log):
+    agent = agent_with([assistant_tool_call("c1", "echo", {"text": "my-secret-arg"}),
+                        assistant_text("it said hi")])
+    list(agent.run_streaming("echo hi please"))
+    log.record("a", agent, provider_name="scripted", road="page")
+    shared = export_markdown(log.read("a"))
+    assert shared.startswith("# echo hi please\n")
+    assert "**You**\n\necho hi please" in shared
+    assert "**Agent**\n\nit said hi" in shared
+    assert "*Tools used: echo*" in shared and "on the page" in shared
+    assert "my-secret-arg" not in shared and "echo:" not in shared
+
+
+def test_a_tool_used_twice_is_counted_once_per_answer():
+    kept = {"title": "t", "entries": [
+        {"who": "you", "text": "a"}, {"who": "tool", "name": "fetch"},
+        {"who": "tool", "name": "fetch"}, {"who": "agent", "text": "b"},
+        {"who": "you", "text": "c"}, {"who": "agent", "text": "d"}]}
+    shared = export_markdown(kept)
+    assert shared.count("Tools used") == 1 and "fetch ×2" in shared
+
+
+def test_a_shared_file_is_named_by_its_date_and_first_words():
+    assert export_name({"title": "How do I bleed a radiator?",
+                        "started_at": "2026-10-18T12:00:00+00:00"}) == \
+        "2026-10-18-how-do-i-bleed-a-radiator.md"
+    assert export_name({"title": "../../etc", "started_at": ""}) == "undated-etc.md"
+
+
 # ---- /chats in the terminal --------------------------------------------------------
 
 
@@ -251,6 +283,16 @@ def test_the_conversation_open_now_cannot_be_deleted_from_under_it(log):
     assert "that is this conversation" in out.getvalue()
 
 
+def test_chats_export_writes_a_file_here_and_never_over_one(log, tmp_path):
+    talked(log, "x", "the router question", "hold reset")
+    repl, out = repl_with(log, ["/chats", "/chats export 1", "/chats export 1", "/quit"], [])
+    repl.agent.ctx.cwd = tmp_path
+    repl.run()
+    [written] = list(tmp_path.glob("*-the-router-question.md"))
+    assert "hold reset" in written.read_text()
+    assert "is already there" in out.getvalue()
+
+
 def test_chats_says_so_when_nothing_is_kept():
     repl, out = repl_with(None, ["/chats", "/quit"], [])
     repl.run()
@@ -300,6 +342,17 @@ def test_the_page_searches_reads_and_deletes(log):
     assert client.delete("/api/chats/old").status_code == 200
     assert client.get("/api/chats/old").status_code == 404
     assert client.get("/api/chats", params={"q": "boiler"}).json()["rows"] == []
+
+
+def test_the_page_gives_one_as_a_markdown_file(log):
+    talked(log, "old", "the boiler pressure", "1.5 bar is right")
+    _, _, client = web(log, [])
+    got = client.get("/api/chats/old/export")
+    assert got.status_code == 200
+    assert got.headers["content-type"].startswith("text/markdown")
+    assert "the-boiler-pressure.md" in got.headers["content-disposition"]
+    assert "**Agent**\n\n1.5 bar is right" in got.text
+    assert client.get("/api/chats/gone/export").status_code == 404
 
 
 def test_the_page_will_not_delete_the_conversation_open_now(log):

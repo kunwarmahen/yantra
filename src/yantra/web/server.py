@@ -60,7 +60,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from yantra.agent import Agent, BudgetWarning, ToolExecuted, TurnEnd
@@ -2761,6 +2761,21 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             session.lesson = None
             session.broadcast({"type": "lesson", "text": DROPPED})
         return session.state()
+
+    @app.get("/api/chats/{conversation_id}/export")
+    def export_chat(conversation_id: str) -> Response:
+        """One conversation as a Markdown file to share: words, answers,
+        the tools' names (history.export_markdown)."""
+        require_ready()
+        kept = require_log().read(conversation_id)
+        if kept is None:
+            raise HTTPException(404, "that conversation is gone")
+        from urllib.parse import quote
+        from yantra.history import export_markdown, export_name
+        name = export_name(kept)
+        return Response(export_markdown(kept), media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition":
+                                 f"attachment; filename*=UTF-8''{quote(name)}"})
 
     @app.delete("/api/chats/{conversation_id}")
     def delete_chat(conversation_id: str) -> dict[str, Any]:
