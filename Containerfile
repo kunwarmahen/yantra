@@ -48,6 +48,8 @@ EXPOSE 8321
 ENTRYPOINT ["yantra"]
 CMD ["--web", "--host", "0.0.0.0"]
 
+# The page's own code, the one thing it serves without its token (it listens
+# on every address in here, so it has one: web/gate.py).
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request as u,sys; \
-sys.exit(0 if u.urlopen('http://127.0.0.1:8321/', timeout=2).status == 200 else 1)"
+sys.exit(0 if u.urlopen('http://127.0.0.1:8321/static/favicon.svg', timeout=2).status == 200 else 1)"

@@ -1863,6 +1863,22 @@ uv run yantra --web                        # http://127.0.0.1:8321
 uv run yantra --provider ollama --web      # local model + browser UI
 ```
 
+**From your phone or another computer at home**, give it this computer's
+address on your network:
+
+```bash
+uv run yantra --web --host 192.168.1.44
+#   yantra web UI -> http://192.168.1.44:8321/?token=E8HSkYBA…
+```
+
+Anywhere but `127.0.0.1`, the page wants its token, because it runs a
+shell for whoever reaches it. Open the printed address once on each
+device. The token leaves the address bar and a cookie keeps you in for a
+year. Without it you get a page saying where the link comes from, and
+the API answers 401. The token is kept in `.yantra/web.token`, or set
+your own with `YANTRA_WEB_TOKEN`
+([notes/132](notes/132-a-token-for-the-page.md)).
+
 It is the **same loop**, not a reimplementation: each turn runs on a
 worker thread pulling `run_streaming()`, and a queue bridge carries human
 questions — permission prompts and `ask_user` — to the browser over one
@@ -1966,7 +1982,12 @@ podman run -d --name yantra-local -p 8401:8321 \
     localhost/yantra-web --web --host 0.0.0.0 --provider ollama
 ```
 
-Port 8321 is fixed inside; publish it wherever you like. The tools run
+Port 8321 is fixed inside; publish it wherever you like. In a container
+the page listens on every address, so it has a token: `podman logs
+yantra-web` shows the address it printed, `http://0.0.0.0:8321/?token=…`.
+Open that once with your own host and port in place of `0.0.0.0:8321`;
+the browser remembers it after that
+([notes/132](notes/132-a-token-for-the-page.md)). The tools run
 *in the container*, so mount a workspace if you want it to touch your
 files. Sessions live in `/app/.yantra/` and vanish with the container
 unless you mount a volume. Docker users swap `podman` → `docker` and

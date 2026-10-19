@@ -446,7 +446,12 @@ container_start() {
     for i in $(seq 1 40); do
         if curl -s -o /dev/null -m 1 "http://127.0.0.1:$port/" 2>/dev/null; then
             echo "$port" >"$CONTAINER_PORT_FILE"
-            echo "opened — http://127.0.0.1:$port in your browser"
+            # it listens on every address in there, so the page has a token
+            # (web/gate.py); the address it printed carries it
+            local token
+            token="$("$eng" container logs "$CONTAINER_ID" 2>&1 \
+                | grep -o 'token=[A-Za-z0-9_-]*' | tail -1)"
+            echo "opened — http://127.0.0.1:$port/${token:+?$token} in your browser"
             return 0
         fi
         if ! container_is_up; then

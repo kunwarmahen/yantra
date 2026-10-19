@@ -539,6 +539,12 @@ Notes worth knowing:
 
 * **Port 8321 is fixed inside** (the health check probes it); publish it
   wherever you like with `-p`.
+* **The page has a token in a container**, because it listens on every
+  address in there ([notes/132](notes/132-a-token-for-the-page.md)).
+  `podman logs yantra-web` shows the address with it
+  (`http://0.0.0.0:8321/?token=…`): open that once, with your own host
+  and port, and the browser remembers. Set `-e YANTRA_WEB_TOKEN=…` to
+  choose it yourself.
 * **The tools run in the container**, not on your machine — `read_file`
   sees `/app`, so give it a workspace if you want it to touch your
   files: mount one and add args after the image name (they compose):
@@ -930,7 +936,10 @@ uv run yantra --subagents "research X and report back"
 ```
 
 Browser UI ([notes/22](notes/22-web-ui.md)) — `--web` serves the same
-agent loop at `http://127.0.0.1:8321` (`--host`/`--port` to move it):
+agent loop at `http://127.0.0.1:8321` (`--host`/`--port` to move it;
+anywhere but this computer, the page wants its token: open the address
+it prints, `…/?token=…`, once per device, and a cookie keeps you in —
+[notes/132](notes/132-a-token-for-the-page.md)):
 streamed replies and thinking rendered as markdown (headings, tables,
 code blocks — by a ~150-line escape-first renderer, no library), tool
 cards, permission prompts with approve/deny/**edit**, image attachments,
@@ -3007,7 +3016,11 @@ src/yantra/
 │                   workspace: a restart brings back what still can be
 │                   saved, and says what was dropped; a host serving
 │                   several people names its own file (path=), and gives
-│                   the learner execute= to test on an async agent
+│                   the learner execute= to test on an async agent.
+│                   gate.py: a page listening beyond this computer wants
+│                   its token -- $YANTRA_WEB_TOKEN or .yantra/web.token --
+│                   from the printed link once, then an HttpOnly, Lax
+│                   cookie ([notes/132](notes/132-a-token-for-the-page.md))
 └── cli/            main.py (argparse) · repl.py (input loop; the look after
                     a turn or a /clear runs behind the prompt, news in one
                     line before the next one, /keep to answer it

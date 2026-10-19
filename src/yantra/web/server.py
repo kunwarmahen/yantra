@@ -88,6 +88,7 @@ from yantra.skills.loader import SkillError
 from yantra.history import new_id
 from yantra.hold import check_answers, held_task
 from yantra.trace import flagged, watch, why_flagged
+from yantra.web import gate
 from yantra.types import (
     EndEvent,
     ImageBlock,
@@ -1493,15 +1494,42 @@ class WebSession:
 
 
 def make_app(session: WebSession, static_dir: Path | None = None,
-             settings_loader=None, provider_factory=None) -> FastAPI:
+             settings_loader=None, provider_factory=None,
+             token: str | None = None) -> FastAPI:
     """Build the app around a WebSession. The session is injected rather
     than constructed here so tests can drive ScriptedProvider agents
     offline through the exact production routes. The load-path provider
     factories are injectable too, on the same principle as
-    ``session.apply_payload`` (a scripted provider has no real settings)."""
+    ``session.apply_payload`` (a scripted provider has no real settings).
+    ``token``: every request but the page's own code must carry it
+    (gate.py); None, the page is this computer's alone."""
     static_dir = static_dir or Path(__file__).parent / "static"
 
     app = FastAPI(title="yantra", docs_url=None, redoc_url=None)
+
+    if token is not None:
+        from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+
+        @app.middleware("http")
+        async def guard(request: Request, call_next):
+            path = request.url.path
+            if path == "/" and request.query_params.get("token") is not None:
+                if not gate.allowed(token, cookie=request.query_params["token"],
+                                    header=None):
+                    return HTMLResponse(gate.LOCKED_PAGE, status_code=401)
+                # the token leaves the address bar; the cookie carries it now
+                back = RedirectResponse("/", status_code=303)
+                back.set_cookie(gate.COOKIE, token, max_age=gate.COOKIE_AGE,
+                                httponly=True, samesite="lax")
+                return back
+            if path.startswith("/static/") or gate.allowed(
+                    token, cookie=request.cookies.get(gate.COOKIE),
+                    header=request.headers.get("authorization")):
+                return await call_next(request)
+            if path == "/":
+                return HTMLResponse(gate.LOCKED_PAGE, status_code=401)
+            return JSONResponse({"detail": "this page needs its token: open its link "
+                                 "again"}, status_code=401)
 
     @app.get("/")
     def index() -> FileResponse:
@@ -1511,6 +1539,11 @@ def make_app(session: WebSession, static_dir: Path | None = None,
 
     @app.websocket("/ws")
     async def ws(sock: WebSocket) -> None:
+        if token is not None and not gate.allowed(
+                token, cookie=sock.cookies.get(gate.COOKIE),
+                header=sock.headers.get("authorization")):
+            await sock.close(code=4401)
+            return
         await sock.accept()
         events: asyncio.Queue = asyncio.Queue()
         client = session.connect(asyncio.get_running_loop(), events)
@@ -2263,7 +2296,9 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         command = f"setu connect {connector} --as {account} --level {level}"
         if not is_local(req):
             raise HTTPException(403, "signing in only works from a page on the computer "
-                                     f"running Yantra -- there, run: {command}")
+                                     f"running Yantra -- there, run: {command}. From this "
+                                     "device, use Setu's own page (Sarathi's home page "
+                                     "links it): it shows you the sign-in in a window")
         if not spec.get("ready", True):
             raise HTTPException(409, spec.get("not_ready") or "not ready to sign in")
         if session.signin is not None and session.signin.running:
@@ -2904,17 +2939,20 @@ def launch(session: WebSession, agent: Agent, store: SessionStore | None,
     import uvicorn
 
     session.attach(agent, store, mcp=mcp)
-    app = make_app(session)
+    token = gate.page_token() if gate.wanted(host) else None
+    app = make_app(session, token=token)
     servers = f" · mcp servers={len(mcp.sessions)}" if mcp else ""
     recording = (f"  recording turns -> {session.trace.path} "
                  f"({session.trace.label})\n" if session.trace else "")
     waiting = (f"  approvals: {session.wait_budget:g}s of waiting per turn, "
                f"then {session.on_timeout}\n"
                if session.wait_budget is not None else "")
-    print(f"\n  yantra web UI -> http://{host}:{port}\n"
+    shown = f"[{host}]" if ":" in host else host
+    link = f"http://{shown}:{port}" + (f"/?token={token}" if token else "")
+    print(f"\n  yantra web UI -> {link}\n"
           f"  provider={agent.provider.name} · model={agent.model} · "
           f"tools={len(agent.registry)}{servers} · cwd={agent.ctx.cwd}\n"
           f"{recording}{waiting}"
-          "  ctrl-c stops the server\n")
+          "  ctrl-c stops the server\n", flush=True)
     uvicorn.run(app, host=host, port=port, log_level="warning")
     return 0

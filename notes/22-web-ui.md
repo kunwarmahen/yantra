@@ -286,6 +286,12 @@ menu answer adds `--auto-approve` (`YANTRA_AUTO_APPROVE`); `--model`,
 `--port` already busy is refused — it tells you the port, it doesn't
 take it.
 
+**On the home network, a token.** `--host` anywhere but this computer
+used to open the page, and its shell, to the whole Wi-Fi. Now such a page
+wants its token, once per device, from the link it prints
+([notes/132](132-a-token-for-the-page.md)). The container's health
+check asks for `/static/favicon.svg`, the one thing served without it.
+
 ## The skills section
 
 The tools panel grew a third section (servers → skills → tools), fed by
