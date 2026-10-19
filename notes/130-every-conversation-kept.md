@@ -154,7 +154,8 @@ conversation became it; `current` moved to its id), and **delete** →
 `grep -c boiler` on the database file counted 0.
 
 Sharing, on the same page: **share** on the radiator conversation showed
-*save as PDF* and *download (.md)* (no *send…* on a desktop browser).
+*save as PDF* and *download (.md)* (no *send…* on a desktop browser;
+on a real phone *send…* showed and opened the phone's share sheet).
 The download came as `2026-10-18-in-one-sentence-how-do-i-bleed-a-radiator.md`.
 *save as PDF*, printed to a real A4 file through headless Chrome, held
 the title, the date line, YOU and AGENT and the answer, and nothing else
