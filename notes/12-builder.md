@@ -93,15 +93,15 @@ Details that mattered more than the green:
   everything passes" — acceptance pressure shapes output quality.
 * **Usage accounting honesty:** OpenRouter reported input tokens as null
   on these streaming calls, so totals show `0 in` (the known gateway
-  quirk from [notes/02](notes/02-wire-formats.md), tolerated as zero).
+  quirk from [notes/02](02-wire-formats.md), tolerated as zero).
 
 ## Cost & scope
 
 ~10–20 tool calls per run; at typical prices, single-digit cents. The
 point is LOOP SHAPE, not scale — but the scale levers are already in the
-codebase: sub-agents for delegation ([notes/08](notes/08-sub-agents.md)),
-auto-compaction when transcripts grow ([notes/07](notes/07-reliability-and-scale.md)),
-and async for N builds at once ([notes/11](notes/11-async.md)).
+codebase: sub-agents for delegation ([notes/08](08-sub-agents.md)),
+auto-compaction when transcripts grow ([notes/07](07-reliability-and-scale.md)),
+and async for N builds at once ([notes/11](11-async.md)).
 
 > This demo later graduated into the product proper —
 > `yantra/builder.py` with `--build` and REPL `/build`, independent

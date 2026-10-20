@@ -58,7 +58,7 @@ Hits are visible ONLY in responses:
 `usage.prompt_tokens_details.cached_tokens` folds into our existing
 `Usage.cache_read_tokens` (both streaming and non-streaming skins;
 explicit nulls tolerated as zero — the gateway lesson from
-[notes/02](notes/02-wire-formats.md) applies here too).
+[notes/02](02-wire-formats.md) applies here too).
 
 ## What the live runs showed
 
@@ -67,7 +67,7 @@ cold call then identical-prefix replay: the billed fresh input
 collapsed by ~99.7% on the replay. Two honest wrinkles:
 
 * **Streaming reports nothing.** This gateway sends no usage counters
-  AT ALL on streamed calls (the [notes/02](notes/02-wire-formats.md)
+  AT ALL on streamed calls (the [notes/02](02-wire-formats.md)
   quirk), so caching cannot be *observed* there — even though it is
   almost certainly working. The receipt comes from the non-streaming
   path.

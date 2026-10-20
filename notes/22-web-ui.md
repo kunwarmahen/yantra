@@ -7,7 +7,7 @@ new front door to the same rooms.*
 
 ## The one rule: the loop stays sync
 
-The agent loop is a blocking generator ([notes/05](notes/05-agent-loop.md)).
+The agent loop is a blocking generator ([notes/05](05-agent-loop.md)).
 The tempting rewrite is to port it to asyncio so it "fits" the server.
 That would be a second harness to maintain, with subtle differences from
 the terminal one. So instead: **each turn runs on an ordinary worker
@@ -50,7 +50,7 @@ the product:
   immediately once the tests wired the real gate in.
 * **Edit round-trips.** Choosing *edit* sends new args; the server
   swaps them into `request.arguments`, re-renders the preview through
-  the tool's own `summarize` (the seam from [notes/20](notes/20-approve-with-edits.md)),
+  the tool's own `summarize` (the seam from [notes/20](20-approve-with-edits.md)),
   and re-asks tagged `edited: true`. What you approve in the browser is
   what runs, and history keeps the edited form.
 

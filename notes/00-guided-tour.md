@@ -247,7 +247,7 @@ There's a third answer besides yes and no: **`e` edits the call**.
 Noticed a typo in the proposed command, or want it to do something
 slightly different? Fix the text, and what you approved is exactly
 what runs — approval is a review step, not a rubber stamp
-([notes/20](notes/20-approve-with-edits.md)).
+([notes/20](20-approve-with-edits.md)).
 
 And note what a denial is: **not a crash**. It becomes a short letter
 back to the model — "the human said no" — so it can shrug and try a
@@ -258,7 +258,7 @@ The seatbelt has a silent partner: *hooks*. Where the belt DECIDES
 ("may this run?"), hooks just WATCH ("it is running… it finished").
 Want a log of every command the agent executed, or timing numbers?
 Attach two small observer functions and never edit the loop at all.
-One rule keeps them apart: a hook can never say no ([notes/14](notes/14-hooks.md)).
+One rule keeps them apart: a hook can never say no ([notes/14](14-hooks.md)).
 
 ### The question travels the other way, too
 
@@ -275,7 +275,7 @@ terminal it's an ordinary prompt line. With `--web`, the same loop
 serves a small local web page: replies stream live, tools appear as
 cards, approvals become buttons, images attach by drag-and-drop, and
 questions from the agent pop up as modals. It's a window onto the very
-same machine — not a second one ([notes/22](notes/22-web-ui.md)).
+same machine — not a second one ([notes/22](22-web-ui.md)).
 
 ## 9 · When things go wrong: bad news becomes data
 
@@ -447,13 +447,13 @@ The hard part was never speed, it was *cancel-safety*: pressing Ctrl-C
 mid-batch in this world must still record the work that actually
 finished. (It nearly didn't — the obvious code cancels the workers
 along with everything else. The fix, `asyncio.shield`, is documented
-in [notes/11](notes/11-async.md) as a war story.)
+in [notes/11](11-async.md) as a war story.)
 
 The same trick pays rent in testing. The project's graded exams
 (evals — a set of real tasks the agent must complete correctly; see
 the glossary) are independent of each other, so they now run all at
 once too: the seven-exam suite took 117 seconds one-at-a-time and 42
-together — identical grades, 2.8× faster ([notes/10](notes/10-evals.md)).
+together — identical grades, 2.8× faster ([notes/10](10-evals.md)).
 
 ## 16 · The money section: prompt caching
 
@@ -473,9 +473,9 @@ prompt: the cold call billed the reference almost in full; the next
 call with the identical prefix billed essentially nothing — the
 document came back from cache for pennies. Off by default (it changes
 billing behavior), one flag to enable: `--cache`. Full story with
-caveats: [notes/13](notes/13-caching.md). And since the harness now knows what
+caveats: [notes/13](13-caching.md). And since the harness now knows what
 tokens *cost*, `/usage` renders these counters as approximate dollars —
-see [notes/21](notes/21-cost-accounting.md).
+see [notes/21](21-cost-accounting.md).
 
 ## 17 · The graduation test
 
@@ -495,7 +495,7 @@ And the kicker: **nothing new had to be built.** The loop from §4,
 the hands from the toolbox, the promise book from §10 — the features
 above are refinements. An agent that builds software is not a bigger
 machine; it is the same circle, pointed at a harder task.
-([notes/12](notes/12-builder.md))
+([notes/12](12-builder.md))
 
 ## 18 · Try it yourself
 
