@@ -32,7 +32,6 @@ from yantra.config import (
     browser_profile,
     default_env_context,
     default_model,
-    default_tool_select,
     guess_provider,
     disabled_skill_patterns,
     disabled_tool_patterns,
@@ -75,11 +74,7 @@ from yantra.unattended import NobodyChannel, is_unattended
 from yantra.trace import (FULL, REDACTED, SHAPE, TrajectoryLog, flagged,
                           read_word_list, step_note, why_flagged)
 from yantra.name_reader import NameReader
-from yantra.tools.selector import (
-    AUTO_SELECTION_THRESHOLD,
-    DEFAULT_TOOLS_PER_TURN,
-    enable_selection,
-)
+from yantra.tools.selector import select_when_many
 
 
 
@@ -3036,14 +3031,8 @@ def main(argv: list[str] | None = None) -> int:
         width = args.tool_select
         if width is None:
             width = spec.tools_per_turn      # [tools] per_turn in agent.toml
-        if width is None:
-            width = default_tool_select()
-        if width is None and len(agent.registry) > AUTO_SELECTION_THRESHOLD:
-            width = DEFAULT_TOOLS_PER_TURN
+        width = select_when_many(agent, width=width)
         if width:
-            catalog, _ = enable_selection(agent.registry)
-            agent.tool_catalog = catalog
-            agent.tools_per_turn = width
             console.print(f"[dim]tool selection: top {width} of "
                           f"{len(agent.registry) - 1}+discovery each turn "
                           f"(--tool-select 0 to disable)[/dim]")

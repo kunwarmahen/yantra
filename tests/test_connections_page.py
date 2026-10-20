@@ -493,6 +493,47 @@ class TestThePageCatchesUp:
             manager.shutdown()
 
 
+    def test_a_connection_made_in_a_chat_arrives_with_no_message_first(self, setu,
+                                                                      tmp_path,
+                                                                      monkeypatch):
+        """Notion connected from Telegram took minutes to reach the page:
+        it was looked for only before the page's next turn."""
+        from yantra.web import server
+
+        monkeypatch.setattr(server, "SETU_LOOK_EVERY", 0.1)
+        setu.set(expired={"gmail:personal": {"since": "2026-10-19T22:00:00Z",
+                                             "why": "HTTP 400 expired"}})
+        session, agent, manager, _ = served(tmp_path, setu.path)
+        try:
+            assert self.tools(agent) == []
+            time.sleep(0.01)
+            setu.set(expired={})                        # connected elsewhere
+            deadline = time.monotonic() + 10
+            while not self.tools(agent) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            assert self.tools(agent)
+        finally:
+            manager.shutdown()
+
+    def test_the_watcher_never_changes_tools_under_a_turn(self, setu, tmp_path,
+                                                         monkeypatch):
+        from yantra.web import server
+
+        monkeypatch.setattr(server, "SETU_LOOK_EVERY", 0.1)
+        session, agent, manager, _ = served(tmp_path, setu.path)
+        try:
+            session.turn_active = True
+            time.sleep(0.01)
+            setu.set(expired={"gmail:personal": {"since": "2026-10-19T22:00:00Z",
+                                                 "why": "HTTP 400 expired"}})
+            time.sleep(0.6)
+            assert self.tools(agent)                    # still there mid-turn
+            assert session.setu_sync(idle_only=True) is None
+        finally:
+            session.turn_active = False
+            manager.shutdown()
+
+
 class TestInstallingFromTheCatalog:
     def test_a_listed_connector_is_installed_through_setu(self, setu, tmp_path):
         setu.set(catalog=CATALOG)

@@ -205,3 +205,37 @@ context certainty for a lot of context economy. A tool outside the
 pins can be missed in the SENT set on its first use — soft admission
 makes that miss cheap (the call runs anyway) rather than free, and
 description quality decides how often it happens at all.
+
+## Every road, not only the terminal
+
+The auto-enable rule lived in the terminal's start-up, after the MCP
+servers were in. A host that builds agents its own way (a chat road
+building one per message) had to apply it itself, and one didn't. A
+person who connected Robinhood, Notion and a server of their own reached
+227 tools, every one sent on every turn. Against `qwen3.8-64k` that was
+more than the window, and Ollama cut the top of the prompt to fit: the
+model's own thinking said it could see no search tool for Notion, only
+the last few of its 36, and the reply was a greeting, as if no question
+had been asked.
+
+So the rule is one function, `select_when_many(agent, width=...)`, that
+every host calls once its tools are all registered: the width given
+(`[tools] per_turn`; `0` sends everything), else
+`$YANTRA_TOOLS_PER_TURN`, else on at `DEFAULT_TOOLS_PER_TURN` past
+`AUTO_SELECTION_THRESHOLD`. The terminal and the page call it, and so
+does the chat road. Live receipt, the same question through that road
+after the fix, `qwen3.8-64k:latest`:
+
+```
+$ dvara say --actor owner --agent minder "Search my Notion for my tasks"
+Here's what I found. You have two task databases:
+
+**1. Yantra Task Manager** (has 3 tasks):
+| Task | Status | Priority | Due |
+| Improve website copy | Done | High | Feb 3, 2025 |
+...
+[end_turn · $0.0000 · 206705in/3166out]
+```
+
+It is slow on a local model (seven minutes, several Notion calls), but it
+answers the question it was asked.

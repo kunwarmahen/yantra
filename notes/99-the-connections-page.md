@@ -102,6 +102,15 @@ is running, the new tools wait until that turn ends. A turn's tool list
 and prompt never change under it. Disconnect and refresh are refused
 while a turn runs, the same as every other change to the tool list.
 
+**A connection made somewhere else arrives between turns.** An account
+added from a chat, Setu's own page or a terminal used to reach the page
+only before its next turn: Notion, connected from Telegram, took minutes
+to show up, because nobody had sent the page anything. Now the page also
+looks every ten seconds while no turn runs (`SETU_LOOK_EVERY`). The look
+reads only the file times Setu says to watch; it asks Setu again only
+when one moved. It takes the same lock a turn takes to start, and gives
+way if a turn began meanwhile, so it never changes tools under one.
+
 **Disconnect goes through Setu**, which revokes the key at Google
 before forgetting it. It keeps a grant that another of your connections
 to the same Google account still uses (note 95 explains why). The page

@@ -385,3 +385,28 @@ def enable_selection(registry, *, k: int = 7,
         name for name in (*pins, "list_available_tools")
         if name in present))
     return catalog, discovery
+
+
+def select_when_many(agent, *, width: int | None = None) -> int | None:
+    """The rule every host applies once ALL its tools are registered (MCP
+    tools included, which arrive after the build): ``width`` when given
+    (0 turns selection off), else $YANTRA_TOOLS_PER_TURN, else on at
+    DEFAULT_TOOLS_PER_TURN past AUTO_SELECTION_THRESHOLD tools. Returns
+    the width in force, or None when every tool is sent.
+
+    One rule, so every road agrees. A chat road that skipped it sent a
+    person's 227 tools on every turn, and a local model's window cut the
+    top of the prompt to fit -- the system prompt and most of the tool
+    list -- so it answered a question it could no longer see."""
+    from yantra.config import default_tool_select
+
+    if width is None:
+        width = default_tool_select()
+    if width is None and len(agent.registry) > AUTO_SELECTION_THRESHOLD:
+        width = DEFAULT_TOOLS_PER_TURN
+    if not width:
+        return None
+    catalog, _ = enable_selection(agent.registry)
+    agent.tool_catalog = catalog
+    agent.tools_per_turn = width
+    return width

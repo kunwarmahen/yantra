@@ -2960,6 +2960,8 @@ src/yantra/
 │   ├── selector.py dynamic tool loading: BM25 ToolCatalog over name+
 │   │               description, transcript-derived query, core pins +
 │   │               list_available_tools discovery hatch ([notes/17](notes/17-tool-selection.md)).
+│   │               select_when_many: the one switch-on rule every host
+│   │               applies once its tools are in, chat roads included
 │   │               Names index BOTH ways -- whole, so a name in the
 │   │               transcript retrieves itself, and in pieces (name_parts),
 │   │               because nobody types browser_open -- and b=0.30 damps the

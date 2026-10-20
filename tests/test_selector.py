@@ -27,6 +27,7 @@ from yantra.tools.selector import (
     enable_selection,
     name_parts,
     query_from_transcript,
+    select_when_many,
     tokenize,
 )
 from yantra.types import (Message, ModelResponse, TextBlock, ToolCall, ToolResult, Usage)
@@ -565,3 +566,33 @@ class TestPrerequisites:
         from yantra.tools.browser import BrowserClick, BrowserFill
         assert BrowserClick.requires == ("browser_open",)
         assert BrowserFill.requires == ("browser_open",)
+
+
+class TestSelectWhenMany:
+    """The one rule every host applies once its tools are all in: a chat
+    road that skipped it sent 227 tools whole to a 64k local model."""
+
+    def _agent(self, n):
+        registry = ToolRegistry()
+        for i in range(n):
+            registry.register(_mk(f"svc_{i}", f"service tool {i}"))
+        return Agent(ScriptedProvider([]), model="scripted", tools=registry,
+                     permissions=yolo)
+
+    def test_past_the_threshold_it_switches_on_by_itself(self, monkeypatch):
+        monkeypatch.delenv("YANTRA_TOOLS_PER_TURN", raising=False)
+        agent = self._agent(AUTO_SELECTION_THRESHOLD + 1)
+        assert select_when_many(agent) == DEFAULT_TOOLS_PER_TURN
+        assert agent.tool_catalog is not None
+        assert agent.tools_per_turn == DEFAULT_TOOLS_PER_TURN
+
+    def test_few_tools_are_all_sent(self, monkeypatch):
+        monkeypatch.delenv("YANTRA_TOOLS_PER_TURN", raising=False)
+        agent = self._agent(AUTO_SELECTION_THRESHOLD)
+        assert select_when_many(agent) is None and agent.tool_catalog is None
+
+    def test_a_width_given_wins_and_zero_sends_everything(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_TOOLS_PER_TURN", "9")
+        agent = self._agent(AUTO_SELECTION_THRESHOLD + 5)
+        assert select_when_many(agent, width=0) is None and agent.tool_catalog is None
+        assert select_when_many(agent) == 9

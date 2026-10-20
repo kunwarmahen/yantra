@@ -146,6 +146,10 @@ def cost_line(agent: Agent) -> str:
 #: How many recorded turns the page's panel lists, newest first.
 TURNS_SHOWN = 100
 
+#: How often, between turns, the page looks whether Setu moved (an account
+#: or a server added in a chat or a terminal). File times only: cheap.
+SETU_LOOK_EVERY = 10.0
+
 
 def _held_view(agent) -> dict[str, Any] | None:
     """The held turn as the page shows it (notes/88), or None: what each
@@ -245,6 +249,8 @@ class WebSession:
         self.signin: Any | None = None
         self._setu_sync_due = False
         self._setu_lock = threading.Lock()
+        threading.Thread(target=self._setu_watch, daemon=True,
+                         name="yantra-setu-watch").start()
         #: What the look after a turn found, waiting for the person
         #: (notes/113): recipe offers by id, as (learner, offer), and
         #: facts about them. Held here rather than asked, so nothing
@@ -549,7 +555,8 @@ class WebSession:
                ) -> None:
         self._cancel.clear()
         self._setu_catch_up()
-        self.turn_active = True
+        with self._setu_lock:          # never while the watcher changes tools
+            self.turn_active = True
         # The allowance is per TURN, and this is the one place a turn
         # starts -- no inferring it from gaps between questions. A resume
         # is a turn too: the person is here now.
@@ -1121,13 +1128,17 @@ class WebSession:
                          "Yantra with its bubblewrap sandbox to contain them"),
                 "sandbox": str(box.describe) if box is not None else "no bash tool"}
 
-    def setu_sync(self) -> dict[str, Any]:
+    def setu_sync(self, *, idle_only: bool = False) -> dict[str, Any] | None:
         """Ask Setu again and make the tools match. Called when no turn is
-        running: a turn's tool list and prompt do not change under it."""
+        running: a turn's tool list and prompt do not change under it.
+        ``idle_only``: say nothing and change nothing (None) if a turn
+        started meanwhile -- the watcher's look, which a turn outranks."""
         setu = getattr(self.agent, "setu", None)
         if setu is None:
             return {"connected": {}, "dropped": [], "notes": []}
         with self._setu_lock:
+            if idle_only and self.turn_active:
+                return None
             self._setu_sync_due = False
             setu.refresh()
             # an account connected since launch may be one a package asked
@@ -1141,6 +1152,22 @@ class WebSession:
         self.broadcast({"type": "connections", **self.connections_state(), "sync": result})
         self.broadcast({"type": "state", **self.state()})
         return result
+
+    def _setu_watch(self) -> None:
+        """Between turns, every SETU_LOOK_EVERY seconds: an account or a
+        server of their own added elsewhere (a chat, Setu's page, a
+        terminal) reaches the page's tools and Connections panel without
+        a message first. Only file times are read unless one moved."""
+        while True:
+            time.sleep(SETU_LOOK_EVERY)
+            setu = getattr(self.agent, "setu", None)
+            if setu is None or self.mcp is None or self.turn_active:
+                continue
+            try:
+                if setu.moved():
+                    self.setu_sync(idle_only=True)
+            except Exception:  # noqa: BLE001 -- a look; the next turn looks again
+                pass
 
     def _setu_catch_up(self) -> None:
         """Before a turn, as the terminal does: an account signed in to
