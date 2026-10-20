@@ -766,8 +766,11 @@ def test_the_startup_line_names_each_phone():
 
 
 def test_using_one_named_phone_serves_only_that_one():
-    config = sparsh_link.server_config(TWO_NAMED, phone="iphone")
+    config = sparsh_link.server_config(TWO_NAMED, phones=("iphone",))
     assert config.args == ["mcp", "--phone", "iphone"]
+    both = sparsh_link.only(TWO_NAMED, "iphone", "nexus")
+    assert [n["name"] for n in both["named"]] == ["iphone", "nexus"]
+    assert len(both["phones"]) == 2
     assert sparsh_link.server_config(TWO_NAMED).args == ["mcp"]
     with pytest.raises(sparsh_link.SparshLinkError, match="no phone is called 'pixel' "
                                                           r"\(nexus, iphone\)"):

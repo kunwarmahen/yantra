@@ -225,17 +225,18 @@ def load(mode: str, path: str | None = None,
 
 def server_config(data: dict[str, Any], shots: bool = False,
                   app_rules: dict[str, Any] | None = None,
-                  grants: list[str] | None = None, phone: str = "") -> MCPServerConfig:
+                  grants: list[str] | None = None,
+                  phones: tuple[str, ...] = ()) -> MCPServerConfig:
     """``grants``: held taps a schedule may do without a yes, as the person
     accepted them ("send in Messages when the screen shows 555-0123"),
     for a run nobody watches -- Sparsh checks each one (its rules.py).
-    ``phone``: one of the phones Sparsh names, the only one served."""
+    ``phones``: of the phones Sparsh names, the only ones served."""
     mcp = data["mcp"]
     args = list(mcp.get("args") or [])
     if shots and data.get("shots"):
         args.append(str(data["shots"]))
-    if phone:
-        args += ["--phone", phone]                    # of the phones named, this one only
+    for name in phones:
+        args += ["--phone", name]                     # of the phones named, these only
     env = {APP_RULES: json.dumps(app_rules)} if app_rules else {}
     if grants:
         env[GRANTS] = json.dumps(list(grants))
@@ -300,14 +301,19 @@ def name_of(data: dict[str, Any], name: str) -> dict[str, Any] | None:
     return next((n for n in named(data) if n["name"] == name), None)
 
 
-def only(data: dict[str, Any], name: str) -> dict[str, Any]:
-    """Sparsh's report narrowed to one named phone (``/phone use NAME``)."""
-    found = name_of(data, name)
-    if found is None:
-        names = ", ".join(n["name"] for n in named(data)) or "none are named"
-        raise SparshLinkError(f"no phone is called {name!r} ({names})")
-    return {**data, "named": [found],
-            "phones": [p for p in data.get("phones") or [] if p.get("serial") == found["where"]]}
+def only(data: dict[str, Any], *names: str) -> dict[str, Any]:
+    """Sparsh's report narrowed to some named phones (``/phone use NAME``;
+    Dvara, a person's own)."""
+    found = []
+    for name in names:
+        each = name_of(data, name)
+        if each is None:
+            known = ", ".join(n["name"] for n in named(data)) or "none are named"
+            raise SparshLinkError(f"no phone is called {name!r} ({known})")
+        found.append(each)
+    wheres = {n["where"] for n in found}
+    return {**data, "named": found,
+            "phones": [p for p in data.get("phones") or [] if p.get("serial") in wheres]}
 
 
 def _phone_words(data: dict[str, Any]) -> str:
@@ -488,8 +494,8 @@ class Sparsh:
     #: Screenshots of unreadable screens to the model, and why (``shots``).
     shots: bool = False
     shots_why: str = ""
-    #: Of the phones Sparsh names, the one this session uses ("" = all).
-    only: str = ""
+    #: Of the phones Sparsh names, the ones this session uses (() = all).
+    only: tuple[str, ...] = ()
 
     def connect(self, manager: Any, agent: Any, grants: list[str] | None = None) -> int:
         """Start the server, set what asks, write the prompt layer.
@@ -500,7 +506,7 @@ class Sparsh:
         assert self.data is not None
         if SERVER not in manager.sessions:
             config = server_config(self.data, self.shots, app_rules_of(agent), grants,
-                                   phone=self.only)
+                                   phones=self.only)
             self.tools = [n for n in manager.connect(config, origin="sparsh")
                           if n in agent.registry]
             if self.sees():
@@ -555,7 +561,7 @@ class Sparsh:
             return f"sparsh: already in use -- phone {_phone_words(self.data)}"
         if name:
             self.data = only(self.data, name)
-            self.only = name
+            self.only = (name,)
         if not ready_phones(self.data):
             raise SparshLinkError("no phone is ready: plug one in with USB debugging on "
                                   "(and allow it on the phone), or start the emulator")

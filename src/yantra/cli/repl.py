@@ -1737,7 +1737,8 @@ class Repl:
         if not d["phones"] and not d["named"]:
             self.console.print("phone: none attached")
         if sparsh.only:
-            self.console.print(f"this session uses only {sparsh.only}", markup=False)
+            self.console.print(f"this session uses only {', '.join(sparsh.only)}",
+                               markup=False)
         self.console.print("in use: " + (f"yes, {d['tools']} tool(s)" if d["connected"] else
                                          "no" + (" -- /phone use to start" if d["ready"]
                                                  else "")))
