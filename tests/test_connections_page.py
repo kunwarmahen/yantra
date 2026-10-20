@@ -132,6 +132,22 @@ FAKE_SETU = """\
             print("error: the guide in sites/x.toml is written by hand", file=sys.stderr)
             sys.exit(2)
         print(args[2] + ": guide saved")
+    elif args[0] == "serve":
+        if s.get("old_setu"):
+            print("setu: error: unrecognized arguments: --json --port 0", file=sys.stderr)
+            sys.exit(2)
+        embed = [args[i + 1] for i, a in enumerate(args) if a == "--embed"]
+        s = load()
+        s["serving"] = s.get("serving", 0) + 1
+        save(s)
+        print(json.dumps({{"format": "setu-page/1", "url": "http://127.0.0.1:41234/",
+                          "page_url": "http://127.0.0.1:41234/#token=k",
+                          "home": "/setu", "embed": embed}}), flush=True)
+        while sys.stdin.read(4096):
+            pass
+        s = load()
+        s["serving"] -= 1
+        save(s)
     elif args[0] == "disconnect":
         s["connections"].pop(args[1], None)
         save(s)
@@ -896,3 +912,80 @@ def test_scripts_are_said_confined_only_when_they_are(tmp_path):
         said = session.scripts_contained()
         assert said["contained"] is confined
         assert ("no network" in said["line"]) is confined
+
+
+# ---- Setu's own page, framed in the panel -----------------------------------------
+#
+# The bias is A FRAME THAT SHOWS THE WRONG FOLDER, OR OUTLIVES ITS SESSION.
+# A Setu page found on 8775 may be another folder's; one started and never
+# stopped holds a port and a key after Yantra is gone.
+
+
+def _serve_calls(setu):
+    return [c for c in setu.get()["calls"] if c[0] == "serve"]
+
+
+def test_a_tab_here_gets_setus_page_started_for_this_session(setu, tmp_path):
+    session, _agent, manager, client = served(tmp_path, setu.path)
+    try:
+        page = client.get("/api/connections/page").json()
+        assert page == {"url": "http://127.0.0.1:41234/",
+                        "page_url": "http://127.0.0.1:41234/#token=k"}
+        assert client.get("/api/connections/page").json() == page     # one page, kept
+        calls = _serve_calls(setu)
+        assert len(calls) == 1 and calls[0][:4] == ["serve", "--json", "--port", "0"]
+        # its own copy, naming this tab's address as the one that may frame it
+        assert "http://testserver" in [calls[0][i + 1] for i, a in enumerate(calls[0])
+                                       if a == "--embed"]
+    finally:
+        session.setu_page.close()
+        manager.shutdown()
+    assert setu.get()["serving"] == 0            # its stdin closed: the page ended
+
+
+def test_a_tab_on_another_device_keeps_yantras_own_view(setu, tmp_path):
+    session, _agent, manager, client = served(tmp_path, setu.path, local=False)
+    try:
+        res = client.get("/api/connections/page")
+        assert res.status_code == 403 and "Yantra's own view" in res.json()["detail"]
+        assert _serve_calls(setu) == []
+    finally:
+        manager.shutdown()
+
+
+def test_a_new_address_for_this_page_starts_setus_again_naming_both(setu, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from yantra.web.server import make_app
+    session, _agent, manager, client = served(tmp_path, setu.path)
+    try:
+        client.get("/api/connections/page")
+        other = TestClient(make_app(session), base_url="http://localhost:8000",
+                           client=("127.0.0.1", 51001))
+        other.get("/api/connections/page")
+        last = _serve_calls(setu)[-1]
+        named = {last[i + 1] for i, a in enumerate(last) if a == "--embed"}
+        assert {"http://testserver", "http://localhost:8000"} <= named
+        assert setu.get()["serving"] == 1        # the first one was stopped
+    finally:
+        session.setu_page.close()
+        manager.shutdown()
+
+
+def test_a_setu_too_old_to_show_its_page_says_so(setu, tmp_path):
+    setu.set(old_setu=True)
+    session, _agent, manager, client = served(tmp_path, setu.path)
+    try:
+        res = client.get("/api/connections/page")
+        assert res.status_code == 503 and "too old" in res.json()["detail"]
+    finally:
+        manager.shutdown()
+
+
+def test_the_panel_hears_only_its_own_frame():
+    """A message from any other window -- another site in another frame,
+    a pop-up -- is not Setu's page saying something changed."""
+    from importlib.resources import files
+    script = files("yantra.web").joinpath("static", "app.js").read_text()
+    assert "e.source !== conn.frame.contentWindow" in script
+    assert "e.origin !== new URL(conn.page.url).origin" in script

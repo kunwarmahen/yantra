@@ -2031,6 +2031,24 @@ pre.output { color: var(--ink); }
 
 /* ---- connections (notes/99) ---- */
 #conn-body { overflow-y: auto; padding: 0 22px 20px; }
+/* Setu's own page inside the panel: Yantra's strip above it, the page
+   filling the rest. The panel grows to the page's width. */
+#conn-panel:has(.setu-frame) { max-width: 960px; height: min(86vh, 860px); }
+#conn-body:has(.setu-frame) { display: flex; flex-direction: column; flex: 1;
+  min-height: 0; overflow: hidden; padding-bottom: 0; }
+.conn-strip { flex: none; max-height: 40%; overflow-y: auto; }
+.conn-own { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin: 12px 0 10px; font-size: 13px; color: var(--ink-2); }
+.conn-own span { flex: 1; min-width: 14em; }
+.conn-recipes { margin: 0 0 10px; font-size: 13px; }
+.conn-recipes summary { cursor: pointer; font-weight: 600; }
+.conn-recipes summary .tools-note { display: inline; font-weight: 400; margin-left: 6px; }
+.conn-own a.m-btn { text-decoration: none; }
+.conn-recipe { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  padding: 4px 0 0 14px; }
+.conn-recipe .conn-sub { margin: 0; }
+.setu-frame { flex: 1; min-height: 320px; width: 100%; border: 1px solid var(--line);
+  border-radius: var(--r-3) var(--r-3) 0 0; border-bottom: none; background: var(--surface-1); }
 .conn-card {
   display: grid;
   grid-template-columns: 9px minmax(0, 1fr) auto;

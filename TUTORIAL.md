@@ -704,13 +704,22 @@ separate small program that keeps your sign-ins (Gmail, Home
 Assistant, Amazon and X so far) so the
 agent can use them without ever seeing a password or key. With it
 installed, Yantra connects your accounts when it starts. In the browser
-UI, the **connections** chip opens a page of cards:
+UI, the **connections** chip opens Setu's own page, right inside Yantra's.
+Yantra starts it for you and stops it when Yantra stops. There you see:
 
-* each account you connected, with its address, its access level
-  (*Read only*, *Read and draft*, …) and how many tools it gives the
-  agent, plus **change access** and **disconnect**;
+* each account you connected, with its address and its access level
+  (*Read only*, *Read and draft*, …), plus **Change level**,
+  **Disconnect**, and **What it did** (every request made for it);
 * each site you could connect: name the account (`personal`, `work`),
-  pick a level, press **connect**.
+  pick a level, press **Connect**.
+
+Whatever you change there, the agent's tools follow from your next
+message. Above Setu's page, Yantra keeps a few lines of its own: which
+recipes use which account, and **open in its own tab** if you'd like
+more room. Opened from a phone instead of the computer running Yantra,
+the panel shows Yantra's own cards for the same accounts (**change
+access**, **disconnect**), because Setu's page only opens on that
+computer.
 
 Connect shows an *open the sign-in* button. That's Google's own page.
 Sign in there, come back, and the agent has the account's tools from
@@ -722,7 +731,7 @@ and the agent tells you the command: run `setu connect gmail --as mine`,
 and your next message has Gmail again, with nothing to restart. Publish
 your Google app once (Setu's README) and it stops expiring. To find a
 stopped sign-in before you need it, run `setu check`; behind Dvara it
-runs daily and messages you. This works when
+runs daily and messages you. Signing in works when
 the page is open on the computer running Yantra. From a phone, the card
 shows the command to run on that computer instead. For now, Google
 sign-in also needs a "Desktop app" client file you make once in
@@ -731,7 +740,8 @@ remembers it. Home Assistant is simpler: the page asks once where your
 Home Assistant is, and the sign-in is its own login page. Start it at
 *See only*, and the agent can tell you which lights are on but can't
 switch any. ([notes/95](notes/95-the-accounts-you-connected.md),
-[notes/99](notes/99-the-connections-page.md))
+[notes/99](notes/99-the-connections-page.md),
+[notes/135](notes/135-setus-own-page-in-the-panel.md))
 
 **Sites with no API.** Amazon won't show a shopper's own orders to any
 program, and X charges money to read through its API. For those, Setu

@@ -1336,6 +1336,117 @@ def run_setu(program: str, *args: str, timeout: float = COMMAND_TIMEOUT,
     return done.returncode == 0, said
 
 
+#: What ``setu serve --json`` prints first; another format is refused.
+PAGE_FORMAT = "setu-page/1"
+#: How long Setu's page may take to say where it is.
+PAGE_SECONDS = 15.0
+
+
+class SetuPage:
+    """Setu's own page, started for this session's Connections panel.
+
+    THE PANEL SHOWS SETU'S PAGE, NOT A COPY OF IT. Account cards drawn by
+    Yantra from Setu's report are a second drawing of the same thing, and
+    fall behind each time Setu's page learns something (servers of your
+    own, people's pages, certifiers). So the panel frames Setu's page,
+    and Yantra draws only what is Yantra's: what a package was allowed,
+    its questions, recipes, and the sign-in news. Yantra's own cards
+    stand in only where Setu's page cannot be shown: a tab on another
+    device (Setu's page listens on this computer alone), or a Setu with
+    no ``serve --json``.
+
+    ITS OWN COPY, STARTED WHEN FIRST WANTED. ``setu serve --json --port 0
+    --embed ORIGIN``: any free port, this page's address as the one site
+    allowed to frame it, in this session's Setu folder (a person's, when
+    the session is theirs). A page found already running on 8775 is not
+    used -- it may be another folder's (Sarathi's container holds that
+    port) and does not name Yantra as its embedder. It holds the child's
+    stdin, so when Yantra ends, however it ends, the page ends too.
+
+    A NEW ADDRESS FOR THIS PAGE MEANS A NEW SETU PAGE. The embedders are
+    fixed when Setu's page starts. Opened as ``localhost`` after
+    ``127.0.0.1``, Setu's page is started again naming both.
+
+    A SETU TOO OLD TO SAY WHERE IT IS (no ``--json``) is not an error the
+    person has to fix: ``open`` says why, and the panel draws Yantra's own
+    cards, as before.
+    """
+
+    def __init__(self) -> None:
+        self._child: subprocess.Popen | None = None
+        self._said: dict[str, Any] | None = None
+        self._embed: frozenset[str] = frozenset()
+        self._lock = threading.Lock()
+
+    def open(self, program: str, embed: set[str], home: str | None = None,
+             key: str | None = None) -> dict[str, Any]:
+        """Setu's page for ``embed`` -> ``{url, page_url, home}``; raises
+        SetuLinkError when it cannot be started."""
+        with self._lock:
+            alive = self._child is not None and self._child.poll() is None
+            if alive and embed <= self._embed:
+                return dict(self._said or {})
+            wanted = frozenset(embed) | (self._embed if alive else frozenset())
+            self._stop()
+            self._said = self._start(program, wanted, home, key)
+            self._embed = wanted
+            return dict(self._said)
+
+    def _start(self, program: str, embed: frozenset[str], home: str | None,
+               key: str | None) -> dict[str, Any]:
+        import selectors
+        import tempfile
+        args = [program, "serve", "--json", "--port", "0"]
+        for origin in sorted(embed):
+            args += ["--embed", origin]
+        errors = tempfile.TemporaryFile(mode="w+")
+        try:
+            child = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=errors, text=True, env=home_env(home, key))
+        except OSError as exc:
+            errors.close()
+            raise SetuLinkError(f"cannot start Setu's page: {exc}") from None
+        with selectors.DefaultSelector() as wait:
+            wait.register(child.stdout, selectors.EVENT_READ)
+            line = child.stdout.readline() if wait.select(PAGE_SECONDS) else ""
+        try:
+            said = json.loads(line) if line.strip() else None
+        except json.JSONDecodeError:
+            said = None
+        if not isinstance(said, dict) or said.get("format") != PAGE_FORMAT:
+            child.kill()
+            child.wait(timeout=5)
+            child.stdin.close()
+            child.stdout.close()
+            errors.seek(0)
+            why = errors.read().strip().splitlines()
+            errors.close()
+            if any("--json" in w or "--embed" in w for w in why):
+                raise SetuLinkError("this Setu is too old to show its page here "
+                                    "(it has no `setu serve --json`): update Setu")
+            raise SetuLinkError("Setu's page did not start" +
+                                (f": {why[-1]}" if why else ""))
+        errors.close()
+        self._child = child
+        return {k: said.get(k) for k in ("url", "page_url", "home")}
+
+    def _stop(self) -> None:
+        child, self._child = self._child, None
+        if child is None:
+            return
+        try:
+            child.stdin.close()            # setu serve --json ends on its stdin closing
+            child.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            child.kill()
+            child.wait(timeout=5)
+        child.stdout.close()
+
+    def close(self) -> None:
+        with self._lock:
+            self._stop()
+
+
 class SignIn:
     """One ``setu connect --json`` in progress. Events arrive on a thread
     as Setu prints them -- started, url, connected, error -- and

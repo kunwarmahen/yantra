@@ -13,6 +13,10 @@ installed but not connected. From there you can connect an account,
 change its access level, and disconnect it, and the agent's tools follow
 without a restart.
 
+On the computer running Yantra the panel now frames Setu's own page, and
+the cards below are what a tab elsewhere sees
+([note 135](135-setus-own-page-in-the-panel.md)).
+
 ## Signing in stays Setu's
 
 The obvious design is for Yantra to run the sign-in itself: build
@@ -228,6 +232,9 @@ the copy it had.
 * **Which agents may use an account.** A package asking for a
   connection is still the open item from note 95. Today every
   connection is available to the person's own chat.
+* ~~**One drawing of the connections.**~~ The panel frames Setu's own page
+  on this computer, and Yantra draws only its own strip
+  ([note 135](135-setus-own-page-in-the-panel.md)).
 * **Merging MCP servers into this page.** The servers, skills and tools
   panel stays where it is, and a Setu connection's server still shows
   there too. Folding it into Connections would move a panel people

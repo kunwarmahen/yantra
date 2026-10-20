@@ -247,6 +247,10 @@ class WebSession:
         #: (setu_link.SignIn), and whether its result still has to reach
         #: the tools -- held while a turn runs (notes/99).
         self.signin: Any | None = None
+        #: Setu's own page, shown in the Connections panel: started the
+        #: first time a tab on this computer opens it (setu_link.SetuPage).
+        from yantra.setu_link import SetuPage
+        self.setu_page = SetuPage()
         self._setu_sync_due = False
         self._setu_lock = threading.Lock()
         threading.Thread(target=self._setu_watch, daemon=True,
@@ -2300,6 +2304,30 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         """The Connections panel's data -- Setu's report, never a key."""
         require_ready()
         return session.connections_state(local=is_local(req))
+
+    @app.get("/api/connections/page")
+    def connections_page(req: Request) -> dict[str, Any]:
+        """Setu's own page for the Connections panel: its address with its
+        key, started for this session's Setu folder, naming this page's
+        address as the one allowed to frame it. Only for a tab on this
+        computer -- Setu's page listens on 127.0.0.1, which another
+        device's browser would take for itself. Plain ``def``: it may
+        start a program."""
+        setu = require_setu()
+        if not is_local(req):
+            raise HTTPException(403, "Setu's page opens on the computer running Yantra; "
+                                     "this tab shows Yantra's own view of it")
+        here = f"{req.url.scheme}://{req.url.netloc}"
+        port = f":{req.url.port}" if req.url.port else ""
+        embed = {here, f"{req.url.scheme}://127.0.0.1{port}",
+                 f"{req.url.scheme}://localhost{port}"}
+        from yantra.setu_link import SetuLinkError
+        try:
+            said = session.setu_page.open(setu_program(setu), embed, setu.home,
+                                          setu.vault_key)
+        except SetuLinkError as exc:
+            raise HTTPException(503, str(exc)) from None
+        return {"url": said["url"], "page_url": said["page_url"]}
 
     @app.post("/api/connections/refresh")
     def connections_refresh(req: Request) -> dict[str, Any]:

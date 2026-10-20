@@ -771,6 +771,16 @@ client file, and Setu remembers the path. For Home Assistant it asks once
 for your server's address instead
 ([notes/99](notes/99-the-connections-page.md)).
 
+On the computer running Yantra, that panel is **Setu's own page**, in a
+frame. Yantra starts it for the session (`setu serve --json --port 0
+--embed <this page>`), names its own address as the one site allowed to
+frame it, and stops it when Yantra stops. Above it, Yantra keeps what is
+its own: a package's asks and grants, recipes per account, and **open in
+its own tab**. A change on Setu's page tells Yantra, and the tools follow
+on the next message. A tab on another device, or a Setu too old for
+`serve --json`, gets the cards described above
+([notes/135](notes/135-setus-own-page-in-the-panel.md)).
+
 **A sign-in the site refused.** Google expires a Testing app's sign-ins
 after seven days. Setu marks such a connection (`setu list` says
 `SIGN-IN EXPIRED`), and Yantra doesn't start its server. The startup line
@@ -2599,6 +2609,9 @@ src/yantra/
 │                   match Setu's report, SignIn relays `setu connect --json`
 │                   for the page's Connections panel -- same computer only,
 │                   never under a running turn ([notes/99](notes/99-the-connections-page.md)).
+│                   SetuPage: Setu's own page (`setu serve --json`) started
+│                   for the panel's frame, ended with Yantra
+│                   ([notes/135](notes/135-setus-own-page-in-the-panel.md)).
 │                   A sign-in Setu marked expired: named with its command,
 │                   never started; the page checks Setu before each turn
 │                   ([notes/127](notes/127-a-sign-in-that-ran-out.md)).

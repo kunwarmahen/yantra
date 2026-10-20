@@ -2463,7 +2463,10 @@ async function lookBack() {
    open on the computer running Yantra; anywhere else the card shows the
    command to run there instead. */
 
-const conn = { loaded: false, data: null, signin: null };
+// page: Setu's own page for this tab ({url, page_url}), framed in the
+// panel; pageWhy: why it could not be, and Yantra's own cards stand in.
+const conn = { loaded: false, data: null, signin: null, page: null, pageWhy: "",
+               frame: null };
 
 $("#chip-conn").onclick = openConnPanel;
 $("#conn-close").onclick = () => $("#conn-backdrop").classList.add("hidden");
@@ -2533,14 +2536,108 @@ function onSignin(env) {
 
 async function openConnPanel() {
   $("#conn-backdrop").classList.remove("hidden");
-  $("#conn-body").innerHTML = '<div class="panel-loading">loading…</div>';
+  if (!conn.frame) $("#conn-body").innerHTML = '<div class="panel-loading">loading…</div>';
   await loadConnections();
+  await loadSetuPage();
   renderConnections();
+}
+
+// Setu's own page, started for this session (notes/99): asked for once,
+// and only by a tab on this computer -- Setu's page listens there alone.
+async function loadSetuPage() {
+  const d = conn.data;
+  if (conn.page || !d || !d.found || !d.local) return;
+  try {
+    const res = await fetch("/api/connections/page");
+    const out = await res.json();
+    if (res.ok) { conn.page = out; conn.pageWhy = ""; }
+    else conn.pageWhy = out.detail || `${res.status}`;
+  } catch (err) { conn.pageWhy = String(err); }
+}
+
+// Framed, Setu's page says only THAT something changed; Yantra asks Setu
+// again so the tools follow. Mid-turn the ask is refused, and the watcher
+// catches up when the turn ends.
+let setuChangedTimer = null;
+window.addEventListener("message", (e) => {
+  if (!conn.page || !conn.frame || e.source !== conn.frame.contentWindow) return;
+  if (e.origin !== new URL(conn.page.url).origin || e.data?.type !== "setu-changed") return;
+  clearTimeout(setuChangedTimer);
+  setuChangedTimer = setTimeout(async () => {
+    try {
+      const res = await fetch("/api/connections/refresh", { method: "POST" });
+      if (res.ok) onConnections(await res.json());
+    } catch { /* the watcher catches up */ }
+  }, 400);
+});
+
+// The panel with Setu's page in it: Yantra's own strip on top (sign-in
+// news, what a package was allowed, recipes), then the page. The frame is
+// made once and never moved -- moving an iframe reloads it, and a sign-in
+// half done in it would be lost on every broadcast.
+function renderFramed(body, d) {
+  let strip = body.querySelector(":scope > .conn-strip");
+  if (!conn.frame || !body.contains(conn.frame)) {
+    body.textContent = "";
+    strip = document.createElement("div");
+    strip.className = "conn-strip";
+    const frame = document.createElement("iframe");
+    frame.className = "setu-frame";
+    frame.title = "Setu's page";
+    frame.src = conn.page.page_url;
+    frame.referrerPolicy = "no-referrer";
+    conn.frame = frame;
+    body.append(strip, frame);
+  }
+  const open = strip.querySelector("details.conn-recipes")?.open || false;
+  strip.textContent = "";
+  const own = document.createElement("div");
+  own.className = "conn-own";
+  own.innerHTML = `<span>Setu's own page, below: connect, change a level, disconnect,
+    see what it did. The agent's tools follow what you do there.</span>`;
+  const tab = document.createElement("a");
+  tab.className = "m-btn";
+  tab.href = conn.page.page_url; tab.target = "_blank"; tab.rel = "noopener noreferrer";
+  tab.textContent = "open in its own tab";
+  own.append(tab);
+  strip.append(own, signinBox());
+  if (d.package) packageBox(strip, d);
+  recipesBox(strip, d, open);
+}
+
+// Recipes are Yantra's, not Setu's: which ones on this computer need which
+// connector, and the catalog's that could be installed (notes/111).
+function recipesBox(strip, d, open) {
+  const lines = d.connectors.map((c) => [c, recipeLine((d.recipes || {})[c.id])
+    + catalogRecipeLine(c, d)]).filter(([, html]) => html);
+  if (!lines.length) return;
+  const box = document.createElement("details");
+  box.className = "conn-recipes";
+  box.open = open;
+  const count = lines.reduce((n, [c]) => n + ((d.recipes || {})[c.id] || []).length, 0);
+  box.innerHTML = `<summary>recipes <span class="tools-note">${count} on this computer —
+    what this agent has learned to do with each account</span></summary>`;
+  for (const [c, html] of lines) {
+    const row = document.createElement("div");
+    row.className = "conn-recipe";
+    row.innerHTML = `<b>${esc(c.name || c.id)}</b>${html}`;
+    box.append(row);
+  }
+  strip.append(box);
+  if (!strip.dataset.recipeClicks) {
+    strip.dataset.recipeClicks = "1";
+    strip.addEventListener("click", (e) => {
+      const name = e.target.closest("[data-recipe]")?.dataset.recipe;
+      if (name) installCatalogRecipe(name);
+    });
+  }
 }
 
 function renderConnections() {
   const body = $("#conn-body");
   const d = conn.data;
+  if (d && d.mode !== "off" && d.found && conn.page) { renderFramed(body, d); return; }
+  conn.frame = null;
   body.textContent = "";
   if (!d) { body.innerHTML = '<div class="panel-loading">loading…</div>'; return; }
   if (d.mode === "off") {
@@ -2555,6 +2652,13 @@ function renderConnections() {
     return;
   }
   body.append(signinBox());
+  if (conn.pageWhy) {
+    const why = document.createElement("div");
+    why.className = "conn-box warn";
+    why.innerHTML = `<span>Setu's own page can't be shown here (${esc(conn.pageWhy)}),
+      so this is Yantra's view of your connections.</span>`;
+    body.append(why);
+  }
   if (d.package) packageBox(body, d);
   for (const box of setupBoxes(d)) body.append(box);
 
