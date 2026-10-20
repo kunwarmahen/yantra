@@ -338,6 +338,12 @@ class TestTheCardIsWords:
         assert ("ON YOUR PHONE, WITHOUT ASKING: send in Messages when the screen "
                 "shows 555-0123") in said
         assert "waits 20 minutes in all" in said
+
+    def test_a_phone_named_by_the_schedule_is_named_on_its_card(self):
+        said = samay_link.explain_create(
+            {"prompt": "read my texts", "when": "every day at 8", "phone_name": "pixel"},
+            registry=ToolRegistry(), phone=True)
+        assert "Your phone: pixel" in said and "IT WORKS YOUR PHONE" in said
         assert "refused while nobody is there" not in said
         plain = samay_link.explain_create({"prompt": "x", "when": "every 2h"},
                                           registry=ToolRegistry())

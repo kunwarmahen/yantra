@@ -360,7 +360,8 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     A Home Assistant job made in a chat with the phone is not a phone
     schedule, and its card doesn't say it is.
     """
-    phone = phone and bool(args.get("phone") or args.get("phone_steps"))
+    name = str(args.get("phone_name") or "").strip()
+    phone = phone and bool(args.get("phone") or args.get("phone_steps") or name)
     when = args.get("when")
     raw_when = json.dumps(when) if not isinstance(when, str) else when
     notify = str(args.get("notify") or "when_new")
@@ -436,7 +437,7 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
         steps = args.get("phone_steps") or []
         steps = [steps] if isinstance(steps, str) else list(steps)
         wait = args.get("wait") or 30
-        lines.append("Your phone")
+        lines.append(f"Your phone: {name}" if name else "Your phone")
         lines.append("  IT WORKS YOUR PHONE at each time. In use: it waits up to 10 "
                      "minutes, then skips. Locked: you're asked to unlock it.")
         for step in steps:
