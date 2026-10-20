@@ -874,7 +874,8 @@ Sparsh's steps apart without finding Sparsh itself); a `--unattended` run gets n
 unless Samay started it for a phone schedule after Dvara found the phone
 free and its person can be asked through Dvara (`YANTRA_PHONE_RUN` with
 `YANTRA_ASK_URL`), so a schedule made on Yantra's page can work the phone
-([notes/119](notes/119-a-phone-and-what-asks.md)). Counted on thirteen
+([notes/119](notes/119-a-phone-and-what-asks.md)), and only the phone it
+names (`YANTRA_PHONE`, [notes/134](notes/134-several-phones-by-name.md)). Counted on thirteen
 everyday tasks on a fresh emulator, `qwen3.8:latest` and `gemma4:26b`
 each did twelve, every text was held for a yes, and a "no" was never
 gone round ([notes/120](notes/120-thirteen-tasks-on-a-phone.md),

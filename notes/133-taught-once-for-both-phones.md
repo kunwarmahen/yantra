@@ -160,8 +160,8 @@ one person's only).
 * **Steps that differ.** Only opening the app is made phone-free. A
   screen that differs inside the app (a menu in another place) is left
   to the line under the title and the next run's check of each screen.
-* **Both phones at once.** With an iPhone and an Android phone both
-  ready, the phone layer says "phones", and the lesson is left without a
-  `TAUGHT ON` line. That waits on several phones at once.
+* ~~**Both phones at once.**~~ With both ready, the lesson takes the
+  phone its steps named, and the layer's list says its kind
+  ([note 134](134-several-phones-by-name.md)).
 * **Skills already kept.** A skill taught before this keeps its folder
   and bundle id until it is taught again, or fails and is rewritten.

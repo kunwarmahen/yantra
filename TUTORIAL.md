@@ -2280,8 +2280,8 @@ read each step.
 
 | Setting | Read by | Documented in |
 |---|---|---|
-| `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_SPARSH`, `YANTRA_PHONE_SHOTS` | Yantra | this repo's README |
-| `SPARSH_STATE`, `SPARSH_RULES`, `ANDROID_SERIAL`, `SPARSH_WDA` | Sparsh | Sparsh's README and SETUP.md |
+| `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_SPARSH`, `YANTRA_PHONE_SHOTS`, `YANTRA_PHONE` | Yantra | this repo's README |
+| `SPARSH_STATE`, `SPARSH_RULES`, `ANDROID_SERIAL`, `SPARSH_WDA`, `SPARSH_PHONES` | Sparsh | Sparsh's README and SETUP.md |
 | `SAMAY_STATE`, `SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`, `SAMAY_TZ` | Samay | Samay's README |
 | `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
 | `DVARA_TOKEN`, `DVARA_ROOT`, `DVARA_ACTORS`, `DVARA_STATE`, `DVARA_SAMAY` | dvara | dvara's README |
@@ -2413,6 +2413,22 @@ the emulator), then press **use this phone** in the panel, or type
 `/phone use` in the terminal. The tools are added without a restart.
 `/phone` on its own says what's attached and whether it's in use, and
 `/phone log` shows the last steps.
+
+**Several phones.** Name them for Sparsh, and the agent works each by
+name:
+
+```bash
+export SPARSH_PHONES="nexus=84B7N16128001616,iphone=http://127.0.0.1:8100"
+uv run yantra --prompt "On the nexus, open Settings and tell me the first item."
+```
+
+The startup line names each (`phone nexus: 84B7N16128001616 (Nexus_6P),
+iphone: …`). Every phone answer starts `Phone: NAME`, so the agent never
+mixes up two lists that look alike. To keep a session to one phone, use
+`/phone use NAME`, **only NAME** in the phone panel, or
+`YANTRA_PHONE=NAME`. A lesson taught with both attached still records
+which phone it was taught on
+([notes/134](notes/134-several-phones-by-name.md)).
 
 **A site's own app.** If a site turns the agent's browser away (X often
 does), connect its app on your phone instead: `setu connect x --phone`,
