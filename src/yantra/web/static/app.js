@@ -2206,8 +2206,10 @@ function phoneChip(d) {
     : `${ready.join(", ")} is attached; open this to let the agent use it`);
 }
 
-async function usePhone() {
-  const res = await fetch("/api/phone/use", { method: "POST" });
+async function usePhone(name) {
+  const res = await fetch("/api/phone/use", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(name ? { name } : {}) });
   const data = await res.json();
   if (!res.ok) { addBanner(`phone: ${data.detail}`, true); return; }
   toast(data.said);
@@ -2303,13 +2305,30 @@ function renderPhone() {
     const box = document.createElement("div");
     box.className = "conn-box";
     if ((d.ready || []).length) {
-      box.innerHTML = "<span>A phone is attached, but the agent isn't using it: there was "
-        + "none when this session started. Use it to give the agent its phone tools.</span>";
+      const several = (d.ready || []).length > 1;
+      box.innerHTML = several
+        ? "<span>Phones are attached, but the agent isn't using them: there were none when "
+          + "this session started. Use them all, or only one, to give the agent its phone "
+          + "tools.</span>"
+        : "<span>A phone is attached, but the agent isn't using it: there was "
+          + "none when this session started. Use it to give the agent its phone tools.</span>";
       const b = document.createElement("button");
       b.className = "m-btn primary";
-      b.textContent = "use this phone";
-      b.onclick = usePhone;
+      // Several named phones ready: all of them, or only one (sparsh_link only)
+      const ready = (d.phones || []).filter((p) => p.state === "device" && p.name);
+      b.textContent = ready.length > 1 ? "use all of them" : "use this phone";
+      b.onclick = () => usePhone();
       box.append(b);
+      if (ready.length > 1) {
+        for (const p of ready) {
+          const one = document.createElement("button");
+          one.className = "m-btn";
+          one.textContent = `only ${p.name}`;
+          one.title = "this session works this phone and no other";
+          one.onclick = () => usePhone(p.name);
+          box.append(one);
+        }
+      }
     } else if ((d.phones || []).length) {
       box.innerHTML = "<span>A phone is named, but not ready: what to do is under it, "
         + "below. Then refresh.</span>";
@@ -2317,6 +2336,12 @@ function renderPhone() {
       box.innerHTML = "<span>No phone yet. Plug one in with USB debugging on (and allow it "
         + "on the phone), or start the emulator, then refresh.</span>";
     }
+    body.append(box);
+  }
+  if (d.connected && (d.only || []).length) {
+    const box = document.createElement("div");
+    box.className = "conn-box";
+    box.innerHTML = `<span>This session works only ${esc(d.only.join(", "))}.</span>`;
     body.append(box);
   }
   const phones = d.phones || [];

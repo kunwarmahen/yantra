@@ -196,6 +196,28 @@ class TestBothPhones:
         assert Lesson.from_dict(lesson.to_dict()).phone == "iPhone"
         assert "TAUGHT ON: the person's iPhone" in digest(lesson.as_turn())
 
+    def test_with_two_phones_it_keeps_the_one_its_steps_named(self, tmp_path):
+        from yantra.prompt import attach_prompt
+        from yantra.skills.learn import Step, Turn
+        from yantra.sparsh_link import prompt_text
+
+        agent = make_agent(tmp_path, [])
+        both = {"adb": "ok", "phones": [
+            {"serial": "0123ABC", "state": "device", "model": "x", "name": "nexus"},
+            {"serial": "http://10.0.0.5:8100", "state": "device", "model": "x",
+             "name": "iphone"}],
+            "named": [{"name": "nexus", "where": "0123ABC", "kind": "Android"},
+                      {"name": "iphone", "where": "http://10.0.0.5:8100", "kind": "iPhone"}]}
+        prompt = attach_prompt(agent)
+        prompt.set("phone", prompt_text(both))
+        prompt.apply()
+        lesson = Lesson(task="read the battery")
+        step = Step("c1", "mcp__sparsh__open_app", {"name": "settings", "phone": "iphone"},
+                    "Phone: iphone", True)
+        lesson.add(Turn(task="open settings", steps=[step], answer="ok"), agent)
+        assert lesson.phone == "iPhone"
+        assert "TAUGHT ON: the person's iPhone" in digest(lesson.as_turn())
+
     def test_a_lesson_with_no_phone_says_nothing_of_one(self, tmp_path):
         agent = make_agent(tmp_path, WALK)
         lesson = Lesson(task="x")

@@ -339,13 +339,19 @@ def _kind_words(phones: list[dict[str, Any]]) -> str:
 _WORKS = "You can work the person's "
 
 
-def phone_kind(agent: Any) -> str:
+def phone_kind(agent: Any, name: str = "") -> str:
     """"iPhone" or "Android phone": the one phone this agent works now,
     read back from its phone layer -- or "" with none, or with both. A
     lesson keeps it (skills/lesson.py), so the skill it becomes can say
-    which phone its steps were seen on."""
+    which phone its steps were seen on. ``name``: of several named phones,
+    the one a step said (its ``phone`` argument), as the layer lists it
+    ("nexus -- Android")."""
     prompt = getattr(agent, "prompt", None)
     text = (prompt.get("phone") if hasattr(prompt, "get") else None) or ""
+    if name:
+        found = re.search(rf"(?:: |; ){re.escape(name)} -- (iPhone|Android)\b", text)
+        if found:
+            return "iPhone" if found.group(1) == "iPhone" else "Android phone"
     for kind in ("iPhone", "Android phone"):
         if f"{_WORKS}{kind} (" in text:
             return kind
@@ -594,7 +600,7 @@ class Sparsh:
         return {"mode": self.mode, "found": self.data is not None, "error": self.error,
                 "program": self.program, "version": data.get("version"),
                 "adb": data.get("adb"), "phones": list(data.get("phones") or []),
-                "named": named(data),
+                "named": named(data), "only": list(self.only),
                 "ready": [p.get("serial") for p in ready_phones(data)],
                 "rules": {"path": rules.get("path"), "exists": bool(rules.get("exists")),
                           "never": list(rules.get("never") or []),

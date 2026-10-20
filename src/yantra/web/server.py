@@ -2251,9 +2251,10 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         return sparsh.describe()
 
     @app.post("/api/phone/use")
-    def phone_use() -> dict[str, Any]:
+    def phone_use(body: dict[str, Any] | None = None) -> dict[str, Any]:
         """A phone attached after the start: start its tools now.
-        require_idle: the tools and the prompt change."""
+        require_idle: the tools and the prompt change. ``{"name": ...}``:
+        of several named phones, only that one (``/phone use NAME``)."""
         from yantra.mcp import MCPError
         from yantra.sparsh_link import SparshLinkError
         require_idle()
@@ -2261,7 +2262,8 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         if session.mcp is None:
             raise HTTPException(409, "this page cannot start tools (no MCP manager)")
         try:
-            said = sparsh.use_now(session.mcp, session.agent)
+            said = sparsh.use_now(session.mcp, session.agent,
+                                  str((body or {}).get("name") or "").strip())
         except (SparshLinkError, MCPError) as exc:
             raise HTTPException(409, f"sparsh: {exc}") from None
         # The tools count and the chip changed: every open page hears it.

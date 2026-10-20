@@ -69,7 +69,7 @@ FAKE_SPARSH = """\
         print(json.dumps({{"format": {fmt!r}, "version": "0.1.0", "state": "/s",
                           "rules": {{"path": "/s/rules.toml", "exists": True,
                                     "never": {never!r}, "ask": ["send"]}},
-                          "adb": "ok", "phones": {phones!r},
+                          "adb": "ok", "phones": {phones!r}, "named": {named!r},
                           "mcp": {{"command": {python!r}, "args": [sys.argv[0], "mcp"]}},
                           **({{"shots": "--shots"}} if {shots!r} else {{}}),
                           "tools": KINDS}}))
@@ -126,12 +126,12 @@ EMULATOR = [{"serial": "emulator-5554", "state": "device", "model": "sdk_gphone6
 
 
 def make_sparsh(tmp_path: Path, *, fmt: str = sparsh_link.FORMAT, phones=None,
-                never=(), shots=True) -> Path:
+                never=(), shots=True, named=()) -> Path:
     program = tmp_path / "sparsh"
     program.write_text(f"#!{sys.executable}\n" + textwrap.dedent(FAKE_SPARSH).format(
         log=str(tmp_path / "sparsh-calls.log"), fmt=fmt,
         phones=EMULATOR if phones is None else phones, never=list(never),
-        python=sys.executable, shots=shots))
+        python=sys.executable, shots=shots, named=list(named)))
     program.chmod(0o755)
     return program
 
@@ -555,6 +555,9 @@ class TestAPhoneAttachedLater:
             assert state["found"] and not state["connected"] and state["ready"] == []
             assert client.post("/api/phone/use").status_code == 409
             make_sparsh(tmp_path)
+            nameless = client.post("/api/phone/use", json={"name": "pixel"})
+            assert nameless.status_code == 409 and "no phone is called 'pixel'" in \
+                nameless.json()["detail"]                # this Sparsh names no phones
             used = client.post("/api/phone/use").json()
             assert used["connected"] and used["said"].startswith("sparsh: 5 tool(s)")
             assert "mcp__sparsh__tap" in agent.registry
@@ -775,3 +778,37 @@ def test_using_one_named_phone_serves_only_that_one():
     with pytest.raises(sparsh_link.SparshLinkError, match="no phone is called 'pixel' "
                                                           r"\(nexus, iphone\)"):
         sparsh_link.only(TWO_NAMED, "pixel")
+
+
+def test_a_named_phones_kind_is_read_back_for_a_lesson():
+    class Agent:
+        prompt = {"phone": sparsh_link.prompt_text(TWO_NAMED)}
+
+    assert sparsh_link.phone_kind(Agent()) == ""               # two: not one kind
+    assert sparsh_link.phone_kind(Agent(), "iphone") == "iPhone"
+    assert sparsh_link.phone_kind(Agent(), "nexus") == "Android phone"
+    assert sparsh_link.phone_kind(Agent(), "pixel") == ""
+
+
+def test_one_phone_named_in_the_environment_is_the_only_one_served(clean, tmp_path,
+                                                                     monkeypatch):
+    # Samay's run of a schedule naming its phone: the one Dvara checked free
+    program = make_sparsh(tmp_path, phones=[
+        {"serial": "84B7N", "state": "device", "model": "Nexus_6P", "name": "nexus"},
+        {"serial": "emulator-5554", "state": "device", "model": "sdk", "name": "pixel"}],
+        named=[{"name": "nexus", "where": "84B7N", "kind": "Android"},
+               {"name": "pixel", "where": "emulator-5554", "kind": "Android"}])
+    monkeypatch.setenv("YANTRA_PHONE", "pixel")
+    code, agent, manager, out = start(tmp_path, str(program))
+    try:
+        assert code is None and "phone pixel: emulator-5554" in out and "nexus" not in out
+        served = [json.loads(x) for x in (tmp_path / "sparsh-calls.log").read_text()
+                  .splitlines()]
+        assert ["mcp", "--phone", "pixel"] in [c[:3] for c in served]
+        assert "There are" not in agent.prompt.get("phone")
+        monkeypatch.setenv("YANTRA_PHONE", "iphone")
+        code, _, again, out = start(tmp_path, str(program))
+        assert "YANTRA_PHONE=iphone: no phone is called 'iphone'" in out
+        again.shutdown()
+    finally:
+        manager.shutdown()

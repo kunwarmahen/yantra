@@ -895,8 +895,9 @@ phone** in the panel, or type `/phone use`, to add them without a
 restart. `/phone` says what's attached, and `/phone log` shows the last
 steps. Several phones at once, each named in `SPARSH_PHONES`
 (`nexus=…,iphone=…`): the model is told which is which, every answer
-says whose screen it is, and `/phone use NAME` keeps a session to one
-of them ([notes/134](notes/134-several-phones-by-name.md)). To teach it a phone job, `/learn start` (tell it each step) or
+says whose screen it is, and `/phone use NAME` (or **only NAME** in the
+phone panel, or `YANTRA_PHONE=NAME`) keeps a session to one of them
+([notes/134](notes/134-several-phones-by-name.md)). To teach it a phone job, `/learn start` (tell it each step) or
 `/learn watch` (do each step yourself and say next; Sparsh's
 `watch_phone` and `watched` tell it what you did) and then `/learn done`
 ([notes/129](notes/129-taught-step-by-step.md)); the skill it keeps

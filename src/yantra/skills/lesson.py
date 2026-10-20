@@ -38,7 +38,8 @@ calls that read it are the lesson's steps like any other.
 ONE SKILL FOR BOTH PHONES. A lesson is taught on one phone, and what it
 saw there is that phone's: an Android package, an iPhone bundle id, the
 folder its home screen keeps the app in. The lesson notes which phone it
-was taught on (``phone``, from the agent's phone layer: sparsh_link.py)
+was taught on (``phone``, from the agent's phone layer: sparsh_link.py;
+with several phones, the one its steps named)
 and the write-up is told to open the app by its everyday name with
 ``open_app`` -- which finds it on either phone -- and to say which phone
 the steps were seen on, so the other one knows which may differ.
@@ -105,7 +106,10 @@ class Lesson:
         if agent is not None and turn.steps:
             from yantra.sparsh_link import phone_kind
 
-            self.phone = phone_kind(agent) or self.phone
+            # with several phones each step names its own: the last one said
+            named = [str(s.arguments.get("phone")) for s in turn.steps
+                     if s.name.startswith("mcp__sparsh__") and s.arguments.get("phone")]
+            self.phone = phone_kind(agent, named[-1] if named else "") or self.phone
         steps = [Step(s.call_id, s.name, dict(s.arguments),
                       _clip(s.result, MAX_RESULT_CHARS), s.ok) for s in turn.steps]
         self.turns.append(Turn(task=turn.task, steps=steps, answer=_clip(turn.answer, 600)))

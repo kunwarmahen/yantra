@@ -2104,6 +2104,9 @@ def _connect_samay(args, mcp_manager, agent, console: Console, spec=None) -> int
 
 #: Set by Samay for a scheduled run that works the phone (its runners.py).
 PHONE_RUN = "YANTRA_PHONE_RUN"
+#: Of the phones Sparsh names, the one this session works (Samay sets it
+#: to a schedule's phone; anyone may, as ``/phone use NAME`` does).
+ONE_PHONE = "YANTRA_PHONE"
 
 
 def _connect_sparsh(args, mcp_manager, agent, console: Console,
@@ -2119,7 +2122,9 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console,
     its person can be asked (``unattended.Reach``), so a held Send is a
     question in their chat, not a yes nobody gave. ``model_road`` is
     (provider, base url, model): whether the model may be shown
-    screenshots of screens the list can't read.
+    screenshots of screens the list can't read. ``$YANTRA_PHONE`` keeps
+    the session to one of several named phones: a schedule's own, checked
+    free before the run, so the run can't open another phone's apps.
     """
     from yantra import sparsh_link, unattended
 
@@ -2140,7 +2145,16 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console,
     if found is None:
         return None
     data, program = found
-    sparsh = sparsh_link.Sparsh(mode=mode, path=path, data=data, program=program)
+    one = os.environ.get(ONE_PHONE, "").strip()
+    if one:
+        try:
+            data = sparsh_link.only(data, one)
+        except sparsh_link.SparshLinkError as exc:
+            console.print(f"[yellow]sparsh: {ONE_PHONE}={one}: {exc}; no phone this "
+                          "session[/yellow]")
+            return 2 if mode == "on" else None
+    sparsh = sparsh_link.Sparsh(mode=mode, path=path, data=data, program=program,
+                                only=(one,) if one else ())
     sparsh.shots, sparsh.shots_why = sparsh_link.shots(*model_road)
     if mode == "auto" and not sparsh_link.ready_phones(data):
         # Here, but no phone: no tools and no prompt for a phone that is

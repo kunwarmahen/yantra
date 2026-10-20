@@ -81,15 +81,46 @@ got back, without a second look. `sparsh log --phone nexus` showed no
 new step. Asked *"which phones can you work?"*, it answered *"two
 Android phones: **nexus** (Nexus 6P) and **pixel** (emulator)"*.
 
+## A lesson, the page, and a schedule's run
+
+Three things the first cut left, built since:
+
+* **A lesson taught with two phones attached** records which phone it
+  was taught on. The layer names no single kind for two phones, but
+  every Sparsh step in the lesson carries its `phone` argument, and the
+  layer lists each name's kind (`nexus -- Android`). `phone_kind(agent,
+  name)` reads it back, so the skill still says *TAUGHT ON: the
+  person's iPhone*.
+* **The page picks a phone by name.** When the session started with no
+  phone and several named ones are ready now, the phone panel offers
+  **use all of them** and **only NAME** for each
+  (`POST /api/phone/use {"name": ...}`). Once one is chosen, the panel
+  says *This session works only pixel*.
+* **A schedule's run gets only its phone.** `$YANTRA_PHONE=NAME` keeps
+  any session to one named phone. Samay sets it for a schedule that
+  names its phone, which is the one Dvara checked free before the run,
+  so a run made on Yantra's page can't open another phone's apps.
+
+LIVE RECEIPT, the Nexus 6P and the emulator, both named:
+
+```
+$ YANTRA_PHONE=nexus uv run yantra --provider ollama --model qwen3.8-64k:latest "Which phones can you work? One line."
+sparsh: 12 tool(s); phone nexus: 84B7N16128001616 (Nexus_6P); screenshots on ...
+Your Nexus 6P (Android, device 84B7N16128001616) — that's the only phone I can work with.
+```
+
+On the page, started with Sparsh reporting no phone and then both,
+headless Chrome showed the panel's *use all of them / only nexus / only
+pixel*. `only pixel` answered *"sparsh: 12 tool(s); phone pixel:
+emulator-5554"*, and the server it started ran `sparsh mcp ... --phone
+pixel`.
+
 ## What is not here yet
 
 * A real iPhone and a real Android in one session. The iPhone line in
   the prompt is the same one a lone iPhone gets; it has only been tested
   in `tests/test_sparsh_link.py`.
-* A lesson taught with two phones attached. `phone_kind`
-  ([note 133](133-taught-once-for-both-phones.md)) reads one phone's
-  kind back from the layer and says "" for two, so such a skill doesn't
-  record which phone it was taught on. The `phone` argument of
-  `watch_phone` would say.
-* Choosing a phone by name from the page. `/phone use NAME` is
-  terminal-only. The panel's **use this phone** starts all of them.
+* ~~A lesson taught with two phones attached.~~ Built: the kind of the
+  phone its steps named (above).
+* ~~Choosing a phone by name from the page.~~ Built: **only NAME** in
+  the phone panel (above).
