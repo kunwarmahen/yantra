@@ -596,6 +596,12 @@ uv run yantra --tool-select 0                          # opt out of auto-enable
 # (.env equivalent: YANTRA_TOOLS_PER_TURN=12)
 ```
 
+The same rule (`select_when_many`) runs on the page and on a chat road
+that builds its agents itself, once the turn's MCP servers are in, so a
+person who keeps connecting accounts never overflows a local model's
+window. A package sets its own width with `[tools] per_turn` (`0` sends
+every tool).
+
 Trim tools you never want — not sent, not executed, not even suggested
 by discovery ([.env.example](.env.example)):
 

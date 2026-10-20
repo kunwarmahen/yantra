@@ -919,7 +919,10 @@ Past about twenty tools, model selection accuracy hits a cliff, so only
 the top-K best-matching tools are **sent** each turn (BM25 over name and
 description). The autonomy floor always loads regardless, and calling any
 real tool by its exact name loads it on the spot — so a selection miss
-costs nothing. ([notes/17](notes/17-tool-selection.md))
+costs nothing. The page and the chat through Dvara do the same, so adding
+accounts never needs a change to the agent; a package can set its own
+width with `[tools] per_turn` (`0` sends every tool).
+([notes/17](notes/17-tool-selection.md))
 
 ```bash
 uv run yantra --mcp-config big.json --tool-select 12
