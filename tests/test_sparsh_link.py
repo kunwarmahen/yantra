@@ -19,6 +19,9 @@ Also designed against:
   tools and no prompt; asked for by name, it connects and says so.
 * **A Sparsh that speaks another format.** Refused, never guessed at.
 * **A tool Sparsh didn't name.** It keeps its own hint (pessimistic).
+* **Two phones mistaken for one.** With several named, the prompt says
+  which is which kind and that one's numbers mean nothing on another;
+  the startup line names each; ``/phone use NAME`` serves only that one.
 * **A phone's screen sent to a cloud model unasked.** Screenshots of
   screens the list can't read go to a local model that can see; to a
   cloud one only with YANTRA_PHONE_SHOTS=on; and a switch to a cloud
@@ -733,3 +736,39 @@ class TestTheAppsRules:
     def test_the_startup_line_names_a_connection_on_the_phone(self):
         assert announce(setu_said(x_on_phone()), {}) == \
             "setu: x:personal (on the phone) -- via test"
+
+
+# -- several phones, each by a name -------------------------------------------
+
+TWO_NAMED = {
+    "format": sparsh_link.FORMAT, "mcp": {"command": "sparsh", "args": ["mcp"]},
+    "phones": [{"serial": "84B7N16128001616", "state": "device", "model": "Nexus_6P",
+                "name": "nexus"},
+               {"serial": "http://127.0.0.1:8100", "state": "device", "model": "iPhone",
+                "name": "iphone"}],
+    "named": [{"name": "nexus", "where": "84B7N16128001616", "kind": "Android"},
+              {"name": "iphone", "where": "http://127.0.0.1:8100", "kind": "iPhone"}],
+}
+
+
+def test_two_named_phones_are_told_apart_in_the_prompt():
+    text = sparsh_link.prompt_text(TWO_NAMED)
+    assert "There are 2 phones: nexus -- Android; iphone -- iPhone." in text
+    assert "Numbers from one phone's screen mean nothing on another" in text
+    assert "An iPhone has no Back key" in text
+    one = sparsh_link.prompt_text(sparsh_link.only(TWO_NAMED, "nexus"))
+    assert "There are" not in one and "iPhone has no Back" not in one
+
+
+def test_the_startup_line_names_each_phone():
+    said = sparsh_link.announce(TWO_NAMED, 12, "sparsh")
+    assert "phone nexus: 84B7N16128001616 (Nexus_6P), iphone: http://127.0.0.1:8100" in said
+
+
+def test_using_one_named_phone_serves_only_that_one():
+    config = sparsh_link.server_config(TWO_NAMED, phone="iphone")
+    assert config.args == ["mcp", "--phone", "iphone"]
+    assert sparsh_link.server_config(TWO_NAMED).args == ["mcp"]
+    with pytest.raises(sparsh_link.SparshLinkError, match="no phone is called 'pixel' "
+                                                          r"\(nexus, iphone\)"):
+        sparsh_link.only(TWO_NAMED, "pixel")

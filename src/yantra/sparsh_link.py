@@ -46,6 +46,14 @@ what it would tap ringed -- never the model's numbered list, which on
 a real phone was forty-one lines of a dialler's keys. A tool Sparsh
 doesn't name keeps the server's hint.
 
+SEVERAL PHONES, EACH BY A NAME. Sparsh can be given several phones
+(``$SPARSH_PHONES``, its phones.py): one server still, so the tools keep
+their names and everything above holds unchanged, and each tool takes
+``phone``. Its report says the names (``named``); the prompt says which
+is which kind -- an iPhone's Back is a swipe -- and that a number from
+one phone's screen means nothing on another. ``/phone use NAME`` starts
+the tools with only that phone (``sparsh mcp --phone NAME``).
+
 THE PAGE PEEKS, IT DOESN'T LOOK. The phone panel shows the phones, the
 rules in force, and on request the screen as it is now -- the list and
 a screenshot -- through ``sparsh look --peek``, a separate program run
@@ -217,14 +225,17 @@ def load(mode: str, path: str | None = None,
 
 def server_config(data: dict[str, Any], shots: bool = False,
                   app_rules: dict[str, Any] | None = None,
-                  grants: list[str] | None = None) -> MCPServerConfig:
+                  grants: list[str] | None = None, phone: str = "") -> MCPServerConfig:
     """``grants``: held taps a schedule may do without a yes, as the person
     accepted them ("send in Messages when the screen shows 555-0123"),
-    for a run nobody watches -- Sparsh checks each one (its rules.py)."""
+    for a run nobody watches -- Sparsh checks each one (its rules.py).
+    ``phone``: one of the phones Sparsh names, the only one served."""
     mcp = data["mcp"]
     args = list(mcp.get("args") or [])
     if shots and data.get("shots"):
         args.append(str(data["shots"]))
+    if phone:
+        args += ["--phone", phone]                    # of the phones named, this one only
     env = {APP_RULES: json.dumps(app_rules)} if app_rules else {}
     if grants:
         env[GRANTS] = json.dumps(list(grants))
@@ -278,12 +289,34 @@ def _can_see(base_url: str, model: str) -> bool:
         return False
 
 
+def named(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """The phones Sparsh was given names for (``$SPARSH_PHONES``): each
+    ``{name, where, kind}``, answering or not. [] when none is named --
+    then the phone is the one that answers."""
+    return [n for n in data.get("named") or [] if isinstance(n, dict) and n.get("name")]
+
+
+def name_of(data: dict[str, Any], name: str) -> dict[str, Any] | None:
+    return next((n for n in named(data) if n["name"] == name), None)
+
+
+def only(data: dict[str, Any], name: str) -> dict[str, Any]:
+    """Sparsh's report narrowed to one named phone (``/phone use NAME``)."""
+    found = name_of(data, name)
+    if found is None:
+        names = ", ".join(n["name"] for n in named(data)) or "none are named"
+        raise SparshLinkError(f"no phone is called {name!r} ({names})")
+    return {**data, "named": [found],
+            "phones": [p for p in data.get("phones") or [] if p.get("serial") == found["where"]]}
+
+
 def _phone_words(data: dict[str, Any]) -> str:
     phones = ready_phones(data)
     if not phones:
         why = data.get("adb")
         return ("no phone attached" if why in (None, "ok") else f"no phone ({why})")
-    return ", ".join(f"{p.get('serial')} ({p.get('model') or '?'})" for p in phones)
+    return ", ".join((f"{p['name']}: " if p.get("name") else "")
+                     + f"{p.get('serial')} ({p.get('model') or '?'})" for p in phones)
 
 
 def _is_iphone(phone: dict[str, Any]) -> bool:
@@ -362,6 +395,15 @@ def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
                      "one to find out what they are. To act on what only the picture "
                      "shows, `tap_at` its spot -- x and y from 0 to 1000 across and down "
                      "the picture. It is held for the person, who sees the spot ringed.")
+    several = [n for n in named(data) if any(p.get("serial") == n.get("where")
+                                             for p in phones)]
+    if len(several) > 1:
+        which = "; ".join(f"{n['name']} -- {n.get('kind') or 'phone'}" for n in several)
+        lines.append(f"There are {len(several)} phones: {which}. Every tool but `confirm` "
+                     "and `describe_hold` says which with `phone`, and every answer starts "
+                     "\"Phone: NAME\". If the person didn't say which phone, ask -- or use "
+                     "the one the task's app is on. Numbers from one phone's screen mean "
+                     "nothing on another.")
     if any(_is_iphone(p) for p in phones):
         lines.append("5. An iPhone has no Back key: `press_key` back swipes in from the "
                      "left edge. If the screen doesn't change, tap the app's own Back, "
@@ -446,6 +488,8 @@ class Sparsh:
     #: Screenshots of unreadable screens to the model, and why (``shots``).
     shots: bool = False
     shots_why: str = ""
+    #: Of the phones Sparsh names, the one this session uses ("" = all).
+    only: str = ""
 
     def connect(self, manager: Any, agent: Any, grants: list[str] | None = None) -> int:
         """Start the server, set what asks, write the prompt layer.
@@ -455,7 +499,8 @@ class Sparsh:
 
         assert self.data is not None
         if SERVER not in manager.sessions:
-            config = server_config(self.data, self.shots, app_rules_of(agent), grants)
+            config = server_config(self.data, self.shots, app_rules_of(agent), grants,
+                                   phone=self.only)
             self.tools = [n for n in manager.connect(config, origin="sparsh")
                           if n in agent.registry]
             if self.sees():
@@ -497,16 +542,20 @@ class Sparsh:
         """Whether the model is shown screenshots (this Sparsh can send them)."""
         return self.shots and bool((self.data or {}).get("shots"))
 
-    def use_now(self, manager: Any, agent: Any) -> str:
+    def use_now(self, manager: Any, agent: Any, name: str = "") -> str:
         """A phone attached after the start: ask Sparsh again and, with a
         phone ready, start the tools now. Returns the startup line it
         would have printed. Raises SparshLinkError (nothing to use) and
-        MCPError (the server would not start)."""
+        MCPError (the server would not start). ``name``: of the phones
+        Sparsh names, only this one (``/phone use nexus``)."""
         self.refresh()
         if self.data is None:
             raise SparshLinkError(self.error or "Sparsh was not found")
         if self.connected:
             return f"sparsh: already in use -- phone {_phone_words(self.data)}"
+        if name:
+            self.data = only(self.data, name)
+            self.only = name
         if not ready_phones(self.data):
             raise SparshLinkError("no phone is ready: plug one in with USB debugging on "
                                   "(and allow it on the phone), or start the emulator")
@@ -539,6 +588,7 @@ class Sparsh:
         return {"mode": self.mode, "found": self.data is not None, "error": self.error,
                 "program": self.program, "version": data.get("version"),
                 "adb": data.get("adb"), "phones": list(data.get("phones") or []),
+                "named": named(data),
                 "ready": [p.get("serial") for p in ready_phones(data)],
                 "rules": {"path": rules.get("path"), "exists": bool(rules.get("exists")),
                           "never": list(rules.get("never") or []),

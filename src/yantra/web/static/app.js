@@ -2336,7 +2336,7 @@ function renderPhone() {
     dot.className = ph.state === "device" ? "dot" : "dot dead";
     dot.title = ph.state;
     const main = document.createElement("div");
-    main.innerHTML = `<div class="conn-title">${esc(ph.model || ph.serial)}</div>
+    main.innerHTML = `<div class="conn-title">${ph.name ? `<b>${esc(ph.name)}</b> · ` : ""}${esc(ph.model || ph.serial)}</div>
       <div class="conn-sub"><code>${esc(ph.serial)}</code> · ${esc(ph.note || PHONE_STATE[ph.state] || ph.state)}</div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";

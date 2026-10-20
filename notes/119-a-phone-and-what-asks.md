@@ -212,6 +212,8 @@ has the rest.
   hold that is gone is now never shown
   ([note 124](124-a-question-with-no-step-behind-it.md)).
 
+* ~~One phone at a time.~~ Several, each by a name, one server for all
+  ([note 134](134-several-phones-by-name.md)).
 * A phone for scheduled runs, which needs an answer to "held, with
   nobody to ask" better than refusing.
 * ~~A Wi-Fi phone that stopped answering vanished from the panel.~~ A

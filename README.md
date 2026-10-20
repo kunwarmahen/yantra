@@ -893,7 +893,10 @@ included. With Sparsh on `PATH` but no phone at the start, a session
 says nothing and adds no tools. Attach one later and press **use this
 phone** in the panel, or type `/phone use`, to add them without a
 restart. `/phone` says what's attached, and `/phone log` shows the last
-steps. To teach it a phone job, `/learn start` (tell it each step) or
+steps. Several phones at once, each named in `SPARSH_PHONES`
+(`nexus=…,iphone=…`): the model is told which is which, every answer
+says whose screen it is, and `/phone use NAME` keeps a session to one
+of them ([notes/134](notes/134-several-phones-by-name.md)). To teach it a phone job, `/learn start` (tell it each step) or
 `/learn watch` (do each step yourself and say next; Sparsh's
 `watch_phone` and `watched` tell it what you did) and then `/learn done`
 ([notes/129](notes/129-taught-step-by-step.md)); the skill it keeps
@@ -2646,7 +2649,10 @@ src/yantra/
 │                   for a hold that is gone is never a card
 │                   ([notes/124](notes/124-a-question-with-no-step-behind-it.md));
 │                   phone_kind reads back which phone the layer names,
-│                   for a lesson ([notes/133](notes/133-taught-once-for-both-phones.md))
+│                   for a lesson ([notes/133](notes/133-taught-once-for-both-phones.md));
+│                   several named phones told apart in the prompt and on
+│                   /phone, /phone use NAME for one
+│                   ([notes/134](notes/134-several-phones-by-name.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled,

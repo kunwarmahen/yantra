@@ -107,9 +107,10 @@ HELP = """[bold]commands[/bold]
                      found something)
   /phone             the phone the agent can work through Sparsh: what is
                      attached, whether it is in use, the rules in force
-  /phone use         start the phone tools for a phone attached since the
-                     start (Sparsh found no phone then)
-  /phone log         the last steps on the phone, the agent's and yours
+  /phone use [NAME]  start the phone tools for a phone attached since the
+                     start (Sparsh found no phone then); NAME: of several
+                     named phones ($SPARSH_PHONES), only that one
+  /phone log [NAME]  the last steps on the phone, the agent's and yours
   /mcp               list connected mcp servers
   /mcp add ...       connect a server MID-SESSION: /mcp add NAME URL, or
                      /mcp add NAME COMMAND [ARGS...] (asks whether to save)
@@ -1675,20 +1676,31 @@ class Repl:
             self.console.print("[yellow]no phone: Sparsh isn't linked to this session "
                                "(put `sparsh` on PATH, or start with --sparsh PATH)[/yellow]")
             return
-        if arg == "use":
+        verb, _, name = arg.partition(" ")
+        name = name.strip()
+        if verb == "use":
             if self.mcp is None:
                 self.console.print("[red]this session cannot start tools[/red]")
                 return
             try:
-                said = sparsh.use_now(self.mcp, self.agent)
+                said = sparsh.use_now(self.mcp, self.agent, name)
             except (SparshLinkError, MCPError) as exc:
                 self.console.print(f"[yellow]sparsh: {escape(str(exc))}[/yellow]")
                 return
             self.console.print(f"[green]{escape(said)}[/green]")
             return
         sparsh.refresh()            # a phone plugged in since shows up
-        if arg == "log":
-            ready = sparsh.describe()["ready"]
+        if verb == "log":
+            d = sparsh.describe()
+            ready = d["ready"]
+            if name:
+                where = next((n["where"] for n in d["named"] if n["name"] == name), None)
+                if where is None:
+                    names = ", ".join(n["name"] for n in d["named"]) or "none are named"
+                    self.console.print(f"[yellow]no phone is called {escape(name)} "
+                                       f"({escape(names)})[/yellow]")
+                    return
+                ready = [where]
             if not ready:
                 self.console.print("no phone is attached")
                 return
@@ -1707,15 +1719,25 @@ class Repl:
                     f"{step.get('outcome')}" + (f" ({said[:120]})" if said else "")))
             return
         if arg:
-            self.console.print("[red]usage: /phone, /phone use, /phone log[/red]")
+            self.console.print("[red]usage: /phone, /phone use [NAME], "
+                               "/phone log [NAME][/red]")
             return
         d = sparsh.describe()
         for phone in d["phones"]:
             note = f"  ({phone['note']})" if phone.get("note") else ""
-            self.console.print(f"phone: {phone.get('serial')}  {phone.get('model') or '?'}  "
-                               f"{phone.get('state')}{note}", markup=False)
-        if not d["phones"]:
+            name = f"{phone['name']}: " if phone.get("name") else ""
+            self.console.print(f"phone: {name}{phone.get('serial')}  "
+                               f"{phone.get('model') or '?'}  {phone.get('state')}{note}",
+                               markup=False)
+        seen = {p.get("serial") for p in d["phones"]}
+        for each in d["named"]:
+            if each.get("where") not in seen:
+                self.console.print(f"phone: {each['name']}: {each.get('where')}  "
+                                   f"{each.get('kind') or '?'}  not found", markup=False)
+        if not d["phones"] and not d["named"]:
             self.console.print("phone: none attached")
+        if sparsh.only:
+            self.console.print(f"this session uses only {sparsh.only}", markup=False)
         self.console.print("in use: " + (f"yes, {d['tools']} tool(s)" if d["connected"] else
                                          "no" + (" -- /phone use to start" if d["ready"]
                                                  else "")))
