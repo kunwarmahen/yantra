@@ -2436,8 +2436,13 @@ export SPARSH_PHONES="nexus=84B7N16128001616,iphone=http://127.0.0.1:8100"
 uv run yantra --prompt "On the nexus, open Settings and tell me the first item."
 ```
 
-The startup line names each (`phone nexus: 84B7N16128001616 (Nexus_6P),
-iphone: …`). Every phone answer starts `Phone: NAME`, so the agent never
+The startup line names each, and says whether it's connected right now
+(`phone nexus: 84B7N16128001616 (Nexus_6P) connected, iphone:
+http://127.0.0.1:8100 (iPhone) not connected`). The phone panel on the
+page says the same, with what to do for one that isn't connected. A
+phone attached under none of the names (the Nexus moved to Wi-Fi, but
+the name still has its cable's serial) is listed as one the agent can't
+reach: name it by the address it has now. Every phone answer starts `Phone: NAME`, so the agent never
 mixes up two lists that look alike. To keep a session to one phone, use
 `/phone use NAME`, **only NAME** in the phone panel, or
 `YANTRA_PHONE=NAME`. A lesson taught with both attached still records

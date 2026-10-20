@@ -32,9 +32,12 @@ iPhone is among them. When the phones aren't named, nothing changes.
 
 ## What the person sees
 
-* The startup line names each phone: *"sparsh: 12 tool(s); phone
-  nexus: 84B7N16128001616 (Nexus_6P), pixel: emulator-5554
-  (sdk_gphone64_x86_64)"*.
+* The startup line names each phone and says whether it's connected
+  now: *"sparsh: 12 tool(s); phone nexus: 84B7N16128001616 (Nexus_6P)
+  connected, pixel: emulator-5554 (sdk_gphone64_x86_64) connected"*. A
+  named phone Sparsh didn't find is said *not connected* rather than
+  left out (`standing()` in sparsh_link.py), so nothing goes missing
+  without a word.
 * `/phone` puts the name in front of each phone. A named phone that
   isn't answering is listed as `not found`, so a phone in a drawer
   isn't silently missing.
@@ -114,6 +117,35 @@ headless Chrome showed the panel's *use all of them / only nexus / only
 pixel*. `only pixel` answered *"sparsh: 12 tool(s); phone pixel:
 emulator-5554"*, and the server it started ran `sparsh mcp ... --phone
 pixel`.
+
+## Connected or not, as it is now
+
+A real Nexus 6P and a real iPhone 17, named the way Sarathi had them
+(`nexus=84B7N16128001616,iphone=http://127.0.0.1:8100`). The Nexus had
+been moved to Wi-Fi, so adb listed it as `192.168.1.160:5555`, not by
+its cable's serial. The old startup line named only the iPhone, and
+nothing said "nexus" was out of reach. Now:
+
+```
+sparsh: 12 tool(s); phone nexus: 84B7N16128001616 (Android) not connected,
+  iphone: http://127.0.0.1:8100 (iPhone) connected -- via .../sparsh
+```
+
+The page, in headless Chrome: the chip read *1 of 2 phones*, its title
+*nexus not connected, iphone connected*. The panel listed three rows:
+
+```
+Nexus_6P        192.168.1.160:5555 · attached under no name — the agent reaches
+                only the named phones; name it in SPARSH_PHONES
+iphone · iPhone http://127.0.0.1:8100 · connected
+nexus · Android 84B7N16128001616 · not connected — plug it in with USB debugging on
+```
+
+NO NAME, NO REACH. With phones named, `sparsh mcp` serves only those, so
+a phone under no name is grey even while adb sees it. Shown green, it
+would say the agent can work a phone its tools can't reach. Named by
+the address it has now (`nexus=192.168.1.160:5555`), the same Nexus
+reads *nexus: 192.168.1.160:5555 (Nexus_6P) connected*.
 
 ## What is not here yet
 

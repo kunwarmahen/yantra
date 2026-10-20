@@ -297,6 +297,27 @@ def named(data: dict[str, Any]) -> list[dict[str, Any]]:
     return [n for n in data.get("named") or [] if isinstance(n, dict) and n.get("name")]
 
 
+def standing(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Each named phone as it is now: ``{name, where, kind, model, state,
+    connected, note}``. A named phone Sparsh didn't find is ``"not
+    found"``, so a phone that came unplugged stays on the list, said to be
+    away, instead of dropping off it."""
+    found = {p.get("serial"): p for p in data.get("phones") or []}
+    out = []
+    for each in named(data):
+        phone = found.get(each.get("where")) or {}
+        state = phone.get("state") or "not found"
+        out.append({**each, "model": phone.get("model") or "", "state": state,
+                    "connected": state == "device", "note": phone.get("note") or ""})
+    return out
+
+
+def _standing_words(data: dict[str, Any]) -> str:
+    return ", ".join(f"{s['name']}: {s.get('where')} ({s['model'] or s.get('kind') or '?'}) "
+                     + ("connected" if s["connected"] else "not connected")
+                     for s in standing(data))
+
+
 def name_of(data: dict[str, Any], name: str) -> dict[str, Any] | None:
     return next((n for n in named(data) if n["name"] == name), None)
 
@@ -367,7 +388,10 @@ def announce(data: dict[str, Any], tools: int, program: str, shots: str = "") ->
     soon = ((data.get("wda") or {}).get("note") or "").strip()
     soon = f"; {soon}" if soon else ""
     shots = f"; {shots}" if shots else ""
-    return (f"sparsh: {tools} tool(s); phone {_phone_words(data)}{kept}{shots}{soon}"
+    # Named phones each say whether they're connected now, so one that is
+    # away is said, not left out.
+    phone = _standing_words(data) if named(data) else _phone_words(data)
+    return (f"sparsh: {tools} tool(s); phone {phone}{kept}{shots}{soon}"
             f" -- via {program}")
 
 
@@ -600,7 +624,8 @@ class Sparsh:
         return {"mode": self.mode, "found": self.data is not None, "error": self.error,
                 "program": self.program, "version": data.get("version"),
                 "adb": data.get("adb"), "phones": list(data.get("phones") or []),
-                "named": named(data), "only": list(self.only),
+                "named": named(data), "standing": standing(data),
+                "only": list(self.only),
                 "ready": [p.get("serial") for p in ready_phones(data)],
                 "rules": {"path": rules.get("path"), "exists": bool(rules.get("exists")),
                           "never": list(rules.get("never") or []),

@@ -2190,17 +2190,24 @@ $("#phone-backdrop").addEventListener("click", (e) => {
 });
 
 const PHONE_STATE = {
-  device: "ready",
+  device: "connected",
   unauthorized: "waiting — unlock the phone and allow USB debugging",
   offline: "not answering — unplug it and plug it back in",
 };
 
 function phoneChip(d) {
   const ready = d.ready || [];
+  const standing = d.standing || [];
+  const away = standing.filter((s) => !s.connected);
   $("#phone-count").textContent = !ready.length ? "no phone"
     : !d.connected ? "phone · not in use"
+    // named phones, some away: how many of them are connected now
+    : away.length ? `${standing.length - away.length} of ${standing.length} phones`
     : ready.length === 1 ? "phone" : `${ready.length} phones`;
-  $("#chip-phone").title = "phone — " + (!ready.length
+  $("#chip-phone").title = "phone — " + (standing.length
+    ? standing.map((s) => `${s.name} ${s.connected ? "connected" : "not connected"}`).join(", ")
+      + (d.connected ? "" : "; open this to let the agent use them")
+    : !ready.length
     ? "no phone is attached right now"
     : d.connected ? `the agent can work ${ready.join(", ")} through Sparsh`
     : `${ready.join(", ")} is attached; open this to let the agent use it`);
@@ -2345,9 +2352,12 @@ function renderPhone() {
     body.append(box);
   }
   const phones = d.phones || [];
-  section(body, phones.length === 1 ? "1 phone" : `${phones.length} phones`,
-    "what adb sees on this computer now");
-  if (!phones.length) {
+  // A named phone Sparsh didn't find stays on the list, said to be away
+  const away = (d.standing || []).filter((s) => s.state === "not found");
+  const counted = phones.length + away.length;
+  section(body, counted === 1 ? "1 phone" : `${counted} phones`,
+    "each one, connected or not, as it is now");
+  if (!counted) {
     const p = document.createElement("div");
     p.className = "conn-foot";
     p.innerHTML = "none attached — plug a phone in with USB debugging on, or start the "
@@ -2358,11 +2368,17 @@ function renderPhone() {
     const row = document.createElement("div");
     row.className = "conn-card phone-row";
     const dot = document.createElement("span");
-    dot.className = ph.state === "device" ? "dot" : "dot dead";
-    dot.title = ph.state;
+    // With phones named, one under no name is attached but not this
+    // session's: Sparsh serves only the named ones
+    const stray = (d.standing || []).length && !ph.name;
+    dot.className = ph.state === "device" && !stray ? "dot" : "dot dead";
+    dot.title = stray ? "under no name" : ph.state;
+    const said = stray && ph.state === "device"
+      ? "attached under no name — the agent reaches only the named phones; name it in SPARSH_PHONES"
+      : ph.note || PHONE_STATE[ph.state] || ph.state;
     const main = document.createElement("div");
     main.innerHTML = `<div class="conn-title">${ph.name ? `<b>${esc(ph.name)}</b> · ` : ""}${esc(ph.model || ph.serial)}</div>
-      <div class="conn-sub"><code>${esc(ph.serial)}</code> · ${esc(ph.note || PHONE_STATE[ph.state] || ph.state)}</div>`;
+      <div class="conn-sub"><code>${esc(ph.serial)}</code> · ${esc(said)}</div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";
     if (ph.state === "device") {
@@ -2382,6 +2398,23 @@ function renderPhone() {
     body.append(row);
     const seen = phone.seen[ph.serial];
     if (seen) body.append(phoneScreen(seen));
+  }
+  for (const s of away) {
+    const row = document.createElement("div");
+    row.className = "conn-card phone-row";
+    const dot = document.createElement("span");
+    dot.className = "dot dead";
+    dot.title = "not connected";
+    const how = s.kind === "iPhone"
+      ? "plug it in, unlock it, and run sparsh iphone"
+      : String(s.where || "").includes(":")
+        ? "on Wi-Fi it stopped answering: plug it in and run sparsh tcpip"
+        : "plug it in with USB debugging on";
+    const main = document.createElement("div");
+    main.innerHTML = `<div class="conn-title"><b>${esc(s.name)}</b> · ${esc(s.kind || "phone")}</div>
+      <div class="conn-sub"><code>${esc(s.where)}</code> · not connected — ${esc(how)}</div>`;
+    row.append(dot, main);
+    body.append(row);
   }
 
   const r = d.rules || {};

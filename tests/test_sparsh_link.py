@@ -765,7 +765,29 @@ def test_two_named_phones_are_told_apart_in_the_prompt():
 
 def test_the_startup_line_names_each_phone():
     said = sparsh_link.announce(TWO_NAMED, 12, "sparsh")
-    assert "phone nexus: 84B7N16128001616 (Nexus_6P), iphone: http://127.0.0.1:8100" in said
+    assert ("phone nexus: 84B7N16128001616 (Nexus_6P) connected, "
+            "iphone: http://127.0.0.1:8100 (iPhone) connected") in said
+
+
+def test_a_named_phone_that_is_away_is_said_not_connected_not_left_out():
+    """The iPhone's cable came out: the startup line named only the
+    Nexus, so nothing said the iPhone was gone."""
+    away = {**TWO_NAMED, "phones": TWO_NAMED["phones"][:1]}
+    said = sparsh_link.announce(away, 12, "sparsh")
+    assert ("nexus: 84B7N16128001616 (Nexus_6P) connected, "
+            "iphone: http://127.0.0.1:8100 (iPhone) not connected") in said
+    iphone = sparsh_link.standing(away)[1]
+    assert iphone["state"] == "not found" and not iphone["connected"]
+
+
+def test_a_named_phone_found_but_not_ready_says_why():
+    waiting = {**TWO_NAMED, "phones": [
+        {**TWO_NAMED["phones"][0], "state": "unauthorized",
+         "note": "unlock the phone and allow USB debugging"}, TWO_NAMED["phones"][1]]}
+    nexus, iphone = sparsh_link.standing(waiting)
+    assert nexus["state"] == "unauthorized" and not nexus["connected"]
+    assert nexus["note"] == "unlock the phone and allow USB debugging"
+    assert iphone["connected"]
 
 
 def test_using_one_named_phone_serves_only_that_one():

@@ -914,7 +914,11 @@ steps. Several phones at once, each named in `SPARSH_PHONES`
 (`nexus=…,iphone=…`): the model is told which is which, every answer
 says whose screen it is, and `/phone use NAME` (or **only NAME** in the
 phone panel, or `YANTRA_PHONE=NAME`) keeps a session to one of them
-([notes/134](notes/134-several-phones-by-name.md)). To teach it a phone job, `/learn start` (tell it each step) or
+([notes/134](notes/134-several-phones-by-name.md)). The startup line, the
+chip (*1 of 2 phones*) and the panel say which named phones are
+connected and which aren't: one with its cable out stays on the list as
+*not connected*, with what to do. A phone attached under none of the
+names is listed as one the agent can't reach. To teach it a phone job, `/learn start` (tell it each step) or
 `/learn watch` (do each step yourself and say next; Sparsh's
 `watch_phone` and `watched` tell it what you did) and then `/learn done`
 ([notes/129](notes/129-taught-step-by-step.md)); the skill it keeps
