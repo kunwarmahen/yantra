@@ -2415,7 +2415,8 @@ started, it says nothing and adds no phone tools. Plug one in (or start
 the emulator), then press **use this phone** in the panel, or type
 `/phone use` in the terminal. The tools are added without a restart.
 `/phone` on its own says what's attached and whether it's in use, and
-`/phone log` shows the last steps.
+`/phone log` shows the last steps (`/phone log NAME`: one of several
+named phones).
 
 **Several phones.** Name them for Sparsh, and the agent works each by
 name:

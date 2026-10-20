@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2819 tests. The
+The harness underneath is complete and covered by 2937 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -899,7 +899,7 @@ phone (`sparsh log`), the agent's and yours, held and refused ones
 included. With Sparsh on `PATH` but no phone at the start, a session
 says nothing and adds no tools. Attach one later and press **use this
 phone** in the panel, or type `/phone use`, to add them without a
-restart. `/phone` says what's attached, and `/phone log` shows the last
+restart. `/phone` says what's attached, and `/phone log [NAME]` shows the last
 steps. Several phones at once, each named in `SPARSH_PHONES`
 (`nexus=…,iphone=…`): the model is told which is which, every answer
 says whose screen it is, and `/phone use NAME` (or **only NAME** in the
@@ -2426,6 +2426,9 @@ src/yantra/
 │                   conversation, this one resumes it
 │                   ([notes/88](notes/88-not-yet.md)); snapshot() is the
 │                   payload a save appends, shared with history.py
+├── images.py       --image PATH and pictures from tools: read, checked
+│                   (png/jpeg/gif/webp, 5 MB), and whether this model may
+│                   take one at all ([notes/15](notes/15-images.md))
 ├── history.py      every conversation kept by itself, to read again: one row
 │                   per conversation rewritten after each turn (terminal and
 │                   page), an FTS5 index of what was said, /chats and the
@@ -2480,7 +2483,9 @@ src/yantra/
 │                   scoped child instead (run_skill), which is the only place
 │                   allowed-tools is ENFORCED rather than announced; /skills
 │                   off|on + $YANTRA_DISABLED_SKILLS are the operator's switch
-│                   ([notes/30](notes/30-skills.md))
+│                   ([notes/30](notes/30-skills.md)); loader.py reads one
+│                   folder (the rules for SKILL.md), registry.py keeps the
+│                   live roster -- the person's own marked [yours]
 │                   learn.py: a SOLVED turn written down as a skill -- counted
 │                   gate (finished, 4+ calls, no skill followed), ONE fresh
 │                   small model call that decides and writes, the script
@@ -3170,7 +3175,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2819 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2937 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
