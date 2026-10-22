@@ -2810,6 +2810,11 @@ function signinBox() {
         : s.event === "answered" ? "Thanks — finishing…"
         : s.event === "window"
         ? "A browser window opened on this computer: sign in there, then close the window."
+        : s.event === "opened" ? "The sign-in window is open on a device: sign in there."
+        : s.event === "link"
+        ? `Open the sign-in window: the site, shown from the computer running Yantra.
+          Sign in there; it ends by itself, or press I've signed in.`
+        : s.url && s.window ? "The sign-in opens in a window on the computer running Yantra…"
         : s.url ? "Open the sign-in, allow access, then come back here."
         : s.site ? "Taking a quick look at the site signed out first…" : "Starting…"}</span>`;
     if (s.event === "ask") {
@@ -2821,11 +2826,13 @@ function signinBox() {
         box.append(b);
       }
     }
-    if (s.url) {
+    // a sign-in page bound for the streamed window waits for its link
+    if (s.url && !(s.event === "url" && s.window)) {
       const a = document.createElement("a");
       a.className = "m-btn primary";
       a.href = s.url; a.target = "_blank"; a.rel = "noopener";
-      a.textContent = "open the sign-in";
+      a.textContent = ["link", "opened"].includes(s.event) || s.expires_at
+        ? "open the sign-in window" : "open the sign-in";
       box.append(a);
     }
     const cancel = document.createElement("button");
@@ -2850,14 +2857,16 @@ async function answerSignin(yes) {
 }
 
 // A site Setu has no connector for: sign in, and Setu writes cautious
-// rules for it (Read only, slow, buying handed to you).
+// rules for it (Read only, slow, buying handed to you). From another
+// device the window is Setu's streamed one, when its link opens there.
 function addSiteBox(d) {
   const box = document.createElement("div");
   box.className = "conn-box";
   box.innerHTML = `<span><b>Another site?</b> Type its address. A window opens to
-    sign in; Setu then writes cautious rules for it: Read only, slow, and buying,
+    sign in${d.local ? "" : ` — on the computer running Yantra, shown to you here through
+    a link`}; Setu then writes cautious rules for it: Read only, slow, and buying,
     paying or deleting always handed to you.</span>`;
-  if (!d.local) {
+  if (!canSignIn(d)) {
     const cmd = document.createElement("code");
     cmd.textContent = "setu connect --site example.com --as personal";
     box.append(cmd);
@@ -3009,7 +3018,7 @@ function connectedCard(row, c) {
   form.append(sel, go);
   change.onclick = () => form.classList.toggle("hidden");
   card.append(form);
-  if (!conn.data.local) card.append(commandLine(row.connector, row.account, null));
+  if (!canSignIn(conn.data)) card.append(commandLine(row.connector, row.account, null));
   return card;
 }
 
@@ -3172,15 +3181,22 @@ function connectorCard(c, d) {
   const go = document.createElement("button");
   go.className = "m-btn primary";
   go.textContent = c.connected ? "connect another" : "connect";
-  go.disabled = !c.ready || !d.local || Boolean(conn.signin?.running);
+  go.disabled = !c.ready || !canSignIn(d) || Boolean(conn.signin?.running);
   go.title = !c.ready ? c.not_ready
-    : !d.local ? "signing in works from a page on the computer running Yantra"
+    : !canSignIn(d) ? "signing in works from a page on the computer running Yantra"
+    : !d.local ? "opens the sign-in on the computer running Yantra, streamed to you here"
     : "opens the site's own sign-in; you choose there";
   go.onclick = () => startSignin(c.id, account.value.trim() || "personal", sel.value);
   form.append(account, sel, go);
   card.append(form, note);
-  if (!d.local) card.append(commandLine(c.id, account.value, sel.value));
+  if (!canSignIn(d)) card.append(commandLine(c.id, account.value, sel.value));
   return card;
+}
+
+// A sign-in can start from this page: it is on the computer running
+// Yantra, or Setu's streamed window makes a link this device opens.
+function canSignIn(d) {
+  return Boolean(d.local || d.window);
 }
 
 function commandLine(connector, account, level) {

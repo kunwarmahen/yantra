@@ -1317,6 +1317,19 @@ class Setu:
 SITE_RE = re.compile(r"^(https?://)?[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z0-9.-]+(:\d+)?/?$")
 ACCOUNT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
 
+
+def window_reaches_another_device() -> bool:
+    """Whether Setu's streamed window (``SETU_WINDOW_*``, read by the
+    ``setu`` this process starts) makes a link another device can open:
+    an address in ``SETU_WINDOW_URL`` or a name in ``SETU_WINDOW_NAME``,
+    or a host that is not this computer alone. Setu's own test, said
+    again here, so a page on a phone is offered a sign-in only when the
+    link it would get opens there."""
+    host = os.environ.get("SETU_WINDOW_HOST", "").strip()
+    return bool(os.environ.get("SETU_WINDOW_URL", "").strip()
+                or os.environ.get("SETU_WINDOW_NAME", "").strip()
+                or (host and host not in ("127.0.0.1", "localhost", "::1")))
+
 #: How long ``setu disconnect`` / ``setu config`` may take (a revoke is
 #: one request to Google).
 COMMAND_TIMEOUT = 30.0
@@ -1462,10 +1475,17 @@ class SignIn:
     Setu may then send ``ask`` -- its look at the page could not tell
     whether the person signed in -- and waits for ``answer``. The ref is
     the address until ``connected`` names the site's new id.
+
+    With ``remote``, the person is on another device (a page opened by
+    the house's name, a phone): ``--remote``, and the sign-in -- a site's
+    window, or Google's page -- runs on this computer in Setu's streamed
+    window, whose address arrives as a ``link`` event. A new site's
+    window ends on the person's "I've signed in", then Setu reads its
+    page as it does here.
     """
 
     def __init__(self, program: str, connector: str, account: str, level: str,
-                 on_event: Any, site: str | None = None) -> None:
+                 on_event: Any, site: str | None = None, remote: bool = False) -> None:
         if not ACCOUNT_RE.match(account):
             raise SetuLinkError(f"account name {account!r}: letters, digits, '.', '_' "
                                 f"and '-', starting with a letter or digit")
@@ -1480,6 +1500,7 @@ class SignIn:
             argv += ["--level", level] if level else []
         else:
             argv = [program, "connect", connector, "--as", account, "--level", level, "--json"]
+        argv += ["--remote"] if remote else []
         self.process = subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True)

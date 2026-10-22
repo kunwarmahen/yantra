@@ -1110,11 +1110,15 @@ class WebSession:
         from yantra.setu_link import recipes_by_connector
         base["recipes"] = recipes_by_connector(getattr(self.agent, "skills", None))
         base["scripts"] = self.scripts_contained()
+        from yantra.setu_link import window_reaches_another_device
         return {**base, "local": local,
+                # a page on another device may still sign in: through
+                # Setu's streamed window, when its link opens over there
+                "window": window_reaches_another_device(),
                 "signin": ({"ref": signin.ref, "running": signin.running,
                             **{k: v for k, v in signin.last.items()
                                if k in ("event", "url", "message", "email",
-                                        "level_label")}}
+                                        "level_label", "expires_at", "question")}}
                            if signin is not None else None)}
 
     def scripts_contained(self) -> dict[str, Any]:
@@ -1199,9 +1203,11 @@ class WebSession:
                                            f"update: {exc}"})
 
     def start_signin(self, connector: str, account: str, level: str,
-                     site: str | None = None) -> None:
+                     site: str | None = None, remote: bool = False) -> None:
         """Run ``setu connect --json`` -- or ``--site`` for a site Setu has
-        no connector for -- and relay it to the page."""
+        no connector for -- and relay it to the page. ``remote``: the page
+        is on another device, so the sign-in opens in Setu's streamed
+        window."""
         from yantra.setu_link import SignIn
 
         setu = self.agent.setu
@@ -1213,7 +1219,8 @@ class WebSession:
                 if not self.turn_active:
                     self._setu_settle()
 
-        self.signin = SignIn(setu.program, connector, account, level, relay, site=site)
+        self.signin = SignIn(setu.program, connector, account, level, relay, site=site,
+                             remote=remote)
 
     def _keep_conversation(self) -> None:
         """This conversation as it is now, into the log -- after every
@@ -2338,10 +2345,26 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         sync = session.setu_sync()
         return {**session.connections_state(local=is_local(req)), "sync": sync}
 
+    def remote_signin(req: Request, command: str) -> bool:
+        """Whether a sign-in from ``req`` opens in Setu's streamed window:
+        False on this computer, True on another device the window's link
+        reaches -- and refused, with the command to run here, on one it
+        does not."""
+        if is_local(req):
+            return False
+        from yantra.setu_link import window_reaches_another_device
+        if not window_reaches_another_device():
+            raise HTTPException(403, "signing in from another device needs Setu's streamed "
+                                     "window to have an address it can open (SETU_WINDOW_"
+                                     "HOST, _URL or _NAME); on the computer running Yantra, "
+                                     f"run: {command}")
+        return True
+
     @app.post("/api/connections/connect")
     async def connections_connect(req: Request) -> dict[str, Any]:
-        """Start a sign-in. Only from a page on this computer; anywhere else
-        the answer is the command to run here instead."""
+        """Start a sign-in. On another device it opens in Setu's streamed
+        window, when that window can reach the device; else the answer is
+        the command to run on this computer."""
         setu = require_setu()
         body = await req.json()
         connector = str(body.get("connector", ""))
@@ -2353,12 +2376,8 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             raise HTTPException(404, f"no installed connector {connector!r}")
         if level not in [lv["name"] for lv in spec.get("levels", [])]:
             raise HTTPException(400, f"{connector} has no access level {level!r}")
-        command = f"setu connect {connector} --as {account} --level {level}"
-        if not is_local(req):
-            raise HTTPException(403, "signing in only works from a page on the computer "
-                                     f"running Yantra -- there, run: {command}. From this "
-                                     "device, use Setu's own page (Sarathi's home page "
-                                     "links it): it shows you the sign-in in a window")
+        remote = remote_signin(req, f"setu connect {connector} --as {account} "
+                                    f"--level {level}")
         if not spec.get("ready", True):
             raise HTTPException(409, spec.get("not_ready") or "not ready to sign in")
         if session.signin is not None and session.signin.running:
@@ -2367,7 +2386,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         setu_program(setu)
         from yantra.setu_link import SetuLinkError
         try:
-            session.start_signin(connector, account, level)
+            session.start_signin(connector, account, level, remote=remote)
         except SetuLinkError as exc:
             raise HTTPException(400, str(exc)) from None
         return {"ok": True, "ref": session.signin.ref}
@@ -2375,8 +2394,8 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     @app.post("/api/connections/add-site")
     async def connections_add_site(req: Request) -> dict[str, Any]:
         """Sign in to a site Setu has no connector for; Setu writes its
-        rules once the person has signed in. Only from a page on this
-        computer -- the window opens here."""
+        rules once the person has signed in. The window opens on this
+        computer, and a page on another device is shown it streamed."""
         setu = require_setu()
         body = await req.json()
         site = str(body.get("site", "")).strip()
@@ -2384,17 +2403,14 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         level = str(body.get("level", "") or "")
         if level not in ("", "read", "write"):
             raise HTTPException(400, f"a site's levels are read and write, not {level!r}")
-        command = f"setu connect --site {site} --as {account}"
-        if not is_local(req):
-            raise HTTPException(403, "signing in only works from a page on the computer "
-                                     f"running Yantra -- there, run: {command}")
+        remote = remote_signin(req, f"setu connect --site {site} --as {account}")
         if session.signin is not None and session.signin.running:
             raise HTTPException(409, f"a sign-in to {session.signin.ref} is already "
                                      "waiting -- finish or cancel it first")
         setu_program(setu)
         from yantra.setu_link import SetuLinkError
         try:
-            session.start_signin("", account, level, site=site)
+            session.start_signin("", account, level, site=site, remote=remote)
         except SetuLinkError as exc:
             raise HTTPException(400, str(exc)) from None
         return {"ok": True, "ref": session.signin.ref}

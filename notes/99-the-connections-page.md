@@ -60,7 +60,10 @@ there, and the server refuses with the same words:
      there, run: setu connect gmail --as work --level read
 ```
 
-The refusal was chosen over a workaround on purpose. The workaround is
+The refusal was chosen over a workaround on purpose. (It has since
+been lifted: a sign-in from another device opens in Setu's streamed
+window, where `127.0.0.1` is this computer again;
+[note 136](136-a-sign-in-from-another-device.md).) The workaround is
 a web-type OAuth client with a registered public redirect, and that
 means Yantra hosting a callback. That's the design the previous section
 turned down.
@@ -221,9 +224,10 @@ the copy it had.
 
 ## What was deliberately not built
 
-* **Signing in from another device.** It needs a web-type OAuth client
-  and a public redirect. That belongs to Setu's own registered app, the
-  day it exists, and not to Yantra.
+* ~~**Signing in from another device.**~~ Done without a web-type
+  client: the sign-in runs in Setu's streamed window on this computer,
+  and the page on the other device gets its link
+  ([note 136](136-a-sign-in-from-another-device.md)).
 * **Turning a site on.** The plan's first switch installs a verified
   connector from a signed index. The index exists now and is checked,
   but installing by hash waits on where the catalog is published, so

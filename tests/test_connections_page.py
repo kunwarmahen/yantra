@@ -87,7 +87,10 @@ FAKE_SETU = """\
         site = args[args.index("--site") + 1]
         ref = site.split(".")[0] + ":" + args[args.index("--as") + 1]
         emit(event="started", ref=None, site=site, level="read", scopes=[])
-        emit(event="window", browser="chrome", url=None, login_url=None)
+        if "--remote" in args:
+            emit(event="link", url="http://beast.local:8792/w/tok", expires_at=1.0)
+        else:
+            emit(event="window", browser="chrome", url=None, login_url=None)
         emit(event="ask", question="Setu could not tell. Did you sign in?")
         if sys.stdin.readline().strip() != "yes":
             emit(event="error", message="could not tell whether you signed in")
@@ -398,12 +401,41 @@ class TestAddingASite:
         finally:
             manager.shutdown()
 
-    def test_a_page_on_another_device_is_given_the_command(self, setu, tmp_path):
+    def test_a_page_on_another_device_with_no_window_is_given_the_command(
+            self, setu, tmp_path, monkeypatch):
+        for key in ("SETU_WINDOW_HOST", "SETU_WINDOW_URL", "SETU_WINDOW_NAME"):
+            monkeypatch.delenv(key, raising=False)
         _, _, manager, client = served(tmp_path, setu.path, local=False)
         try:
+            assert client.get("/api/connections").json()["window"] is False
             res = client.post("/api/connections/add-site", json={"site": "example.com"})
             assert res.status_code == 403
             assert "setu connect --site example.com --as personal" in res.json()["detail"]
+        finally:
+            manager.shutdown()
+
+    def test_a_page_on_another_device_signs_in_through_the_streamed_window(
+            self, setu, tmp_path, monkeypatch):
+        """The house's name opens Yantra's page on every device; the box
+        that adds a site went missing there until the window carried it."""
+        monkeypatch.setenv("SETU_WINDOW_NAME", "beast.local")
+        _, _, manager, client = served(tmp_path, setu.path, local=False)
+        try:
+            assert client.get("/api/connections").json()["window"] is True
+            with client.websocket_connect("/ws") as ws:
+                ws.receive_json()
+                res = client.post("/api/connections/add-site", json={
+                    "site": "example.com", "account": "work"})
+                assert res.status_code == 200, res.text
+                seen = until(ws, "setu_signin", "ask")
+                link = [e for e in seen if e.get("event") == "link"]
+                assert link and link[0]["url"].startswith("http://beast.local:8792/w/")
+                assert client.post("/api/connections/signin-answer",
+                                   json={"yes": True}).status_code == 200
+                until(ws, "connections")
+            assert ["connect", "--site", "example.com", "--as", "work", "--json",
+                    "--remote"] in setu.get()["calls"]
+            assert "example:work" in setu.get()["connections"]
         finally:
             manager.shutdown()
 
@@ -683,7 +715,10 @@ class TestPage:
         finally:
             manager.shutdown()
 
-    def test_a_page_on_another_device_is_given_the_command(self, setu, tmp_path):
+    def test_a_page_on_another_device_with_no_window_is_given_the_command(
+            self, setu, tmp_path, monkeypatch):
+        for key in ("SETU_WINDOW_HOST", "SETU_WINDOW_URL", "SETU_WINDOW_NAME"):
+            monkeypatch.delenv(key, raising=False)
         _, _, manager, client = served(tmp_path, setu.path, local=False)
         try:
             res = client.post("/api/connections/connect", json={
@@ -691,6 +726,22 @@ class TestPage:
             assert res.status_code == 403
             assert "setu connect gmail --as work --level read" in res.json()["detail"]
             assert not any(c[0] == "connect" for c in setu.get()["calls"])
+        finally:
+            manager.shutdown()
+
+    def test_a_page_on_another_device_is_handed_the_streamed_window(
+            self, setu, tmp_path, monkeypatch):
+        monkeypatch.setenv("SETU_WINDOW_URL", "https://beast.example.net/")
+        _, _, manager, client = served(tmp_path, setu.path, local=False)
+        try:
+            with client.websocket_connect("/ws") as ws:
+                ws.receive_json()
+                res = client.post("/api/connections/connect", json={
+                    "connector": "gmail", "account": "work", "level": "read"})
+                assert res.status_code == 200, res.text
+                until(ws, "connections")
+            assert ["connect", "gmail", "--as", "work", "--level", "read", "--json",
+                    "--remote"] in setu.get()["calls"]
         finally:
             manager.shutdown()
 

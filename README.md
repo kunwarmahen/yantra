@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2937 tests. The
+The harness underneath is complete and covered by 2946 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -763,9 +763,15 @@ account, pick a level, *connect*). Connect asks Setu to sign in
 (`setu connect --json`) and shows the site's sign-in as a button —
 Google's, or your Home Assistant's own login page. Yantra
 never holds a code or a key. The tools arrive without a restart, or
-when the running turn ends if one is running. Signing in works from a
-page on the computer running Yantra, because Google's reply comes back
-to a port there. Anywhere else, the card shows the command to run. Until
+when the running turn ends if one is running. Google's reply comes back
+to a port on the computer running Yantra, so from a page on another
+device (opened by the house's name, or on a phone) the sign-in, and
+**Another site?**, open in Setu's streamed window there, and the panel
+shows its link (**open the sign-in window**). A new site's window ends
+on **I've signed in**, then Setu checks its page. When the window has
+no address that device can open (`SETU_WINDOW_HOST`, `_URL`, `_NAME`),
+the card shows the command to run instead
+([notes/136](notes/136-a-sign-in-from-another-device.md)). Until
 Setu has its own Google app, the panel asks once for your Desktop OAuth
 client file, and Setu remembers the path. For Home Assistant it asks once
 for your server's address instead
@@ -2611,7 +2617,9 @@ src/yantra/
 │                   ([notes/95](notes/95-the-accounts-you-connected.md)).
 │                   Live, not only at startup: `Setu.sync` makes the servers
 │                   match Setu's report, SignIn relays `setu connect --json`
-│                   for the page's Connections panel -- same computer only,
+│                   for the page's Connections panel -- from another device
+│                   with --remote, in Setu's streamed window, when its link
+│                   reaches there ([notes/136](notes/136-a-sign-in-from-another-device.md));
 │                   never under a running turn ([notes/99](notes/99-the-connections-page.md)).
 │                   SetuPage: Setu's own page (`setu serve --json`) started
 │                   for the panel's frame, ended with Yantra
@@ -3192,7 +3200,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2937 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2946 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
