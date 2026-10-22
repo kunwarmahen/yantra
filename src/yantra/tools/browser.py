@@ -19,7 +19,9 @@ Scope decisions worth writing down:
   numbered interactive element refs ([e1], [e2], ...) harvested from
   the live DOM; clicking/filling takes a ref and returns the refreshed
   page. Screenshots would dogfood the image pipeline but text is the
-  wire format local models are best at -- vision stays opt-in elsewhere.
+  wire format local models are best at -- vision stays opt-in elsewhere:
+  a signed-in site's ``screenshot`` (tools/site.py), for the chart or
+  photo text cannot carry, uses this session's ``screenshot``.
 * NOT read_only, ALL FOUR. Same rule as web_fetch: this is network
   egress from OUTSIDE every sandbox wall, and a browser compounds it
   (form submissions mutate remote state). Each verb gates individually;
@@ -471,6 +473,14 @@ class _VirtualDisplay:
         self.display = ""
 
 
+#: A screenshot's JPEG quality, then lower ones while it is over the
+#: 5 MB a picture may be (images.MAX_IMAGE_BYTES).
+SHOT_QUALITIES = (80, 60, 40)
+#: The tallest whole-page screenshot, in CSS pixels: under the 8000 a
+#: model takes, with room for a phone-sized device scale.
+SHOT_MAX_HEIGHT = 6000
+
+
 class BrowserSession:
     """The live browser behind all four tools: launch lazily, one page.
 
@@ -648,6 +658,39 @@ class BrowserSession:
 
     def close(self) -> bool:
         return self._call(self._shutdown)
+
+    def screenshot(self, ref: str = "", full_page: bool = False) -> tuple[bytes, str]:
+        """(a JPEG of the open page, its address): what is on the screen,
+        the whole page, or one element by its ref."""
+        return self._call(lambda: self._screenshot(ref, full_page))
+
+    def _screenshot(self, ref: str, full_page: bool) -> tuple[bytes, str]:
+        from yantra.images import MAX_IMAGE_BYTES
+
+        page = self._require_page()
+        target = self._locator(page, ref) if ref else page
+        if ref:
+            self._resolve(ref)        # a ref from the last output, or said so
+        options: dict[str, Any] = {"type": "jpeg", "timeout": 15_000}
+        if full_page and not ref:
+            # a page that never ends (a timeline) is cut, not refused: a
+            # picture past this height is one no model takes whole
+            width, height = page.evaluate(
+                "() => [document.documentElement.scrollWidth,"
+                " document.documentElement.scrollHeight]")
+            options |= {"full_page": True, "clip": {
+                "x": 0, "y": 0, "width": int(width),
+                "height": int(min(height, SHOT_MAX_HEIGHT))}}
+        try:
+            for quality in SHOT_QUALITIES:
+                raw = target.screenshot(quality=quality, **options)
+                if len(raw) <= MAX_IMAGE_BYTES:
+                    return raw, page.url
+        except Exception as exc:
+            raise ToolError(f"could not take the picture: {type(exc).__name__}: "
+                            f"{exc}") from exc
+        raise ToolError("the picture is over 5 MB even at low quality -- take what is "
+                        "on the screen (no full_page), or one element by its ref")
 
     @property
     def url(self) -> str:

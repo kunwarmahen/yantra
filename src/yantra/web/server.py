@@ -50,6 +50,7 @@ import asyncio
 import base64
 import json
 import queue
+import re
 import threading
 import time
 import shutil
@@ -2970,6 +2971,21 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         return Response(export_markdown(kept), media_type="text/markdown; charset=utf-8",
                         headers={"Content-Disposition":
                                  f"attachment; filename*=UTF-8''{quote(name)}"})
+
+    @app.get("/api/screenshots/{name}")
+    def screenshot_file(name: str) -> FileResponse:
+        """A site's screenshot, as its tool card shows it: a file the
+        agent saved in its folder's ``screenshots/`` (tools/site.py), by
+        its plain name -- never a path that leaves that folder."""
+        require_ready()
+        from yantra.tools.site import SHOTS_DIR
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+\.jpg", name) or name.startswith("."):
+            raise HTTPException(404, "no such picture")
+        path = session.agent.ctx.cwd / SHOTS_DIR / name
+        if not path.is_file():
+            raise HTTPException(404, "that picture is gone")
+        return FileResponse(path, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
 
     @app.delete("/api/chats/{conversation_id}")
     def delete_chat(conversation_id: str) -> dict[str, Any]:

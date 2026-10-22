@@ -48,6 +48,18 @@ wrote down, because a generic browser cannot tell reading from buying:
 * SIGNED OUT IS SAID. A page that turns out to be the site's sign-in
   says so, and how to get the person to sign in again (``handoff``
   return, or ``setu connect``).
+* A PICTURE IS A READ OF WHAT ``open`` READ. Text is what a model works
+  from, but a chart, a photo or a layout has none to give: asked for a
+  picture of their TradingView chart, the agent had to say it couldn't.
+  ``screenshot`` takes the open page as the person would see it (the
+  screen, the whole page, or one element by its ref), presses nothing
+  and loads nothing, so it comes with ``open`` at ``open``'s class
+  wherever a manifest doesn't name it -- a site Setu wrote years of
+  rules for gets it without being written again. It is SAVED in the
+  agent's folder (``screenshots/``), where a chat's ``send_file`` finds
+  it and Yantra's page shows it, and ATTACHED for the model to look at
+  only when the model can see (``ToolContext.sees_pictures``): a local
+  model that can't still hands the file on, told not to describe it.
 """
 
 from __future__ import annotations
@@ -63,7 +75,7 @@ from urllib.parse import urljoin, urlparse
 
 from yantra.config import browser_handoff, browser_headed
 from yantra.errors import ToolError
-from yantra.tools.base import Tool, ToolContext, require_str
+from yantra.tools.base import Tool, ToolContext, ToolOutput, require_str
 from yantra.tools.browser import BrowserHandoff, BrowserSession, _VirtualDisplay
 
 #: The classes a level reaches, by the level's name.
@@ -91,6 +103,8 @@ ACT_WORDS = ("delete", "remove", "trash", "archive", "spam", "block", "report",
 SHORT_LABEL_WORDS = 6
 #: A scroll's wait for the next part of an endless page to load.
 SCROLL_SETTLE_MS = 1_200
+#: Where a screenshot is saved, in the agent's folder.
+SHOTS_DIR = "screenshots"
 
 #: Is this textbox a search box? Its own type or role, a word in its
 #: labels, or a search landmark around it -- and never one whose form
@@ -448,6 +462,16 @@ VERBS: dict[str, tuple[str, dict[str, Any]]] = {
     "search": ("Type words into a search box on the open {site} page and press Enter.",
                {"ref": {"type": "string", "description": "The search box's ref."},
                 "text": {"type": "string", "description": "What to search for."}}),
+    "screenshot": ("Take a picture of the open {site} page as the person sees it -- a "
+                   "chart, a photo, a layout the text can't carry, or when they ask for a "
+                   "picture. Presses nothing. Saved as a file in your folder (to send them "
+                   "or show), and attached for you to look at when your model can see "
+                   "pictures.",
+                   {"ref": {"type": "string", "description": "Only this element, by its "
+                                                             "[eN] ref (a chart). Omit "
+                                                             "for the screen."},
+                    "full_page": {"type": "boolean", "description": "The whole page, "
+                                  "not just the screen (default false)."}}),
     "click": ("Click a button or control on the open {site} page by its [eN] ref (asked "
               "about every time). Buying, paying and what cannot be undone are refused: "
               "hand those pages to the person.",
@@ -503,6 +527,10 @@ class SiteTool(Tool):
                 + f" on {self.session.url or '(no page)'}"
         if self.verb == "search":
             return f"{site}: search {args.get('text', '')!r}"
+        if self.verb == "screenshot":
+            what = args.get("ref") or ("the whole page" if args.get("full_page") is True
+                                       else "the screen")
+            return f"{site}: picture of {what} on {self.session.url or '(no page)'}"
         return f"{site}: {self.verb} {args.get('ref', '')}".rstrip()
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
@@ -515,10 +543,36 @@ class SiteTool(Tool):
             return s.scroll()
         if self.verb == "search":
             return s.search(require_str(args, "ref"), require_str(args, "text"))
+        if self.verb == "screenshot":
+            return self._picture(args, ctx)
         if self.verb == "click":
             return s.click(require_str(args, "ref"))
         return s.fill(require_str(args, "ref"), require_str(args, "text"),
                       enter=args.get("enter") is True)
+
+    def _picture(self, args: dict[str, Any], ctx: ToolContext) -> ToolOutput:
+        from yantra.images import image_block_from_bytes
+
+        ref = require_str(args, "ref", optional=True) or ""
+        raw, url = self.session.screenshot(ref, full_page=args.get("full_page") is True)
+        folder = ctx.cwd / SHOTS_DIR
+        folder.mkdir(parents=True, exist_ok=True)
+        stem = f"{self.name.removesuffix('_screenshot')}-{time.strftime('%Y%m%d-%H%M%S')}"
+        path = folder / f"{stem}.jpg"
+        n = 1
+        while path.exists():                  # two in one second
+            n += 1
+            path = folder / f"{stem}-{n}.jpg"
+        path.write_bytes(raw)
+        shown = f"{SHOTS_DIR}/{path.name}"
+        said = f"picture of {url} saved to {shown} ({len(raw) // 1024} KB)"
+        hand = ("To give it to the person, send it with send_file if you have that tool, "
+                f"or tell them it is {shown} in your folder.")
+        if ctx.sees_pictures is not None and not ctx.sees_pictures():
+            return ToolOutput(text=f"{said}. Your model can't see pictures, so it is not "
+                                   f"attached: don't describe it. {hand}")
+        return ToolOutput(text=f"{said} -- it is attached to this result. {hand}",
+                          images=[image_block_from_bytes(path.name, raw)])
 
     def turn_ended(self) -> None:
         self.session.release()
@@ -578,6 +632,8 @@ def site_tools(prefix: str, session: SiteSession, verbs: dict[str, str],
     tools: list[Tool] = []
     for verb in VERBS:
         klass = verbs.get(verb)
+        if verb == "screenshot" and klass is None:
+            klass = verbs.get("open")    # a picture reads what open read
         if klass not in CLASS_RANK:
             continue                     # not in the manifest: nobody agreed to it
         if verb in ("click", "fill") and klass == "read":

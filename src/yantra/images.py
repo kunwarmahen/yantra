@@ -15,6 +15,7 @@ teaches more than silently second-guessing them.
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from pathlib import Path
 
 from yantra.errors import ImageError
@@ -114,3 +115,20 @@ def sees_pictures(provider: str, base_url: str, model: str) -> bool:
         return "vision" in (response.json().get("capabilities") or [])
     except (httpx.HTTPError, ValueError, AttributeError, TypeError):
         return False
+
+
+def sight(agent) -> Callable[[], bool]:
+    """``sees_pictures`` for whatever ``agent`` runs at the moment it is
+    asked -- its provider, address and model, which /model and a page's
+    picker change mid-session -- asked once per model and kept. The
+    agent's ToolContext carries it (``ToolContext.sees_pictures``)."""
+    known: dict[tuple[str, str, str], bool] = {}
+
+    def sees() -> bool:
+        provider = agent.provider
+        base = str(getattr(getattr(provider, "settings", None), "base_url", "") or "")
+        key = (str(getattr(provider, "name", "")), base, str(agent.model))
+        if key not in known:
+            known[key] = sees_pictures(*key)
+        return known[key]
+    return sees

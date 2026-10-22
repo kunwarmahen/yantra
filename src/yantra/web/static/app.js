@@ -579,6 +579,19 @@ function fillToolCard(env) {
     outPre.textContent = output;
     body.append(outPre);
   }
+  // a site's screenshot: the picture it saved, shown under its card
+  const shot = !env.is_error && output.match(/saved to screenshots\/([A-Za-z0-9_.-]+\.jpg)/);
+  if (shot) {
+    const img = document.createElement("img");
+    img.className = "tool-shot";
+    img.alt = "the page, as the agent's screenshot took it";
+    img.loading = "lazy";
+    img.src = `/api/screenshots/${encodeURIComponent(shot[1])}`;
+    const link = document.createElement("a");
+    link.href = img.src; link.target = "_blank"; link.rel = "noopener";
+    link.append(img);
+    card.append(link);
+  }
   card.append(body);
   ui.openToolCard = null;
   scrollDown();

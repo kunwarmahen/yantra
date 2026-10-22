@@ -61,6 +61,7 @@ For `amazon:personal` at *Read only*, the model gets:
 | `amazon_follow(ref)` | go to a link by its `[eN]` ref |
 | `amazon_scroll()` | one screen down, showing only what is new |
 | `amazon_search(ref, text)` | type into a search box and press Enter |
+| `amazon_screenshot(ref?, full_page?)` | a picture of the open page ([note 137](137-a-picture-of-the-page.md)) |
 | `amazon_handoff(mode)` | give the page to you |
 
 None of these can press anything, and that is why they may run without

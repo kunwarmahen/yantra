@@ -133,6 +133,8 @@ class AsyncAgent:
         self.max_parallel_tools = max_parallel_tools
         self._turn_tools: list | None = None
         self.ctx = ToolContext(cwd=(cwd or Path.cwd()).resolve())
+        from yantra.images import sight
+        self.ctx.sees_pictures = sight(self)
         self.max_tokens = max_tokens
         self.max_iterations = max_iterations
         self.context_window = context_window

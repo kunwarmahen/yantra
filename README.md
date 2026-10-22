@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2946 tests. The
+The harness underneath is complete and covered by 2953 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -734,7 +734,12 @@ computer that need it
 A site with no API for a person (Amazon's orders, X's timeline) is Setu's
 browser road: `setu connect amazon` opens a window of your own Chrome on a
 profile kept for that connection, you sign in and close it, and the agent
-gets `amazon_open`, `amazon_follow`, `amazon_scroll` and `amazon_search`.
+gets `amazon_open`, `amazon_follow`, `amazon_scroll`, `amazon_search`
+and `amazon_screenshot` (a picture of the open page, saved in the
+agent's folder under `screenshots/` and shown on Yantra's page, sent
+from a chat with `send_file`, and attached for the model to look at
+when it can see pictures,
+[notes/137](notes/137-a-picture-of-the-page.md)).
 None of them press anything, so they run unasked; the write level adds
 `click` and `fill`, asked every time. A site whose pages open by script,
 with no address to load (Yahoo Mail's inbox), says `script_links = true`
@@ -2448,7 +2453,9 @@ src/yantra/
 │                   payload a save appends, shared with history.py
 ├── images.py       --image PATH and pictures from tools: read, checked
 │                   (png/jpeg/gif/webp, 5 MB), and whether this model may
-│                   take one at all ([notes/15](notes/15-images.md))
+│                   take one at all ([notes/15](notes/15-images.md));
+│                   sight(agent): that, for the model running now, asked
+│                   once per model ([notes/137](notes/137-a-picture-of-the-page.md))
 ├── history.py      every conversation kept by itself, to read again: one row
 │                   per conversation rewritten after each turn (terminal and
 │                   page), an FTS5 index of what was said, /chats and the
@@ -2976,7 +2983,11 @@ src/yantra/
 │   │               spending pages and buttons refused, no password typed,
 │   │               the manifest's pace and action limit ([notes/112](notes/112-a-site-with-no-api.md));
 │   │               script_links: follow presses a link with no address,
-│   │               never one that spends, deletes or sends ([notes/128](notes/128-a-link-that-runs-a-script.md))
+│   │               never one that spends, deletes or sends ([notes/128](notes/128-a-link-that-runs-a-script.md));
+│   │               screenshot: the open page as a JPEG in screenshots/,
+│   │               with open's class, attached only for a model that
+│   │               sees (ToolContext.sees_pictures, images.sight)
+│   │               ([notes/137](notes/137-a-picture-of-the-page.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,
@@ -3200,7 +3211,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2946 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2953 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local

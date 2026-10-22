@@ -284,6 +284,8 @@ class Agent:
         self.tool_catalog = tool_catalog
         self.tools_per_turn = tools_per_turn
         self.ctx = ToolContext(cwd=(cwd or Path.cwd()).resolve())
+        from yantra.images import sight
+        self.ctx.sees_pictures = sight(self)
         self.max_tokens = max_tokens
         self.max_iterations = max_iterations
         self.context_window = context_window

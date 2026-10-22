@@ -20,6 +20,7 @@ import asyncio
 import fnmatch
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
@@ -51,6 +52,11 @@ class ToolContext:
     cwd: Path
     leases: LeaseManager = field(default_factory=LeaseManager)
     read_roots: tuple[Path, ...] = ()
+    #: Whether a picture may go to the model running now (the agent sets
+    #: it; images.sees_pictures). A tool that makes one -- a site's
+    #: screenshot -- attaches it only then: sent to a model that can't
+    #: take one, a picture fails the whole turn. None: nobody said, yes.
+    sees_pictures: Callable[[], bool] | None = None
 
 
 @dataclass(slots=True)

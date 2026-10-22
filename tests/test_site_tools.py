@@ -17,6 +17,10 @@ Also designed against:
   person is signed out, and not to type a password.
 * **A level changed in Setu that the session never hears of.** The tools
   are rebuilt; a gone connection takes its tools with it.
+* **A picture that fails the turn.** A screenshot goes to the model only
+  when it can see; otherwise the file is saved and said, and nothing is
+  attached. It presses nothing, so it comes with ``open`` even where a
+  site's file never named it.
 """
 
 from __future__ import annotations
@@ -72,6 +76,10 @@ class Locator:
     def press(self, key, timeout=None):
         self.page.presses.append((self.ref, key))
 
+    def screenshot(self, **kw):
+        self.page.shots.append((self.ref, kw))
+        return b"\xff\xd8 element \xff\xd9"
+
 
 class Page:
     def __init__(self, url=HOME, elements=()):
@@ -91,6 +99,7 @@ class Page:
         self.by_ref = {e["ref"]: e for e in self.elements}
         self.gotos, self.clicks, self.fills, self.presses = [], [], [], []
         self.scripted, self.opts, self.scrolls = [], [], 0
+        self.shots, self.shot_bytes = [], b"\xff\xd8 page \xff\xd9"
 
     def title(self):
         return "Shop"
@@ -103,6 +112,8 @@ class Page:
         if "scrollBy" in script:
             self.scrolls += 1
             return None
+        if "scrollHeight" in script:
+            return [1280, 20000]
         self.opts.append(arg)
         return {"text": "page text", "dialog": False, "skipped": 0,
                 "elements": [{k: e[k] for k in ("ref", "kind", "label")}
@@ -113,6 +124,10 @@ class Page:
 
     def wait_for_timeout(self, ms):
         pass
+
+    def screenshot(self, **kw):
+        self.shots.append((None, kw))
+        return self.shot_bytes
 
     def wait_for_load_state(self, state, timeout=None):
         pass
@@ -338,7 +353,7 @@ class TestLevels:
 
     def test_read_only_has_nothing_that_presses(self):
         assert self.names("read") == ["shop_open", "shop_follow", "shop_scroll",
-                                      "shop_search", "shop_handoff"]
+                                      "shop_search", "shop_screenshot", "shop_handoff"]
 
     def test_write_adds_click_and_fill_asked_every_time(self):
         tools = {t.name: t for t in site_tools("shop", session(), VERBS, "write")}
@@ -352,13 +367,21 @@ class TestLevels:
     def test_a_click_is_never_a_read_and_unlisted_verbs_do_not_exist(self):
         tools = {t.name: t for t in site_tools(
             "shop", session(), {"open": "read", "click": "read"}, "write")}
-        assert set(tools) == {"shop_open", "shop_click", "shop_handoff"}
+        # a picture reads what open read, so it comes with open
+        assert set(tools) == {"shop_open", "shop_screenshot", "shop_click", "shop_handoff"}
         assert not tools["shop_click"].read_only
 
     def test_the_approval_names_the_button_and_the_page(self):
         tools = {t.name: t for t in site_tools("shop", session(), VERBS, "write")}
         said = tools["shop_click"].summary({"ref": "e4"}, ToolContext(cwd=Path(".")))
         assert "Add to cart" in said and HOME in said
+
+    def test_a_screenshot_named_in_the_sites_file_keeps_that_class(self):
+        tools = {t.name: t for t in site_tools(
+            "shop", session(), {**VERBS, "screenshot": "write"}, "read")}
+        assert "shop_screenshot" not in tools
+        tools = {t.name: t for t in site_tools("shop", session(), {"follow": "read"}, "read")}
+        assert "shop_screenshot" not in tools          # no open, no picture of it
 
     def test_two_accounts_get_their_own_prefix(self):
         assert prefix_for("amazon", "personal", False) == "amazon"
@@ -396,13 +419,13 @@ def synced(tmp_path, data, setu=None):
 class TestThroughSetu:
     def test_a_browser_connection_becomes_its_own_tools(self, tmp_path):
         setu, agent, manager, done = synced(tmp_path, report())
-        assert done.connected == {"shop": 5}
+        assert done.connected == {"shop": 6}
         assert "shop_open" in agent.registry and "shop_click" not in agent.registry
         assert manager.sessions == {}               # no server was started
         layer = setu_link.prompt_text(setu.link, sites={"shop:personal": "shop"})
         assert "`shop_*`" in layer and "Orders: https://www.shop.in/orders" in layer
         row = setu.describe(manager)["connections"][0]
-        assert row["road"] == "browser" and row["tools"] == 5 and row["tools_as"] == "shop_"
+        assert row["road"] == "browser" and row["tools"] == 6 and row["tools_as"] == "shop_"
 
     def test_the_rules_come_from_the_card_and_home_from_the_connection(self):
         data = report()
@@ -431,7 +454,7 @@ class TestThroughSetu:
 
     def test_announced_like_any_other(self, tmp_path):
         setu, _, _, done = synced(tmp_path, report())
-        assert "shop (5 tool(s))" in setu_link.announce(setu.link, done.connected)
+        assert "shop (6 tool(s))" in setu_link.announce(setu.link, done.connected)
 
 
 class TestHealthEvents:
@@ -470,3 +493,75 @@ class TestHealthEvents:
         s.on_event = lambda kind: (_ for _ in ()).throw(RuntimeError("setu is gone"))
         with pytest.raises(ToolError, match="buy now"):
             s._click("e3")
+
+
+class TestScreenshot:
+    def tool(self):
+        tools = {t.name: t for t in site_tools("shop", session(), VERBS, "read")}
+        return tools["shop_screenshot"]
+
+    def test_it_is_saved_in_the_folder_and_attached_for_a_model_that_sees(self, tmp_path):
+        shot = self.tool()
+        out = shot.run({}, ToolContext(cwd=tmp_path, sees_pictures=lambda: True))
+        saved = list((tmp_path / "screenshots").glob("shop-*.jpg"))
+        assert len(saved) == 1 and saved[0].read_bytes() == b"\xff\xd8 page \xff\xd9"
+        assert f"saved to screenshots/{saved[0].name}" in out.text and "attached" in out.text
+        assert out.images and out.images[0].media_type == "image/jpeg"
+        assert shot.read_only and shot.session._page.gotos == []   # nothing loaded
+
+    def test_a_model_that_cannot_see_gets_the_file_and_no_picture(self, tmp_path):
+        out = self.tool().run({}, ToolContext(cwd=tmp_path, sees_pictures=lambda: False))
+        assert out.images == [] and "can't see pictures" in out.text
+        assert "send_file" in out.text and list((tmp_path / "screenshots").iterdir())
+
+    def test_one_element_by_its_ref_and_a_whole_page_cut_to_a_height(self, tmp_path):
+        shot = self.tool()
+        out = shot.run({"ref": "e1"}, ToolContext(cwd=tmp_path))
+        page = shot.session._page
+        assert page.shots[-1][0] == "e1" and out.images
+        shot.run({"full_page": True}, ToolContext(cwd=tmp_path))
+        clip = page.shots[-1][1]["clip"]
+        assert page.shots[-1][1]["full_page"] and clip["height"] == 6000
+        assert len(list((tmp_path / "screenshots").iterdir())) == 2   # never overwritten
+        with pytest.raises(ToolError, match="unknown ref"):
+            shot.run({"ref": "e99"}, ToolContext(cwd=tmp_path))
+
+    def test_a_picture_too_big_even_at_low_quality_says_what_to_take_instead(self, tmp_path):
+        shot = self.tool()
+        shot.session._page.shot_bytes = b"x" * (6 * 1024 * 1024)
+        with pytest.raises(ToolError, match="no full_page"):
+            shot.run({"full_page": True}, ToolContext(cwd=tmp_path))
+        assert [kw["quality"] for _, kw in shot.session._page.shots] == [80, 60, 40]
+
+
+def test_the_page_shows_a_screenshot_from_the_folder_and_nothing_outside_it(tmp_path):
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from yantra.web.server import WebSession, make_app
+
+    agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry(), cwd=tmp_path)
+    session = WebSession()
+    session.attach(agent, None)
+    (tmp_path / "screenshots").mkdir()
+    (tmp_path / "screenshots" / "shop-20261021-101500.jpg").write_bytes(b"\xff\xd8jpeg")
+    (tmp_path / "secret.jpg").write_bytes(b"not yours")
+    client = TestClient(make_app(session), client=("127.0.0.1", 51000))
+    got = client.get("/api/screenshots/shop-20261021-101500.jpg")
+    assert got.status_code == 200 and got.content == b"\xff\xd8jpeg"
+    assert got.headers["content-type"] == "image/jpeg"
+    for bad in ("..%2Fsecret.jpg", ".hidden.jpg", "shop.png", "gone.jpg"):
+        assert client.get(f"/api/screenshots/{bad}").status_code == 404, bad
+
+
+def test_the_agent_says_whether_its_model_sees_once_per_model(monkeypatch):
+    from yantra import images
+
+    asked = []
+    monkeypatch.setattr(images, "sees_pictures",
+                        lambda name, base, model: asked.append(model) or model == "llava")
+    agent = Agent(ScriptedProvider([]), model="qwen", tools=ToolRegistry())
+    sees = agent.ctx.sees_pictures
+    assert sees() is False and sees() is False and asked == ["qwen"]
+    agent.model = "llava"                      # /model, mid-session
+    assert sees() is True and asked == ["qwen", "llava"]
