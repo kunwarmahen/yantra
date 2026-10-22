@@ -46,7 +46,10 @@ action.
 
 Text out, no screenshots: text is the wire format local models are
 best at. Vision stays where it belongs, behind read_image's explicit
-opt-in.
+opt-in. A signed-in site's tools are the one place a picture was asked
+for (a chart has no text to give): their `screenshot` uses this
+session's, and the plain `browser_*` tools stay text only
+([note 137](137-a-picture-of-the-page.md)).
 
 ## A heavy app needs a second look
 

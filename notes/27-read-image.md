@@ -85,3 +85,9 @@ the model called read_image, the panel showed `image loaded: pic.png
 and its answer came back *"The dominant color of the image is red."*
 — pixels traveled tool → loop → history → wire → eyes, end to end.
 `2293 in / 64 out · 3 iteration(s)`.
+
+The same hand-off carries a second tool's pictures: a signed-in site's
+`screenshot` returns a ToolOutput too, and attaches its picture only
+when the model can see (`ToolContext.sees_pictures`), because a picture
+sent to one that can't fails the turn
+([note 137](137-a-picture-of-the-page.md)).
