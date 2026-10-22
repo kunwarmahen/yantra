@@ -68,13 +68,18 @@ taken at the person's word, as it is at the computer.
 
 ## Sarathi gives Yantra's page its own window
 
-The panel can only stream what Setu's window can show. Under Sarathi
-with `[house]`, Yantra's page gets a window of its own:
+The panel can only stream what Setu's window can show. Under Sarathi,
+Yantra's page gets a window of its own:
 
 - **Containers:** port 8792, after Dvara's 8790 and Setu's page's 8791.
-  It is published on the house address, its links say the house's
-  name, and it is in the firewall line.
-- **Plain programs:** any free port on the house address.
+  With `[house]` it is published on the house address, its links say
+  the house's name, and it is in the firewall line. Without a house it
+  is on `127.0.0.1`, for you alone. In a container even your own
+  browser comes in through Podman's bridge, so the page counts it as
+  another device too.
+- **Plain programs:** with `[house]`, any free port on the house
+  address. Without a house the page runs on this computer itself, and
+  a browser here is local.
 
 ## Live receipt
 
