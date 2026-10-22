@@ -28,8 +28,9 @@ That conditionality is load-bearing, not cosmetic — the tool-selection
 threshold is 20, sixteen built-ins + ask_user = 17 today, and
 always-on browser verbs would push EVERY user past the cliff into
 per-turn tool discovery they never asked for. No extra → no tools,
-count stays 16/17. Extra installed → twenty (+ask_user = 21), which
-DOES cross the threshold, deliberately: you opted into a heavier mode,
+count stays 16/17. Extra installed → twenty-two with the handoff and
+screenshot verbs that came later (+ask_user = 23), which DOES cross the
+threshold, deliberately: you opted into a heavier mode,
 so the harness switches to its heavy-mode tool strategy (`--tool-select
 0` puts the full list back).
 
@@ -44,12 +45,13 @@ page and its click targets can never disagree. Refs regenerate on
 EVERY snapshot, so they always describe the page as of your last
 action.
 
-Text out, no screenshots: text is the wire format local models are
-best at. Vision stays where it belongs, behind read_image's explicit
-opt-in. A signed-in site's tools are the one place a picture was asked
-for (a chart has no text to give): their `screenshot` uses this
-session's, and the plain `browser_*` tools stay text only
-([note 137](137-a-picture-of-the-page.md)).
+Text out: text is the wire format local models are best at, so every
+action returns text and no picture comes unasked. A picture is its own
+verb, for a chart or photo that has no text to give. A signed-in site's
+`screenshot` ([note 137](137-a-picture-of-the-page.md)) and the plain
+browser's `browser_screenshot` ([note 138](138-a-picture-of-any-page.md))
+both take it from this session and attach it only to a model that can
+see.
 
 ## A heavy app needs a second look
 
@@ -176,7 +178,8 @@ and every action without a page saying so in model-readable words.
   a profile runs key-free to completion, --prompt/--build/--web
   combinations refused
 - gating: all four NOT read_only; summaries name url/ref/text
-- registration: without playwright 16 tools; with it 20 sharing ONE
+  (browser_screenshot, added later, is read-only: it loads nothing)
+- registration: without playwright 16 tools; with it 22 sharing ONE
   BrowserSession — the suite pins both worlds via the find_spec seam
 
 ## Receipts
@@ -205,4 +208,6 @@ cannot do, or a purchase it should not
 ([notes/93](93-a-page-for-a-person.md)). A search form a person fills
 without thinking (autocomplete suggestions, a date picker, a result row
 covered by its own contents) needed five fixes to the snapshot and the
-click ([notes/94](94-a-form-the-way-a-person-fills-it.md)).
+click ([notes/94](94-a-form-the-way-a-person-fills-it.md)). A sixth verb,
+`browser_screenshot`, takes a picture of the open page when text can't
+carry it ([notes/138](138-a-picture-of-any-page.md)).

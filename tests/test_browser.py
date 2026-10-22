@@ -15,6 +15,11 @@ each has a test demanding a loud refusal or a count that can be
 wrong. The rest pin that the automation flags are always dropped,
 that a channel and a path reach Playwright by their own doors,
 and that headed mode never leaves an Xvfb behind.
+
+The screenshot tests are designed against A PICTURE THAT FAILS THE
+TURN: it is attached only for a model that can see, and otherwise
+saved and said -- and against a picture that asks again for what
+browser_open already asked: it loads and presses nothing.
 """
 
 from __future__ import annotations
@@ -31,7 +36,7 @@ import pytest
 import yantra.cli.main as cli_main
 from yantra.errors import ConfigError, ToolError
 from yantra.tools import BrowserClick, BrowserClose, BrowserFill, \
-    BrowserOpen, default_registry
+    BrowserOpen, BrowserScreenshot, default_registry
 from yantra.tools.base import ToolContext
 from yantra.tools.browser import MAX_ELEMENTS, BrowserSession, \
     _COOKIE_KEY_ARG, LoginInterrupted, _VirtualDisplay, _cookie_count, \
@@ -94,6 +99,10 @@ class FakeLocator:
     def press(self, key, timeout=None) -> None:
         self.page.presses.append((self.selector, key))
 
+    def screenshot(self, **kw) -> bytes:
+        self.page.shots.append((self.selector, kw))
+        return b"\xff\xd8 element \xff\xd9"
+
     def select_option(self, label=None, timeout=None) -> None:
         if self.page.drawn_dropdown:
             raise Exception("Error: Element is not a <select> element")
@@ -122,6 +131,8 @@ class FakePage:
         self.drawn_dropdown = False   # role=combobox on a <div>
         self.closed = False
         self.threads: set[int] = set()  # worker threads seen at the page
+        self.shots: list = []
+        self.shot_bytes = b"\xff\xd8 page \xff\xd9"
 
     def title(self):
         return self.title_value
@@ -131,6 +142,8 @@ class FakePage:
         self.gotos.append(url)
 
     def evaluate(self, script):
+        if "scrollHeight" in script:      # a whole-page screenshot's size
+            return [1280, 20000]
         assert "data-yantra-ref" in script  # snapshots must tag targets
         self.threads.add(threading.get_ident())
         return {"text": self.text, "elements": self.elements,
@@ -144,6 +157,10 @@ class FakePage:
 
     def wait_for_load_state(self, state, timeout=None):
         pass
+
+    def screenshot(self, **kw) -> bytes:
+        self.shots.append((None, kw))
+        return self.shot_bytes
 
     def close(self):
         self.closed = True
@@ -1136,14 +1153,14 @@ class TestRegistration:
         assert len(registry) == 16
         assert "browser_open" not in registry
 
-    def test_with_extra_five_tools_share_one_session(self, monkeypatch):
+    def test_with_extra_six_tools_share_one_session(self, monkeypatch):
         monkeypatch.setattr("yantra.tools.browser.find_spec",
                             lambda name: True)
         monkeypatch.delenv("YANTRA_BROWSER_HANDOFF", raising=False)
         registry = default_registry()
         names = ("browser_open", "browser_click", "browser_fill",
-                 "browser_close", "browser_handoff")
-        assert len(registry) == 21
+                 "browser_screenshot", "browser_close", "browser_handoff")
+        assert len(registry) == 22
         for name in names:
             assert name in registry
         sessions = {registry.get(n).browser for n in names}
@@ -1154,5 +1171,56 @@ class TestRegistration:
                             lambda name: True)
         monkeypatch.setenv("YANTRA_BROWSER_HANDOFF", "off")
         registry = default_registry()
-        assert len(registry) == 20
+        assert len(registry) == 21
         assert "browser_handoff" not in registry
+
+
+class TestScreenshot:
+    def tool(self, page=None) -> BrowserScreenshot:
+        session = make_session(page or FakePage())
+        session.open(URL)                     # refs e1, e2 from this page
+        return BrowserScreenshot(session)
+
+    def test_it_is_saved_in_the_folder_and_attached_for_a_model_that_sees(self, tmp_path):
+        shot = self.tool()
+        out = shot.run({}, ToolContext(cwd=tmp_path, sees_pictures=lambda: True))
+        saved = list((tmp_path / "screenshots").glob("browser-*.jpg"))
+        assert len(saved) == 1 and saved[0].read_bytes() == b"\xff\xd8 page \xff\xd9"
+        assert f"saved to screenshots/{saved[0].name}" in out.text and URL in out.text
+        assert out.images and out.images[0].media_type == "image/jpeg"
+
+    def test_a_model_that_cannot_see_gets_the_file_and_no_picture(self, tmp_path):
+        out = self.tool().run({}, ToolContext(cwd=tmp_path, sees_pictures=lambda: False))
+        assert out.images == [] and "can't see pictures" in out.text
+        assert "send_file" in out.text and list((tmp_path / "screenshots").iterdir())
+
+    def test_it_loads_and_presses_nothing_so_it_does_not_ask_again(self, tmp_path):
+        page = FakePage()
+        shot = self.tool(page)
+        before = (list(page.gotos), list(page.clicks))
+        shot.run({}, ToolContext(cwd=tmp_path))
+        assert (page.gotos, page.clicks) == before
+        assert shot.read_only and shot.requires == ("browser_open",)
+
+    def test_one_element_by_its_ref_and_a_whole_page_cut_to_a_height(self, tmp_path):
+        shot = self.tool()
+        page = shot.browser._page
+        shot.run({"ref": "e1"}, ToolContext(cwd=tmp_path))
+        assert page.shots[-1][0] == '[data-yantra-ref="e1"]'
+        shot.run({"full_page": True}, ToolContext(cwd=tmp_path))
+        kw = page.shots[-1][1]
+        assert kw["full_page"] and kw["clip"]["height"] == 6000
+        assert len(list((tmp_path / "screenshots").iterdir())) == 2   # none overwritten
+
+    def test_a_ref_from_no_output_and_a_closed_browser_say_so(self, tmp_path):
+        shot = self.tool()
+        with pytest.raises(ToolError, match="unknown ref"):
+            shot.run({"ref": "e99"}, ToolContext(cwd=tmp_path))
+        shot.browser.close()
+        with pytest.raises(ToolError, match="no page open"):
+            shot.run({}, ToolContext(cwd=tmp_path))
+
+    def test_the_approval_line_names_what_and_where(self, ctx):
+        shot = self.tool()
+        assert shot.summary({"full_page": True}, ctx) == f"picture of the whole page on {URL}"
+        assert shot.summary({"ref": "e2"}, ctx) == f"picture of e2 on {URL}"

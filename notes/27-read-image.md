@@ -90,4 +90,6 @@ The same hand-off carries a second tool's pictures: a signed-in site's
 `screenshot` returns a ToolOutput too, and attaches its picture only
 when the model can see (`ToolContext.sees_pictures`), because a picture
 sent to one that can't fails the turn
-([note 137](137-a-picture-of-the-page.md)).
+([note 137](137-a-picture-of-the-page.md)). The plain browser's
+`browser_screenshot` goes the same way
+([note 138](138-a-picture-of-any-page.md)).

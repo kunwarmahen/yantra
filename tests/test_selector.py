@@ -243,6 +243,19 @@ class TestNameIndexing:
             k=4, must_include=())]
         assert "browser_open" in picked
 
+    def test_a_picture_asked_for_in_plain_words_finds_the_screenshot(self, monkeypatch):
+        """The default catalog, browser extra in, past the threshold: a
+        person says "picture" or "screenshot", never browser_screenshot,
+        and the page it is a picture of has to come along."""
+        from yantra.tools import default_registry
+
+        monkeypatch.setattr("yantra.tools.browser.find_spec", lambda name: True)
+        catalog, _ = enable_selection(default_registry())
+        for ask in ("take a screenshot of the chart",
+                    "open tradingview ALAB and send me a picture"):
+            picked = [t.name for t in catalog.select(ask, k=5, must_include=())]
+            assert picked[0] == "browser_screenshot" and "browser_open" in picked
+
 
 class TestDiscoveryTool:
     def test_lists_everything(self):

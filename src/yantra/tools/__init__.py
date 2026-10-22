@@ -33,6 +33,7 @@ from yantra.tools.browser import (
     BrowserHandoff,
     BrowserFill,
     BrowserOpen,
+    BrowserScreenshot,
     BrowserSession,
 )
 from yantra.tools.fs import EditFile, ListDir, ReadFile, WriteFile
@@ -55,6 +56,7 @@ __all__ = [
     "BrowserHandoff",
     "BrowserFill",
     "BrowserOpen",
+    "BrowserScreenshot",
     "BrowserSession",
     "EditFile",
     "Glob",
@@ -91,12 +93,13 @@ def default_registry(sandbox: ToolSandbox | None = None) -> ToolRegistry:
     trust_sandbox's auto-approval.
 
     The browser_* family (headless Chromium) joins only when playwright
-    is importable -- the [browse] extra is its own opt-in. All four are
-    network egress and gate like web_fetch.
+    is importable -- the [browse] extra is its own opt-in. All but its
+    screenshot are network egress and gate like web_fetch.
 
     read_only flags drive permission gating automatically: read_file,
     list_dir, glob, grep, read_image, recall_notes, todo_read,
-    bash_poll auto-approve; write_file, edit_file, bash, bash_start,
+    bash_poll (and browser_screenshot, a read of an open page)
+    auto-approve; write_file, edit_file, bash, bash_start,
     bash_kill, web_fetch (network egress), browser_open/click/fill/
     close (when registered -- same egress rule), write_note, todo_write
     prompt.

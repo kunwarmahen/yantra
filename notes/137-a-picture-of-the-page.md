@@ -93,11 +93,14 @@ and the chart are all there.
 
 ## What was not built
 
-* **`browser_screenshot` for the plain browser.** Those tools stay
+* ~~**`browser_screenshot` for the plain browser.** Those tools stay
   text-only ([note 28](28-browser-tools.md)). A sixth plain browser
   tool would change the default tool count, which tool selection is
   tuned to, for every person who installs the browser extra. A signed-in
-  site is where the picture was asked for.
+  site is where the picture was asked for.~~ Built in
+  [note 138](138-a-picture-of-any-page.md): counted, the browser extra
+  already put selection on, and both tools now share one
+  `save_picture`.
 * **A picture sent by itself.** The tool saves and attaches; sending is
   the host's own tool (`send_file`), asked for like any file. A
   screenshot that went to the chat on its own would be the agent

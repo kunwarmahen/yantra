@@ -792,7 +792,7 @@ takes it back. ([notes/110](notes/110-which-account-and-who-may-use-it.md))
 
 ## 9 · The tools that make it finish rather than answer
 
-Sixteen built-ins cover the whole autonomy loop, and four more appear if
+Sixteen built-ins cover the whole autonomy loop, and six more appear if
 you install the browser extra.
 
 | family | tools |
@@ -802,7 +802,7 @@ you install the browser extra.
 | RUN LONG | `bash_start` `bash_poll` `bash_kill` |
 | LOOK OUT | `web_fetch` |
 | REMEMBER | `write_note` `recall_notes` (durable) · `todo_write` `todo_read` (live plan) |
-| OPERATE | `browser_open` `browser_click` `browser_fill` `browser_close` `browser_handoff` — only with `[browse]` |
+| OPERATE | `browser_open` `browser_click` `browser_fill` `browser_screenshot` `browser_close` `browser_handoff` — only with `[browse]` |
 
 A few deserve a sentence each:
 
@@ -823,7 +823,12 @@ A few deserve a sentence each:
   JS-rendered apps work where `web_fetch` sees an empty shell. Every
   action returns prose plus numbered element refs (`[e1]`, `[e2]`)
   harvested from the live DOM. Logins persist through a profile directory
-  — cookies stay on disk, never in model context.
+  — cookies stay on disk, never in model context. Ask *"open the ALAB
+  page on TradingView and send me a picture"* and `browser_screenshot`
+  saves one under `screenshots/` in the agent's folder; it doesn't ask
+  first, because it only shows the page you already let it open. A model
+  that can see pictures (Ollama lists "vision") looks at it too
+  ([notes/138](notes/138-a-picture-of-any-page.md)).
 
 ```bash
 uv sync --extra browse && uv run playwright install chromium

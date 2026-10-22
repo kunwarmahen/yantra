@@ -1123,6 +1123,13 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   is what opens. `YANTRA_BROWSER_HANDOFF=window|link|off`; unset, a
   machine with a screen opens windows and one without gives you a link
   ([notes/93](notes/93-a-page-for-a-person.md)).
+- **browser_screenshot** takes a picture of the open page: the screen,
+  the whole page (`full_page`, cut at 6000 pixels), or one element by
+  its ref. It is saved under `screenshots/` in the agent's folder and
+  shown under its card on Yantra's page; it is attached for the model
+  only when the model can see. It loads and presses nothing, so unlike
+  the other browser verbs it runs without asking
+  ([notes/138](notes/138-a-picture-of-any-page.md)).
 - **Nobody watching.** `--unattended` (or `YANTRA_UNATTENDED=1`) is a
   run a program started with no person in front of it: writes are
   refused unless named with `--allow-tools GRANT` (a tool that asks on
@@ -2927,7 +2934,7 @@ src/yantra/
 │   ├── read_image.py the agent looking at a picture BY ITSELF: returns a
 │   │               ToolOutput; the loop hoists images onto history after the
 │   │               result ([notes/27](notes/27-read-image.md))
-│   ├── browser.py  browser_open/click/fill/close — a real browser behind the
+│   ├── browser.py  browser_open/click/fill/screenshot/close — a real browser behind the
 │   │               [browse] extra: JS-rendered pages come back as text +
 │   │               numbered element refs; registers only when playwright
 │   │               imports, so the tool count never moves uninvited; optional
@@ -2970,7 +2977,11 @@ src/yantra/
 │   │               ([notes/94](notes/94-a-form-the-way-a-person-fills-it.md)).
 │   │               Unattended, browser_handoff opens nothing, keeps the need,
 │   │               and is described for that case
-│   │               ([notes/114](notes/114-nobody-watching.md))
+│   │               ([notes/114](notes/114-nobody-watching.md)).
+│   │               browser_screenshot: the open page as a JPEG, read-only
+│   │               (loads and presses nothing); save_picture saves it in
+│   │               screenshots/ for it and site.py's screenshot alike
+│   │               ([notes/138](notes/138-a-picture-of-any-page.md))
 │   ├── profile_lock.py one browser per profile across processes: flock on
 │   │               yantra.lock, waited on (10 s / 2 min unattended), the
 │   │               holder named; the kernel releases it with the process;

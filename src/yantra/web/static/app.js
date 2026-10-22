@@ -579,7 +579,7 @@ function fillToolCard(env) {
     outPre.textContent = output;
     body.append(outPre);
   }
-  // a site's screenshot: the picture it saved, shown under its card
+  // a screenshot (the browser's or a site's): the picture it saved, under its card
   const shot = !env.is_error && output.match(/saved to screenshots\/([A-Za-z0-9_.-]+\.jpg)/);
   if (shot) {
     const img = document.createElement("img");

@@ -140,7 +140,7 @@ disabled tool is never sent, never executed, never suggested by
 
 ```bash
 # hide one family ...
-YANTRA_DISABLED_TOOLS=browser_open,browser_click,browser_fill,browser_close
+YANTRA_DISABLED_TOOLS=browser_open,browser_click,browser_fill,browser_screenshot,browser_close
 # ... or one tool, or a whole MCP server
 YANTRA_DISABLED_TOOLS=web_fetch,mcp__slack__*
 ```

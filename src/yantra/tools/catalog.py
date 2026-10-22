@@ -40,6 +40,7 @@ from yantra.tools.browser import (
     BrowserFill,
     BrowserHandoff,
     BrowserOpen,
+    BrowserScreenshot,
     browser_available,
 )
 from yantra.tools.fs import EditFile, ListDir, ReadFile, WriteFile
@@ -68,6 +69,7 @@ PLAIN = {
     "browser_open": "Open a page in its own browser (no sign-in)",
     "browser_click": "Click on a page it opened",
     "browser_fill": "Type into a page it opened",
+    "browser_screenshot": "Take a picture of a page it opened",
     "browser_close": "Close its browser",
     "browser_handoff": "Hand you its browser window to finish a step",
     "write_note": "Keep a note for later",
@@ -84,8 +86,8 @@ PLAIN = {
 GROUPS = (
     ("Files", (ReadFile, ListDir, Glob, Grep, ReadImage, WriteFile, EditFile)),
     ("Web", (WebFetch,)),
-    ("Its own browser", (BrowserOpen, BrowserClick, BrowserFill, BrowserClose,
-                         BrowserHandoff)),
+    ("Its own browser", (BrowserOpen, BrowserClick, BrowserFill,
+                         BrowserScreenshot, BrowserClose, BrowserHandoff)),
     ("Commands", (Bash, BashStart, BashPoll, BashKill)),
     ("Notes and to-dos", (WriteNote, RecallNotes, TodoWrite, TodoRead)),
     ("Talking and skills", (AskUser, LoadSkill)),

@@ -2974,11 +2974,11 @@ def make_app(session: WebSession, static_dir: Path | None = None,
 
     @app.get("/api/screenshots/{name}")
     def screenshot_file(name: str) -> FileResponse:
-        """A site's screenshot, as its tool card shows it: a file the
-        agent saved in its folder's ``screenshots/`` (tools/site.py), by
+        """A screenshot, as its tool card shows it: a file the agent
+        saved in its folder's ``screenshots/`` (tools/browser.py), by
         its plain name -- never a path that leaves that folder."""
         require_ready()
-        from yantra.tools.site import SHOTS_DIR
+        from yantra.tools.browser import SHOTS_DIR
         if not re.fullmatch(r"[A-Za-z0-9_.-]+\.jpg", name) or name.startswith("."):
             raise HTTPException(404, "no such picture")
         path = session.agent.ctx.cwd / SHOTS_DIR / name

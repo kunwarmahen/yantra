@@ -76,7 +76,8 @@ from urllib.parse import urljoin, urlparse
 from yantra.config import browser_handoff, browser_headed
 from yantra.errors import ToolError
 from yantra.tools.base import Tool, ToolContext, ToolOutput, require_str
-from yantra.tools.browser import BrowserHandoff, BrowserSession, _VirtualDisplay
+from yantra.tools.browser import BrowserHandoff, BrowserSession, _VirtualDisplay, \
+    save_picture
 
 #: The classes a level reaches, by the level's name.
 LEVEL_RANK = {"read": 0, "write": 1}
@@ -103,8 +104,6 @@ ACT_WORDS = ("delete", "remove", "trash", "archive", "spam", "block", "report",
 SHORT_LABEL_WORDS = 6
 #: A scroll's wait for the next part of an endless page to load.
 SCROLL_SETTLE_MS = 1_200
-#: Where a screenshot is saved, in the agent's folder.
-SHOTS_DIR = "screenshots"
 
 #: Is this textbox a search box? Its own type or role, a word in its
 #: labels, or a search landmark around it -- and never one whose form
@@ -551,28 +550,9 @@ class SiteTool(Tool):
                       enter=args.get("enter") is True)
 
     def _picture(self, args: dict[str, Any], ctx: ToolContext) -> ToolOutput:
-        from yantra.images import image_block_from_bytes
-
         ref = require_str(args, "ref", optional=True) or ""
         raw, url = self.session.screenshot(ref, full_page=args.get("full_page") is True)
-        folder = ctx.cwd / SHOTS_DIR
-        folder.mkdir(parents=True, exist_ok=True)
-        stem = f"{self.name.removesuffix('_screenshot')}-{time.strftime('%Y%m%d-%H%M%S')}"
-        path = folder / f"{stem}.jpg"
-        n = 1
-        while path.exists():                  # two in one second
-            n += 1
-            path = folder / f"{stem}-{n}.jpg"
-        path.write_bytes(raw)
-        shown = f"{SHOTS_DIR}/{path.name}"
-        said = f"picture of {url} saved to {shown} ({len(raw) // 1024} KB)"
-        hand = ("To give it to the person, send it with send_file if you have that tool, "
-                f"or tell them it is {shown} in your folder.")
-        if ctx.sees_pictures is not None and not ctx.sees_pictures():
-            return ToolOutput(text=f"{said}. Your model can't see pictures, so it is not "
-                                   f"attached: don't describe it. {hand}")
-        return ToolOutput(text=f"{said} -- it is attached to this result. {hand}",
-                          images=[image_block_from_bytes(path.name, raw)])
+        return save_picture(raw, url, self.name.removesuffix("_screenshot"), ctx)
 
     def turn_ended(self) -> None:
         self.session.release()

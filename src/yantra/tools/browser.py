@@ -1,4 +1,4 @@
-"""Real browsing -- four verbs on a real browser, behind an extra.
+"""Real browsing -- verbs on a real browser, behind an extra.
 
 web_fetch reads the web's DOCUMENTS; these tools operate its APPS. The
 difference is JavaScript: modern pages ship an empty shell and build
@@ -11,21 +11,25 @@ Scope decisions worth writing down:
 
 * OPTIONAL EXTRA, CONDITIONALLY REGISTERED. ``uv add
   'yantra[browse]'`` plus ``playwright install chromium`` is the
-  whole opt-in -- installing the dependency IS the signal. The four
+  whole opt-in -- installing the dependency IS the signal. The
   browser_* tools appear in default_registry only when playwright is
   importable, so users who never asked for a ~300MB browser keep the
   old tool count (and the tool-selection threshold keyed to it) intact.
-* TEXT OUT, NO SCREENSHOTS. Every action returns readable prose plus
-  numbered interactive element refs ([e1], [e2], ...) harvested from
-  the live DOM; clicking/filling takes a ref and returns the refreshed
-  page. Screenshots would dogfood the image pipeline but text is the
-  wire format local models are best at -- vision stays opt-in elsewhere:
-  a signed-in site's ``screenshot`` (tools/site.py), for the chart or
-  photo text cannot carry, uses this session's ``screenshot``.
-* NOT read_only, ALL FOUR. Same rule as web_fetch: this is network
-  egress from OUTSIDE every sandbox wall, and a browser compounds it
-  (form submissions mutate remote state). Each verb gates individually;
-  --yolo owns the tradeoff explicitly.
+* TEXT OUT; A PICTURE ONLY WHEN ASKED FOR. Every action returns
+  readable prose plus numbered interactive element refs ([e1], [e2],
+  ...) harvested from the live DOM; clicking/filling takes a ref and
+  returns the refreshed page. Text is the wire format local models are
+  best at. ``browser_screenshot`` is the one picture: the chart or
+  photo text cannot carry, or a person who asked to see the page. It
+  is saved in the agent's folder and attached only to a model that can
+  see (save_picture, shared with a signed-in site's ``screenshot`` in
+  tools/site.py).
+* NOT read_only, ALL BUT THE PICTURE. Same rule as web_fetch: this is
+  network egress from OUTSIDE every sandbox wall, and a browser
+  compounds it (form submissions mutate remote state). Each verb gates
+  individually; --yolo owns the tradeoff explicitly. A screenshot loads
+  and presses nothing -- it is a read of the page ``browser_open``
+  already brought, past its gate -- so it does not ask again.
 * LOGINS LIVE IN A PROFILE, NEVER IN MODEL CONTEXT. With
   $YANTRA_BROWSER_PROFILE set, every session launches the browser on
   that on-disk profile (launch_persistent_context), so one login --
@@ -96,7 +100,7 @@ from yantra.config import BROWSER_CHANNELS, browser_close_policy, \
     browser_login_command, browser_profile, has_screen, shadowed_by_shell
 from yantra import unattended
 from yantra.errors import ToolError
-from yantra.tools.base import Tool, ToolContext, require_str
+from yantra.tools.base import Tool, ToolContext, ToolOutput, require_str
 from yantra.tools.profile_lock import ProfileLock
 from yantra.tools.web_fetch import MAX_RESULT_CHARS, _clip
 
@@ -479,10 +483,39 @@ SHOT_QUALITIES = (80, 60, 40)
 #: The tallest whole-page screenshot, in CSS pixels: under the 8000 a
 #: model takes, with room for a phone-sized device scale.
 SHOT_MAX_HEIGHT = 6000
+#: Where a screenshot is saved, in the agent's folder.
+SHOTS_DIR = "screenshots"
+
+
+def save_picture(raw: bytes, url: str, stem: str, ctx: ToolContext) -> ToolOutput:
+    """A screenshot saved as ``screenshots/<stem>-<date>-<time>.jpg`` and
+    said, attached only when the model can see. A picture sent to a model
+    that can't take one fails the whole turn; that model gets the file to
+    hand on and is told not to describe it."""
+    from yantra.images import image_block_from_bytes
+
+    folder = ctx.cwd / SHOTS_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    stem = f"{stem}-{time.strftime('%Y%m%d-%H%M%S')}"
+    path = folder / f"{stem}.jpg"
+    n = 1
+    while path.exists():                  # two in one second
+        n += 1
+        path = folder / f"{stem}-{n}.jpg"
+    path.write_bytes(raw)
+    shown = f"{SHOTS_DIR}/{path.name}"
+    said = f"picture of {url} saved to {shown} ({len(raw) // 1024} KB)"
+    hand = ("To give it to the person, send it with send_file if you have that tool, "
+            f"or tell them it is {shown} in your folder.")
+    if ctx.sees_pictures is not None and not ctx.sees_pictures():
+        return ToolOutput(text=f"{said}. Your model can't see pictures, so it is not "
+                               f"attached: don't describe it. {hand}")
+    return ToolOutput(text=f"{said} -- it is attached to this result. {hand}",
+                      images=[image_block_from_bytes(path.name, raw)])
 
 
 class BrowserSession:
-    """The live browser behind all four tools: launch lazily, one page.
+    """The live browser behind every browser_* tool: launch lazily, one page.
 
     Two launch modes share one body: ephemeral (no profile -- a fresh
     Chromium every time) and persistent ($YANTRA_BROWSER_PROFILE set --
@@ -1216,8 +1249,8 @@ class _BrowserTool(Tool):
         self.browser = browser
 
     def turn_ended(self) -> None:
-        # All four verbs share one session; release() is idempotent, so the
-        # three that find it already closed pay nothing (notes/92).
+        # Every verb shares one session; release() is idempotent, so the
+        # others that find it already closed pay nothing (notes/92).
         self.browser.release()
 
 
@@ -1318,6 +1351,44 @@ class BrowserFill(_BrowserTool):
         return self.browser.fill(require_str(args, "ref"),
                                  require_str(args, "text"),
                                  enter=args.get("enter") is True)
+
+
+class BrowserScreenshot(_BrowserTool):
+    name = "browser_screenshot"
+    requires = ("browser_open",)  # no page without it
+    #: A read of the page browser_open already brought past its gate:
+    #: it loads nothing and presses nothing (module docstring).
+    read_only = True
+    description = (
+        "Take a picture (screenshot) of the open browser page as a person "
+        "would see it -- a chart, a photo, a layout the text can't carry, "
+        "or when they ask to see the page. Presses nothing. Saved as a "
+        "file in your folder (to send them or show), and attached for you "
+        "to look at when your model can see pictures."
+    )
+    parameters: ClassVar[dict] = {
+        "type": "object",
+        "properties": {
+            "ref": {"type": "string",
+                    "description": "Only this element, by its [eN] ref from "
+                                   "the latest browser output (a chart). "
+                                   "Omit for the screen."},
+            "full_page": {"type": "boolean",
+                          "description": "The whole page, not just the "
+                                         "screen (default false)."},
+        },
+        "additionalProperties": False,
+    }
+
+    def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
+        what = args.get("ref") or ("the whole page" if args.get("full_page") is True
+                                   else "the screen")
+        return f"picture of {what} on {self.browser.url or '(no page open)'}"
+
+    def run(self, args: dict[str, Any], ctx: ToolContext) -> ToolOutput:
+        ref = require_str(args, "ref", optional=True) or ""
+        raw, url = self.browser.screenshot(ref, full_page=args.get("full_page") is True)
+        return save_picture(raw, url, "browser", ctx)
 
 
 class BrowserClose(_BrowserTool):
@@ -1445,13 +1516,14 @@ def browser_available() -> bool:
 
 def browser_tools() -> tuple[Tool, ...]:
     """The browser verbs sharing one session, or () without the extra:
-    the four that drive it, and browser_handoff unless it is switched
-    off ($YANTRA_BROWSER_HANDOFF=off)."""
+    the four that drive it, its picture, and browser_handoff unless it
+    is switched off ($YANTRA_BROWSER_HANDOFF=off)."""
     if not browser_available():
         return ()
     browser = BrowserSession()  # reads $YANTRA_BROWSER_PROFILE itself
     tools: tuple[Tool, ...] = (BrowserOpen(browser), BrowserClick(browser),
-                               BrowserFill(browser), BrowserClose(browser))
+                               BrowserFill(browser), BrowserScreenshot(browser),
+                               BrowserClose(browser))
     reach = browser_handoff()   # None: the operator switched it off
     if reach is not None:
         tools += (BrowserHandoff(browser, reach),)
