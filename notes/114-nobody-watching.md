@@ -304,3 +304,8 @@ accept — and Yantra's card for a schedule does ([note 115](115-what-a-yes-cove
 * **Retrying.** An unattended run doesn't try the browser again after a
   busy profile or a sign-in wall. Whether and when to try again belongs
   to whatever scheduled it, which knows the next time it's due.
+* ~~**A look that needs no model.**~~ A scheduler that only has to look
+  ("is the price under $50 yet?") would pay a model for every look.
+  `yantra --call TOOL --args JSON` runs one tool with no model, under a
+  narrower rule than this note's: only what reads, or one call granted
+  with every argument fixed ([note 139](139-one-tool-no-model.md)).

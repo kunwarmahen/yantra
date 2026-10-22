@@ -158,6 +158,10 @@ uv run yantra --json --unattended --allow-tools 'browser_*' \
                                                       # for a PROGRAM that runs Yantra
                                                       #   (a scheduler): nobody waits,
                                                       #   one JSON object on stdout
+uv run yantra --json --call web_fetch --args '{"url": "https://example.com"}' \
+              --allow-tools 'web_fetch(url=https://example.com)'
+                                                      # ONE tool, NO model: what a
+                                                      #   watcher (Prahari) runs to look
 ```
 
 ### It knows where (and when) it is
@@ -1155,6 +1159,16 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   allowed is put to that person on their chat (Dvara's `POST /ask`), and
   silence or an unreachable Dvara is still a refusal
   ([notes/126](notes/126-a-yes-that-covers-the-job.md)).
+- **One tool, no model.** `--call TOOL --args JSON` builds the agent as
+  for a turn (package, Setu's accounts, MCP servers, sites), runs that
+  one tool once and exits; with `--json` stdout is one `yantra.call.v1`
+  object (`ok`, the tool's `text`, `detail` when it failed, `images`,
+  `needs_person`). Nobody approves a call and no model judged it wanted,
+  so only a read-only tool runs, or one call granted word for word: a
+  grant naming this exact tool and fixing every argument passed
+  (`web_fetch(url=https://example.com)`). No API key is needed. This is
+  how Prahari looks for "tell me when…" without paying a model for every
+  look ([notes/139](notes/139-one-tool-no-model.md)).
 - **The browser can be one you already have.**
   `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
   — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
@@ -3100,7 +3114,9 @@ src/yantra/
 │                   its token -- $YANTRA_WEB_TOKEN or .yantra/web.token --
 │                   from the printed link once, then an HttpOnly, Lax
 │                   cookie ([notes/132](notes/132-a-token-for-the-page.md))
-└── cli/            main.py (argparse) · repl.py (input loop; the look after
+└── cli/            main.py (argparse; --call runs one tool with no model,
+                    only one that reads or is granted word for word
+                    ([notes/139](notes/139-one-tool-no-model.md))) · repl.py (input loop; the look after
                     a turn or a /clear runs behind the prompt, news in one
                     line before the next one, /keep to answer it
                     ([notes/131](notes/131-cleared-at-once.md))) · render.py (rich:
@@ -3222,7 +3238,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2953 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2974 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -3254,7 +3270,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2819 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2974 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

@@ -282,6 +282,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "remembered, or in the package's [[mcp]]. No "
                              "model, no API key needed")
     parser.add_argument("--prompt", help="one-shot mode: run this prompt and exit")
+    parser.add_argument("--call", metavar="TOOL", default=None,
+                        help="run this one tool once, with --args, and exit: no "
+                             "model is asked anything. Only a tool that reads "
+                             "(marked read-only) runs this way. With --json, "
+                             "stdout gets one object (yantra.call.v1). For a "
+                             "program that checks something on a timer, such "
+                             "as Prahari")
+    parser.add_argument("--args", metavar="JSON", default=None, dest="call_args",
+                        help="the arguments for --call, as one JSON object "
+                             "(default {})")
     parser.add_argument("--json", action="store_true", dest="json_out",
                         help="with a one-shot prompt: everything a person "
                              "would read goes to stderr, and stdout gets ONE "
@@ -2427,6 +2437,103 @@ def _print_run(end: TurnEnd | None, agent, *, error: str = "") -> None:
     }), flush=True)
 
 
+CALL_FORMAT = "yantra.call.v1"
+
+
+def _call_mode(agent, args) -> int:
+    """``--call TOOL --args JSON``: one tool, run once, and no model.
+
+    A program that checks something on a timer -- "is the price under
+    $50 yet?" -- needs the tool's answer, not a model's account of it.
+    Asking a model every ten minutes to call one tool and repeat what it
+    said is a bill for nothing, and a small model may not repeat it
+    faithfully. So the agent is built exactly as for a turn -- the
+    package, Setu's accounts, MCP servers, sites -- and then one tool is
+    run straight from the registry with the arguments given.
+
+    ONLY A TOOL THAT READS, OR ONE CALL SAID YES TO WORD FOR WORD. A
+    call has nobody to approve it and no model deciding it is wanted, so
+    a tool not marked read-only is refused -- unless ``--allow-tools``
+    holds a grant for exactly this tool (no glob) that fixes EVERY
+    argument passed (``web_fetch(url=https://...)``). Fetching a page is
+    not read-only here because an address can carry data out; a person
+    who accepted "fetch this address every three hours" approved that
+    address, and nothing else. A bare name or a glob never covers a
+    call, and a tool that asks every time (a purchase) is never run.
+
+    With ``--json`` stdout is one object: ``ok``, the tool's ``text``,
+    ``detail`` when it failed, how many ``images`` it made (a
+    screenshot is saved where the tool saves it; its pixels are not
+    printed), and what it needed a person for (a sign-in wall).
+    """
+    import difflib
+
+    from yantra.tools.base import ToolOutput, coerce_arguments
+
+    name = args.call
+
+    def said(ok: bool, text: str = "", detail: str = "", images: int = 0) -> int:
+        if args.json_out:
+            print(json.dumps({
+                "format": CALL_FORMAT, "ok": ok, "tool": name, "text": text,
+                "detail": detail, "images": images,
+                "needs_person": unattended.needs(), "busy": unattended.busy(),
+            }), flush=True)
+        elif ok:
+            print(text, flush=True)
+        else:
+            print(f"error: {detail}", file=sys.stderr)
+        return 0 if ok else 1
+
+    try:
+        arguments = json.loads(args.call_args or "{}")
+    except json.JSONDecodeError as exc:
+        return said(False, detail=f"--args is not JSON: {exc}")
+    if not isinstance(arguments, dict):
+        return said(False, detail="--args is one JSON object, like {\"url\": \"...\"}")
+    if name not in agent.registry or agent.registry.is_disabled(name):
+        close = difflib.get_close_matches(name, agent.registry.names(), n=3)
+        return said(False, detail=f"no tool {name!r} here"
+                    + (f"; did you mean {', '.join(close)}?" if close else ""))
+    tool = agent.registry.get(name)
+    arguments = coerce_arguments(arguments, tool.parameters)
+    if not tool.read_only and not _said_yes_to(args.allow_tools, tool, arguments):
+        return said(False, detail=(
+            f"{name} is not read-only; --call runs only tools that read, or one call "
+            f"granted word for word: --allow-tools '{name}(key=value, ...)' fixing "
+            "every argument"))
+    try:
+        out = tool.run(arguments, agent.ctx)
+    except Exception as exc:          # a tool's failure is the answer, said as one
+        return said(False, detail=str(exc) or type(exc).__name__)
+    finally:
+        try:
+            tool.turn_ended()         # a browser it opened closes with the call
+        except Exception:
+            pass
+    if isinstance(out, ToolOutput):
+        return said(True, out.text, images=len(out.images))
+    return said(True, str(out))
+
+
+def _said_yes_to(patterns: list[str], tool, arguments: dict) -> bool:
+    """A grant names this exact tool and fixes every argument passed."""
+    from yantra.permissions import parse_grant
+
+    if getattr(tool, "always_ask", False):
+        return False
+    for pattern in patterns:
+        try:
+            grant = parse_grant(pattern)
+        except ValueError:
+            continue
+        fixed = {key for key, _ in grant.args}
+        if (grant.tool == tool.name and fixed and set(arguments) <= fixed
+                and grant.allows(tool.name, arguments)):
+            return True
+    return False
+
+
 def _status_mode(rest: list[str]) -> int:
     """``yantra status [--json]``: which release, and would it reach a model.
 
@@ -2459,10 +2566,21 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     console = Console()
 
+    if args.call_args is not None and args.call is None:
+        print("error: --args goes with --call TOOL", file=sys.stderr)
+        return 2
+    if args.call is not None:
+        if args.prompt is not None or args.prompt_positional:
+            print("error: --call runs one tool and no model: it takes no "
+                  "prompt", file=sys.stderr)
+            return 2
+        # Nobody is in front of a call either: nothing it starts may wait
+        # for a keystroke, and Samay's offers are not made to nobody.
+        args.unattended = True
     if args.json_out:
-        if args.prompt is None and not args.prompt_positional:
+        if args.prompt is None and not args.prompt_positional and args.call is None:
             print("error: --json answers one prompt: give it --prompt or a "
-                  "positional PROMPT", file=sys.stderr)
+                  "positional PROMPT (or --call TOOL)", file=sys.stderr)
             return 2
         # stdout is the JSON object and nothing else; everything a person
         # would read -- the banner, the streamed answer, the tool lines --
@@ -2725,8 +2843,13 @@ def main(argv: list[str] | None = None) -> int:
         provider_name = spec.provider or guess_provider()
         settings = load_settings(provider_name)
     except ConfigError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+        if args.call is None:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        # A call asks no model, so a missing key is no reason to refuse
+        # one: the agent is built around a local provider never called.
+        provider_name = "ollama"
+        settings = load_settings(provider_name)
 
     model = spec.model or default_model(provider_name)
 
@@ -3036,6 +3159,11 @@ def main(argv: list[str] | None = None) -> int:
             if unmatched:
                 console.print(f"[yellow]no tools match YANTRA_DISABLED_"
                               f"TOOLS entry: {', '.join(unmatched)}[/yellow]")
+
+        # One tool, no model: every tool is in the registry now (Setu's,
+        # the package's, MCP servers'), and none is hidden by selection.
+        if args.call is not None:
+            return _call_mode(agent, args)
 
         # Dynamic tool loading (book ch12): decided AFTER MCP registration
         # so external tools count toward the cliff threshold. Precedence
