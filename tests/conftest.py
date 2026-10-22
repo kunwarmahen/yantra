@@ -94,6 +94,14 @@ def no_phone(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_watches(monkeypatch):
+    """A `prahari` installed on this machine stays out too: a test that
+    starts a session would otherwise find it and offer its watches. A test
+    about Prahari says where its fake one is."""
+    monkeypatch.setenv("YANTRA_PRAHARI", "off")
+
+
+@pytest.fixture(autouse=True)
 def private_home(tmp_path_factory, monkeypatch):
     """Skills you wrote or learned live under ~/.yantra/skills/, and the
     loader scans them in every session -- so a test that turns skills on

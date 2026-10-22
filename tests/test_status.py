@@ -116,6 +116,14 @@ class TestTheSiblings:
         assert data["sparsh"] == {"found": False, "program": None, "phones": []}
         assert not any(p.startswith(("setu", "samay", "sparsh")) for p in data["problems"])
 
+    def test_prahari_off_is_not_found_and_a_missing_one_is_a_problem(self, monkeypatch):
+        assert status.report()["prahari"] == {"found": False, "program": None,
+                                              "serving": False}
+        monkeypatch.setenv("YANTRA_PRAHARI", "/nowhere/prahari")
+        data = status.report()
+        assert "prahari: no prahari program at /nowhere/prahari" in data["problems"]
+        assert "prahari: not found" in status.lines(data)
+
     def test_a_named_program_that_is_not_there_is_a_problem(self, monkeypatch):
         monkeypatch.setenv("YANTRA_SAMAY", "/nowhere/samay")
         data = status.report()

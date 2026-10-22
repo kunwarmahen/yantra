@@ -43,13 +43,13 @@ Copyright 2026 Mahen Singh. Licensed under the Apache License, Version
 
 ## Works with
 
-Four separate programs build on Yantra, each documented in its own
+Five separate programs build on Yantra, each documented in its own
 repository; what Yantra does for each is in [the tutorial's Act VI](TUTORIAL.md),
-and §24 there is the order to set them up in. A fourth,
+and §24 there is the order to set them up in. Another,
 **[Sarathi](https://github.com/kunwarmahen/sarathi)**, is the one to
 install if you want them together: it finds them, asks once which model
-answers, and starts Samay's clock and Yantra's page as programs or as
-Podman containers.
+answers, and starts Samay's clock, Prahari's watch and Yantra's page as
+programs or as Podman containers.
 
 * **[Setu](https://github.com/kunwarmahen/setu)** keeps your sign-ins; Yantra finds it at startup and gets
   each account's tools (below: *Your own accounts, through Setu*).
@@ -57,6 +57,12 @@ Podman containers.
   it at startup, the agent can offer a schedule, and `yantra --web` shows
   them (below: *Doing things later, through Samay*). Samay starts
   `yantra --json --unattended` for each run (below: *Nobody watching*).
+* **[Prahari](https://github.com/kunwarmahen/prahari)** watches for what you are waiting for (a
+  price under a line, a mail from someone, a phone's notification) with
+  no model, and wakes the agent when it happens; Yantra finds it at
+  startup and the agent can offer a watch (below: *Telling you when
+  something happens, through Prahari*). Each look is `yantra --call`
+  (below: *One tool, no model*).
 * **[Sparsh](https://github.com/kunwarmahen/sparsh)** works an Android phone, the emulator, or an iPhone; Yantra
   finds it at startup when a phone is attached, and the agent can tap,
   type and scroll, asking you before Send, Pay or Delete (below: *Your
@@ -869,6 +875,35 @@ said comes back here: an **answers** chip appears when there's a reply
 you haven't seen (*1 new answer*), and the panel opens with **what they
 said** at the top, read from Samay's record
 ([notes/125](notes/125-the-answer-comes-back-here.md)).
+
+**Telling you when something happens, through Prahari.**
+[Prahari](https://github.com/kunwarmahen/prahari) watches for "tell me
+when…": a price under a line, a mail from the bank, a page that changed.
+The agent writes a recipe once, out of tools it already has (one tool
+call to look with, what to pick out of its answer, when that matters,
+how often), and Prahari repeats the look with no model (`yantra
+--call`), waking the agent only when it happens. When `prahari` is on
+`PATH`, Yantra starts its tools at startup (`prahari mcp --for local`,
+plus `--agent` for a package's session) and says so in one line:
+
+```
+prahari: 9 tool(s), 3 active watch(es); it is watching -- via /home/you/prahari/.venv/bin/prahari
+```
+
+`YANTRA_PRAHARI=/path/to/prahari` names it when it is elsewhere;
+`--prahari` insists, `--no-prahari` never looks, and an unattended run
+or a `--call` never looks. A `watches` prompt layer tells the model
+when a watch fits (a schedule is for something done at a time), to
+preview first and fix the pick from what the tool really said, and to
+create only after a yes. The approval card is in words: the exact call
+it will run and how often, said in capitals when that call is NOT
+READ-ONLY (a yes lets Prahari run exactly it on a timer) or names a
+tool this agent doesn't have; when it tells you, with Prahari's own
+words for what it sees now; and what it asks the agent to do then, with
+what that may use unasked. A look runs in the watch's own work folder,
+like a schedule's run, so file tools there see only that folder: watches
+are for accounts, pages and APIs
+([notes/140](notes/140-a-watch-offered.md)).
 
 **Your phone, through Sparsh.** [Sparsh](https://github.com/kunwarmahen/sparsh)
 works an Android phone (or the emulator on this computer) through `adb`,
@@ -2695,6 +2730,13 @@ src/yantra/
 │                   job nothing listed can do said in capitals, where its
 │                   questions go (asks_go), and allow_for_schedule's card
 │                   ([notes/126](notes/126-a-yes-that-covers-the-job.md))
+├── prahari_link.py telling you when something happens: Prahari found by
+│                   `prahari status --json` (prahari.status.v1), its tools
+│                   started `--for local` and `--agent` this package, skipped
+│                   when unattended; the create card in words (the exact call
+│                   and how often, NOT READ-ONLY said in capitals, when it
+│                   tells you and what it sees now, what happens then) and a
+│                   `watches` prompt layer ([notes/140](notes/140-a-watch-offered.md))
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and
@@ -3238,7 +3280,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2974 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 2989 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
@@ -3270,7 +3312,7 @@ result-encoding shape on the second request.
 
 ## Tested
 
-`uv run pytest -q` — 2974 offline tests against byte-exact SSE/JSON
+`uv run pytest -q` — 2989 offline tests against byte-exact SSE/JSON
 fixtures (`httpx.MockTransport`) and a `ScriptedProvider` loop: no
 network, no key. Retries are exercised offline too, against flaky
 mock transports whose policy path is identical to the live one. The

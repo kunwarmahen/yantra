@@ -2135,7 +2135,7 @@ uv run python examples/async_demo.py    # 4 conversations, sequential vs concurr
 
 # Act VI — the programs around it
 
-Yantra is one agent, one person, one keyboard. Four separate programs
+Yantra is one agent, one person, one keyboard. Five separate programs
 build on it. Each lives in its own repository and documents itself
 there; this act says in a sentence what each one is, and what *Yantra*
 does for it, which is the part that lives here.
@@ -2144,12 +2144,13 @@ does for it, which is the part that lives here.
 |---|---|---|
 | **Setu** (सेतु, *bridge*) | keeps your sign-ins (Gmail, Home Assistant, Amazon, X…) and hands an agent their tools; the agent never sees a key | [Setu's README](https://github.com/kunwarmahen/setu) |
 | **Samay** (समय, *time*) | a clock and a logbook: runs an agent's work later or on a repeat, and keeps what came back | [Samay's README](https://github.com/kunwarmahen/samay) |
+| **Prahari** (प्रहरी, *the sentinel*) | watches for what you're waiting for (a price, a mail, a phone's notification) with no model, and wakes the agent when it happens | [Prahari's README](https://github.com/kunwarmahen/prahari), and §26 here |
 | **Sparsh** (स्पर्श, *touch*) | works an Android phone (or the emulator): the agent reads the screen as a numbered list and taps by number, and asks you before Send, Pay or Delete | [Sparsh's README](https://github.com/kunwarmahen/sparsh), and §25 here |
 | **dvara** (द्वार, *door*) | one always-on process serving many people, over Telegram or HTTP, with the owner's money and rules around every turn | [dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) |
 
-The dependencies run one way. Setu, Samay and Sparsh are programs Yantra
-starts and reads (`setu status --json`, `samay status --json`, `sparsh
-status --json`, a versioned JSON
+The dependencies run one way. Setu, Samay, Prahari and Sparsh are
+programs Yantra starts and reads (`setu status --json`, `samay status
+--json`, `prahari status --json`, `sparsh status --json`, a versioned JSON
 whose `format` is the whole contract); dvara imports Yantra as a library.
 None of them is imported by Yantra. Yantra answers the same question the
 same way: `yantra status --json` (notes/117).
@@ -2300,7 +2301,12 @@ read each step.
    ([Samay's README](https://github.com/kunwarmahen/samay)). Yantra finds
    it by itself (§22). Scheduled runs started this way reach your Setu
    accounts too, because they are ordinary Yantra runs.
-3. **Add a door** (`sarathi dvara` does this step). Run dvara for other people or for your phone
+3. **Add watches.** Install Prahari, tell it which Yantra looks
+   (`PRAHARI_YANTRA`, `PRAHARI_YANTRA_HOME`), and keep it running with
+   `prahari unit --install`
+   ([Prahari's README](https://github.com/kunwarmahen/prahari)). Yantra
+   finds it by itself (§26).
+4. **Add a door** (`sarathi dvara` does this step). Run dvara for other people or for your phone
    ([dvara's tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md)).
    For schedules there, start it with `--samay`, and give both dvara and
    Samay's service the same `SAMAY_DVARA_URL` and `SAMAY_DVARA_TOKEN`.
@@ -2310,7 +2316,8 @@ read each step.
 
 | Setting | Read by | Documented in |
 |---|---|---|
-| `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_SPARSH`, `YANTRA_PHONE_SHOTS`, `YANTRA_PHONE` | Yantra | this repo's README |
+| `YANTRA_SETU`, `YANTRA_SAMAY`, `YANTRA_PRAHARI`, `YANTRA_SPARSH`, `YANTRA_PHONE_SHOTS`, `YANTRA_PHONE` | Yantra | this repo's README |
+| `PRAHARI_STATE`, `PRAHARI_YANTRA`, `PRAHARI_YANTRA_HOME`, `PRAHARI_DVARA_URL`, `PRAHARI_DVARA_TOKEN`, `PRAHARI_DVARA_ACTOR` | Prahari | Prahari's README |
 | `SPARSH_STATE`, `SPARSH_RULES`, `ANDROID_SERIAL`, `SPARSH_WDA`, `SPARSH_PHONES` | Sparsh | Sparsh's README and SETUP.md |
 | `SAMAY_STATE`, `SAMAY_YANTRA`, `SAMAY_YANTRA_HOME`, `SAMAY_TZ` | Samay | Samay's README |
 | `SAMAY_DVARA_URL`, `SAMAY_DVARA_TOKEN`, `SAMAY_DVARA_ACTOR` | Samay (and `samay mcp` started by dvara) | Samay's README, dvara's tutorial §15 |
@@ -2637,6 +2644,58 @@ became a Gmail search, and on a real iPhone 17 the battery check above
 its name, not through the folder you happened to tap, so a job taught
 on the iPhone is written for the Android phone too
 ([notes/133](notes/133-taught-once-for-both-phones.md)).
+
+## 26 · Prahari — when something happens
+
+A schedule (§22) does something at a time. Some requests aren't like
+that: "tell me when ALAB drops under $50", "tell me when a mail from the
+bank comes". The answer is usually *not yet*, and asking a model every
+hour to look and say *not yet* is a bill for nothing.
+[Prahari](https://github.com/kunwarmahen/prahari) does the waiting
+without a model. Yantra's side is two things.
+
+**One tool, no model.** Every look Prahari makes is
+
+```bash
+yantra --json --call mcp__gmail__search_threads \
+       --args '{"account": "personal", "query": "from:alerts@bank.example newer_than:2d"}'
+```
+
+The agent is built as for a turn (your accounts through Setu, your
+sites), the one tool runs, and the answer comes back as one JSON
+object, with no model asked. Only a tool that reads runs this way, or
+one exact call you said yes to: `web_fetch` of one address, because a
+watch's card showed you that address
+([notes/139](notes/139-one-tool-no-model.md)).
+
+**The offer.** With `prahari` on your `PATH`, Yantra finds it at
+startup, as it finds Samay:
+
+```
+prahari: 9 tool(s), 0 active watch(es); it is NOT running -- nothing is looked at until `prahari serve` is
+```
+
+Say "tell me when a mail from my bank arrives". The agent picks a tool
+it has that reads (the Gmail search), tries it once with
+`preview_watch`, fixes its pick if that found nothing, tells you what it
+sees now, and asks. The approval card says the exact call and how
+often. When that call isn't read-only it says so in capitals, because a
+yes lets Prahari run exactly it on a timer. It also says when it tells
+you and what happens then ([notes/140](notes/140-a-watch-offered.md)).
+Leave `then` out and you just get a line; no model is asked even when
+it fires.
+
+**Things that can tell you themselves.** A WhatsApp message on an
+Android phone, a door in Home Assistant, a price tracker's webhook:
+these don't need looking at. They knock on Prahari's *inlet*, and a
+watch that listens decides. On the phone, MacroDroid's *notification
+received* trigger and an HTTP request do it; Prahari's README has the
+three steps. An iPhone can't: it doesn't let other apps read its
+notifications.
+
+Installing Prahari, its page, the inlet, and its rules (the first look
+only learns, a price fires once when it crosses its line, a check that
+broke is never quiet) are Prahari's: see its README.
 
 ---
 

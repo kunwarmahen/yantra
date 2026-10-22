@@ -12,9 +12,9 @@ than guess. The rest is what Yantra would do with no flags, in this
 folder, with this environment: the provider ``guess_provider`` settles
 on and why, the model it would ask for, which optional parts are
 installed, which tool packs it could name, and whether a session would
-find Setu, Samay and Sparsh -- asked the way a session asks them
-(``YANTRA_SETU``, ``YANTRA_SAMAY``, ``YANTRA_SPARSH``, then what is
-installed), which only reads: each is asked its own ``status --json``,
+find Setu, Samay, Prahari and Sparsh -- asked the way a session asks them
+(``YANTRA_SETU``, ``YANTRA_SAMAY``, ``YANTRA_PRAHARI``, ``YANTRA_SPARSH``,
+then what is installed), which only reads: each is asked its own ``status --json``,
 and none is started. Sparsh is reported once found even with no phone
 attached, which is the thing a person setting it up needs to read.
 
@@ -43,7 +43,7 @@ from importlib.util import find_spec
 
 import httpx
 
-from yantra import samay_link, setu_link, sparsh_link
+from yantra import prahari_link, samay_link, setu_link, sparsh_link
 from yantra.config import default_model, guess_provider, load_settings
 from yantra.errors import ConfigError
 from yantra.tools.discover import entry_point_packs
@@ -113,6 +113,19 @@ def _samay(problems: list[str]) -> dict:
     return {"found": True, "program": program, "serving": bool(data.get("serving"))}
 
 
+def _prahari(problems: list[str]) -> dict:
+    """Would a session find Prahari, and is it watching?"""
+    try:
+        found = prahari_link.load(*prahari_link.resolve_mode(None))
+    except prahari_link.PrahariLinkError as exc:
+        problems.append(f"prahari: {exc}")
+        return {"found": False, "program": None, "serving": False}
+    if found is None:
+        return {"found": False, "program": None, "serving": False}
+    data, program = found
+    return {"found": True, "program": program, "serving": bool(data.get("serving"))}
+
+
 def _sparsh(problems: list[str]) -> dict:
     """Would a session find Sparsh, and which phones can it use now?"""
     mode, path = sparsh_link.resolve_mode(None)
@@ -164,6 +177,7 @@ def report() -> dict:
         "packs": sorted(entry_point_packs()),
         "setu": _setu(problems),
         "samay": _samay(problems),
+        "prahari": _prahari(problems),
         "sparsh": _sparsh(problems),
         "problems": problems,
     }
@@ -189,6 +203,9 @@ def lines(data: dict) -> list[str]:
                if setu["found"] else "setu: not found")
     out.append(("samay: " + ("clock running" if samay["serving"] else "clock not running")
                 + f" ({samay['program']})") if samay["found"] else "samay: not found")
+    prahari = data.get("prahari") or {"found": False}
+    out.append(("prahari: " + ("watching" if prahari["serving"] else "not running")
+                + f" ({prahari['program']})") if prahari["found"] else "prahari: not found")
     sparsh = data["sparsh"]
     out.append(("sparsh: " + (f"phone {', '.join(sparsh['phones'])}" if sparsh["phones"]
                               else "no phone attached")
