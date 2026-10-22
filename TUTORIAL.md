@@ -718,8 +718,8 @@ message. Above Setu's page, Yantra keeps a few lines of its own: which
 recipes use which account, and **open in its own tab** if you'd like
 more room. Opened from a phone instead of the computer running Yantra,
 the panel shows Yantra's own cards for the same accounts (**change
-access**, **disconnect**), because Setu's page only opens on that
-computer.
+access**, **disconnect**, **connect**, and **Another site?**), because
+Setu's page only opens on that computer.
 
 Connect shows an *open the sign-in* button. That's Google's own page.
 Sign in there, come back, and the agent has the account's tools from
@@ -731,9 +731,17 @@ and the agent tells you the command: run `setu connect gmail --as mine`,
 and your next message has Gmail again, with nothing to restart. Publish
 your Google app once (Setu's README) and it stops expiring. To find a
 stopped sign-in before you need it, run `setu check`; behind Dvara it
-runs daily and messages you. Signing in works when
-the page is open on the computer running Yantra. From a phone, the card
-shows the command to run on that computer instead. For now, Google
+runs daily and messages you. On the computer running Yantra, signing in
+opens the site's own page. **From a phone** (or any page opened by the
+house's name), the sign-in runs in a browser on the computer running
+Yantra. Your phone sees it through a link, **open the sign-in window**.
+Sign in in the picture. For a site you add by its address under
+**Another site?**, press **I've signed in** when you're in; Setu then
+checks the site's page and may ask you *did you sign in?* This needs
+Setu's window to have an address your phone can open (`SETU_WINDOW_NAME`
+or `SETU_WINDOW_HOST`; Sarathi sets it). Without one, the card shows the
+command to run on that computer instead
+([notes/136](notes/136-a-sign-in-from-another-device.md)). For now, Google
 sign-in also needs a "Desktop app" client file you make once in
 Google's console. The page asks for its path the first time, and Setu
 remembers it. Home Assistant is simpler: the page asks once where your
@@ -756,9 +764,13 @@ Each opens a window of your own Chrome on that site's sign-in page. Sign
 in, then close the window. The sign-in is kept in a browser profile made
 just for that connection. Now ask *"where's my kettle order?"* or *"what
 are people saying in my mentions?"* and the agent reads the site the way
-you would. At *Read only* it can open pages, follow links, scroll and
-search, but it can't click a button or type anywhere except a search
-box. At the next level it can click and type (add to cart, post a
+you would. At *Read only* it can open pages, follow links, scroll,
+search, and take a picture of the page, but it can't click a button or
+type anywhere except a search box. Ask *"take a screenshot of my ALAB
+chart"* and it saves the picture in its folder under `screenshots/`;
+the page shows it under the tool's card. A model that can see pictures
+(Ollama lists "vision") describes it too
+([notes/137](notes/137-a-picture-of-the-page.md)). At the next level it can click and type (add to cart, post a
 reply), and it asks you each time. At no level will it buy, pay, cancel
 or return: on those pages it stops and hands the page to you. On X it
 also goes slowly on purpose, because X locks accounts that look

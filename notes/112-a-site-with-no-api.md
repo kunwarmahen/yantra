@@ -246,6 +246,8 @@ link with no password box means signed in. A password box or a "Sign
 in" link means not, and nothing is saved: no file, no profile. A page
 that shows neither goes to the person, who has just closed the window:
 *did you sign in?* On the page that is a yes/no in the sign-in box.
+From a phone, the window is Setu's streamed one, and it ends when the
+person presses *I've signed in* ([note 136](136-a-sign-in-from-another-device.md)).
 
 ### Why the page, not the cookies
 
