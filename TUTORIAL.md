@@ -1952,6 +1952,7 @@ when you want that answer from last week again:
 /chats open 2          go on with it from where it stopped
 /chats export 2        save it as a file to share (here, named by its date)
 /chats delete 2        delete it for good (it asks first)
+/chats test 2 May 20   keep it as a test (below)
 ```
 
 On the page, press **history** in the top bar. Type a word you remember
@@ -1960,6 +1961,17 @@ the word marked. Click one to read it the way it looked (the tools it
 used are folded under small grey lines). **carry on here** puts it back
 into the chat, and **delete** removes it for good: from the list, from
 the search, and from the file on disk.
+
+**Keep a good one as a test.** When an answer was right and you
+checked it, press **keep as a test** while reading it (or `/chats test N`
+in the terminal), and type a few words the right answer must say. From
+then on, `yantra --eval --kept` asks the same question again with every
+tool answering from what it said that day, so nothing real happens: no
+email is sent, nothing is bought. It checks that the answer still says
+your words, still uses the same tools, and gives the same facts. Run it
+after you change the model or a prompt, and it tells you what broke.
+`yantra --tests` runs everyone's at once, and that is what a nightly
+schedule runs ([notes/141](notes/141-a-test-you-already-had.md)).
 
 To share one, press **share** while reading it:
 
