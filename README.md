@@ -2078,7 +2078,10 @@ with the tools' answers recorded beside it. `yantra --eval --kept` replays
 them: every tool answers from the recording (same name, best match) and
 nothing real runs, the words must be in the answer, and the model judges
 tonight's answer against the kept one. `--report`/`--against` say what
-moved since last night. See [notes/141](notes/141-a-test-you-already-had.md).
+moved since last night, and `yantra --tests` runs every kept suite at once
+(each against its own agent) and leaves one summary, `last.json`, for a
+schedule to start and a page to show. See
+[notes/141](notes/141-a-test-you-already-had.md).
 
 **Shape, not content, is what gets kept**: the task, the tools in call
 order, whether each worked, the counts — never tool arguments, tool
@@ -2553,7 +2556,10 @@ src/yantra/
 │                   per agent (~/.local/state/yantra/tests/<agent>/,
 │                   YANTRA_TESTS); fakes answer same name, best match and
 │                   nothing real runs; stand-ins for tools tonight's agent
-│                   lacks; --keep-test, /chats test, the page's History
+│                   lacks; --keep-test, /chats test, the page's History;
+│                   --tests runs every suite (yours and people/<person>/)
+│                   against its own agent and leaves last.json
+│                   (yantra.tests.v1): passed, broke, fixed since last time
 │                   ([notes/141](notes/141-a-test-you-already-had.md))
 ├── memory/         what the agent knows about the PERSON across conversations
 │                   (not write_note's project notes): MemoryStore is four verbs

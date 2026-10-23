@@ -44,6 +44,16 @@ the answer must contain the words they typed when they kept it
 the kept one (``judge``) -- a die roll of its own, which is why it is
 one of three and never the only one.
 
+EVERY NIGHT, EVERY SUITE. ``yantra --tests`` runs each kept suite under
+the root -- yours, one folder per agent, and each Dvara person's under
+``people/<person>/`` -- as its own ``--eval --kept`` process against the
+agent it was kept from (``agent.json`` beside its cases says which
+package), writes each run's report into the suite's ``runs/``, compares
+it with the one before, and leaves one summary at the root
+(``last.json``, ``yantra.tests.v1``): how many passed, which broke and
+which were fixed since. A clock (Samay) starts it; a page (Sarathi's
+home) reads the summary. Nothing here decides when.
+
     YANTRA_TESTS=PATH        kept tests live under PATH instead
 """
 
@@ -52,6 +62,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import sys
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -64,6 +77,16 @@ from yantra.tools.base import Tool, ToolContext, ToolRegistry
 
 #: The folder under a suite that holds each case's recording.
 REPLAY_DIR = "replay"
+#: Beside a suite's cases: which agent it tests, and whose it is.
+ABOUT = "agent.json"
+#: Under a suite: each night's report, one file per run.
+RUNS_DIR = "runs"
+#: At the root: the last night's summary, what a page reads.
+LAST = "last.json"
+#: The summary's shape. A reader refuses one it does not know.
+TESTS_FORMAT = "yantra.tests.v1"
+#: Under the root: Dvara's people, one folder each.
+PEOPLE_DIR = "people"
 #: What a fake says for a tool the recording never called.
 NOT_RECORDED = ("not recorded in this test: {name} was not used when this "
                 "conversation was kept, so it has no answer here. Answer "
@@ -229,7 +252,8 @@ def roster_of(registry: ToolRegistry | None) -> dict[str, dict[str, Any]]:
 
 
 def keep(recording: Recording, directory: Path, *, words: Sequence[str] = (),
-         title: str = "") -> str:
+         title: str = "", agent: str | None = None, package: Path | None = None,
+         person: str = "") -> str:
     """Write ``recording`` into the suite at ``directory`` as a new case;
     returns its id. The suite file is created the first time, and each
     keep appends one ``[[case]]`` -- never rewrites the ones above it,
@@ -242,6 +266,11 @@ def keep(recording: Recording, directory: Path, *, words: Sequence[str] = (),
         case_id, n = f"{base}-{n}", n + 1
     replay = directory / REPLAY_DIR / f"{case_id}.json"
     replay.parent.mkdir(parents=True, exist_ok=True)
+    # Rewritten on every keep: the agent's package may have moved, and
+    # the night run should build the one the person is using now.
+    (directory / ABOUT).write_text(json.dumps(
+        {"agent": agent or "yantra", "package": str(package) if package else "",
+         "person": person}, indent=1) + "\n", encoding="utf-8")
     replay.write_text(json.dumps(recording.to_json(), ensure_ascii=False, indent=1),
                       encoding="utf-8")
     words = [w.strip() for w in words if w.strip()]
@@ -334,9 +363,17 @@ def stand_ins(recording: Recording, present: Sequence[str]) -> list[ReplayTool]:
     return out
 
 
+def people_root(person: str, root: Path | None = None) -> Path:
+    """A Dvara person's kept tests, under the same root as everyone's, so
+    one night run reads them all: ``<root>/people/<person>/<agent>/``."""
+    slug = re.sub(r"[^A-Za-z0-9_.@-]+", "-", person).strip("-.") or "someone"
+    return (root or default_root()) / PEOPLE_DIR / slug
+
+
 def keep_from_log(log: Any, conversation_id: str, agent_name: str | None, *,
                   words: Sequence[str] = (), registry: ToolRegistry | None = None,
-                  root: Path | None = None) -> tuple[str, Path, Recording]:
+                  root: Path | None = None, package: Path | None = None,
+                  person: str = "") -> tuple[str, Path, Recording]:
     """One History conversation kept as a test of ``agent_name``: the
     one road every surface takes (the command, /chats test, the page,
     Dvara). ``registry`` is the live session's, when there is one, so the
@@ -349,5 +386,129 @@ def keep_from_log(log: Any, conversation_id: str, agent_name: str | None, *,
                              tools=roster_of(registry))
     directory = suite_dir(agent_name, root)
     case_id = keep(recording, directory, words=words,
-                   title=found[0].title if found else "")
+                   title=found[0].title if found else "", agent=agent_name,
+                   package=package, person=person)
     return case_id, directory, recording
+
+
+# ---- every suite, one night ----------------------------------------------------
+
+
+def suites(root: Path) -> list[Path]:
+    """Every kept suite under ``root``: yours at ``<agent>/``, a person's
+    at ``people/<person>/<agent>/``. Never deeper -- a recording folder
+    is not a suite."""
+    found = [p.parent for p in [*root.glob("*/cases.toml"),
+                                *root.glob(f"{PEOPLE_DIR}/*/*/cases.toml")]]
+    return sorted(p for p in found if p.name != PEOPLE_DIR)
+
+
+def about(suite: Path) -> dict[str, str]:
+    try:
+        raw = json.loads((suite / ABOUT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raw = {}
+    return {"agent": str(raw.get("agent") or suite.name),
+            "package": str(raw.get("package") or ""),
+            "person": str(raw.get("person") or "")}
+
+
+def _yantra() -> list[str]:
+    return [sys.executable, "-c",
+            "import sys; from yantra.cli.main import main; sys.exit(main(sys.argv[1:]))"]
+
+
+def run_suite(suite: Path, *, extra: Sequence[str] = (), command: Sequence[str] | None = None,
+              timeout: float | None = None) -> dict[str, Any]:
+    """One suite, run as its own ``--eval --kept`` process; what it found,
+    compared with the run before. A suite that could not run says why
+    and is red -- a night that quietly skipped one is a green card that
+    checked less than it says."""
+    from yantra.eval_report import compare, read_report
+    info = about(suite)
+    runs = suite / RUNS_DIR
+    before = sorted(runs.glob("*.json")) if runs.is_dir() else []
+    report = runs / (time.strftime("%Y%m%dT%H%M%S") + ".json")
+    argv = [*(command or _yantra()), "--eval", "--kept", "--suite", str(suite),
+            "--report", str(report)]
+    package = Path(info["package"]) if info["package"] else None
+    if package is not None and package.is_dir():
+        argv += ["--agent", str(package)]
+    argv += list(extra)
+    row: dict[str, Any] = {"suite": str(suite), **info, "report": str(report),
+                           "cases": 0, "passed": 0, "red": [], "broke": [],
+                           "fixed": [], "error": ""}
+    if package is not None and not package.is_dir():
+        row["error"] = f"its agent's package is gone: {package}"
+        return row
+    try:
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                              stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        row["error"] = f"stopped after {timeout:.0f}s"
+        return row
+    except OSError as exc:
+        row["error"] = f"could not start yantra: {exc}"
+        return row
+    if not report.is_file():
+        tail = (done.stderr or done.stdout or "").strip().splitlines()[-3:]
+        row["error"] = " ".join(tail) or f"yantra exited {done.returncode} with no report"
+        return row
+    try:
+        now = read_report(report)
+    except ConfigError as exc:
+        row["error"] = str(exc)
+        return row
+    row.update(cases=len(now.cases), passed=now.passed, model=now.model,
+               red=[c.id for c in now.cases if not c.passed])
+    if before:
+        try:
+            moved = compare(read_report(before[-1]), now)
+            row.update(broke=[d.id for d in moved.broke], fixed=[d.id for d in moved.fixed])
+        except ConfigError:
+            pass                    # an unreadable old report moves nothing
+    return row
+
+
+def night(root: Path | None = None, *, extra: Sequence[str] = (),
+          command: Sequence[str] | None = None,
+          timeout: float | None = None) -> dict[str, Any]:
+    """Every suite under ``root``, then the summary written to ``LAST``."""
+    root = root or default_root()
+    rows = [run_suite(s, extra=extra, command=command, timeout=timeout)
+            for s in suites(root)]
+    summary = {
+        "format": TESTS_FORMAT,
+        "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "suites": rows,
+        "cases": sum(r["cases"] for r in rows),
+        "passed": sum(r["passed"] for r in rows),
+        "broke": sum(len(r["broke"]) for r in rows),
+        "fixed": sum(len(r["fixed"]) for r in rows),
+        "errors": sum(1 for r in rows if r["error"]),
+    }
+    summary["green"] = bool(rows) and not summary["errors"] and (
+        summary["passed"] == summary["cases"])
+    root.mkdir(parents=True, exist_ok=True)
+    (root / LAST).write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
+    return summary
+
+
+def said(summary: dict[str, Any]) -> str:
+    """The summary in a line or a few, as a chat or a logbook says it."""
+    if not summary["suites"]:
+        return "No conversation is kept as a test yet."
+    head = (f"{summary['passed']} of {summary['cases']} kept tests passed"
+            + (f", {summary['broke']} broke since last time" if summary["broke"] else "")
+            + (f", {summary['fixed']} fixed" if summary["fixed"] else "")
+            + (f", {summary['errors']} could not run" if summary["errors"] else "") + ".")
+    lines = [head]
+    for row in summary["suites"]:
+        whose = f"{row['person']}'s {row['agent']}" if row["person"] else row["agent"]
+        if row["error"]:
+            lines.append(f"· {whose}: could not run -- {row['error']}")
+        elif row["broke"] or row["red"]:
+            lines.append(f"· {whose}: {row['passed']}/{row['cases']}"
+                         + (f", broke: {', '.join(row['broke'])}" if row["broke"] else "")
+                         + (f", red: {', '.join(row['red'])}" if row["red"] else ""))
+    return "\n".join(lines)

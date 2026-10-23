@@ -11,6 +11,7 @@ not a fake raises if it runs.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -21,7 +22,8 @@ from yantra.errors import ConfigError
 from yantra.eval_suite import load_cases, render_case
 from yantra.evals import EvalCase, EvalRunner
 from yantra.kept_tests import (NOT_RECORDED, Call, Recording, best_match,
-                               from_payload, keep, suite_dir)
+                               from_payload, keep, night, said, suite_dir,
+                               suites)
 from yantra.permissions import allow_read_only
 from yantra.tools.base import Tool, ToolRegistry
 
@@ -332,3 +334,103 @@ class TestFromTheTerminalAndThePage:
         [case] = load_cases(tmp_path / "tests" / "minder")
         assert case.answer_contains == ["reset"]
         assert client.post("/api/chats/gone/test").status_code == 400
+
+
+FAKE_YANTRA = '''
+import json, os, sys
+from pathlib import Path
+from yantra.eval_report import CaseRecord, SuiteRun, write_report
+args = sys.argv[1:]
+suite = Path(args[args.index("--suite") + 1])
+report = Path(args[args.index("--report") + 1])
+Path(os.environ["FAKE_LOG"]).open("a").write(json.dumps(args) + "\\n")
+if (suite / "broken").exists():
+    sys.exit("error: the model is not answering")
+red = set(json.loads((suite / "red.json").read_text())) if (suite / "red.json").exists() else set()
+cases = [CaseRecord(id=c, passed=c not in red, attempts=1, passes=int(c not in red),
+                    min_pass_rate=1.0, tokens=10, seconds=1.0, ran_model=True,
+                    failures=[] if c not in red else ["judge: FAIL"])
+         for c in ("kept-a", "kept-b")]
+write_report(report, SuiteRun(suite="s", provider="ollama", model="qwen3.8:latest",
+             at="2026-10-22T03:00:00Z", repeat=1, cases_in_suite=2, cases=cases))
+'''
+
+
+class TestEveryNight:
+    """The bias: a night that quietly skipped a suite, or called a broken
+    one green, is a card that checked less than it says."""
+
+    @pytest.fixture
+    def root(self, tmp_path, monkeypatch):
+        fake = tmp_path / "fake_yantra.py"
+        fake.write_text(FAKE_YANTRA)
+        monkeypatch.setenv("FAKE_LOG", str(tmp_path / "calls.jsonl"))
+        root = tmp_path / "tests"
+        rec = from_payload(_payload(), conversation="abc")
+        keep(rec, root / "yantra")
+        keep(rec, root / "people" / "naina" / "minder", agent="minder",
+             package=tmp_path, person="naina")
+        return root, [sys.executable, str(fake)]
+
+    def calls(self, root):
+        return [json.loads(line) for line in
+                (root.parent / "calls.jsonl").read_text().splitlines()]
+
+    def test_every_suite_is_found_yours_and_each_persons(self, root):
+        found = suites(root[0])
+        assert [p.relative_to(root[0]).as_posix() for p in found] == [
+            "people/naina/minder", "yantra"]
+
+    def test_each_suite_runs_against_its_own_agent(self, root):
+        tests, command = root
+        summary = night(tests, command=command, extra=["--model", "qwen3.8:latest"])
+        assert summary["cases"] == 4 and summary["passed"] == 4 and summary["green"]
+        naina, mine = self.calls(tests)
+        assert "--agent" in naina and "--agent" not in mine
+        assert naina[-2:] == ["--model", "qwen3.8:latest"]
+        assert json.loads((tests / "last.json").read_text())["format"] == "yantra.tests.v1"
+
+    def test_what_broke_since_last_time_is_named(self, root):
+        tests, command = root
+        night(tests, command=command)
+        import time as clock
+        clock.sleep(1.1)                      # a new report file name
+        (tests / "yantra" / "red.json").write_text('["kept-b"]')
+        summary = night(tests, command=command)
+        mine = next(r for r in summary["suites"] if r["agent"] == "yantra")
+        assert mine["broke"] == ["kept-b"] and mine["red"] == ["kept-b"]
+        assert summary["broke"] == 1 and not summary["green"]
+        assert "broke: kept-b" in said(summary)
+
+    def test_a_suite_that_could_not_run_is_said_and_never_green(self, root):
+        tests, command = root
+        (tests / "yantra" / "broken").write_text("")
+        summary = night(tests, command=command)
+        assert summary["errors"] == 1 and not summary["green"]
+        assert "the model is not answering" in said(summary)
+
+    def test_a_gone_package_is_said(self, root, tmp_path):
+        tests, command = root
+        about_file = tests / "people" / "naina" / "minder" / "agent.json"
+        about_file.write_text(json.dumps({"agent": "minder", "package": str(tmp_path / "gone"),
+                                          "person": "naina"}))
+        row = next(r for r in night(tests, command=command)["suites"] if r["person"])
+        assert "package is gone" in row["error"]
+
+    def test_nothing_kept_is_not_green(self, tmp_path):
+        summary = night(tmp_path / "empty")
+        assert summary["green"] is False
+        assert said(summary) == "No conversation is kept as a test yet."
+
+    def test_tests_runs_them_from_the_command_line(self, root, monkeypatch, capsys):
+        from yantra.cli import main as cli
+        tests, command = root
+        monkeypatch.setenv("YANTRA_TESTS", str(tests))
+        monkeypatch.setattr("yantra.kept_tests._yantra", lambda: command)
+        assert cli.main(["--tests", "--json"]) == 0
+        assert json.loads(capsys.readouterr().out)["passed"] == 4
+
+    def test_suite_goes_with_kept(self, capsys):
+        from yantra.cli.main import main
+        assert main(["--suite", "x"]) == 2
+        assert "--eval --kept" in capsys.readouterr().err

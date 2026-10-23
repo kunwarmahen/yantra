@@ -288,6 +288,7 @@ class WebSession:
         #: The agent History's "Keep as a test" keeps a conversation as a
         #: test of (kept_tests.py): the package's name, None for yantra.
         self.tests_for: str | None = None
+        self.tests_package: Path | None = None
 
     def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
         """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
@@ -2991,7 +2992,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         try:
             case_id, directory, recording = keep_from_log(
                 log, conversation_id, session.tests_for, words=words,
-                registry=session.agent.registry)
+                registry=session.agent.registry, package=session.tests_package)
         except ConfigError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {"case": case_id, "folder": str(directory),

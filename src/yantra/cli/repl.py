@@ -342,6 +342,7 @@ class Repl:
         #: The agent ``/chats test`` keeps a conversation as a test of
         #: (kept_tests.py): the package's name, or None for plain yantra.
         self.tests_for: str | None = None
+        self.tests_package: Path | None = None
         #: A TrajectoryLog when the operator asked for one (--trace), so
         #: a turn that goes wrong leaves something a regression case can
         #: be built from (notes/57). None is the usual case and costs
@@ -2118,7 +2119,7 @@ class Repl:
         try:
             case_id, directory, recording = keep_from_log(
                 self.log, conversation_id, self.tests_for, words=wanted,
-                registry=self.agent.registry)
+                registry=self.agent.registry, package=self.tests_package)
         except ConfigError as exc:
             self.console.print(str(exc), markup=False, style="red")
             return

@@ -98,6 +98,42 @@ costs nothing to find out), and its bytes go into the case's
 fingerprint ([note 72](72-what-changed-under-a-name.md)). An edited
 recording is a different case.
 
+## Every suite, one night
+
+```bash
+yantra --tests [--json] [--provider ollama --model qwen3.8:latest]
+```
+
+runs every kept suite under the tests folder as its own `--eval --kept`
+process: yours, one folder per agent, and each Dvara person's under
+`people/<person>/<agent>/`. Each runs against the agent it was kept
+from, because `agent.json` beside its cases names the package
+(rewritten on every keep, so a package that moved is followed). Each
+run's report goes into the suite's `runs/` and is compared with the
+one before it. One summary is left at the root, `last.json`
+(`yantra.tests.v1`): how many passed, which broke and which were fixed
+since the last run, and which suites could not run at all.
+
+A SUITE THAT COULD NOT RUN IS RED, NEVER SKIPPED. A model that is not
+answering, a package that is gone, or a run that printed no report each
+puts its reason on the suite's line. A night that quietly left one out
+is a green card that checked less than it says. A red night still exits
+0: it is an answer, and the clock that started it should write it down,
+not retry it. Exit 1 means a suite could not run.
+
+Nothing here decides when. A clock (Samay) starts it, and a page
+(Sarathi's home) reads the summary.
+
+```
+$ yantra --tests --provider ollama --model qwen3.8-64k:latest
+1 of 2 kept tests passed.
+· yantra: 1/2, red: kept-aa5f4ecb
+```
+
+That is the Robinhood case from below, still red against its wrong
+kept answer. It is not listed as broke, because it was red the run
+before too.
+
 ## Live receipt
 
 Two real conversations from History, kept and replayed on
@@ -145,7 +181,7 @@ answer into `answer` in its recording.
 
 ## Tests
 
-`tests/test_kept_tests.py` (30). The bias is against a replay that is
+`tests/test_kept_tests.py` (38). The bias is against a replay that is
 not one: every tool there that is not a fake raises if it runs, and the
 gate is the unattended one. They check:
 
@@ -163,15 +199,22 @@ gate is the unattended one. They check:
 * missing words fail by name and ignore case;
 * the judge sees the kept answer, runs with no tools, and fails closed;
 * a recorded error is replayed as an error;
-* `--keep-test`, `/chats test` and the page's endpoint each keep one.
+* `--keep-test`, `/chats test` and the page's endpoint each keep one;
+* the night finds every suite (yours and each person's) and runs each
+  against its own agent;
+* it names what broke since the last run;
+* a suite that could not run, or whose package is gone, is said and
+  never green;
+* nothing kept is not green;
+* `--tests --json` prints the summary.
 
 ## What is not here yet
 
-* **A night run on its own.** Samay running `--eval --kept` every
-  night, and a pass/fail card on Sarathi's home page with what changed
-  since last night.
+* ~~**A night run on its own.**~~ `yantra --tests` runs them all and
+  leaves `last.json` (above). Samay starting it every night, and the
+  card on Sarathi's home page, are theirs (Samay's and Sarathi's notes).
 * **Dvara's people.** `/keep test` on Telegram, into that person's own
-  suite for that agent.
+  suite (`people_root`) for that agent, is Dvara's.
 * **Choosing the turn.** The last turn is kept. A conversation whose
   good answer came earlier is kept by carrying it on to that point
   in a new conversation.

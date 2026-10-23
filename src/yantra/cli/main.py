@@ -485,6 +485,17 @@ def build_parser() -> argparse.ArgumentParser:
                              "tests of this agent (--keep-test, /chats test, "
                              "the page's Keep as a test) instead of the "
                              "package's own suite. Needs no package")
+    parser.add_argument("--suite", metavar="DIR", default=None,
+                        help="with --eval --kept: the kept tests in DIR instead "
+                             "of this agent's own folder (a Dvara person's, "
+                             "under people/)")
+    parser.add_argument("--tests", action="store_true",
+                        help="run EVERY suite of kept tests (yours and each "
+                             "Dvara person's), each against the agent it was "
+                             "kept from, and leave a summary of what passed, "
+                             "broke and was fixed since the last run "
+                             "(last.json in the tests folder). What a nightly "
+                             "schedule runs; --json prints the summary")
     parser.add_argument("--judge-model", metavar="MODEL", default=None,
                         dest="judge_model",
                         help="with --eval: the model that judges a kept "
@@ -1019,6 +1030,27 @@ def _eval_mcp(spec: AgentSpec, tools, console: Console):
     return manager
 
 
+def _tests_mode(args, console: Console) -> int:
+    """--tests: every suite of kept tests, one process each (kept_tests.night).
+    Exit 0 when it ran, red or green -- a red night is an answer, and the
+    clock that started it should write it down, not retry it. Exit 1 only
+    when a suite could not run at all."""
+    from yantra.kept_tests import night, said
+    extra: list[str] = []
+    if args.provider:
+        extra += ["--provider", args.provider]
+    if args.model:
+        extra += ["--model", args.model]
+    if args.judge_model:
+        extra += ["--judge-model", args.judge_model]
+    summary = night(extra=extra)
+    if args.json_out:
+        print(json.dumps(summary))
+    else:
+        console.print(said(summary), markup=False)
+    return 1 if summary["errors"] else 0
+
+
 def _keep_test_mode(args, spec: AgentSpec, console: Console) -> int:
     """--keep-test ID: a conversation from History, kept as a test of
     this agent (kept_tests.py). Reads a file and writes two; no model."""
@@ -1041,7 +1073,7 @@ def _keep_test_mode(args, spec: AgentSpec, console: Console) -> int:
                   file=sys.stderr)
             return 2
         case_id, directory, recording = keep_from_log(
-            log, found[0].id, spec.name, words=args.words)
+            log, found[0].id, spec.name, words=args.words, package=spec.root)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -1075,7 +1107,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
         # The person's own tests of this agent (kept_tests.py): no package
         # needed, because the agent with no --agent is an agent too.
         from yantra.kept_tests import suite_dir
-        suite = suite_dir(spec.name)
+        suite = Path(args.suite) if args.suite else suite_dir(spec.name)
         if not (suite / CASES).is_file():
             print(f"error: no conversation is kept as a test of "
                   f"{spec.name or 'yantra'} yet ({suite}) -- keep one with "
@@ -2633,9 +2665,10 @@ def main(argv: list[str] | None = None) -> int:
         # for a keystroke, and Samay's offers are not made to nobody.
         args.unattended = True
     if args.json_out:
-        if args.prompt is None and not args.prompt_positional and args.call is None:
+        if (args.prompt is None and not args.prompt_positional and args.call is None
+                and not args.tests):
             print("error: --json answers one prompt: give it --prompt or a "
-                  "positional PROMPT (or --call TOOL)", file=sys.stderr)
+                  "positional PROMPT (or --call TOOL, or --tests)", file=sys.stderr)
             return 2
         # stdout is the JSON object and nothing else; everything a person
         # would read -- the banner, the streamed answer, the tool lines --
@@ -2792,6 +2825,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --async must be at least 1 (got {args.eval_async})",
               file=sys.stderr)
         return 2
+    if args.suite and not args.kept:
+        print("error: --suite names a folder of kept tests; it goes with "
+              "--eval --kept", file=sys.stderr)
+        return 2
     if args.words and args.keep_test is None:
         print("error: --words are what a kept test's answer must say; they "
               "go with --keep-test ID", file=sys.stderr)
@@ -2895,6 +2932,8 @@ def main(argv: list[str] | None = None) -> int:
         return _eval_mode(args, spec, console)
     if args.keep_test is not None:
         return _keep_test_mode(args, spec, console)
+    if args.tests:
+        return _tests_mode(args, console)
 
     # Reading a recorded turn back needs no provider either -- it is a
     # file and a printer -- so it goes beside the acceptance run rather
@@ -3132,6 +3171,7 @@ def main(argv: list[str] | None = None) -> int:
                 mcp=mcp_manager, trace=_trace_log(args),
                 log=_conversation_log(args, console))
     repl.tests_for = spec.name           # whose kept tests /chats test adds to
+    repl.tests_package = spec.root
     if memory is not None and repl.trace is not None:
         # What the trace would scrub, the look back scrubs too.
         memory.redact = repl.trace.redact
@@ -3269,6 +3309,7 @@ def main(argv: list[str] | None = None) -> int:
             web_session.trace = repl.trace   # --trace records the browser too
             web_session.log = repl.log       # and the page keeps its own too
             web_session.tests_for = repl.tests_for
+            web_session.tests_package = repl.tests_package
             return launch(web_session, agent, store,
                           host=args.host, port=args.port, mcp=mcp_manager)
 
