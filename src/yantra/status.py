@@ -25,6 +25,15 @@ people running this hit first, and it is invisible until a turn fails
 on it. A cloud provider is never asked anything: whether a key is good
 is the provider's to say, and costs a call to find out.
 
+HOW MUCH THE MODEL HOLDS, BESIDE HOW MUCH YANTRA PLANS FOR. Yantra
+shortens a long conversation by ``context_window``; Ollama cuts
+whatever is past the model's own window, silently, from the front --
+the system prompt and the tools first. When the two disagree the agent
+"forgets" its tools mid-conversation and nothing says why. So for a
+local model the same visit asks how many tokens it really holds (the
+loaded model's own number, else the ``num_ctx`` it was made with), and
+a window smaller than the plan is a problem line.
+
 NO SECRET IS IN IT. Which rung of the ladder chose the provider (a key
 is set, ``YANTRA_PROVIDER`` says so), never the key itself.
 
@@ -44,7 +53,8 @@ from importlib.util import find_spec
 import httpx
 
 from yantra import prahari_link, samay_link, setu_link, sparsh_link
-from yantra.config import default_model, guess_provider, load_settings
+from yantra.config import (default_context_window, default_model, guess_provider,
+                           load_settings)
 from yantra.errors import ConfigError
 from yantra.tools.discover import entry_point_packs
 
@@ -73,8 +83,31 @@ def _why(provider: str) -> str:
     return f"{provider.upper()}_API_KEY"
 
 
+def _holds(root: str, model: str) -> tuple[int | None, str | None]:
+    """(tokens the model holds, where that came from): the loaded model's
+    own context length, else the num_ctx it was made with; (None, None)
+    when neither says -- Ollama's own default applies then."""
+    wanted = {model, f"{model}:latest"}
+    try:
+        loaded = httpx.get(f"{root}/api/ps", timeout=LOCAL_TIMEOUT).json().get("models")
+        for row in loaded if isinstance(loaded, list) else []:
+            if isinstance(row, dict) and row.get("name") in wanted \
+                    and isinstance(row.get("context_length"), int):
+                return row["context_length"], "loaded"
+        shown = httpx.post(f"{root}/api/show", json={"model": model},
+                           timeout=LOCAL_TIMEOUT).json()
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return None, None
+    for line in str(shown.get("parameters") or "").splitlines():
+        key, _, value = line.strip().partition(" ")
+        if key == "num_ctx" and value.strip().isdigit():
+            return int(value.strip()), "num_ctx"
+    return None, None
+
+
 def _local(base_url: str, model: str) -> dict:
-    """Is the local server answering, and has it pulled the model?"""
+    """Is the local server answering, has it pulled the model, and how
+    much does it hold?"""
     root = base_url.rstrip("/").removesuffix("/v1")
     try:
         response = httpx.get(f"{root}/api/tags", timeout=LOCAL_TIMEOUT)
@@ -83,8 +116,9 @@ def _local(base_url: str, model: str) -> dict:
         return {"answering": False, "pulled": None}
     names = {m.get("name") for m in listed if isinstance(m, dict)} \
         if isinstance(listed, list) else set()
-    return {"answering": True,
-            "pulled": model in names or f"{model}:latest" in names}
+    pulled = model in names or f"{model}:latest" in names
+    holds, said_by = _holds(root, model) if pulled else (None, None)
+    return {"answering": True, "pulled": pulled, "holds": holds, "holds_from": said_by}
 
 
 def _setu(problems: list[str]) -> dict:
@@ -145,7 +179,7 @@ def _sparsh(problems: list[str]) -> dict:
 
 def report() -> dict:
     problems: list[str] = []
-    provider = model = base_url = why = None
+    provider = model = base_url = why = window = None
     local = None
     try:
         provider = guess_provider()
@@ -154,6 +188,7 @@ def report() -> dict:
     if provider is not None:
         why = _why(provider)
         model = default_model(provider)
+        window = default_context_window(provider)
         if provider == "ollama":
             base_url = load_settings(provider).base_url
             local = _local(base_url, model)
@@ -163,6 +198,12 @@ def report() -> dict:
             elif not local["pulled"]:
                 problems.append(f"{model} is not pulled "
                                 f"(ollama pull {model})")
+            elif local["holds"] is not None and local["holds"] < window:
+                problems.append(
+                    f"{model} holds {local['holds']} tokens but Yantra plans for "
+                    f"{window}: past {local['holds']} Ollama silently drops the start "
+                    f"(the tools first). Set OLLAMA_CONTEXT_WINDOW={local['holds']}, "
+                    f"or use a model made with a bigger num_ctx")
     return {
         "format": FORMAT,
         "version": _version(),
@@ -170,6 +211,7 @@ def report() -> dict:
         "provider": provider,
         "chosen_by": why,
         "model": model,
+        "context_window": window,
         "base_url": base_url,
         "local": local,
         "extras": {"web": find_spec("fastapi") is not None,

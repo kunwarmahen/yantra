@@ -73,7 +73,10 @@ programs or as Podman containers.
 
 `yantra status` answers the question each of them answers for itself:
 which release this is, which model a turn would ask and why, and — on a
-local model — whether Ollama is running and has it pulled. `--json`
+local model — whether Ollama is running, has it pulled, and how many
+tokens it really holds beside the `context_window` Yantra plans for (a
+model holding less is a problem line: Ollama would silently drop the
+start of a talk, the tools first). `--json`
 prints it as `yantra.status.v1`, which is what Sarathi reads. `status`
 is the one bare word that is not a prompt; to ask a model the word,
 use `--prompt status` ([notes/117](notes/117-asked-what-it-is.md)).
@@ -2836,7 +2839,8 @@ src/yantra/
 │                   ([notes/134](notes/134-several-phones-by-name.md))
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
-│                   them), whether a local model is served and pulled,
+│                   them), whether a local model is served and pulled
+│                   and how many tokens it holds against context_window,
 │                   extras, tool packs, and whether a session would find
 │                   Setu (a count) and Samay; yantra.status.v1, no turn
 │                   and no key ([notes/117](notes/117-asked-what-it-is.md))

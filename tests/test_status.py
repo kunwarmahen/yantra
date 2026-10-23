@@ -29,6 +29,15 @@ def no_siblings(monkeypatch):
     monkeypatch.setenv("YANTRA_SPARSH", "off")
 
 
+@pytest.fixture(autouse=True)
+def no_model_shown(monkeypatch):
+    """No real Ollama is asked what a model holds; a test that is about
+    it says what the server answers."""
+    def refuse(*args, **kwargs):
+        raise httpx.ConnectError("refused")
+    monkeypatch.setattr(status.httpx, "post", refuse)
+
+
 @pytest.fixture
 def no_local_server(monkeypatch):
     def refuse(*args, **kwargs):
@@ -98,7 +107,8 @@ class TestTheReport:
         monkeypatch.setenv("OLLAMA_MODEL", "gemma4:12b")
         monkeypatch.setattr(status.httpx, "get", _tags("qwen3.8:latest"))
         data = status.report()
-        assert data["local"] == {"answering": True, "pulled": False}
+        assert data["local"] == {"answering": True, "pulled": False,
+                                 "holds": None, "holds_from": None}
         assert data["problems"] == ["gemma4:12b is not pulled "
                                     "(ollama pull gemma4:12b)"]
 
@@ -107,6 +117,51 @@ class TestTheReport:
         monkeypatch.setenv("OLLAMA_MODEL", "qwen3.8")
         monkeypatch.setattr(status.httpx, "get", _tags("qwen3.8:latest"))
         assert status.report()["local"]["pulled"] is True
+
+
+class TestHowMuchTheModelHolds:
+    """The bias: a window Yantra plans past, which Ollama cuts silently --
+    the tools first -- and nothing anywhere says why the agent forgot."""
+
+    def local(self, monkeypatch, *, loaded=None, num_ctx=None, window="65536"):
+        monkeypatch.setenv("YANTRA_PROVIDER", "local")
+        monkeypatch.setenv("OLLAMA_MODEL", "qwen3.8")
+        monkeypatch.setenv("OLLAMA_CONTEXT_WINDOW", window)
+
+        class Reply:
+            def __init__(self, data):
+                self.data = data
+
+            def json(self):
+                return self.data
+
+        def get(url, **kw):
+            if url.endswith("/api/ps"):
+                return Reply({"models": [{"name": "qwen3.8:latest",
+                                          "context_length": loaded}] if loaded else []})
+            return Reply({"models": [{"name": "qwen3.8:latest"}]})
+
+        def post(url, **kw):
+            params = f"temperature 1\nnum_ctx {num_ctx}" if num_ctx else "temperature 1"
+            return Reply({"parameters": params})
+        monkeypatch.setattr(status.httpx, "get", get)
+        monkeypatch.setattr(status.httpx, "post", post)
+        return status.report()
+
+    def test_the_loaded_models_own_number_comes_first(self, monkeypatch):
+        data = self.local(monkeypatch, loaded=65536, num_ctx=4096)
+        assert (data["local"]["holds"], data["local"]["holds_from"]) == (65536, "loaded")
+        assert data["problems"] == []
+
+    def test_a_window_smaller_than_the_plan_is_a_problem(self, monkeypatch):
+        data = self.local(monkeypatch, num_ctx=8192)
+        assert data["context_window"] == 65536
+        assert "holds 8192 tokens but Yantra plans for 65536" in data["problems"][0]
+        assert "OLLAMA_CONTEXT_WINDOW=8192" in data["problems"][0]
+
+    def test_a_model_that_says_nothing_is_not_a_problem(self, monkeypatch):
+        data = self.local(monkeypatch)
+        assert data["local"]["holds"] is None and data["problems"] == []
 
 
 class TestTheSiblings:
