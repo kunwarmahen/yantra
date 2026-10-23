@@ -293,6 +293,14 @@ class TestTheModelIsTold:
         layer = sparsh_link.prompt_text({"phones": [android]})
         assert "the step WAS carried out" in layer and "never that the hold lapsed" in layer
 
+    def test_an_agent_with_only_the_battery_is_told_only_the_battery(self):
+        android = {"serial": "emulator-5554", "state": "device", "model": "sdk"}
+        layer = sparsh_link.status_text({"phones": [android]})
+        assert "phone_status" in layer and "BY NUMBER" not in layer
+        assert "isn't connected" in sparsh_link.status_text({"phones": []})
+        assert "`phone_status` reads the battery" in sparsh_link.prompt_text(
+            {"phones": [android]})
+
     def test_no_phone_says_how_either_kind_is_connected(self):
         layer = sparsh_link.prompt_text({"phones": []})
         assert "USB debugging" in layer and "WebDriverAgent" in layer

@@ -395,6 +395,19 @@ def announce(data: dict[str, Any], tools: int, program: str, shots: str = "") ->
             f" -- via {program}")
 
 
+def status_text(data: dict[str, Any]) -> str:
+    """The ``phone`` layer for an agent let in to ``phone_status`` alone (a
+    morning brief): what it reads, and nothing about a screen it can't use."""
+    if not ready_phones(data):
+        return ("# The person's phone (through Sparsh)\n"
+                "None is connected right now: if the battery or missed calls are "
+                "wanted, say the phone isn't connected.")
+    return ("# The person's phone (through Sparsh)\n"
+            "`mcp__sparsh__phone_status` reads the phone's battery and the calls "
+            "missed since they last looked, without touching the screen. That is "
+            "all of the phone this agent has.")
+
+
 def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
     """The ``phone`` layer: the tools exist, and how to use them well."""
     phones = ready_phones(data)
@@ -422,6 +435,7 @@ def prompt_text(data: dict[str, Any], shots: bool = False) -> str:
         "to it (\"Turn off airplane mode to make a call\") -- tell the person that, "
         "never that the hold lapsed.",
         "4. \"The screen changed\" means nothing was done: use the screen it gives you.",
+        "5. `phone_status` reads the battery and the new missed calls without the screen.",
     ]
     if shots:
         lines.append("A screen the list can't read, or reads only in part (unnamed rows, "
@@ -552,7 +566,9 @@ class Sparsh:
             if classify(tool, kinds) == "confirm":
                 tool.explain = explain_confirm(tool)
         prompt = attach_prompt(agent)
-        prompt.set("phone", prompt_text(self.data, self.sees()))
+        prompt.set("phone", prompt_text(self.data, self.sees())
+                   if self.tools == [] or f"mcp__{SERVER}__look" in self.tools
+                   else status_text(self.data))
         prompt.apply()
         self.connected = True
         return len(self.tools)

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 2953 tests. The
+The harness underneath is complete and covered by 3110 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -958,11 +958,13 @@ and it answers "tap 6". That's why a local model can do it. When
 and says so in one line:
 
 ```
-sparsh: 12 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via /home/you/sparsh/.venv/bin/sparsh
+sparsh: 13 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via /home/you/sparsh/.venv/bin/sparsh
 ```
 
 Sparsh's ordinary steps (look, tap, type, scroll, open an app) run
-without a card. Sparsh holds the risky ones itself: a tap on Send, Pay,
+without a card, and `phone_status` reads the battery and new missed
+calls with no screen at all; a package that admits only that one is told
+only about it ([notes/146](notes/146-told-only-what-it-can-use.md)). Sparsh holds the risky ones itself: a tap on Send, Pay,
 Buy, Delete, Allow and the like, typing into a password field, and
 Enter while such a button is on screen. The
 model is told "NOT DONE", and the only way through is
@@ -2649,7 +2651,9 @@ src/yantra/
 │                   verb it lacks reported rather than fatal
 │                   ([notes/102](notes/102-kept-somewhere-else.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (agent / base / env /
-│                   memory / connections / schedules / phone / skills):
+│                   memory / household / connections / schedules / watches /
+│                   phone / skills; `household` a host's, e.g. Dvara's
+│                   facts for everyone, [notes/146](notes/146-told-only-what-it-can-use.md)):
 │                   each owner writes one named layer, attach_prompt captures
 │                   the operator's --system exactly once, recompose() rebuilds
 │                   after a /load restores a stale composed string
@@ -2863,7 +2867,9 @@ src/yantra/
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and
 │                   act run, `confirm` asks every time), the confirm card is
-│                   Sparsh's describe_hold, a `phone` prompt layer, and
+│                   Sparsh's describe_hold, a `phone` prompt layer (only
+│                   `phone_status` when that is all it admits,
+│                   [notes/146](notes/146-told-only-what-it-can-use.md)), and
 │                   the page's phone panel through `sparsh look --peek`
 │                   and `sparsh log`; with no phone at the start it waits
 │                   DORMANT for /phone use or the panel's "use this phone"

@@ -2455,7 +2455,7 @@ not use your own phone:
 **Use it.** Start Yantra as usual. It says one line at startup:
 
 ```
-sparsh: 12 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via …/sparsh
+sparsh: 13 tool(s); phone emulator-5554 (sdk_gphone64_x86_64) -- via …/sparsh
 ```
 
 Then just ask: *"On my phone, turn on airplane mode."* *"Using Messages,
