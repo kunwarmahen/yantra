@@ -1973,8 +1973,10 @@ when you want that answer from last week again:
 /chats export 2        save it as a file to share (here, named by its date)
 /chats delete 2        delete it for good (it asks first)
 /chats test 2 May 20   keep it as a test (below); add "turn 1" for an earlier answer
+/chats steps 2         what its last answer did, step by step (add 1 for the first)
 /tests                 the tests you kept, and how each did last time
 /tests delete 1        take one back
+/carry                 carry on a job a restart stopped, from its last step
 ```
 
 On the page, press **history** in the top bar. Type a word you remember
@@ -1983,6 +1985,8 @@ the word marked. Click one to read it the way it looked (the tools it
 used are folded under small grey lines). **carry on here** puts it back
 into the chat, and **delete** removes it for good: from the list, from
 the search, and from the file on disk.
+Every answer, there and in the chat, has a small **steps** link: what
+that turn did, one tool at a time, with **file for a bug report**.
 
 **Keep a good one as a test.** When an answer was right and you
 checked it, press **keep as a test** while reading it (or `/chats test N`
