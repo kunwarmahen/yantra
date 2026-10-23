@@ -1244,6 +1244,7 @@ class _BrowserTool(Tool):
     """Shared wiring: every verb speaks to the same BrowserSession."""
 
     read_only = False  # network egress family -- gates, like web_fetch
+    outside = True     # every verb answers with the page (outside.py)
 
     def __init__(self, browser: BrowserSession) -> None:
         self.browser = browser
@@ -1256,6 +1257,7 @@ class _BrowserTool(Tool):
 
 class BrowserOpen(_BrowserTool):
     name = "browser_open"
+    acts = False  # goes to a page and reads it; presses nothing
     description = (
         "Open a URL in a real headless Chromium browser -- JavaScript "
         "runs, so JS-rendered pages work where web_fetch sees an empty "
@@ -1393,6 +1395,7 @@ class BrowserScreenshot(_BrowserTool):
 
 class BrowserClose(_BrowserTool):
     name = "browser_close"
+    acts = False
     description = (
         "Shut the browser down and free it -- call this once you have "
         "what you needed from the web. Harmless if none is open; a later "
@@ -1448,6 +1451,7 @@ NOBODY_DESCRIPTION = (
 
 class BrowserHandoff(_BrowserTool):
     name = "browser_handoff"
+    acts = False  # puts the page in front of the person; they act, not it
     description = (
         "Give the page you have open to the PERSON. mode='finish' when the "
         "rest is theirs to do: anything that spends money (a purchase, a "

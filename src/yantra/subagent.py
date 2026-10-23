@@ -396,6 +396,10 @@ class SubagentSpawner:
         # time is gone only from a refusal.
         child.clock_turn = _approval_turn(self.parent)
         child.approval_notice = self.parent.approval_notice
+        # ONE LIST OF WHAT WAS READ (outside.py): the parent's reads reach
+        # the child through its objective, the child's reach the parent
+        # through its answer, so a read in either marks a change in both.
+        child.outside_read = self.parent.outside_read
         if self.on_child_event is not None:
             # Stream tee: the child's raw StreamEvents are PUSHED to the
             # observer tagged with this spawn's 1-based number, so a UI can

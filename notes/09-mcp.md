@@ -444,7 +444,9 @@ matter:
   for being "from a tool".
 * Our mitigations are structural: qualified names, permission gates
   that sub-agents cannot escalate past, and pessimistic side-effect
-  assumptions.
+  assumptions. And once a turn has read any server's answer, every call
+  after it that changes something asks a person, whatever would have
+  allowed it ([note 142](142-outside-text-cannot-give-orders.md)).
 * **A server's `readOnlyHint` is its own claim.** For a server Yantra
   knows nothing else about, that is all there is. For a Setu connection
   there is more: the connector's manifest classes every tool, and that —

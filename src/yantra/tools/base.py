@@ -92,6 +92,14 @@ class Tool(ABC):
     #: it (tools/selector.py). browser_fill with no browser_open in reach
     #: is a tool the model can see and never successfully call.
     requires: ClassVar[tuple[str, ...]] = ()
+    #: What it returns is text the person didn't write -- a page, an
+    #: email, a server's answer, a phone's screen. After one of these, a
+    #: call that changes something asks (yantra/outside.py).
+    outside: ClassVar[bool] = False
+    #: Whether a call changes something, for that rule. None: anything not
+    #: ``read_only``. False for a tool that gates only because it reaches
+    #: the network to LOOK (web_fetch, browser_open).
+    acts: ClassVar[bool | None] = None
 
     def spec(self) -> ToolSpec:
         return ToolSpec(name=self.name, description=self.description,

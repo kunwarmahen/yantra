@@ -196,6 +196,8 @@ class WebFetch(Tool):
         "additionalProperties": False,
     }
     read_only = False  # network egress gates, exactly like bash (see above)
+    outside = True     # a page is text the person didn't write (outside.py)
+    acts = False       # ...and fetching one changes nothing
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         return f"fetch {require_str(args, 'url')}"

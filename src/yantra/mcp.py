@@ -903,6 +903,9 @@ class MCPToolWrapper(Tool):
         # pessimistic default: honor readOnlyHint when present, assume
         # side effects otherwise -- annotations are hints, not guarantees
         self.read_only = info.read_only_hint
+        #: Whatever a server returns is text the person didn't write --
+        #: an email, a Notion page, a phone's screen (outside.py).
+        self.outside = True
         #: Plain words for the permission card, set by whoever knows what
         #: this server's calls mean (samay_link.explain). A server cannot
         #: set it: its description is its own claim; this is the host's.

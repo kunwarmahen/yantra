@@ -303,6 +303,7 @@ def _dump_held(held: Held, message: Message) -> dict:
         "turn_id": held.turn_id,
         "at": held.at,
         "recorded": held.recorded,
+        "read_outside": list(held.read_outside),
         "done": [{"tool_call_id": r.tool_call_id, "content": r.content,
                   "is_error": r.is_error,
                   "images": [{"media_type": i.media_type, "data": i.data}
@@ -337,7 +338,8 @@ def _load_held(raw: dict) -> tuple[Message, Held]:
         for w in raw.get("waiting", [])]
     held = Held(turn_id=raw.get("turn_id", ""),
                 calls=list(message.tool_calls()), done=done, waiting=waiting,
-                at=raw.get("at", 0.0), recorded=raw.get("recorded"))
+                at=raw.get("at", 0.0), recorded=raw.get("recorded"),
+                read_outside=list(raw.get("read_outside") or []))
     return message, held
 
 

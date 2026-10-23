@@ -509,6 +509,7 @@ class SiteTool(Tool):
         }
         self.read_only = klass == "read"
         self.always_ask = False         # spending is never offered at all
+        self.outside = True             # every verb answers with the page
         self.requires = () if verb == "open" else (f"{prefix}_open",)
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:

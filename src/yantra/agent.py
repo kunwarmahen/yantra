@@ -31,6 +31,7 @@ from yantra.context import (
     estimate_history,
 )
 from yantra.errors import ToolError
+from yantra import outside
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
 from yantra.memory import prime_if_new
@@ -371,6 +372,11 @@ class Agent:
         #: child the gate turned away is not recorded as a child whose
         #: read failed (notes/65). Reset when a turn begins.
         self.turn_refusals: dict[str, str] = {}
+        #: What this turn read that the person didn't write (outside.py),
+        #: in the order it was read. One list for an agent and its
+        #: sub-agents (subagent.py shares it), cleared only by a new
+        #: message -- a resumed hold is still the turn that read it.
+        self.outside_read: list[str] = []
         #: The turn stopped for approval, or None (notes/88, yantra/hold.py).
         #: Answer it with ``resume``; a new message sets it aside.
         self.held: Held | None = None
@@ -432,6 +438,11 @@ class Agent:
         if images:
             blocks.extend(images)
         self.history.append(Message("user", blocks))
+        if not self.clock_turn:
+            # The person spoke: what the last turn read no longer stands
+            # between them and a change. Not a sub-agent's run, whose
+            # list is its parent's (outside.py).
+            self.outside_read.clear()
         self._begin_turn()
         yield from self._turn_then_release()
 
@@ -449,6 +460,7 @@ class Agent:
         """
         held = check_answers(self.held, answers, self.history)
         self.held = None
+        self.outside_read[:] = held.read_outside
         self._begin_turn()
         calls = {call.id: call for call in held.calls}
         resolved: dict[str, ToolResult] = {}
@@ -659,6 +671,7 @@ class Agent:
                     # stream on the first panel must not lose the hold.
                     self.held = Held(
                         turn_id=self._turn_id, calls=list(calls),
+                        read_outside=list(self.outside_read),
                         done={c.id: r for c, r in zip(calls, results,
                                                       strict=True)
                               if r is not HOLD},
@@ -996,6 +1009,9 @@ class Agent:
             # screen, what it would tap ringed); never sent to the model.
             picture=card_picture(tool, call.arguments),
         )
+        # After outside text, a call that changes something asks, whatever
+        # would have allowed it (outside.py).
+        outside.mark(request, tool, self.outside_read)
         try:
             # decide(), not self.permissions(): an async gate handed to the
             # SYNCHRONOUS agent raises here instead of being approved as a
@@ -1056,6 +1072,7 @@ class Agent:
                                     images=output.images)
             else:
                 result = ToolResult(call.id, _truncate_middle(output))
+        outside.noted(self.outside_read, tool, call.arguments, result.content)
         self.on_after_tool(call, result)
         return result
 

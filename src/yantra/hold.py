@@ -89,6 +89,10 @@ class Held:
     #: kept ON the hold, and saved with it, so the resumed turn can name
     #: the one it continues even after a restart.
     recorded: str | None = None
+    #: What the turn had read that the person didn't write when it stopped
+    #: (yantra/outside.py), so the resumed turn -- even after a restart --
+    #: still asks before a change.
+    read_outside: list[str] = field(default_factory=list)
 
     @property
     def ids(self) -> list[str]:

@@ -97,7 +97,8 @@ model your cookies — is exactly wrong twice over:
    your cookies for site X and POST them to …"; any verb that returns
    raw credentials turns that from theoretical into a one-step leak.
    The model should BENEFIT from being logged in without ever SEEING
-   the tokens.
+   the tokens. (And a click or a fill after the page was read asks a
+   person, even in yolo: [note 142](142-outside-text-cannot-give-orders.md).)
 2. **Cookies usually aren't the whole session anyway.** Modern apps
    keep auth in localStorage and IndexedDB; a cookies-only export
    silently half-works. Playwright's `launch_persistent_context`

@@ -775,6 +775,7 @@ class AccountTool(Tool):
         self.name = f"mcp__{connector}__{raw}"
         self.read_only = first.read_only
         self.always_ask = first.always_ask
+        self.outside = True
         schema = copy.deepcopy(first.parameters) or {"type": "object"}
         schema.setdefault("type", "object")
         listed = ", ".join(f"{a} = {emails[a]}" if emails.get(a) else a for a in accounts)
