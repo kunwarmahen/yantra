@@ -85,6 +85,7 @@ from yantra.pricing import is_free, session_cost
 from yantra.prompt import recompose
 from yantra.providers import get_provider
 from yantra.session import SessionStore, apply_payload
+from yantra.steps import turn_number as steps_turn_number
 from yantra.skills.loader import SkillError
 from yantra.history import new_id
 from yantra.hold import check_answers, held_task
@@ -498,6 +499,8 @@ class WebSession:
                             0.0, self._wait_left
                             - (time.monotonic() - started))
                 decision = answer.get("decision")
+                if decision in ("approve", "deny", "edit"):
+                    request.answered_by = "you, on the page"
                 if decision == "approve":
                     return True
                 if decision == "deny":
@@ -1423,6 +1426,8 @@ class WebSession:
                     "iterations": n,
                     "budget_meter": _budget_meter(self.agent),
                     "refused": _refusal_tally(self.agent),
+                    # which turn, for its steps link (steps.py)
+                    "turn_number": steps_turn_number(self.agent.history),
                 })
             case TurnEnd(reason=reason, response=response, iterations=n,
                          detail=detail):
@@ -1431,6 +1436,7 @@ class WebSession:
                 # A capped reply (notes/76) arrives WITH its response: the
                 # text so far is kept, and the reason says why it stops.
                 self.broadcast({"type": "turn_end", "reason": reason,
+                                "turn_number": steps_turn_number(self.agent.history),
                                 "detail": detail or "",
                                 "text": (response.message.text()
                                          if response is not None else ""),
@@ -3011,6 +3017,54 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return session.state()
+
+    # ---- a turn, step by step (steps.py) ----------------------------------
+
+    def steps_of(payload: dict, turn: str) -> dict[str, Any]:
+        from yantra import steps
+        try:
+            return steps.timeline(payload, turn or None)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    def steps_file(view: dict[str, Any]) -> Response:
+        from yantra import steps
+        return Response(steps.markdown(view), media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition":
+                                 f'attachment; filename="steps-turn-{view["turn"]}.md"'})
+
+    def this_conversation() -> dict:
+        from yantra.session import snapshot
+        return snapshot(session.agent, session.agent.provider.name)
+
+    @app.get("/api/steps")
+    def steps_now(turn: str = "") -> dict[str, Any]:
+        """This conversation's turn (its last by default), step by step:
+        each tool, its arguments, what came back, when, how long, who
+        was asked."""
+        require_ready()
+        return steps_of(this_conversation(), turn)
+
+    @app.get("/api/steps/export")
+    def steps_now_export(turn: str = "") -> Response:
+        require_ready()
+        return steps_file(steps_of(this_conversation(), turn))
+
+    @app.get("/api/chats/{conversation_id}/steps")
+    def chat_steps(conversation_id: str, turn: str = "") -> dict[str, Any]:
+        require_ready()
+        payload = require_log().payload(conversation_id)
+        if payload is None:
+            raise HTTPException(404, "that conversation is gone")
+        return steps_of(payload, turn)
+
+    @app.get("/api/chats/{conversation_id}/steps/export")
+    def chat_steps_export(conversation_id: str, turn: str = "") -> Response:
+        require_ready()
+        payload = require_log().payload(conversation_id)
+        if payload is None:
+            raise HTTPException(404, "that conversation is gone")
+        return steps_file(steps_of(payload, turn))
 
     @app.post("/api/carry")
     def carry_on() -> dict[str, Any]:

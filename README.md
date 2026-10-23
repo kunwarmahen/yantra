@@ -149,6 +149,9 @@ uv run yantra --yolo                                 # no permission prompts (ca
 uv run yantra --cache                                # prompt-cache breakpoints on
 uv run yantra --max-usd 0.50                         # stop a turn once it costs this much
 uv run yantra --resume                               # restore the newest checkpoint
+uv run yantra --steps run.sqlite [--turn N] [--json|--markdown]
+                                                      # what that run did, step by step,
+                                                      #   no model (notes/145)
 uv run yantra --unattended --json --job run.sqlite --prompt "..."
                                                       # saved after every step; a run a
                                                       #   restart stopped carries on from
@@ -1283,7 +1286,12 @@ every STEP, too: a job Yantra was killed in the middle of is named in the
 next banner, and `/carry` carries it on from its last step without
 redoing any (the page: a **carry on / leave it** bar). The agent is
 told it stopped and looks again before it acts
-([notes/144](notes/144-a-job-a-restart-stopped.md));
+([notes/144](notes/144-a-job-a-restart-stopped.md)). `/steps [N]` shows
+what a turn did, step by step: each tool, what it was given, what came
+back, when, how long it waited for a yes and how long it ran, and who
+said yes. `/steps export` writes it as a file for a bug report, and the
+page has a **steps** link under every answer and in History
+([notes/145](notes/145-what-each-step-did.md));
 `/compact` force-clears context pressure — auto-compaction also fires by
 itself at 80% of the window (`--context-window` to set it; the web UI's
 meter shows the same number live).
@@ -2803,6 +2811,14 @@ src/yantra/
 │                   (SETU_HOME, for a service serving several people), and
 │                   an allow key may name one account (gmail:work)
 │                   ([notes/110](notes/110-which-account-and-who-may-use-it.md))
+├── steps.py        what each step did: the loop notes when each step ran, its
+│                   wait at the gate apart from its run, who said yes
+│                   (PermissionRequest.answered_by) and its pictures, and each
+│                   turn's start, end and answer, beside the history in the
+│                   same payload; timeline() reads one turn as yantra.steps.v1
+│                   for Yantra's, Dvara's and Samay's pages, markdown() as a
+│                   file for a bug report; /steps, --steps FILE
+│                   ([notes/145](notes/145-what-each-step-did.md))
 ├── carry.py        a job a restart stopped: on_step saves every step (and the
 │                   turn's start and end), turn_open says it was still going
 │                   (a kill or a cancelled task leaves it, Ctrl-C clears it),

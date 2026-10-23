@@ -192,3 +192,9 @@ one on into its own row, and starts a new row after clear.
   found it on some page" turns out to be how people remember, it is one
   more column in the index.
 * ~~**Export.**~~ Built: see *Sharing one* above.
+* ~~**What each step did.**~~ Built: every step's time, its wait for a
+  yes, who said it and its pictures are kept with the conversation, and
+  each answer here has a **steps** link
+  ([note 145](145-what-each-step-did.md)). A row is also written after
+  every step, so a job a restart stopped can be carried on
+  ([note 144](144-a-job-a-restart-stopped.md)).

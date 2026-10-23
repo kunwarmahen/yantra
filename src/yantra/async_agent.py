@@ -43,12 +43,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
-from yantra import carry
+from yantra import carry, steps
 from yantra.agent import (
     INTERRUPTED_MESSAGE,
     MAX_PARALLEL_TOOLS,
@@ -211,6 +212,13 @@ class AsyncAgent:
         self.step_error: str | None = None
         #: A restored checkpoint's ``unfinished`` block, until carried on.
         self.unfinished: dict | None = None
+        # ---- what each step and turn did, for the run viewer (steps.py) ----
+        self.step_notes: dict[str, dict] = {}
+        self.turn_notes: dict[str, dict] = {}
+        #: The host's name for the turn about to run (Dvara: its run id).
+        self.turn_tag = ""
+        self._turn_key = ""
+        self._last_request: PermissionRequest | None = None
         #: The sync twin's hold, same contract (notes/88): the turn that
         #: stopped for approval, answered with ``resume``.
         self.held: Held | None = None
@@ -277,7 +285,7 @@ class AsyncAgent:
         held = check_answers(self.held, answers, self.history)
         self.held = None
         self.outside_read[:] = held.read_outside
-        self._begin_turn()
+        self._begin_turn("resumed")
         calls = {call.id: call for call in held.calls}
         resolved: dict[str, ToolResult] = {}
         refusals: dict[str, str] = {}
@@ -324,7 +332,7 @@ class AsyncAgent:
             return ToolResult(call.id, str(exc), is_error=True)
         return await self._run_one(call)
 
-    def _begin_turn(self) -> None:
+    def _begin_turn(self, kind: str = "message") -> None:
         # One turn is one thing the agent was asked to do, so that is the
         # unit the ceiling covers -- and the meter only listens to the
         # agent it belongs to, which is what stops a sub-agent from
@@ -343,6 +351,7 @@ class AsyncAgent:
         self.turn_refusals = {}
         self.turn_open = True               # until it ends (carry.py)
         self.turn_started = carry.now_iso()
+        steps.turn_began(self, kind)        # the run viewer's note
 
     async def carry_on(self) -> AsyncIterator[AgentEvent]:
         """The sync twin's ``carry_on``: a turn a restart stopped,
@@ -350,7 +359,7 @@ class AsyncAgent:
         info = carry.prepare(self)
         if getattr(self, "memory", None) is not None:
             await asyncio.to_thread(prime_if_new, self, info.get("message") or "")
-        self._begin_turn()
+        self._begin_turn("carried")
         self.turn_started = info.get("started") or self.turn_started
         async for event in self._turn_then_release():
             yield event
@@ -365,6 +374,7 @@ class AsyncAgent:
                 if isinstance(event, TurnEnd):
                     ended = True
                     self.turn_open = False
+                    steps.turn_ended(self, event)
                     carry.step_done(self)   # the sync twin's last checkpoint
                     if event.reason != "held":
                         await asyncio.to_thread(_release_turn_tools, self)
@@ -726,6 +736,15 @@ class AsyncAgent:
         raise cancelled
 
     async def _gate(self, call: ToolCall) -> ToolResult | None:
+        """``_decide``, with the step's time at the gate and who answered
+        noted for the run viewer (steps.py)."""
+        began = time.time()
+        self._last_request = None
+        result = await self._decide(call)
+        steps.gated(self, call, began, self._last_request)
+        return result
+
+    async def _decide(self, call: ToolCall) -> ToolResult | None:
         """Permission stage. Returns an error ToolResult to block the call,
         or None when approved. Never runs the tool.
 
@@ -758,7 +777,7 @@ class AsyncAgent:
         except Exception:
             summary = f"{call.name}({json.dumps(call.arguments)})"
 
-        request = PermissionRequest(
+        request = self._last_request = PermissionRequest(
             tool_name=call.name,
             arguments=call.arguments,
             summary=summary,
@@ -813,6 +832,13 @@ class AsyncAgent:
         return None
 
     async def _run_one(self, call: ToolCall) -> ToolResult:
+        """``_run_tool``, timed for the run viewer (steps.py)."""
+        began = time.time()
+        result = await self._run_tool(call)
+        steps.ran(self, call, began, result)
+        return result
+
+    async def _run_tool(self, call: ToolCall) -> ToolResult:
         """Execution stage: run the tool, wrap every failure as data.
 
         Hooks bracket the real execution exactly as in the sync twin --

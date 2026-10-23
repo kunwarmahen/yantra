@@ -659,6 +659,7 @@ function onTurnEnd(env) {
   foot.textContent =
     `── ${env.stop_reason} · ${env.input_tokens} in / ${env.output_tokens} out` +
     `${cost} · ${env.iterations} iteration(s)`;
+  if (env.turn_number) foot.append(stepsLink(null, env.turn_number));
   const wrap = ensureAssistant().parentElement;
   wrap.append(foot);
   const tally = refusalTally(env.refused);
@@ -1548,6 +1549,86 @@ $("#chats-q").onkeydown = (e) => {
 
 function closeChats() { $("#chats-backdrop").classList.add("hidden"); }
 
+/* A turn, step by step (steps.py): from under an answer, or from History. */
+function stepsLink(id, turn) {
+  const b = document.createElement("button");
+  b.className = "linkish";
+  b.textContent = "steps";
+  b.title = "what this turn did, step by step: each tool, its arguments, what came back, how long, who was asked";
+  b.onclick = () => openSteps(id, turn);
+  return b;
+}
+function stepsUrl(id, turn, tail = "") {
+  const base = id ? `/api/chats/${encodeURIComponent(id)}/steps` : "/api/steps";
+  return `${base}${tail}?turn=${encodeURIComponent(turn || "")}`;
+}
+function secs(n) { return n == null ? "" : n < 0.001 ? "<1ms" : n < 1 ? `${Math.round(n * 1000)}ms` : `${n.toFixed(1)}s`; }
+async function openSteps(id, turn) {
+  const res = await fetch(stepsUrl(id, turn));
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(d.detail || res.statusText); return; }
+  $("#steps-backdrop").classList.remove("hidden");
+  $("#steps-note").textContent = `turn ${d.turn} of ${d.of}` +
+    (d.seconds != null ? ` · ${d.seconds}s` : "") + (d.outcome ? ` · ${d.outcome}` : "");
+  const body = $("#steps-body");
+  body.textContent = "";
+  const nav = document.createElement("div");
+  nav.className = "steps-nav";
+  const asked = document.createElement("div");
+  asked.className = "grow";
+  asked.innerHTML = `<b>asked:</b> ${esc(d.message)}`;
+  nav.append(asked);
+  for (const [label, to] of [["earlier", d.turn - 1], ["later", d.turn + 1]]) {
+    if (to < 1 || to > d.of) continue;
+    const b = document.createElement("button");
+    b.className = "m-btn";
+    b.textContent = label;
+    b.onclick = () => openSteps(id, to);
+    nav.append(b);
+  }
+  const save = document.createElement("a");
+  save.className = "m-btn";
+  save.textContent = "file for a bug report";
+  save.title = "this turn as a Markdown file; it holds what the tools were given and read, so look before you send it";
+  save.href = stepsUrl(id, d.turn, "/export");
+  nav.append(save);
+  body.append(nav);
+  if (!d.steps.length) {
+    const none = document.createElement("div");
+    none.className = "conn-sub";
+    none.textContent = "no tools: it answered from what it knew";
+    body.append(none);
+  }
+  for (const s of d.steps) {
+    const row = document.createElement("div");
+    row.className = "step-row";
+    const meta = [
+      s.at ? new Date(s.at).toLocaleTimeString() : "",
+      s.answered_by ? `asked ${s.answered_by}, ${secs(s.waited)}` : "",
+      s.ran != null ? `ran ${secs(s.ran)}` : "",
+      s.refused ? `refused (${s.refused})` : "",
+    ].filter(Boolean).join(" · ");
+    const failed = s.error && !s.refused ? ' <span class="fail">failed</span>' : "";
+    row.innerHTML = `<div class="step-head">${s.n}. ${esc(s.tool)}${failed}</div>
+      ${meta ? `<div class="step-meta">${esc(meta)}</div>` : ""}
+      <details><summary>what it was given</summary><pre>${esc(JSON.stringify(s.arguments, null, 2))}</pre></details>
+      <details${s.error ? " open" : ""}><summary>${esc(s.short || "(no result)")}</summary><pre>${esc(s.result)}</pre></details>`;
+    for (const p of s.pictures || []) {
+      const img = document.createElement("img");
+      img.alt = `what ${s.tool} saw`;
+      img.src = `data:${p.media_type};base64,${p.data}`;
+      row.append(img);
+    }
+    body.append(row);
+  }
+  const answer = document.createElement("div");
+  answer.className = "step-row";
+  answer.innerHTML = `<div class="step-head">answer</div><div class="md"></div>`;
+  answer.querySelector(".md").innerHTML = renderMarkdown(d.answer || "(none)");
+  body.append(answer);
+}
+$("#steps-close").onclick = () => $("#steps-backdrop").classList.add("hidden");
+
 async function openChats() {
   $("#chats-backdrop").classList.remove("hidden");
   showChatList();
@@ -1858,7 +1939,7 @@ async function readChat(id) {
       keepIt.textContent = "keep this answer as a test";
       const at = turn;
       keepIt.onclick = () => openTestRow(d, line, at);
-      line.append(keepIt);
+      line.append(keepIt, stepsLink(d.id, at));
     }
     lines.append(line);
   }

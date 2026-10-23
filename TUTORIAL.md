@@ -2100,6 +2100,22 @@ containers, see §24.
   kettle" (6 steps done: phone_open_app, phone_tap) -- /carry carries it on
   ```
 
+* **What each step did.** `/steps` shows the last turn one step at a
+  time: the tool, what it was given, what came back, when it ran, how long
+  it waited for your yes and how long it ran, and who said yes. `/steps 2`
+  shows the second turn, and `/steps export` writes it as a Markdown file
+  to attach to a bug report. Read that file first: it holds what the tools
+  read. On the page, every answer has a **steps** link, and so does every
+  answer in History. A scheduled run's file has the same:
+  `yantra --steps FILE` ([notes/145](notes/145-what-each-step-did.md)).
+
+  ```
+  turn 1 of 1: Read a.txt and b.txt, ... -- 13s, end_turn
+    1. read_file  12:04:06 · ran <1ms
+       {"path": "a.txt"}
+       -> 1 17
+  ```
+
 * **Compaction.** Mask before summarize: old tool-result *output* is
   elided first (reversible, the calls stay verbatim), and only if the
   context is still in the red zone does a model summarize the middle —

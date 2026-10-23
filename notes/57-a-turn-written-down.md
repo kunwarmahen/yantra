@@ -133,6 +133,11 @@ redirect above does not swallow it.
 
 ## What is not here yet
 
+* **Not the run viewer.** A trace is opt-in and, by default, the turn's
+  shape. Looking at what one turn did, step by step, with what each tool
+  was given and returned, comes from the conversation itself, which every
+  road keeps anyway ([note 145](145-what-each-step-did.md)).
+
 * **Nothing decides what was a failure.** `Trajectory.failed` is the
   cheap filter — the turn ended badly, or a tool errored — and a turn
   can end perfectly while producing a wrong answer. Only a person can

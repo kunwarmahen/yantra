@@ -490,6 +490,24 @@
   </div>
 </div>
 
+<!-- a turn, step by step (steps.py): each tool, its arguments, what came
+     back, when, how long, who was asked -- and a file for a bug report. -->
+<div id="steps-backdrop" class="hidden">
+  <div id="steps-panel" role="dialog" aria-modal="true" aria-labelledby="steps-title">
+    <div class="tools-head">
+      <div>
+        <h3 id="steps-title">steps</h3>
+        <span class="tools-note" id="steps-note">what this turn did, one step at a time</span>
+      </div>
+      <button class="ghost icon-only" id="steps-close" title="close" aria-label="close">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div id="steps-body"></div>
+  </div>
+</div>
+
 <!-- worth keeping: what the look after a turn found -- recipes to save,
      facts to remember -- waiting for whenever the person looks. -->
 <div id="kept-backdrop" class="hidden">

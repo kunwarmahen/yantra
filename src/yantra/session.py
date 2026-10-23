@@ -202,10 +202,17 @@ def snapshot(agent, provider_name: str) -> dict:
     if held is not None and still_current(held, agent.history):
         payload["history"].pop()   # the question, kept below
         payload["held"] = _dump_held(held, agent.history[-1])
-    from yantra import carry
+    from yantra import carry, steps
     info = carry.unfinished(agent)
     if info is not None:           # a turn still going (carry.py)
         payload[carry.KEY] = info
+    if getattr(agent, "step_notes", None) is not None:
+        # when each step ran, how long, who said yes (steps.py)
+        step_notes, turn_notes = steps.kept(agent, payload["history"])
+        if step_notes:
+            payload["steps"] = step_notes
+        if turn_notes:
+            payload["turns"] = turn_notes
     return payload
 
 
@@ -325,6 +332,9 @@ def _restore_conversation(agent, payload: dict) -> int:
         agent.history.append(message)
     # a turn a restart stopped: the host decides whether to carry it on
     agent.unfinished = payload.get("unfinished") or None
+    # and what each step did, so the next turn's notes join them (steps.py)
+    agent.step_notes = dict(payload.get("steps") or {})
+    agent.turn_notes = dict(payload.get("turns") or {})
     agent.turn_open = False
     return len(agent.history)
 

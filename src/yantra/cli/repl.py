@@ -123,7 +123,13 @@ HELP = """[bold]commands[/bold]
                      that say WORDS -- each is kept by itself as it goes
   /chats N           read conversation N from that list
   /chats open N      carry it on here (this one stays kept)
+  /chats steps N [K] what its turn K did (its last by default), step by step
   /carry             carry on a job a restart stopped, from its last step
+  /steps [N]         what turn N did (the last one by default), step by step:
+                     each tool, its arguments, what came back, how long,
+                     who was asked
+  /steps export [N] [FILE]
+                     the same as a Markdown file, for a bug report
   /chats delete N    delete it for good (asks first)
   /chats test N [turn K] [WORDS, ...]
                      keep it as a test that replays its last turn (or turn
@@ -245,6 +251,7 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
                                   f"[/dim]{escape(shown)}")
             answer = Prompt.ask("run it?", choices=["y", "n", "e", "s"],
                                 default="n").lower()
+            request.answered_by = "you, in the terminal"
             if answer == "y":
                 return True  # edits ride along: the loop adopts them
             if answer == "s":
@@ -1351,6 +1358,8 @@ class Repl:
                 self._chats_command(arg)
             case "carry":
                 self._carry_command()
+            case "steps":
+                self._steps_command(arg)
             case "tests":
                 self._tests_command(arg)
             case "usage":
@@ -2066,6 +2075,33 @@ class Repl:
         except Exception as exc:
             self.console.print(f"[yellow]conversation not kept: {exc}[/yellow]")
 
+    def _steps_command(self, arg: str) -> None:
+        """/steps [N] | /steps export [N] [FILE]: this conversation's turn,
+        step by step (steps.py). Answered here, never a turn."""
+        from yantra import steps
+        from yantra.session import snapshot
+        words = arg.split()
+        export = bool(words) and words[0] == "export"
+        if export:
+            words = words[1:]
+        which = int(words.pop(0)) if words and words[0].isdigit() else None
+        try:
+            view = steps.timeline(snapshot(self.agent, self.agent.provider.name), which)
+        except LookupError as exc:
+            self.console.print(f"[yellow]{exc}[/yellow]")
+            return
+        if not export:
+            self.console.print(steps.text(view), markup=False, highlight=False)
+            return
+        target = (Path(words[0]).expanduser() if words else
+                  self.agent.ctx.cwd / f"steps-turn-{view['turn']}.md")
+        if target.exists():
+            self.console.print(f"[red]{target} is there already; name another file[/red]")
+            return
+        target.write_text(steps.markdown(view), encoding="utf-8")
+        self.console.print(f"[green]written: {target}[/green] [dim](it holds what the "
+                           "tools were given and read: look before you send it)[/dim]")
+
     def _carry_command(self) -> None:
         """/carry: the job this conversation stopped in, or else the last
         terminal conversation a restart stopped, carried on (carry.py)."""
@@ -2110,6 +2146,21 @@ class Repl:
             picked = self._chat_picked(number)
             if picked is not None:
                 self._keep_as_test(picked, words, turn)
+            return
+        if verb == "steps" and rest.split()[:1] and rest.split()[0].isdigit():
+            # one of the kept ones, turn K (its last by default), step by step
+            number, *more = rest.split()
+            picked = self._chat_picked(number)
+            payload = self.log.payload(picked) if picked is not None else None
+            if payload is not None:
+                from yantra import steps
+                try:
+                    view = steps.timeline(payload, int(more[0]) if more and
+                                          more[0].isdigit() else None)
+                except LookupError as exc:
+                    self.console.print(f"[yellow]{exc}[/yellow]")
+                    return
+                self.console.print(steps.text(view), markup=False, highlight=False)
             return
         if verb in ("open", "delete") and rest.strip().isdigit():
             picked = self._chat_picked(rest.strip())

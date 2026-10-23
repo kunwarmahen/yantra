@@ -166,6 +166,11 @@ class PermissionRequest:
     #: line says it already; this is the same thing for a host or a gate
     #: that wants to name it in a refusal. () for every ordinary call.
     after_reading: tuple[str, ...] = ()
+    #: Who answered, in words, when somebody was asked: "you, in the
+    #: terminal", "asha on telegram". Written by a gate that asks a person;
+    #: None when nobody was (a read-only tool, yolo, a standing rule). The
+    #: run viewer shows it beside the step (steps.py).
+    answered_by: str | None = None
     #: A picture the card shows beside ``summary`` -- the phone's screen
     #: as a held step found it, what it would tap ringed (sparsh_link).
     #: For the PERSON's eyes: no gate sends it to the model. An

@@ -16,6 +16,7 @@ The rules that make it robust (see notes/05-agent-loop.md):
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -34,7 +35,7 @@ from yantra.errors import ToolError
 from yantra import outside
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
-from yantra import carry
+from yantra import carry, steps
 from yantra.memory import note_used, prime_if_new
 from yantra.memory.reflect import before_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
@@ -388,6 +389,13 @@ class Agent:
         self.step_error: str | None = None
         #: A restored checkpoint's ``unfinished`` block, until carried on.
         self.unfinished: dict | None = None
+        # ---- what each step and turn did, for the run viewer (steps.py) ----
+        self.step_notes: dict[str, dict] = {}
+        self.turn_notes: dict[str, dict] = {}
+        #: The host's name for the turn about to run (Dvara: its run id).
+        self.turn_tag = ""
+        self._turn_key = ""
+        self._last_request: PermissionRequest | None = None
         #: The turn stopped for approval, or None (notes/88, yantra/hold.py).
         #: Answer it with ``resume``; a new message sets it aside.
         self.held: Held | None = None
@@ -474,7 +482,7 @@ class Agent:
         held = check_answers(self.held, answers, self.history)
         self.held = None
         self.outside_read[:] = held.read_outside
-        self._begin_turn()
+        self._begin_turn("resumed")
         calls = {call.id: call for call in held.calls}
         resolved: dict[str, ToolResult] = {}
         refusals: dict[str, str] = {}
@@ -530,7 +538,7 @@ class Agent:
             return ToolResult(call.id, str(exc), is_error=True)
         return self._run_one(call)
 
-    def _begin_turn(self) -> None:
+    def _begin_turn(self, kind: str = "message") -> None:
         # One turn is one thing the agent was asked to do, so that is the
         # unit the ceiling covers -- and the meter only listens to the
         # agent it belongs to, which is what stops a sub-agent from
@@ -551,6 +559,7 @@ class Agent:
         self.turn_refusals = {}
         self.turn_open = True               # until it ends (carry.py)
         self.turn_started = carry.now_iso()
+        steps.turn_began(self, kind)        # the run viewer's note
 
     def carry_on(self) -> Iterator[AgentEvent]:
         """Continue a turn a restart stopped, from its last saved step
@@ -559,7 +568,7 @@ class Agent:
         ValueError when there is none."""
         info = carry.prepare(self)
         prime_if_new(self, info.get("message") or "")
-        self._begin_turn()
+        self._begin_turn("carried")
         self.turn_started = info.get("started") or self.turn_started
         yield from self._turn_then_release()
 
@@ -581,6 +590,7 @@ class Agent:
                 if isinstance(event, TurnEnd):
                     ended = True
                     self.turn_open = False
+                    steps.turn_ended(self, event)
                     carry.step_done(self)   # and as it ends: no longer open
                     if event.reason != "held":
                         _release_turn_tools(self)
@@ -1001,6 +1011,15 @@ class Agent:
         return results  # type: ignore[return-value]
 
     def _gate(self, call: ToolCall) -> ToolResult | None:
+        """``_decide``, with the step's time at the gate and who answered
+        noted for the run viewer (steps.py)."""
+        began = time.time()
+        self._last_request = None
+        result = self._decide(call)
+        steps.gated(self, call, began, self._last_request)
+        return result
+
+    def _decide(self, call: ToolCall) -> ToolResult | None:
         """Permission stage. Returns an error ToolResult to block the call,
         or None when approved. Never runs the tool."""
         try:
@@ -1027,7 +1046,7 @@ class Agent:
         except Exception:
             summary = f"{call.name}({json.dumps(call.arguments)})"
 
-        request = PermissionRequest(
+        request = self._last_request = PermissionRequest(
             tool_name=call.name,
             arguments=call.arguments,
             summary=summary,
@@ -1083,6 +1102,13 @@ class Agent:
         return None
 
     def _run_one(self, call: ToolCall) -> ToolResult:
+        """``_run_tool``, timed for the run viewer (steps.py)."""
+        began = time.time()
+        result = self._run_tool(call)
+        steps.ran(self, call, began, result)
+        return result
+
+    def _run_tool(self, call: ToolCall) -> ToolResult:
         """Execution stage: run the tool, wrap every failure as data.
 
         The hooks bracket the real execution (before = starting, after =

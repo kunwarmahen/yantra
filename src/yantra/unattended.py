@@ -235,6 +235,8 @@ class Reach:
                 f"you would have done.", code=REFUSED_UNATTENDED)
         finally:
             self.spent += time.monotonic() - started
+        if answer.get("via"):
+            request.answered_by = f"{self.actor} on {answer['via']}"
         if answer.get("approved") is True:
             return True
         note_refused(request.tool_name)

@@ -314,6 +314,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "step instead of starting the prompt again (the "
                              "model is told, and looks again before it acts). "
                              "For a scheduler that may be restarted mid-run")
+    parser.add_argument("--steps", metavar="FILE",
+                        help="what a turn did, step by step: each tool call, "
+                             "its arguments, what came back, when, how long, and "
+                             "who was asked (notes/145). FILE is a --job file or a "
+                             "session store; the last turn unless --turn N. With "
+                             "--json, yantra.steps.v1; with --markdown, a file "
+                             "for a bug report")
+    parser.add_argument("--markdown", action="store_true",
+                        help="with --steps: the turn as Markdown, for a bug report")
     parser.add_argument("--allow-tools", action="append", default=[],
                         metavar="GRANT", dest="allow_tools",
                         help="approve these tools ahead of time (repeatable; "
@@ -490,7 +499,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--turn", type=int, default=None, metavar="N",
                         help="with --keep-test: keep the conversation's Nth "
                              "turn (1 is the first thing you asked) instead "
-                             "of its last")
+                             "of its last; with --steps, show that turn")
     parser.add_argument("--kept", action="store_true",
                         help="with --eval: run the conversations you kept as "
                              "tests of this agent (--keep-test, /chats test, "
@@ -2678,9 +2687,10 @@ def main(argv: list[str] | None = None) -> int:
         args.unattended = True
     if args.json_out:
         if (args.prompt is None and not args.prompt_positional and args.call is None
-                and not args.tests):
+                and not args.tests and not args.steps):
             print("error: --json answers one prompt: give it --prompt or a "
-                  "positional PROMPT (or --call TOOL, or --tests)", file=sys.stderr)
+                  "positional PROMPT (or --call TOOL, --tests, or --steps FILE)",
+                  file=sys.stderr)
             return 2
         # stdout is the JSON object and nothing else; everything a person
         # would read -- the banner, the streamed answer, the tool lines --
@@ -2690,6 +2700,9 @@ def main(argv: list[str] | None = None) -> int:
         # Set in the environment rather than passed down: the browser's
         # handoff and anything Yantra starts as a child read it there.
         os.environ["YANTRA_UNATTENDED"] = "1"
+
+    if args.steps:
+        return _steps_mode(args)
 
     if args.job and args.prompt is None and not args.prompt_positional:
         print("error: --job keeps one prompt's run: give it --prompt or a "
@@ -3378,6 +3391,34 @@ def main(argv: list[str] | None = None) -> int:
 
 #: The one conversation a ``--job`` file holds.
 JOB_SESSION = "job"
+
+
+def _steps_mode(args) -> int:
+    """``--steps FILE``: one turn, step by step, read from a checkpoint
+    file -- no model, no agent. The ``job`` conversation of a ``--job``
+    file, else ``default`` (``/save``'s)."""
+    from yantra import steps
+    path = Path(args.steps).expanduser()
+    if not path.is_file():
+        print(f"error: --steps {path}: no such file", file=sys.stderr)
+        return 2
+    store = SessionStore(path)
+    payload = store.load_latest(JOB_SESSION) or store.load_latest("default")
+    if payload is None:
+        print(f"error: --steps {path}: no conversation in it", file=sys.stderr)
+        return 2
+    try:
+        view = steps.timeline(payload, args.turn)
+    except LookupError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.json_out:
+        print(json.dumps(view, ensure_ascii=False))
+    elif args.markdown:
+        print(steps.markdown(view))
+    else:
+        print(steps.text(view))
+    return 0
 
 
 def _open_job(args, agent, console) -> bool:
