@@ -106,7 +106,7 @@ CASE_KEYS = frozenset({
     "subagent_lacks_tools", "subagent_prompt_contains",
     "subagent_prompt_lacks", "subagent_model",
     "subagent_iterations_at_most", "max_tokens", "max_iterations",
-    "min_pass_rate", "check",
+    "min_pass_rate", "check", "answer_contains", "replay", "judge",
 })
 
 #: The roster keys: everything gradeable with no model and no request.
@@ -123,7 +123,7 @@ ROSTER_KEYS = ("has_tools", "lacks_tools", "subagent_has_tools",
 #: check that would never be performed.
 TRAJECTORY_KEYS = frozenset({
     "required_tools", "forbidden_tools", "max_tokens", "max_iterations",
-    "min_pass_rate", "check",
+    "min_pass_rate", "check", "answer_contains", "replay", "judge",
 })
 
 #: fnmatch metacharacters. Allowed in the roster keys (a roster is a SET,
@@ -465,6 +465,14 @@ def load_cases(where: Path) -> list[EvalCase]:
                             f"keep it to {', '.join(ROSTER_KEYS)}")
         rate = _rate(entry, "min_pass_rate", path, where_label)
         check = entry.get("check")
+        replay = _replay(entry, suite, path, where_label)
+        judged = entry.get("judge", False)
+        if not isinstance(judged, bool):
+            _fail(path, f"{where_label}.judge must be true or false")
+        if judged and replay is None:
+            _fail(path, f"{where_label}.judge compares the answer with a kept "
+                        f"one, and only a replay has one: add replay = "
+                        f"\"replay/<id>.json\" or drop judge")
         cases.append(EvalCase(
             id=case_id,
             description=_str(entry, "description", path, where_label) or "",
@@ -483,14 +491,35 @@ def load_cases(where: Path) -> list[EvalCase]:
             max_tokens=_int(entry, "max_tokens", path, where_label),
             max_iterations=_int(entry, "max_iterations", path, where_label),
             min_pass_rate=1.0 if rate is None else rate,
+            answer_contains=_str_list(entry, "answer_contains", path,
+                                      where_label),
+            replay=replay,
+            judge=judged,
             check_answer=(None if check is None else
                           _grader(_str(entry, "check", path, where_label),
                                   suite, path, where_label)),
             fingerprint=case_fingerprint(
                 entry, (suite / f"{check.partition(':')[0]}.py"
-                        if isinstance(check, str) else None)),
+                        if isinstance(check, str) else None),
+                (suite / entry["replay"]) if replay is not None else None),
         ))
     return cases
+
+
+def _replay(entry: dict[str, Any], suite: Path, path: Path, where: str):
+    """``replay = "replay/<id>.json"``, read now rather than mid-run (the
+    graders' rule): a recording that will not open costs nothing to find
+    out at load time. Inside the suite folder only, like a grader."""
+    name = _str(entry, "replay", path, where)
+    if name is None:
+        return None
+    from yantra.kept_tests import read_recording
+    file = (suite / name).resolve()
+    if not file.is_relative_to(suite.resolve()):
+        _fail(path, f"{where}.replay must name a file inside {suite}")
+    if not file.is_file():
+        _fail(path, f"{where}.replay: no such file {file}")
+    return read_recording(file)
 
 
 # ---- the other direction: a case somebody can paste into a suite -----------
@@ -529,8 +558,13 @@ def render_case(case: EvalCase) -> str:
         lines.append(f"description = {_toml_str(case.description)}")
     if case.user_message:
         lines.append(f"user_message = {_toml_str(case.user_message)}")
+    if case.replay is not None:
+        raise ConfigError(
+            f"case {case.id!r} replays a recording, which lives in its own "
+            f"file beside the suite: keep it with kept_tests.keep, which "
+            f"writes both")
     for key in ("required_tools", "forbidden_tools", "has_tools",
-                "lacks_tools"):
+                "lacks_tools", "answer_contains"):
         values = getattr(case, key)
         if values:
             lines.append(f"{key} = {_toml_list(values)}")

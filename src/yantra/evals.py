@@ -200,6 +200,16 @@ class EvalCase:
     #: hashed (fingerprint.case_fingerprint, notes/72). None for a case
     #: built in Python, which has no table to hash.
     fingerprint: str | None = None
+    #: Words the answer must contain, case-insensitively, each one its own
+    #: failure. The cheap answer check a person can write without Python:
+    #: "May 20", "refund" -- what made the answer right when they saw it.
+    answer_contains: list[str] = field(default_factory=list)
+    #: A kept conversation to replay (kept_tests.py): every tool answers
+    #: from it and nothing real runs, and the turn is asked with the
+    #: conversation before it behind it.
+    replay: Any | None = None
+    #: Have the model judge this answer against the replay's kept one.
+    judge: bool = False
 
     def __post_init__(self) -> None:
         # A case with neither a task nor a roster assertion is a case that
@@ -210,6 +220,10 @@ class EvalCase:
                 f"case {self.id!r} has nothing to do: give it a user_message, "
                 f"or a roster assertion (has_tools/lacks_tools, or the "
                 f"subagent_ pair), which needs no model")
+        if self.judge and self.replay is None:
+            raise ValueError(
+                f"case {self.id!r}: judge compares the answer with a kept "
+                f"one, and only a replay has one")
         if not 0 < self.min_pass_rate <= 1:
             raise ValueError(
                 f"case {self.id!r}: min_pass_rate must be greater than 0 and "
@@ -792,6 +806,47 @@ def recording_registry(base: ToolRegistry, seen: list[str]) -> RecordingRegistry
     return reg
 
 
+class ReplayRegistry(RecordingRegistry):
+    """A recording registry whose every tool is a fake answering from a
+    kept conversation (kept_tests.py). In ``register`` for the reason
+    RecordingRegistry is: a package's tools, skills and MCP tools arrive
+    after the registry is handed over, and each must be a fake too --
+    one real tool slipping through is a replay that sends an email."""
+
+    def __init__(self, seen: list[str], recording: Any) -> None:
+        super().__init__(seen)
+        self._recording = recording
+
+    def register(self, tool: Tool) -> None:
+        from yantra.kept_tests import ReplayTool
+        inner = getattr(tool, "_inner", None) or tool
+        if not isinstance(inner, ReplayTool):
+            inner = ReplayTool.standing_for(inner, self._recording)
+        super().register(inner)
+
+
+def replay_registry(base: ToolRegistry, seen: list[str],
+                    recording: Any) -> ReplayRegistry:
+    reg = ReplayRegistry(seen, recording)
+    for tool in base:
+        reg.register(tool)
+    for name in base.disabled_names():
+        reg.disable(name)
+    return reg
+
+
+def _replayed(agent: Any, case: EvalCase) -> Any:
+    """A replay case's agent, finished: stand-ins for the recorded tools
+    tonight's agent lacks, and the conversation before the kept turn put
+    back behind it."""
+    from yantra.kept_tests import stand_ins
+    from yantra.session import _load_message
+    for tool in stand_ins(case.replay, agent.registry.names()):
+        agent.registry.register(tool)
+    agent.history = [_load_message(m) for m in case.replay.before]
+    return agent
+
+
 def _agent_for(case: EvalCase, seen: list[str], *, agent_cls,
                spec: AgentSpec | None, provider: Provider, model: str,
                provider_name: str | None, base_tools: ToolRegistry,
@@ -810,8 +865,21 @@ def _agent_for(case: EvalCase, seen: list[str], *, agent_cls,
     whose manifest says twenty iterations is under test at twenty, and the
     runner's default only fills a blank.
     """
-    registry = recording_registry(base_tools, seen)
+    registry = (replay_registry(base_tools, seen, case.replay)
+                if case.replay is not None else recording_registry(base_tools, seen))
     extra = extra or {}
+    agent = _built(case, registry, agent_cls=agent_cls, spec=spec,
+                   provider=provider, model=model, provider_name=provider_name,
+                   permissions=permissions, max_iterations=max_iterations,
+                   context_window=context_window, cwd=cwd, extra=extra)
+    return _replayed(agent, case) if case.replay is not None else agent
+
+
+def _built(case: EvalCase, registry: ToolRegistry, *, agent_cls,
+           spec: AgentSpec | None, provider: Provider, model: str,
+           provider_name: str | None, permissions: Callable[[Any], bool],
+           max_iterations: int, context_window: int | None, cwd: Any,
+           extra: dict):
     if spec is None:
         kwargs: dict[str, Any] = {}
         if context_window is not None:
@@ -1019,6 +1087,12 @@ class EvalRunner:
         failures: list[str] = []
         if case.check_answer is not None and not case.check_answer(answer):
             failures.append("answer check failed")
+        lowered = answer.casefold()
+        for words in case.answer_contains:
+            if words.casefold() not in lowered:
+                failures.append(f"answer does not say: {words}")
+        if case.judge:
+            failures.extend(_judged(self, case, answer))
         for name in case.required_tools:
             if name not in seen:
                 failures.append(f"required tool not used: {name}")
@@ -1040,6 +1114,27 @@ class EvalRunner:
     @staticmethod
     def _count_iterations(agent: Agent) -> int:
         return sum(1 for m in agent.history if m.role == "assistant")
+
+
+def _judged(runner: Any, case: EvalCase, answer: str) -> list[str]:
+    """The judge's verdict on a replay, as failures (none when it agrees).
+
+    The runner's own model by default -- the loaded local one, on the
+    night road -- with ``judge_model`` to pick another. A judge that
+    cannot answer FAILS THE CASE, like a judge that answered badly: a
+    verdict nobody gave is not a pass.
+    """
+    from yantra.kept_tests import JUDGE_CRITERIA
+    if not answer:
+        return ["judge: there was no answer to compare"]
+    try:
+        ok, why = judge(runner.provider,
+                        getattr(runner, "judge_model", None) or runner.model,
+                        question=case.user_message, answer=answer,
+                        reference=case.replay.answer, criteria=JUDGE_CRITERIA)
+    except Exception as exc:
+        return [f"judge could not answer: {type(exc).__name__}: {exc}"]
+    return [] if ok else [f"judge: {why}"]
 
 
 class AsyncEvalRunner:

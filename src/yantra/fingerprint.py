@@ -92,7 +92,8 @@ def fingerprint(spec: Any) -> str | None:
     return digest.hexdigest()[:12]
 
 
-def case_fingerprint(entry: dict, graders: Path | None) -> str:
+def case_fingerprint(entry: dict, graders: Path | None,
+                     replay: Path | None = None) -> str:
     """One ``[[case]]`` table as written, plus its grader file (notes/72).
 
     ``description`` is left out: it is prose for the reader, and a typo
@@ -100,7 +101,8 @@ def case_fingerprint(entry: dict, graders: Path | None) -> str:
     (``graders.py`` for ``check = "graders:..."``) is hashed rather than
     the one function, because a grader leans on the module around it (a
     constant, a helper) and a function's source alone would miss the edit
-    that mattered.
+    that mattered. A kept conversation's recording (``replay``) is hashed
+    for the same reason: the tools' answers are part of what the case is.
     """
     digest = hashlib.sha256()
     graded = {k: v for k, v in entry.items() if k != "description"}
@@ -110,6 +112,11 @@ def case_fingerprint(entry: dict, graders: Path | None) -> str:
             digest.update(b"\0graders:" + graders.read_bytes())
         except OSError:
             digest.update(b"\0graders:<unreadable>")
+    if replay is not None:
+        try:
+            digest.update(b"\0replay:" + replay.read_bytes())
+        except OSError:
+            digest.update(b"\0replay:<unreadable>")
     return digest.hexdigest()[:12]
 
 

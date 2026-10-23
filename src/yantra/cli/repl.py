@@ -40,7 +40,7 @@ from yantra.builder import BUILD_SYSTEM, BuildSpec, run_build
 from yantra.cli.render import Renderer
 from yantra.config import default_model, load_settings
 from yantra.context import RED, estimate_history
-from yantra.errors import ImageError, RateLimitError, UserUnavailable
+from yantra.errors import ConfigError, ImageError, RateLimitError, UserUnavailable
 from yantra.history import END, HIT, ConversationLog, new_id
 from yantra.history import title_of as payload_title
 from yantra.history import export_markdown, export_name
@@ -124,6 +124,11 @@ HELP = """[bold]commands[/bold]
   /chats N           read conversation N from that list
   /chats open N      carry it on here (this one stays kept)
   /chats delete N    delete it for good (asks first)
+  /chats test N [WORDS, ...]
+                     keep it as a test that replays its last turn with the
+                     tools answering from what they said then (nothing
+                     real runs); WORDS are what the answer must say.
+                     Run them: yantra --eval --kept
   /chats export N [FILE]
                      write it as a Markdown file to share (your words, its
                      answers, the tools' names -- never their output); the
@@ -334,6 +339,9 @@ class Repl:
         self.conversation_id = new_id()
         #: The last /chats list, so /chats N means what was on screen.
         self._chats_shown: list[str] = []
+        #: The agent ``/chats test`` keeps a conversation as a test of
+        #: (kept_tests.py): the package's name, or None for plain yantra.
+        self.tests_for: str | None = None
         #: A TrajectoryLog when the operator asked for one (--trace), so
         #: a turn that goes wrong leaves something a regression case can
         #: be built from (notes/57). None is the usual case and costs
@@ -2056,6 +2064,12 @@ class Repl:
             if picked is not None:
                 self._export_chat(picked, path.strip())
             return
+        if verb == "test" and rest.split()[:1] and rest.split()[0].isdigit():
+            number, _, words = rest.strip().partition(" ")
+            picked = self._chat_picked(number)
+            if picked is not None:
+                self._keep_as_test(picked, words)
+            return
         if verb in ("open", "delete") and rest.strip().isdigit():
             picked = self._chat_picked(rest.strip())
             if picked is None:
@@ -2091,7 +2105,30 @@ class Repl:
                                    markup=False, style="dim")
         self.console.print("[dim]/chats N reads one · /chats open N carries it "
                            "on · /chats export N writes it to share · "
+                           "/chats test N keeps it as a test · "
                            "/chats delete N deletes it for good[/dim]")
+
+    def _keep_as_test(self, conversation_id: str, words: str) -> None:
+        """/chats test N [WORDS, WORDS]: kept as a test (kept_tests.py).
+        The words are comma-separated, so "May 20, refund" is two."""
+        from yantra.kept_tests import keep_from_log
+        if conversation_id == self.conversation_id:
+            self._keep_conversation()       # as it is now, not last turn's
+        wanted = [w.strip() for w in words.split(",") if w.strip()]
+        try:
+            case_id, directory, recording = keep_from_log(
+                self.log, conversation_id, self.tests_for, words=wanted,
+                registry=self.agent.registry)
+        except ConfigError as exc:
+            self.console.print(str(exc), markup=False, style="red")
+            return
+        self.console.print(
+            f"kept as a test: {case_id} -- it asks {recording.question[:80]!r}"
+            + (f", must say {', '.join(wanted)}" if wanted else "")
+            + (f", must use {', '.join(recording.used)}" if recording.used else ""),
+            markup=False)
+        self.console.print(f"in {directory} · run them: yantra --eval --kept",
+                           markup=False, style="dim")
 
     def _chat_picked(self, number: str) -> str | None:
         n = int(number)

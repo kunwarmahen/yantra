@@ -2316,3 +2316,7 @@ mark.hit { background: var(--accent-soft); color: inherit; border-radius: 3px; p
   border: 1px solid var(--line);
   border-radius: var(--r-3);
 }
+
+/* The words row under a conversation's heading (keep as a test). */
+.chat-test-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.chat-test-row input { flex: 1; min-width: 0; }

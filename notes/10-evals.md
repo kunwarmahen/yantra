@@ -158,3 +158,8 @@ cases are graded against the package's own prompt, tools and admission
 policy (`EvalRunner(spec=…)`) rather than against a bare agent. The
 scoring rules on this page are unchanged — that is the point of them
 living in one place.
+
+The fossil rule has a twin for the cases that went RIGHT:
+[note 141](141-a-test-you-already-had.md) keeps a conversation from
+History as a case that replays its last turn with the tools answering
+from what they said then, so nothing real runs.

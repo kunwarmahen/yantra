@@ -285,6 +285,9 @@ class WebSession:
         #: row this one is written to. None when nothing is kept.
         self.log: Any | None = None
         self.conversation_id = new_id()
+        #: The agent History's "Keep as a test" keeps a conversation as a
+        #: test of (kept_tests.py): the package's name, None for yantra.
+        self.tests_for: str | None = None
 
     def set_wait_budget(self, seconds: float, *, on_timeout: str) -> None:
         """Give each turn ``seconds`` of waiting for approvals (notes/78)."""
@@ -2971,6 +2974,29 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         return Response(export_markdown(kept), media_type="text/markdown; charset=utf-8",
                         headers={"Content-Disposition":
                                  f"attachment; filename*=UTF-8''{quote(name)}"})
+
+    @app.post("/api/chats/{conversation_id}/test")
+    def keep_as_test(conversation_id: str,
+                     body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Kept as a test that replays its last turn with the tools
+        answering from the recording (kept_tests.py). ``words``: what
+        the answer must say."""
+        require_ready()
+        from yantra.errors import ConfigError
+        from yantra.kept_tests import keep_from_log
+        log = require_log()
+        if conversation_id == session.conversation_id and session.agent is not None:
+            session._keep_conversation()    # as it is now
+        words = [w for w in ((body or {}).get("words") or []) if isinstance(w, str)]
+        try:
+            case_id, directory, recording = keep_from_log(
+                log, conversation_id, session.tests_for, words=words,
+                registry=session.agent.registry)
+        except ConfigError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"case": case_id, "folder": str(directory),
+                "question": recording.question, "tools": recording.used,
+                "words": [w.strip() for w in words if w.strip()]}
 
     @app.get("/api/screenshots/{name}")
     def screenshot_file(name: str) -> FileResponse:

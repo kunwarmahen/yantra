@@ -467,6 +467,29 @@ def build_parser() -> argparse.ArgumentParser:
                              "prefix is enough. Printed rather than written: "
                              "a package's cases.toml belongs to its author "
                              "(append it yourself with >>)")
+    parser.add_argument("--keep-test", metavar="CHAT_ID", default=None,
+                        dest="keep_test",
+                        help="keep a conversation from History (/chats, the "
+                             "page's History) as a test of the agent named "
+                             "the usual way: its last turn, replayed with the "
+                             "tools answering from what they said then, so "
+                             "nothing real runs. An id prefix is enough. Run "
+                             "the kept tests with --eval --kept")
+    parser.add_argument("--words", action="append", default=[],
+                        metavar="TEXT",
+                        help="with --keep-test: words the answer must say "
+                             "for the test to pass (repeatable): 'May 20', "
+                             "'refund' -- what made it right when you saw it")
+    parser.add_argument("--kept", action="store_true",
+                        help="with --eval: run the conversations you kept as "
+                             "tests of this agent (--keep-test, /chats test, "
+                             "the page's Keep as a test) instead of the "
+                             "package's own suite. Needs no package")
+    parser.add_argument("--judge-model", metavar="MODEL", default=None,
+                        dest="judge_model",
+                        help="with --eval: the model that judges a kept "
+                             "test's answer against the kept one (default: "
+                             "the model under test)")
     parser.add_argument("--trace-prune", metavar="DAYS", type=int,
                         default=None, dest="trace_prune",
                         help="with --trace FILE: remove the turns recorded "
@@ -996,6 +1019,46 @@ def _eval_mcp(spec: AgentSpec, tools, console: Console):
     return manager
 
 
+def _keep_test_mode(args, spec: AgentSpec, console: Console) -> int:
+    """--keep-test ID: a conversation from History, kept as a test of
+    this agent (kept_tests.py). Reads a file and writes two; no model."""
+    from yantra.history import open_log
+    from yantra.kept_tests import keep_from_log
+    log = open_log()
+    if log is None:
+        print("error: conversations are not kept here (YANTRA_HISTORY=off), "
+              "so there is none to keep as a test", file=sys.stderr)
+        return 2
+    try:
+        found = [r for r in log.listed(limit=100_000)
+                 if r.id.startswith(args.keep_test)]
+        if len(found) != 1:
+            print(f"error: {'no' if not found else len(found)} conversation"
+                  f"{'s' if len(found) > 1 else ''} in History "
+                  f"{'starts' if len(found) <= 1 else 'start'} with "
+                  f"{args.keep_test!r}"
+                  + (" -- give more of the id" if found else ""),
+                  file=sys.stderr)
+            return 2
+        case_id, directory, recording = keep_from_log(
+            log, found[0].id, spec.name, words=args.words)
+    except ConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        log.close()
+    console.print(f"kept as a test of {escape(spec.name or 'yantra')}: "
+                  f"[bold]{escape(case_id)}[/bold] in {escape(str(directory))}"
+                  f"\n[dim]asks: {escape(recording.question[:120])}\n"
+                  f"tools it must use: {escape(', '.join(recording.used) or 'none')}"
+                  + (f"\nthe answer must say: {escape(', '.join(args.words))}"
+                     if args.words else "")
+                  + "\nrun it: yantra --eval --kept"
+                  + (f" --agent {escape(str(spec.root))}" if spec.root else "")
+                  + "[/dim]")
+    return 0
+
+
 def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     """--eval: run the package's own suite, and make the exit code the verdict.
 
@@ -1008,12 +1071,24 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     AgentSpec a session would build, so the prompt, skills, package tools,
     admission policy and declared servers under test are the shipped ones.
     """
-    if spec.root is None:
+    if args.kept:
+        # The person's own tests of this agent (kept_tests.py): no package
+        # needed, because the agent with no --agent is an agent too.
+        from yantra.kept_tests import suite_dir
+        suite = suite_dir(spec.name)
+        if not (suite / CASES).is_file():
+            print(f"error: no conversation is kept as a test of "
+                  f"{spec.name or 'yantra'} yet ({suite}) -- keep one with "
+                  f"--keep-test ID, /chats test N, or the page's History",
+                  file=sys.stderr)
+            return 2
+    elif spec.root is None:
         print("error: --eval runs an agent package's own suite, and no "
               "package was named: --agent DIR (or cd into one)",
               file=sys.stderr)
         return 2
-    suite = find_suite(spec.root)
+    else:
+        suite = find_suite(spec.root)
     if suite is None:
         print(f"error: {spec.root} has no eval suite -- create "
               f"{SUITE_DIR}/{CASES} with a [[case]] for each behavior you "
@@ -1133,9 +1208,12 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
     # operator happened to be standing in is not a gate. The package's own
     # root is the default -- a suite over files the package SHIPS answers
     # the same way on every machine -- and --cwd points it at a wider tree.
-    cwd = Path(args.cwd).resolve() if str(args.cwd) != "." else spec.root
+    cwd = (Path(args.cwd).resolve() if str(args.cwd) != "." or spec.root is None
+           else spec.root)
 
     label = f"{spec.name} {spec.version}" if spec.version else (spec.name or "")
+    if args.kept:
+        label = f"{label or 'yantra'} (kept tests)"
     # The package's own ceiling applies per case (one case is one turn), so
     # a suite can go red on cost rather than on behaviour. Said up front,
     # or "crashed: over_budget" three cases later reads as a bug.
@@ -1241,6 +1319,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                 spec=spec, provider_name=provider_name,
                 concurrency=args.eval_async, trace=trace,
             )
+            runner.judge_model = args.judge_model
             outcomes = asyncio.run(runner.run_suite(
                 cases, repeat=args.repeat, on_outcome=report,
                 stop_early=not args.all_runs))
@@ -1250,6 +1329,7 @@ def _eval_mode(args, spec: AgentSpec, console: Console) -> int:
                 cwd=cwd, spec=spec, provider_name=provider_name,
                 trace=trace,
             )
+            runner.judge_model = args.judge_model
             # Printed as each case lands rather than in one table at the
             # end: a live suite is minutes of silence otherwise, and the
             # first red is the one you want to see soonest.
@@ -2712,11 +2792,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --async must be at least 1 (got {args.eval_async})",
               file=sys.stderr)
         return 2
+    if args.words and args.keep_test is None:
+        print("error: --words are what a kept test's answer must say; they "
+              "go with --keep-test ID", file=sys.stderr)
+        return 2
     if ((args.eval_async is not None or args.repeat != 1 or args.case
          or args.no_mcp or args.report or args.against or args.all_runs
+         or args.kept or args.judge_model
          or args.failed is not None) and not args.eval):
         print("error: --async, --repeat, --all-runs, --case, --failed, "
-              "--no-mcp, --report and --against belong to --eval -- they say "
+              "--no-mcp, --kept, --judge-model, --report and --against "
+              "belong to --eval -- they say "
               "how an "
               "acceptance "
               "suite is driven, and a session has one trajectory",
@@ -2807,6 +2893,8 @@ def main(argv: list[str] | None = None) -> int:
     # use for either.
     if args.eval:
         return _eval_mode(args, spec, console)
+    if args.keep_test is not None:
+        return _keep_test_mode(args, spec, console)
 
     # Reading a recorded turn back needs no provider either -- it is a
     # file and a printer -- so it goes beside the acceptance run rather
@@ -3043,6 +3131,7 @@ def main(argv: list[str] | None = None) -> int:
     repl = Repl(agent, console, store=store, sandbox=sandbox,
                 mcp=mcp_manager, trace=_trace_log(args),
                 log=_conversation_log(args, console))
+    repl.tests_for = spec.name           # whose kept tests /chats test adds to
     if memory is not None and repl.trace is not None:
         # What the trace would scrub, the look back scrubs too.
         memory.redact = repl.trace.redact
@@ -3179,6 +3268,7 @@ def main(argv: list[str] | None = None) -> int:
             from yantra.web.server import launch
             web_session.trace = repl.trace   # --trace records the browser too
             web_session.log = repl.log       # and the page keeps its own too
+            web_session.tests_for = repl.tests_for
             return launch(web_session, agent, store,
                           host=args.host, port=args.port, mcp=mcp_manager)
 

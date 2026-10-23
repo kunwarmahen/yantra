@@ -185,6 +185,9 @@ one on into its own row, and starts a new row after clear.
   (`listed(folder=...)`); what its old `/new` book held came over with
   its own dates (`keep(at=...)`). Its `/chats` searches and deletes, and
   Sarathi's home page has a History button (Dvara's notes/50).
+* ~~**A conversation as a test.**~~ Built: one is kept as a case that
+  replays its last turn with the tools answering from what they said
+  then ([note 141](141-a-test-you-already-had.md)).
 * **Searching tool output.** Left out on purpose (above). If "the agent
   found it on some page" turns out to be how people remember, it is one
   more column in the index.

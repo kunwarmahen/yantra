@@ -2070,6 +2070,16 @@ required_tools = ["read_file"]
 max_tokens = 13140
 ```
 
+**A conversation that went well is a test you already had.** History
+keeps every one, tools and all, so `yantra --keep-test ID --words "May
+20"` (or `/chats test N May 20`, or *keep as a test* on the page's
+History) keeps its last turn as a case in your own suite for that agent,
+with the tools' answers recorded beside it. `yantra --eval --kept` replays
+them: every tool answers from the recording (same name, best match) and
+nothing real runs, the words must be in the answer, and the model judges
+tonight's answer against the kept one. `--report`/`--against` say what
+moved since last night. See [notes/141](notes/141-a-test-you-already-had.md).
+
 **Shape, not content, is what gets kept**: the task, the tools in call
 order, whether each worked, the counts — never tool arguments, tool
 results or the answer, because a trajectory holds whatever the *agent
@@ -2537,6 +2547,14 @@ src/yantra/
 │                   export_markdown shares one: words, answers, the tools'
 │                   NAMES, never their output
 │                   ([notes/130](notes/130-every-conversation-kept.md))
+├── kept_tests.py   a conversation from History kept as a test: its last
+│                   turn and everything before it, the tools' answers in
+│                   replay/<id>.json, a [[case]] in the person's own suite
+│                   per agent (~/.local/state/yantra/tests/<agent>/,
+│                   YANTRA_TESTS); fakes answer same name, best match and
+│                   nothing real runs; stand-ins for tools tonight's agent
+│                   lacks; --keep-test, /chats test, the page's History
+│                   ([notes/141](notes/141-a-test-you-already-had.md))
 ├── memory/         what the agent knows about the PERSON across conversations
 │                   (not write_note's project notes): MemoryStore is four verbs
 │                   (remember/recall/forget/list), identity is passed in (no
@@ -2850,7 +2868,12 @@ src/yantra/
 │                   would grade nothing and report green
 │                   ([notes/44](notes/44-a-ceiling-and-a-floor.md)); the
 │                   same keying carries the prompt, model and cap
-│                   assertions ([notes/50](notes/50-the-rest-of-what-a-child-is.md))
+│                   assertions ([notes/50](notes/50-the-rest-of-what-a-child-is.md)).
+│                   answer_contains (words, any case), replay (a recording
+│                   inside the suite, read at load time, hashed into the
+│                   fingerprint) and judge (against the replay's kept
+│                   answer, fails closed) for kept conversations
+│                   ([notes/141](notes/141-a-test-you-already-had.md))
 ├── eval_report.py  one --eval run as JSON, and what moved since the last:
 │                   a record, never a baseline (comparing changes no exit
 │                   code); counts rather than percentages; a case in only

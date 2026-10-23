@@ -122,7 +122,7 @@ class TestWhatTheFormatRefuses:
             load_cases(_suite(tmp_path, '[[case]]\nid = "x"\n'
                               'user_message = "hi"\nforbiden_tools = ["bash"]\n'))
         assert "forbiden_tools" in str(exc.value)
-        assert "known: check, description" in str(exc.value)
+        assert "known: answer_contains, check, description" in str(exc.value)
 
     def test_an_empty_suite_is_refused(self, tmp_path):
         """A file with no cases would report green forever."""

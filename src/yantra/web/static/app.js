@@ -1624,6 +1624,48 @@ async function listChats() {
   }
 }
 
+/* Keep as a test (kept_tests.py): its last turn, replayed every night
+   with the tools answering from what they said then -- nothing real
+   runs. A row opens under the heading for the words the answer must
+   say; empty is fine (the tools and the judge still check it). */
+function chatTestButton(d, view) {
+  const b = document.createElement("button");
+  b.className = "m-btn";
+  b.textContent = "keep as a test";
+  b.title = "replay its last turn on a schedule, with the tools answering from "
+    + "this recording (nothing real runs), and say when the answer changes";
+  b.onclick = () => {
+    if (view.querySelector(".chat-test-row")) return;
+    const row = document.createElement("div");
+    row.className = "list-filter chat-test-row";
+    row.innerHTML = `<input type="text" spellcheck="false"
+        placeholder="words the answer must say, comma-separated (optional) — e.g. May 20, refund"
+        aria-label="words the answer must say">
+      <button class="m-btn primary">keep</button><button class="m-btn">cancel</button>`;
+    const [input, keepBtn, cancel] = row.querySelectorAll("input, button");
+    cancel.onclick = () => row.remove();
+    const keep = async () => {
+      keepBtn.disabled = true;
+      const words = input.value.split(",").map((w) => w.trim()).filter(Boolean);
+      const res = await fetch(`/api/chats/${encodeURIComponent(d.id)}/test`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ words }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { keepBtn.disabled = false; toast(out.detail || res.statusText); return; }
+      row.remove();
+      toast(`kept as a test: ${out.case}`
+        + (out.tools.length ? ` — must use ${out.tools.join(", ")}` : "")
+        + (out.words.length ? `, must say ${out.words.join(", ")}` : ""));
+    };
+    keepBtn.onclick = keep;
+    input.onkeydown = (e) => { if (e.key === "Enter") keep(); };
+    view.querySelector(".chats-head").after(row);
+    input.focus();
+  };
+  return b;
+}
+
 function chatDeleteButton(r) {
   const drop = document.createElement("button");
   drop.className = "m-btn danger";
@@ -1700,7 +1742,8 @@ async function readChat(id) {
   carry.disabled = d.id === chats.current;
   carry.title = "put this conversation back into the chat and go on from it; the one open now stays kept";
   carry.onclick = () => carryOnChat(d.id);
-  head.append(back, title, carry, chatShareButton(d), chatDeleteButton(d));
+  head.append(back, title, carry, chatShareButton(d), chatTestButton(d, view),
+    chatDeleteButton(d));
   view.append(head);
   const lines = document.createElement("div");
   for (const e of d.entries) {
