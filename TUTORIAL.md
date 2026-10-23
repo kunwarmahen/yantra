@@ -2756,7 +2756,10 @@ is harder than that.
 
 No answer? `uv run yantra status` says which model a turn would ask when
 you give no flags, and on Ollama whether it's running and has that model
-pulled, with the command that fixes it if not. (`YANTRA_PROVIDER=local`
+pulled, with the command that fixes it if not. It also says how many
+tokens the model really holds. If that's less than Yantra plans for
+(`OLLAMA_CONTEXT_WINDOW`), it says so: past that point Ollama silently
+drops the start of the conversation, the tools first. (`YANTRA_PROVIDER=local`
 in `.env` makes Ollama the no-flags choice.)
 
 ### 1 · Five minutes — watch the loop, event by event

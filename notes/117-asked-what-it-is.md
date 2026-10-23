@@ -52,11 +52,24 @@ samay: clock running (/home/you/samay/.venv/bin/samay)
 ```
 
 `--json` prints the same thing as `yantra.status.v1`: `version`,
-`python`, `provider`, `chosen_by`, `model`, `base_url`, `local`
-(`answering`, `pulled`), `extras`, `packs`, `setu` (`found`, `road`,
-`connections`), `samay` (`found`, `program`, `serving`) and `problems`. As with the
-others, the `format` field is the contract, and a reader refuses a
-version it doesn't know.
+`python`, `provider`, `chosen_by`, `model`, `context_window`, `base_url`,
+`local` (`answering`, `pulled`, `holds`, `holds_from`), `extras`, `packs`,
+`setu` (`found`, `road`, `connections`), `samay` (`found`, `program`,
+`serving`) and `problems`. As with the others, the `format` field is the
+contract, and a reader refuses a version it doesn't know.
+
+**How much the model holds.** Yantra shortens a long talk by
+`context_window`, but Ollama cuts whatever goes past the model's own
+window, silently and from the front, the system prompt and the tools
+first. When the two disagree, the agent forgets its tools in the middle
+of a conversation and nothing says why. So the same visit asks how many
+tokens the model holds: the loaded model's own context length, else the
+`num_ctx` it was made with. `holds` is that number and `holds_from` says
+which source gave it. A model holding less than `context_window` is a
+problem line naming the setting that matches it. Live:
+`qwen3.8-64k:latest` holds 65536 (`num_ctx`), and `qwen3.8:latest` says
+nothing, which leaves Ollama's own default. Sarathi's doctor says that
+case in amber (Sarathi's notes/28).
 
 **WHAT YANTRA WOULD DO, NOT WHAT IS CONFIGURED SOMEWHERE.** The provider
 comes from the same ladder a turn uses (`guess_provider`: `YANTRA_PROVIDER`,
