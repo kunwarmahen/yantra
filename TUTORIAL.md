@@ -572,6 +572,14 @@ header opens the same list. Once it's long, type a word in the box above
 it (`brother`, say) and only the memories with that word stay, with a
 count like `2 of 32`.
 
+A memory an answer actually leans on stays fresh. When the agent uses
+*"lives near RDU"* to pick your airport, it tells the store, and that
+memory is listed with the newest again, marked `(used 2026-10-23)`.
+Something you said a year ago and rely on every week won't drop out of
+the twenty memories each conversation starts with. Only what the answer
+used counts, not everything it was shown
+([notes/143](notes/143-a-memory-in-use.md)).
+
 The file is simple on purpose: it matches words, not meanings. If you
 run a memory server with real search (Smritikosh is one), connect it as
 an MCP server and point memory at it by name:
