@@ -480,6 +480,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="with --keep-test: words the answer must say "
                              "for the test to pass (repeatable): 'May 20', "
                              "'refund' -- what made it right when you saw it")
+    parser.add_argument("--turn", type=int, default=None, metavar="N",
+                        help="with --keep-test: keep the conversation's Nth "
+                             "turn (1 is the first thing you asked) instead "
+                             "of its last")
     parser.add_argument("--kept", action="store_true",
                         help="with --eval: run the conversations you kept as "
                              "tests of this agent (--keep-test, /chats test, "
@@ -1073,7 +1077,8 @@ def _keep_test_mode(args, spec: AgentSpec, console: Console) -> int:
                   file=sys.stderr)
             return 2
         case_id, directory, recording = keep_from_log(
-            log, found[0].id, spec.name, words=args.words, package=spec.root)
+            log, found[0].id, spec.name, words=args.words, package=spec.root,
+            turn=args.turn)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -2828,6 +2833,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.suite and not args.kept:
         print("error: --suite names a folder of kept tests; it goes with "
               "--eval --kept", file=sys.stderr)
+        return 2
+    if args.turn is not None and args.keep_test is None:
+        print("error: --turn says which turn --keep-test keeps", file=sys.stderr)
         return 2
     if args.words and args.keep_test is None:
         print("error: --words are what a kept test's answer must say; they "

@@ -2989,15 +2989,55 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         if conversation_id == session.conversation_id and session.agent is not None:
             session._keep_conversation()    # as it is now
         words = [w for w in ((body or {}).get("words") or []) if isinstance(w, str)]
+        turn = (body or {}).get("turn")
+        if turn is not None and not isinstance(turn, int):
+            raise HTTPException(400, "turn is a number: 1 is the first thing you asked")
         try:
             case_id, directory, recording = keep_from_log(
                 log, conversation_id, session.tests_for, words=words,
-                registry=session.agent.registry, package=session.tests_package)
+                registry=session.agent.registry, package=session.tests_package,
+                turn=turn)
         except ConfigError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {"case": case_id, "folder": str(directory),
                 "question": recording.question, "tools": recording.used,
                 "words": [w.strip() for w in words if w.strip()]}
+
+    @app.get("/api/tests")
+    def kept_tests() -> dict[str, Any]:
+        """Every kept test under the tests folder -- this page is its
+        owner's -- each suite with whose it is and each test with how it
+        did on its last run (kept_tests.py)."""
+        require_ready()
+        from yantra.kept_tests import about, default_root, kept_in, suites
+        root = default_root()
+        out = []
+        for suite in suites(root):
+            info = about(suite)
+            out.append({"suite": suite.relative_to(root).as_posix(), **info,
+                        "mine": suite.name == (session.tests_for or "yantra")
+                        and not info["person"],
+                        "tests": [k.as_dict() for k in kept_in(suite)]})
+        last = None
+        try:
+            last = json.loads((root / "last.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+        return {"suites": out, "last": last}
+
+    @app.delete("/api/tests")
+    def forget_test(suite: str, case: str) -> dict[str, Any]:
+        """One kept test taken back: its case and its recording. ``suite``
+        is a folder the list named, never a path that leaves the root."""
+        require_ready()
+        from yantra.kept_tests import default_root, forget, suites
+        root = default_root()
+        known = {p.relative_to(root).as_posix(): p for p in suites(root)}
+        if suite not in known:
+            raise HTTPException(404, "no such set of kept tests")
+        if not forget(known[suite], case):
+            raise HTTPException(404, "that test is gone")
+        return {"forgotten": case}
 
     @app.get("/api/screenshots/{name}")
     def screenshot_file(name: str) -> FileResponse:

@@ -140,7 +140,9 @@ uv run yantra --provider local                       # LOCAL models (localhost:1
 uv run yantra --provider local --model qwen3.8       # any tag you have pulled
 uv run yantra --yolo                                 # no permission prompts (careful)
                                                       #   ...and /yolo flips it back
-                                                      #   mid-session (web UI: mode chip)
+                                                      #   mid-session (web UI: mode chip);
+                                                      #   a change after reading an email
+                                                      #   or a page still asks (notes/142)
 uv run yantra --cache                                # prompt-cache breakpoints on
 uv run yantra --max-usd 0.50                         # stop a turn once it costs this much
 uv run yantra --resume                               # restore the newest checkpoint
@@ -718,6 +720,9 @@ setu: gmail-personal (7 tool(s)) -- via /home/you/setu/.venv/bin/setu
 which accounts are connected and at what level, and which are not. Each
 tool is classed by Setu's manifest, not by the server's own hint: reads
 run, writes ask, anything that spends asks every time even under `--yolo`,
+and once a turn has read an email, a page or any server's answer, every
+change after it asks too, with what was read on the card's first line
+([notes/142](notes/142-outside-text-cannot-give-orders.md)),
 and a tool the manifest does not list is not registered at all, unless
 the manifest says `"*" = "write"` for a server whose tool names are its
 own (Home Assistant's), and then it is asked about
@@ -2079,7 +2084,7 @@ max_tokens = 13140
 **A conversation that went well is a test you already had.** History
 keeps every one, tools and all, so `yantra --keep-test ID --words "May
 20"` (or `/chats test N May 20`, or *keep as a test* on the page's
-History) keeps its last turn as a case in your own suite for that agent,
+History) keeps its last turn (or `--turn N`) as a case in your own suite for that agent,
 with the tools' answers recorded beside it. `yantra --eval --kept` replays
 them: every tool answers from the recording (same name, best match) and
 nothing real runs, the words must be in the answer, and the model judges
@@ -2509,6 +2514,15 @@ src/yantra/
 │                   ([notes/91](notes/91-one-clock-for-the-child.md)).
 │                   hold() is the third answer, NOT YET, and "hold" the
 │                   third on_timeout ([notes/88](notes/88-not-yet.md))
+├── outside.py      text the person didn't write cannot give orders: once a
+│                   turn has read a page, an email, a server's answer or a
+│                   phone's screen (Tool.outside), every call that CHANGES
+│                   something (Tool.acts; a look like browser_open does
+│                   not) is marked always_ask, so no yolo, grant or
+│                   standing rule covers it, and the card's first line
+│                   says what was read. One list per turn, shared with
+│                   sub-agents, kept across a hold
+│                   ([notes/142](notes/142-outside-text-cannot-give-orders.md))
 ├── hold.py         a turn that STOPS for an approval and carries on when
 │                   it comes: Held (the batch, what already ran, what
 │                   waits), resume()'s answer checks -- all before anything
@@ -2562,7 +2576,10 @@ src/yantra/
 │                   per agent (~/.local/state/yantra/tests/<agent>/,
 │                   YANTRA_TESTS); fakes answer same name, best match and
 │                   nothing real runs; stand-ins for tools tonight's agent
-│                   lacks; --keep-test, /chats test, the page's History;
+│                   lacks; --keep-test [--turn N], /chats test N [turn K],
+│                   the page's History (a link under each answer);
+│                   /tests and the page's kept tests list each one's last
+│                   result, delete takes one back (its block, its recording);
 │                   --tests runs every suite (yours and people/<person>/)
 │                   against its own agent and leaves last.json
 │                   (yantra.tests.v1): passed, broke, fixed since last time

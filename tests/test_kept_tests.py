@@ -22,8 +22,8 @@ from yantra.errors import ConfigError
 from yantra.eval_suite import load_cases, render_case
 from yantra.evals import EvalCase, EvalRunner
 from yantra.kept_tests import (NOT_RECORDED, Call, Recording, best_match,
-                               from_payload, keep, night, said, suite_dir,
-                               suites)
+                               forget, from_payload, keep, kept_in, night,
+                               said, suite_dir, suites)
 from yantra.permissions import allow_read_only
 from yantra.tools.base import Tool, ToolRegistry
 
@@ -434,3 +434,111 @@ class TestEveryNight:
         from yantra.cli.main import main
         assert main(["--suite", "x"]) == 2
         assert "--eval --kept" in capsys.readouterr().err
+
+
+class TestChoosingTheTurn:
+    def test_an_earlier_turn_is_kept_with_only_what_was_known_then(self):
+        payload = _payload()
+        payload["history"] += [
+            {"role": "user", "content": [{"kind": "text", "text": "and in June?"}]},
+            {"role": "assistant", "content": [
+                {"kind": "tool_call", "id": "c2", "name": "search_mail",
+                 "arguments": {"q": "june refund"}}]},
+            {"role": "user", "content": [
+                {"kind": "tool_result", "tool_call_id": "c2", "content": "none"}]},
+            {"role": "assistant", "content": [{"kind": "text", "text": "None in June."}]}]
+        rec = from_payload(payload, turn=2)
+        assert rec.question == "what did Amazon refund me?"
+        assert rec.answer == "Amazon refunded $42.10 on May 20."
+        assert [c.content for c in rec.calls] == ["Refund of $42.10 issued May 20"]
+        assert from_payload(payload).question == "and in June?"
+        assert from_payload(payload, turn=1).answer == "hi!"
+
+    def test_a_turn_that_is_not_there_is_said(self):
+        with pytest.raises(ConfigError, match="has 2 turns, not 5"):
+            from_payload(_payload(), turn=5)
+
+
+class TestTakingOneBack:
+    def test_the_list_says_how_each_did_last_time(self, tmp_path):
+        rec = from_payload(_payload(), conversation="abc12345")
+        keep(rec, tmp_path, words=["May 20"])
+        keep(rec, tmp_path)
+        runs = tmp_path / "runs"
+        runs.mkdir()
+        (runs / "20261023T030000.json").write_text(json.dumps({"cases": [
+            {"id": "kept-abc12345", "passed": False, "failures": ["judge: FAIL x"]}]}))
+        first, second = kept_in(tmp_path)
+        assert (first.passed, first.why, first.words) == (False, ["judge: FAIL x"], ["May 20"])
+        assert second.passed is None and first.kept_at
+
+    def test_forget_takes_out_one_block_and_its_recording_and_nothing_else(self, tmp_path):
+        rec = from_payload(_payload(), conversation="abc12345")
+        keep(rec, tmp_path)
+        keep(rec, tmp_path)
+        cases = tmp_path / "cases.toml"
+        cases.write_text(cases.read_text() + "# a note I wrote by hand\n")
+        assert forget(tmp_path, "kept-abc12345")
+        assert [c.id for c in load_cases(tmp_path)] == ["kept-abc12345-2"]
+        assert "# a note I wrote by hand" in cases.read_text()
+        assert cases.read_text().startswith("# Conversations you kept as tests.")
+        assert not (tmp_path / "replay" / "kept-abc12345.json").exists()
+        assert (tmp_path / "replay" / "kept-abc12345-2.json").exists()
+        assert forget(tmp_path, "nope") is False
+
+    def test_the_last_one_taken_leaves_no_suite(self, tmp_path):
+        keep(from_payload(_payload(), conversation="abc"), tmp_path)
+        assert forget(tmp_path, "kept-abc")
+        assert not (tmp_path / "cases.toml").exists()
+
+    def test_terminal_lists_and_deletes(self, tmp_path, monkeypatch):
+        from test_history import repl_with
+
+        monkeypatch.setenv("YANTRA_TESTS", str(tmp_path))
+        keep(from_payload(_payload(), conversation="abc"), tmp_path / "yantra",
+             words=["May 20"])
+        repl, out = repl_with(None, ["/tests", "/tests delete 1", "/tests", "/quit"], [])
+        repl.run()
+        text = out.getvalue()
+        assert "1. what did Amazon refund me? -- not run yet (must say May 20)" in text
+        assert "taken back: kept-abc" in text
+        assert "no conversation is kept as a test of this agent yet" in text
+
+    def test_chats_test_n_turn_k(self, tmp_path, monkeypatch):
+        from test_history import repl_with
+
+        from yantra.history import ConversationLog
+        monkeypatch.setenv("YANTRA_TESTS", str(tmp_path / "tests"))
+        log = ConversationLog(tmp_path / "h.sqlite")
+        log.keep("x1", _payload(), road="terminal")
+        repl, out = repl_with(log, ["/chats", "/chats test 1 turn 1 hi", "/quit"], [])
+        repl.run()
+        [case] = load_cases(tmp_path / "tests" / "yantra")
+        assert case.user_message == "hello" and case.answer_contains == ["hi"]
+
+    def test_turn_goes_with_keep_test(self, capsys):
+        from yantra.cli.main import main
+        assert main(["--turn", "2"]) == 2
+        assert "--keep-test" in capsys.readouterr().err
+
+
+class TestThePagesTests:
+    def test_the_page_lists_keeps_a_turn_and_deletes(self, tmp_path, monkeypatch):
+        pytest.importorskip("fastapi")
+        from test_history import web
+
+        from yantra.history import ConversationLog
+        monkeypatch.setenv("YANTRA_TESTS", str(tmp_path / "tests"))
+        log = ConversationLog(tmp_path / "h.sqlite")
+        log.keep("old", _payload(), road="terminal")
+        _, _, client = web(log, [])
+        assert client.post("/api/chats/old/test", json={"turn": 1}).json()["question"] == "hello"
+        assert client.post("/api/chats/old/test", json={"turn": "x"}).status_code == 400
+        [suite] = client.get("/api/tests").json()["suites"]
+        assert suite["suite"] == "yantra" and suite["mine"]
+        assert [t["question"] for t in suite["tests"]] == ["hello"]
+        assert client.delete("/api/tests", params={"suite": "../x", "case": "kept-old"}
+                             ).status_code == 404
+        assert client.delete("/api/tests", params={"suite": "yantra", "case": "kept-old"}
+                             ).status_code == 200
+        assert client.get("/api/tests").json()["suites"] == []

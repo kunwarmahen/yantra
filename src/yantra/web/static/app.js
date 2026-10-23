@@ -1554,6 +1554,13 @@ async function openChats() {
   $("#chats-q").focus();
 }
 
+$("#chats-tests").onclick = () => showTests();
+// Sarathi's Kept tests card links here: the page opens on the list.
+if (location.hash === "#tests") {
+  $("#chats-backdrop").classList.remove("hidden");
+  showTests();
+}
+
 function showChatList() {
   chats.reading = null;
   $("#chats-read").classList.add("hidden");
@@ -1624,46 +1631,125 @@ async function listChats() {
   }
 }
 
-/* Keep as a test (kept_tests.py): its last turn, replayed every night
-   with the tools answering from what they said then -- nothing real
-   runs. A row opens under the heading for the words the answer must
-   say; empty is fine (the tools and the judge still check it). */
+/* Keep as a test (kept_tests.py): a turn, replayed every night with the
+   tools answering from what they said then -- nothing real runs. A row
+   opens for the words the answer must say; empty is fine (the tools and
+   the judge still check it). The heading's button keeps the last turn;
+   the link under each answer keeps that one. */
 function chatTestButton(d, view) {
   const b = document.createElement("button");
   b.className = "m-btn";
   b.textContent = "keep as a test";
-  b.title = "replay its last turn on a schedule, with the tools answering from "
+  b.title = "replay its last answer on a schedule, with the tools answering from "
     + "this recording (nothing real runs), and say when the answer changes";
-  b.onclick = () => {
-    if (view.querySelector(".chat-test-row")) return;
-    const row = document.createElement("div");
-    row.className = "list-filter chat-test-row";
-    row.innerHTML = `<input type="text" spellcheck="false"
-        placeholder="words the answer must say, comma-separated (optional) — e.g. May 20, refund"
-        aria-label="words the answer must say">
-      <button class="m-btn primary">keep</button><button class="m-btn">cancel</button>`;
-    const [input, keepBtn, cancel] = row.querySelectorAll("input, button");
-    cancel.onclick = () => row.remove();
-    const keep = async () => {
-      keepBtn.disabled = true;
-      const words = input.value.split(",").map((w) => w.trim()).filter(Boolean);
-      const res = await fetch(`/api/chats/${encodeURIComponent(d.id)}/test`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ words }),
-      });
-      const out = await res.json().catch(() => ({}));
-      if (!res.ok) { keepBtn.disabled = false; toast(out.detail || res.statusText); return; }
-      row.remove();
-      toast(`kept as a test: ${out.case}`
-        + (out.tools.length ? ` — must use ${out.tools.join(", ")}` : "")
-        + (out.words.length ? `, must say ${out.words.join(", ")}` : ""));
-    };
-    keepBtn.onclick = keep;
-    input.onkeydown = (e) => { if (e.key === "Enter") keep(); };
-    view.querySelector(".chats-head").after(row);
-    input.focus();
-  };
+  b.onclick = () => openTestRow(d, view.querySelector(".chats-head"), null);
   return b;
+}
+
+function openTestRow(d, after, turn) {
+  document.querySelectorAll(".chat-test-row").forEach((r) => r.remove());
+  const row = document.createElement("div");
+  row.className = "list-filter chat-test-row";
+  row.innerHTML = `<input type="text" spellcheck="false"
+      placeholder="words the answer must say, comma-separated (optional) — e.g. May 20, refund"
+      aria-label="words the answer must say">
+    <button class="m-btn primary">keep</button><button class="m-btn">cancel</button>`;
+  const [input, keepBtn, cancel] = row.querySelectorAll("input, button");
+  cancel.onclick = () => row.remove();
+  const keep = async () => {
+    keepBtn.disabled = true;
+    const words = input.value.split(",").map((w) => w.trim()).filter(Boolean);
+    const res = await fetch(`/api/chats/${encodeURIComponent(d.id)}/test`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(turn ? { words, turn } : { words }),
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) { keepBtn.disabled = false; toast(out.detail || res.statusText); return; }
+    row.remove();
+    toast(`kept as a test: ${out.case}`
+      + (out.tools.length ? ` — must use ${out.tools.join(", ")}` : "")
+      + (out.words.length ? `, must say ${out.words.join(", ")}` : ""));
+  };
+  keepBtn.onclick = keep;
+  input.onkeydown = (e) => { if (e.key === "Enter") keep(); };
+  after.after(row);
+  input.focus();
+}
+
+/* Every kept test, yours and each person's, with how it did last time;
+   delete takes one back (its case and its recording). */
+async function showTests() {
+  chats.reading = null;
+  $("#chats-rows").classList.add("hidden");
+  $(".chats-search").classList.add("hidden");
+  const view = $("#chats-read");
+  view.classList.remove("hidden");
+  view.textContent = "";
+  const head = document.createElement("div");
+  head.className = "chats-head";
+  const back = document.createElement("button");
+  back.className = "ghost icon-only";
+  back.title = back.ariaLabel = "back to the list";
+  back.innerHTML = `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-back"/></svg>`;
+  back.onclick = () => { showChatList(); listChats(); };
+  const res = await fetch("/api/tests");
+  const d = await res.json().catch(() => ({}));
+  const title = document.createElement("div");
+  title.className = "grow";
+  const last = d.last && d.last.suites && d.last.suites.length
+    ? `last run ${chatWhen(d.last.at)}: ${d.last.passed} of ${d.last.cases} passed`
+      + (d.last.broke ? `, ${d.last.broke} broke` : "")
+    : "not run yet — yantra --tests, or Samay every night";
+  title.innerHTML = `<div class="conn-title">kept tests</div><div class="conn-sub">${esc(last)}</div>`;
+  head.append(back, title);
+  view.append(head);
+  if (!res.ok) { toast(d.detail || res.statusText); return; }
+  if (!d.suites.length) {
+    const none = document.createElement("div");
+    none.className = "conn-foot";
+    none.textContent = "No conversation is kept as a test yet. Open one from the "
+      + "list and press keep as a test, or keep one answer with the link under it.";
+    view.append(none);
+    return;
+  }
+  for (const suite of d.suites) {
+    const h = document.createElement("div");
+    h.className = "conn-sub tests-suite";
+    h.textContent = suite.person ? `${suite.person}'s ${suite.agent}` : suite.agent;
+    view.append(h);
+    for (const t of suite.tests) {
+      const row = document.createElement("div");
+      row.className = "chat-row tests-row";
+      const mark = t.passed === null ? ["", "not run yet"]
+        : t.passed ? ["ok", "passed"] : ["fail", "failed"];
+      row.innerHTML = `<div class="grow"><div class="conn-title">${esc(t.question)}</div>
+        <div class="conn-sub"><span class="${mark[0]}">${mark[1]}</span>
+        ${t.words.length ? " · must say " + esc(t.words.join(", ")) : ""}
+        ${t.tools.length ? " · uses " + esc(t.tools.join(", ")) : ""}
+        ${t.kept_at ? " · kept " + esc(chatWhen(t.kept_at)) : ""}</div>
+        ${t.why.length ? `<div class="conn-sub fail">${esc(t.why[0])}</div>` : ""}</div>`;
+      const drop = document.createElement("button");
+      drop.className = "m-btn danger";
+      drop.textContent = "delete";
+      drop.onclick = async () => {
+        const ok = await confirmDialog({
+          title: "take this test back?",
+          body: `“${t.question}” stops being replayed. The conversation itself stays in history.`,
+          confirm: "delete the test", tone: "danger",
+        });
+        if (!ok) return;
+        const r = await fetch(`/api/tests?suite=${encodeURIComponent(suite.suite)}`
+          + `&case=${encodeURIComponent(t.id)}`, { method: "DELETE" });
+        const out = await r.json().catch(() => ({}));
+        if (!r.ok) { toast(out.detail || r.statusText); return; }
+        toast("test taken back");
+        showTests();
+      };
+      row.append(drop);
+      view.append(row);
+    }
+  }
 }
 
 function chatDeleteButton(r) {
@@ -1746,7 +1832,9 @@ async function readChat(id) {
     chatDeleteButton(d));
   view.append(head);
   const lines = document.createElement("div");
+  let turn = 0;
   for (const e of d.entries) {
+    if (e.who === "you") turn += 1;
     if (e.who === "tool") {
       const t = document.createElement("div");
       t.className = "chat-tool";
@@ -1763,6 +1851,14 @@ async function readChat(id) {
     if (e.who === "you") text.textContent = e.text;
     else { text.style.whiteSpace = "normal"; text.innerHTML = renderMarkdown(e.text); }
     line.append(text);
+    if (e.who !== "you" && turn) {
+      const keepIt = document.createElement("button");
+      keepIt.className = "linkish keep-answer";
+      keepIt.textContent = "keep this answer as a test";
+      const at = turn;
+      keepIt.onclick = () => openTestRow(d, line, at);
+      line.append(keepIt);
+    }
     lines.append(line);
   }
   view.append(lines);

@@ -190,29 +190,45 @@ def _text(message: dict) -> str:
                      if b.get("kind") == "text").strip()
 
 
-def from_payload(payload: dict, *, conversation: str = "",
-                 tools: dict[str, dict[str, Any]] | None = None) -> Recording:
-    """The LAST turn of a kept conversation, with everything before it.
+def asked_at(payload: dict) -> list[int]:
+    """Where in the history each thing the person asked is: turn 1 is the
+    first. A tool's result rides in a user message too and is not a turn."""
+    return [i for i, m in enumerate(payload.get("history") or [])
+            if m.get("role") == "user" and _text(m)]
 
-    The last turn is the one kept because it is the one the person was
-    looking at when they said "this went well"; a conversation whose
-    first answer was the good one is kept from History by opening it
-    there, which shows it whole.
+
+def from_payload(payload: dict, *, conversation: str = "",
+                 tools: dict[str, dict[str, Any]] | None = None,
+                 turn: int | None = None) -> Recording:
+    """One turn of a kept conversation, with everything before it: the
+    LAST by default, or ``turn`` (1 is the first thing the person asked).
+
+    The last turn is the usual one -- it is what the person was looking
+    at when they said "this went well". A good answer earlier in a long
+    conversation is kept by its number. ONLY WHAT WAS KNOWN THEN: the
+    calls recorded are the ones made up to the end of that turn. A later
+    call's answer was not there the first time, and a replay that could
+    look it up would be asking an easier question than the one kept.
     """
     history = list(payload.get("history") or [])
-    asked = max((i for i, m in enumerate(history)
-                 if m.get("role") == "user" and _text(m)), default=None)
-    if asked is None:
+    turns = asked_at(payload)
+    if not turns:
         raise ConfigError("that conversation has nothing you asked in it")
+    if turn is not None and not 1 <= turn <= len(turns):
+        raise ConfigError(f"that conversation has {len(turns)} turn"
+                          f"{'s' if len(turns) != 1 else ''}, not {turn}")
+    place = len(turns) if turn is None else turn
+    asked = turns[place - 1]
+    end = turns[place] if place < len(turns) else len(history)
     results: dict[str, dict] = {}
-    for message in history:
+    for message in history[:end]:
         for block in message.get("content") or []:
             if block.get("kind") == "tool_result":
                 results[block.get("tool_call_id", "")] = block
     calls: list[Call] = []
     used: list[str] = []
     answer = ""
-    for i, message in enumerate(history):
+    for i, message in enumerate(history[:end]):
         for block in message.get("content") or []:
             if block.get("kind") != "tool_call":
                 continue
@@ -227,8 +243,8 @@ def from_payload(payload: dict, *, conversation: str = "",
         if i > asked and message.get("role") == "assistant" and _text(message):
             answer = _text(message)
     if not answer:
-        raise ConfigError("that conversation's last turn has no answer yet "
-                          "-- keep it once the agent has replied")
+        raise ConfigError("that turn has no answer yet -- keep it once the "
+                          "agent has replied")
     names = {c.name for c in calls}
     return Recording(
         question=_text(history[asked]), answer=answer, before=history[:asked],
@@ -373,7 +389,8 @@ def people_root(person: str, root: Path | None = None) -> Path:
 def keep_from_log(log: Any, conversation_id: str, agent_name: str | None, *,
                   words: Sequence[str] = (), registry: ToolRegistry | None = None,
                   root: Path | None = None, package: Path | None = None,
-                  person: str = "") -> tuple[str, Path, Recording]:
+                  person: str = "", turn: int | None = None
+                  ) -> tuple[str, Path, Recording]:
     """One History conversation kept as a test of ``agent_name``: the
     one road every surface takes (the command, /chats test, the page,
     Dvara). ``registry`` is the live session's, when there is one, so the
@@ -383,12 +400,116 @@ def keep_from_log(log: Any, conversation_id: str, agent_name: str | None, *,
         raise ConfigError("that conversation is gone")
     found = [r for r in log.listed(limit=100_000) if r.id == conversation_id]
     recording = from_payload(payload, conversation=conversation_id,
-                             tools=roster_of(registry))
+                             tools=roster_of(registry), turn=turn)
     directory = suite_dir(agent_name, root)
     case_id = keep(recording, directory, words=words,
                    title=found[0].title if found else "", agent=agent_name,
                    package=package, person=person)
     return case_id, directory, recording
+
+
+# ---- what is kept, and taking one back -----------------------------------------
+
+
+@dataclass
+class Kept:
+    """One kept test as a list shows it, with how it did last time."""
+    id: str
+    question: str
+    words: list[str]
+    tools: list[str]
+    kept_at: str
+    #: True / False on the last run that graded it, None if never run.
+    passed: bool | None = None
+    why: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self.__dict__)
+
+
+def _blocks(text: str) -> tuple[str, list[str]]:
+    """A suite file as its head and its ``[[case]]`` blocks, as written."""
+    parts = re.split(r"(?m)^(?=\[\[case\]\]\s*$)", text)
+    return parts[0], parts[1:]
+
+
+def _block_id(block: str) -> str:
+    found = re.search(r'(?m)^id\s*=\s*"([^"]*)"', block)
+    return found.group(1) if found else ""
+
+
+def last_results(suite: Path) -> dict[str, tuple[bool, list[str]]]:
+    """Each case's verdict in the newest report under ``runs/``."""
+    runs = sorted((suite / RUNS_DIR).glob("*.json")) if (suite / RUNS_DIR).is_dir() else []
+    if not runs:
+        return {}
+    try:
+        raw = json.loads(runs[-1].read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {c.get("id", ""): (bool(c.get("passed")), list(c.get("failures") or []))
+            for c in raw.get("cases") or []}
+
+
+def kept_in(suite: Path) -> list[Kept]:
+    """The tests in one suite, in the order they were kept. Read for a
+    list, never loaded as a suite: a recording that will not open still
+    shows here, so it can be deleted."""
+    cases = suite / "cases.toml"
+    if not cases.is_file():
+        return []
+    import tomllib
+    try:
+        data = tomllib.loads(cases.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    done = last_results(suite)
+    out = []
+    for entry in data.get("case") or []:
+        if not isinstance(entry, dict):
+            continue
+        case_id = str(entry.get("id") or "")
+        kept_at = ""
+        replay = entry.get("replay")
+        if isinstance(replay, str):
+            try:
+                kept_at = json.loads((suite / replay).read_text(encoding="utf-8")
+                                     ).get("kept_at", "")
+            except (OSError, ValueError):
+                pass
+        verdict = done.get(case_id)
+        out.append(Kept(case_id, str(entry.get("user_message") or ""),
+                        list(entry.get("answer_contains") or []),
+                        list(entry.get("required_tools") or []), kept_at,
+                        verdict[0] if verdict else None,
+                        verdict[1] if verdict else []))
+    return out
+
+
+def forget(suite: Path, case_id: str) -> bool:
+    """Take a kept test back: its block out of the suite file (the rest
+    left exactly as written, hand edits included) and its recording
+    deleted. The last one taken leaves no suite, so a night never runs an
+    empty file. False when there is no such test."""
+    cases = suite / "cases.toml"
+    if not cases.is_file():
+        return False
+    head, blocks = _blocks(cases.read_text(encoding="utf-8"))
+    gone = [b for b in blocks if _block_id(b) == case_id]
+    if not gone:
+        return False
+    for block in gone:
+        found = re.search(r'(?m)^replay\s*=\s*"([^"]*)"', block)
+        if found:
+            target = (suite / found.group(1)).resolve()
+            if target.is_relative_to(suite.resolve()):
+                target.unlink(missing_ok=True)
+    left = [b for b in blocks if _block_id(b) != case_id]
+    if left:
+        cases.write_text(head + "".join(left), encoding="utf-8")
+    else:
+        cases.unlink()
+    return True
 
 
 # ---- every suite, one night ----------------------------------------------------

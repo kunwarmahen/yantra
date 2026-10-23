@@ -2320,3 +2320,11 @@ mark.hit { background: var(--accent-soft); color: inherit; border-radius: 3px; p
 /* The words row under a conversation's heading (keep as a test). */
 .chat-test-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
 .chat-test-row input { flex: 1; min-width: 0; }
+.keep-answer { display: block; margin-top: 4px; font-size: 12px; color: var(--ink-3);
+  background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+.keep-answer:hover { color: var(--ink); }
+.tests-suite { margin: 14px 0 4px; font-weight: 600; }
+.tests-row { display: flex; gap: 10px; align-items: center; padding: 8px 0; cursor: default;
+  border-top: 1px solid var(--line); }
+.tests-row .ok { color: var(--ok); }
+.tests-row .fail, .conn-sub.fail { color: var(--danger); }

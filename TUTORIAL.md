@@ -1958,7 +1958,9 @@ when you want that answer from last week again:
 /chats open 2          go on with it from where it stopped
 /chats export 2        save it as a file to share (here, named by its date)
 /chats delete 2        delete it for good (it asks first)
-/chats test 2 May 20   keep it as a test (below)
+/chats test 2 May 20   keep it as a test (below); add "turn 1" for an earlier answer
+/tests                 the tests you kept, and how each did last time
+/tests delete 1        take one back
 ```
 
 On the page, press **history** in the top bar. Type a word you remember
@@ -1970,7 +1972,10 @@ the search, and from the file on disk.
 
 **Keep a good one as a test.** When an answer was right and you
 checked it, press **keep as a test** while reading it (or `/chats test N`
-in the terminal), and type a few words the right answer must say. From
+in the terminal), and type a few words the right answer must say. For an
+answer earlier in the conversation, use the small *keep this answer as a
+test* link under it. **kept tests** at the top of History lists them,
+with how each did last time, and **delete** takes one back. From
 then on, `yantra --eval --kept` asks the same question again with every
 tool answering from what it said that day, so nothing real happens: no
 email is sent, nothing is bought. It checks that the answer still says

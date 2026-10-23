@@ -124,11 +124,13 @@ HELP = """[bold]commands[/bold]
   /chats N           read conversation N from that list
   /chats open N      carry it on here (this one stays kept)
   /chats delete N    delete it for good (asks first)
-  /chats test N [WORDS, ...]
-                     keep it as a test that replays its last turn with the
-                     tools answering from what they said then (nothing
-                     real runs); WORDS are what the answer must say.
-                     Run them: yantra --eval --kept
+  /chats test N [turn K] [WORDS, ...]
+                     keep it as a test that replays its last turn (or turn
+                     K) with the tools answering from what they said then
+                     (nothing real runs); WORDS are what the answer must
+                     say. Run them: yantra --eval --kept
+  /tests             this agent's kept tests, and how each did last time
+  /tests delete N    take one back
   /chats export N [FILE]
                      write it as a Markdown file to share (your words, its
                      answers, the tools' names -- never their output); the
@@ -1337,6 +1339,8 @@ class Repl:
                 self._show_history()
             case "chats":
                 self._chats_command(arg)
+            case "tests":
+                self._tests_command(arg)
             case "usage":
                 u = self.agent.total_usage
                 line = (f"session tokens: {u.input_tokens} in / {u.output_tokens} out "
@@ -2067,9 +2071,13 @@ class Repl:
             return
         if verb == "test" and rest.split()[:1] and rest.split()[0].isdigit():
             number, _, words = rest.strip().partition(" ")
+            turn = None
+            said = words.split(maxsplit=2)
+            if len(said) >= 2 and said[0].lower() == "turn" and said[1].isdigit():
+                turn, words = int(said[1]), said[2] if len(said) > 2 else ""
             picked = self._chat_picked(number)
             if picked is not None:
-                self._keep_as_test(picked, words)
+                self._keep_as_test(picked, words, turn)
             return
         if verb in ("open", "delete") and rest.strip().isdigit():
             picked = self._chat_picked(rest.strip())
@@ -2109,9 +2117,47 @@ class Repl:
                            "/chats test N keeps it as a test · "
                            "/chats delete N deletes it for good[/dim]")
 
-    def _keep_as_test(self, conversation_id: str, words: str) -> None:
-        """/chats test N [WORDS, WORDS]: kept as a test (kept_tests.py).
-        The words are comma-separated, so "May 20, refund" is two."""
+    def _tests_command(self, arg: str) -> None:
+        """/tests | /tests delete N: this agent's kept tests, each with how
+        it did on its last run, and taking one back (kept_tests.py)."""
+        from yantra.kept_tests import forget, kept_in, suite_dir
+        suite = suite_dir(self.tests_for)
+        kept = kept_in(suite)
+        verb, _, rest = arg.partition(" ")
+        if verb == "delete" and rest.strip().isdigit():
+            n = int(rest.strip())
+            if not 1 <= n <= len(kept):
+                self.console.print(f"no kept test {n} -- /tests lists them",
+                                   markup=False, style="red")
+                return
+            forget(suite, kept[n - 1].id)
+            self.console.print(f"taken back: {kept[n - 1].id} ({kept[n - 1].question[:60]!r})",
+                               markup=False)
+            return
+        if arg:
+            self.console.print("/tests lists them; /tests delete N takes one back",
+                               markup=False, style="red")
+            return
+        if not kept:
+            self.console.print("no conversation is kept as a test of this agent yet "
+                               "-- /chats test N keeps one", markup=False, style="dim")
+            return
+        self.console.print(f"kept tests of {self.tests_for or 'yantra'}:", markup=False)
+        for n, k in enumerate(kept, start=1):
+            mark = {True: "passed", False: "FAILED", None: "not run yet"}[k.passed]
+            self.console.print(f"  {n:>3}. {k.question[:70]} -- {mark}"
+                               + (f" (must say {', '.join(k.words)})" if k.words else ""),
+                               markup=False)
+            for why in k.why[:2]:
+                self.console.print(f"       {why[:160]}", markup=False, style="dim")
+        self.console.print("/tests delete N takes one back · yantra --eval --kept "
+                           "runs them", markup=False, style="dim")
+
+    def _keep_as_test(self, conversation_id: str, words: str,
+                      turn: int | None = None) -> None:
+        """/chats test N [turn K] [WORDS, WORDS]: kept as a test
+        (kept_tests.py). The words are comma-separated, so "May 20,
+        refund" is two; ``turn K`` keeps that turn instead of the last."""
         from yantra.kept_tests import keep_from_log
         if conversation_id == self.conversation_id:
             self._keep_conversation()       # as it is now, not last turn's
@@ -2119,7 +2165,8 @@ class Repl:
         try:
             case_id, directory, recording = keep_from_log(
                 self.log, conversation_id, self.tests_for, words=wanted,
-                registry=self.agent.registry, package=self.tests_package)
+                registry=self.agent.registry, package=self.tests_package,
+                turn=turn)
         except ConfigError as exc:
             self.console.print(str(exc), markup=False, style="red")
             return

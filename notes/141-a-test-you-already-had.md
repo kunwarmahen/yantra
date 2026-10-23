@@ -71,8 +71,34 @@ was kept from a live session (the page, `/chats test`), the stand-in
 carries the real tool's description and arguments. Kept from the
 command line, it takes any arguments.
 
-The kept turn is the conversation's LAST one, asked with everything
-before it put back behind it, the way it was asked the first time.
+The kept turn is the conversation's LAST one by default, asked with
+everything before it put back behind it, the way it was asked the first
+time. A good answer earlier in a long conversation is kept by its number:
+`--turn 2`, `/chats test 3 turn 2 May 20`, or the *keep this answer as a
+test* link under each answer in the page's History. Turn 1 is the first
+thing the person asked. ONLY WHAT WAS KNOWN THEN: the recording holds
+the calls made up to the end of that turn. A later call's answer was not
+there the first time, and a replay that could look it up would be
+asking an easier question than the one kept.
+
+## Seeing them, and taking one back
+
+```
+/tests                 this agent's kept tests, and how each did last time
+/tests delete 2        take one back
+```
+
+On the page, **kept tests** in History lists every suite, yours and each
+person's, with each test's last result and its first reason when it
+failed. **delete** takes one back, and it asks first. Sarathi's Kept
+tests card links straight to that list (`#tests`). Taking one back
+removes its `[[case]]` block and its recording and leaves the rest of
+the file exactly as written, hand edits included. The last one taken
+removes the file, so a night never runs an empty suite. The
+conversation itself stays in History.
+
+That is the fix for the red below: a test kept from a wrong answer is
+deleted, not argued with every night.
 
 ## Three checks
 
@@ -176,12 +202,13 @@ That red is the lesson. Tonight's crypto account number is the one in
 the tool's own output. The KEPT answer had it wrong, and the judge was
 faithful to a wrong reference. **Keep a conversation whose answer you
 checked.** A test is only as right as the answer it was kept from.
-When a kept answer turns out wrong, delete its case, or put the right
-answer into `answer` in its recording.
+When a kept answer turns out wrong, delete it (`/tests delete N`, or
+**delete** on the page), or put the right answer into `answer` in its
+recording.
 
 ## Tests
 
-`tests/test_kept_tests.py` (38). The bias is against a replay that is
+`tests/test_kept_tests.py` (47). The bias is against a replay that is
 not one: every tool there that is not a fake raises if it runs, and the
 gate is the unattended one. They check:
 
@@ -206,7 +233,16 @@ gate is the unattended one. They check:
 * a suite that could not run, or whose package is gone, is said and
   never green;
 * nothing kept is not green;
-* `--tests --json` prints the summary.
+* `--tests --json` prints the summary;
+* an earlier turn is kept with only what was known then, and a turn
+  that is not there is said;
+* the list says how each did last time;
+* delete takes out one block and its recording and nothing else, and
+  the last one leaves no suite;
+* the terminal lists and deletes;
+* `/chats test N turn K` works, and `--turn` goes with `--keep-test`;
+* the page lists, keeps a turn, refuses a suite outside the root, and
+  deletes.
 
 ## What is not here yet
 
@@ -215,8 +251,9 @@ gate is the unattended one. They check:
   card on Sarathi's home page, are theirs (Samay's and Sarathi's notes).
 * **Dvara's people.** `/keep test` on Telegram, into that person's own
   suite (`people_root`) for that agent, is Dvara's.
-* **Choosing the turn.** The last turn is kept. A conversation whose
-  good answer came earlier is kept by carrying it on to that point
-  in a new conversation.
+* ~~**Choosing the turn.**~~ Built: `--turn`, `turn K`, and the link
+  under each answer (above).
+* ~~**Taking one back.**~~ Built: `/tests delete N`, and **delete** in
+  the page's kept tests (above).
 * **Pictures.** A screenshot a tool returned is replayed as its text
   only.
