@@ -81,6 +81,12 @@ prints it as `yantra.status.v1`, which is what Sarathi reads. `status`
 is the one bare word that is not a prompt; to ask a model the word,
 use `--prompt status` ([notes/117](notes/117-asked-what-it-is.md)).
 
+`yantra keeps [--json]` is the second bare word: where Yantra keeps what
+is yours alone (History, the built-in memory, MCP sign-ins, the page's
+browser profile, your skills and the ones it learned), as
+`yantra.keeps.v1`. Sarathi's `sarathi backup` packs what it says, browser
+caches left out ([keeps.py](src/yantra/keeps.py)).
+
 ## Setup
 
 Working *on* Yantra:
@@ -2604,6 +2610,9 @@ src/yantra/
 │                   export_markdown shares one: words, answers, the tools'
 │                   NAMES, never their output
 │                   ([notes/130](notes/130-every-conversation-kept.md))
+├── keeps.py        `yantra keeps [--json]`: where what is yours alone is kept
+│                   (the state home, ~/.yantra/skills, a moved History), for
+│                   Sarathi's backup; browser caches and Chrome's locks left out
 ├── kept_tests.py   a conversation from History kept as a test: its last
 │                   turn and everything before it, the tools' answers in
 │                   replay/<id>.json, a [[case]] in the person's own suite

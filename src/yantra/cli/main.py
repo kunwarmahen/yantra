@@ -2667,10 +2667,27 @@ def _status_mode(rest: list[str]) -> int:
     return 0
 
 
+def _keeps_mode(rest: list[str]) -> int:
+    """``yantra keeps [--json]``: where Yantra keeps what is yours alone,
+    for ``sarathi backup`` (keeps.py). The family's second bare word,
+    asked the way ``status`` is; ``yantra --prompt keeps`` asks a model."""
+    from yantra.keeps import lines, report
+
+    if rest not in ([], ["--json"]):
+        print("error: yantra keeps takes only --json (to ask a model "
+              "about 'keeps', use --prompt)", file=sys.stderr)
+        return 2
+    data = report()
+    print(json.dumps(data, indent=2) if rest else "\n".join(lines(data)))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
     if given[:1] == ["status"]:
         return _status_mode(given[1:])
+    if given[:1] == ["keeps"]:
+        return _keeps_mode(given[1:])
     args = build_parser().parse_args(argv)
     console = Console()
 
