@@ -1213,10 +1213,16 @@ user_message = "Which section of sources/rate-limiting.md covers throttled clien
 required_tools = ["outline"]          # what ACTUALLY executed, not what was offered
 forbidden_tools = ["bash"]
 check = "graders:names_a_line_number" # (str) -> bool, optional
+answer_contains = ["line"]            # words the answer must say, any case; no Python
 max_tokens = 30_000
 max_iterations = 8
 min_pass_rate = 0.7                   # "holds seven runs in ten"
 ```
+
+Two more keys come from conversations kept as tests (`replay`, a
+recording the tools answer from, and `judge`, the model comparing the
+answer with the kept one). Those are written for you by *keep as a
+test*; see [notes/141](notes/141-a-test-you-already-had.md).
 
 ### Two kinds of assertion, and only one costs money
 
@@ -2248,7 +2254,8 @@ appears in the top bar: *1 new answer*. Click it: the panel opens with
 seen it, and the chip goes away
 ([notes/125](notes/125-the-answer-comes-back-here.md)).
 
-Installing Samay, its own page, the two roads, keeping its clock running
+Installing Samay, its own page, its roads (including the one that
+replays your kept tests every night, §17 above), keeping its clock running
 (`samay unit`), and the rules about missed times are Samay's: see its
 README.
 

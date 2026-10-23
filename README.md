@@ -1737,10 +1737,16 @@ user_message = "Which section of SKILL.md covers confidence, and on what line?"
 required_tools = ["outline"]          # what ACTUALLY executed, not what was offered
 forbidden_tools = ["bash"]
 check = "graders:names_a_line_number" # (str) -> bool, optional
+answer_contains = ["line"]            # words the answer must say, any case; no Python
 max_tokens = 30_000
 max_iterations = 8
 min_pass_rate = 0.7                   # "holds seven runs in ten" -- see --repeat
 ```
+
+Two more keys come from conversations kept as tests (`replay`, a
+recording the tools answer from, and `judge`, the model comparing the
+answer with the kept one). Those are written for you by *keep as a
+test*; see [notes/141](notes/141-a-test-you-already-had.md).
 
 **Two kinds of assertion, and only one of them costs money.** The keys
 above grade the *trajectory* — what ran — so they need a run. `has_tools`
