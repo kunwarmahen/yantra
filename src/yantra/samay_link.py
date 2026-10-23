@@ -224,8 +224,13 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
     lines = [
         "# Doing things later (through Samay)",
         "You can offer to do something later, or on a repeat, with the `mcp__samay__` "
-        "tools -- when the person asks for something that has to happen at a time, or "
-        "that is worth checking again. Not for every answer.",
+        "tools -- when the person asks for something that has to happen AT A TIME: a "
+        "reminder, a morning summary, a weekly report. Not for every answer.",
+        "WAITING FOR SOMETHING TO HAPPEN is not a schedule: a price under a line, a mail "
+        "from someone, a page that changes, a parcel that ships. If you have "
+        "`mcp__prahari__` tools, that is a watch (Prahari looks with no model and wakes "
+        "you only when it happens). Only without them, a schedule that checks and tells "
+        "the person only when something is new (`notify`: `when_new`) will do.",
         "1. Call `mcp__samay__preview_schedule` first and tell the person its sentence, "
         "what will be done, and when they will be told.",
         "2. Only after they say yes, call `mcp__samay__create_schedule`. Its `prompt` is "

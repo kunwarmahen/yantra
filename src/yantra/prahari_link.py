@@ -163,8 +163,9 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "When the person wants to know WHEN something happens -- a price drops under a "
         "line, a mail from someone arrives, a page or a status changes, something is "
         "back in stock -- offer a watch with the `mcp__prahari__` tools. A watch looks "
-        "on its own with NO model and wakes you only when it matters. (Something done "
-        "at a time, every morning, is a schedule instead.)",
+        "on its own with NO model and wakes you only when it matters. Something done AT "
+        "A TIME -- a reminder at 6, a summary every morning -- is a schedule instead "
+        "(`mcp__samay__`), not a watch: a watch's `every` is only how often it looks.",
         "1. The check is ONE call of a tool you have that READS, with exact arguments: "
         "a mail search with the sender in the query, a site's open, a page's address. "
         "Put everything that narrows it in the arguments.",

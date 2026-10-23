@@ -264,3 +264,15 @@ class TestTheCardIsWords:
         assert said.startswith("Change watch w-1\n  w-1 [active] ALAB under 50")
         assert "its memory starts over" in said
         assert gone.startswith("Delete watch w-1, its looks and what it saw, for good")
+
+
+def test_a_watch_and_a_schedule_are_told_apart_in_both_layers():
+    """Two programs both repeat things; the model must not offer the wrong one.
+    A time is Samay's; waiting for something to happen is Prahari's."""
+    from yantra import samay_link
+
+    watches = prahari_link.prompt_text({"serving": True})
+    schedules = samay_link.prompt_text({"serving": True})
+    assert "is a schedule instead (`mcp__samay__`), not a watch" in watches
+    assert "WAITING FOR SOMETHING TO HAPPEN is not a schedule" in schedules
+    assert "Only without them" in schedules

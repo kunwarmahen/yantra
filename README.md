@@ -876,6 +876,21 @@ you haven't seen (*1 new answer*), and the panel opens with **what they
 said** at the top, read from Samay's record
 ([notes/125](notes/125-the-answer-comes-back-here.md)).
 
+**Samay or Prahari?** Both repeat things, so here is the line between them:
+
+| You say | It's | Who keeps it | What happens each time |
+|---|---|---|---|
+| "Every morning at 8, summarise my mail" | a **schedule**: something done AT A TIME | Samay | a whole agent turn, at that time |
+| "Remind me on Friday to call the plumber" | a **schedule** | Samay | the reminder, at that time |
+| "Tell me when ALAB drops under $50" | a **watch**: WAITING for something to happen | Prahari | one tool call, no model; the agent wakes only when it happens |
+| "Tell me as soon as the bank writes" | a **watch** | Prahari | the mailbox says so the moment it lands |
+
+A watch's *every 30 minutes* is only how often it peeks, not a time you
+care about, so it stays with Prahari. The agent is told the same line in
+both prompt layers. Without Prahari, a schedule that checks and tells you
+only when something is new does the waiting instead, at a model call per
+check.
+
 **Telling you when something happens, through Prahari.**
 [Prahari](https://github.com/kunwarmahen/prahari) watches for "tell me
 when…": a price under a line, a mail from the bank, a page that changed.
@@ -887,7 +902,7 @@ how often), and Prahari repeats the look with no model (`yantra
 plus `--agent` for a package's session) and says so in one line:
 
 ```
-prahari: 9 tool(s), 3 active watch(es); it is watching -- via /home/you/prahari/.venv/bin/prahari
+prahari: 10 tool(s), 3 active watch(es); it is watching -- via /home/you/prahari/.venv/bin/prahari
 ```
 
 `YANTRA_PRAHARI=/path/to/prahari` names it when it is elsewhere;
