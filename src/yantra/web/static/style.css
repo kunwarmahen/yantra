@@ -1409,7 +1409,7 @@ pre.output { color: var(--ink); }
 
 /* ---- a lesson open: above the composer, until done or stop ---- */
 
-#lesson-bar {
+#lesson-bar, #carry-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1422,9 +1422,9 @@ pre.output { color: var(--ink); }
   font-size: 13px;
   color: var(--ink-2);
 }
-#lesson-words { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+#lesson-words, #carry-words { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
 .lesson-acts { display: flex; gap: 8px; margin-left: auto; }
-#lesson-bar .m-btn { height: 28px; padding: 0 12px; font-size: 12.5px; }
+#lesson-bar .m-btn, #carry-bar .m-btn { height: 28px; padding: 0 12px; font-size: 12.5px; }
 
 /* ---- the anchored menu (provider picker) ---- */
 

@@ -31,6 +31,14 @@ on the person's message; this one puts the question back and
 held today. No format bump: nothing an old reader does with the file is
 wrong, only less.
 
+A TURN STILL GOING IS SAVED AS FAR AS IT GOT (carry.py). A host that
+checkpoints after every step writes, while the turn runs, an
+``unfinished`` block: when it started, the person's message, the steps
+done. A process killed then leaves it in the newest version, and a
+restored agent carries it as ``agent.unfinished`` for ``carry_on``. A
+history saved between steps has no outstanding call either: the
+invariant holds at every step, not only at the end of a turn.
+
 A WHOLE SESSION CAN BE FORGOTTEN, NEVER A VERSION. ``forget`` drops
 every checkpoint of one session id and nothing else. Append-only is a
 promise about a conversation that may continue: no save rewrites what
@@ -142,6 +150,24 @@ class SessionStore:
             self._db.commit()
         return gone
 
+    def unfinished(self) -> list[tuple[str, dict]]:
+        """Every session whose NEWEST checkpoint is a turn still going
+        (carry.py): (session id, its ``unfinished`` block). What a service
+        reads as it starts, to offer back the jobs a restart stopped."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT c.session_id, c.payload FROM checkpoints c JOIN "
+                "(SELECT session_id, MAX(version) AS v FROM checkpoints "
+                "GROUP BY session_id) m ON m.session_id = c.session_id "
+                "AND m.v = c.version WHERE c.payload LIKE '%\"unfinished\"%'"
+            ).fetchall()
+        found = []
+        for session_id, raw in rows:
+            info = json.loads(raw).get("unfinished")
+            if info:
+                found.append((session_id, info))
+        return found
+
     def latest_version(self, session_id: str = "default") -> int:
         with self._lock:
             return self._latest_version(session_id)
@@ -176,6 +202,10 @@ def snapshot(agent, provider_name: str) -> dict:
     if held is not None and still_current(held, agent.history):
         payload["history"].pop()   # the question, kept below
         payload["held"] = _dump_held(held, agent.history[-1])
+    from yantra import carry
+    info = carry.unfinished(agent)
+    if info is not None:           # a turn still going (carry.py)
+        payload[carry.KEY] = info
     return payload
 
 
@@ -293,6 +323,9 @@ def _restore_conversation(agent, payload: dict) -> int:
     if payload.get("held"):
         message, agent.held = _load_held(payload["held"])
         agent.history.append(message)
+    # a turn a restart stopped: the host decides whether to carry it on
+    agent.unfinished = payload.get("unfinished") or None
+    agent.turn_open = False
     return len(agent.history)
 
 

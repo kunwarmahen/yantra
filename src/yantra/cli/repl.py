@@ -123,6 +123,7 @@ HELP = """[bold]commands[/bold]
                      that say WORDS -- each is kept by itself as it goes
   /chats N           read conversation N from that list
   /chats open N      carry it on here (this one stays kept)
+  /carry             carry on a job a restart stopped, from its last step
   /chats delete N    delete it for good (asks first)
   /chats test N [turn K] [WORDS, ...]
                      keep it as a test that replays its last turn (or turn
@@ -339,6 +340,10 @@ class Repl:
         #: is written to; /clear and /load start another.
         self.log = log
         self.conversation_id = new_id()
+        if log is not None:
+            # every step, not only every turn: a job a killed terminal
+            # stopped is kept as far as it got, for /carry (carry.py)
+            agent.on_step = lambda _agent: self._keep_conversation()
         #: The last /chats list, so /chats N means what was on screen.
         self._chats_shown: list[str] = []
         #: The agent ``/chats test`` keeps a conversation as a test of
@@ -475,7 +480,7 @@ class Repl:
 
     def run_turn(self, user_input: str,
                  *, images: list[ImageBlock] | None = None,
-                 learn: bool = True) -> None:
+                 learn: bool = True, carry: bool = False) -> None:
         """One user turn, fully rendered. Public because one-shot mode and
         the REPL share this exact path. ``images`` (loaded via
         yantra.images) ride along in the same user message -- how
@@ -483,9 +488,13 @@ class Repl:
 
         ``learn=False`` counts the turn against any learned skill it used
         but never offers to save it -- a turn that ran a skill by name
-        already had its recipe."""
+        already had its recipe.
+
+        ``carry=True`` carries on the restored turn a restart stopped
+        (carry.py) instead of sending ``user_input``."""
         self._setu_catch_up()
-        stream = self.agent.run_streaming(user_input, images=images)
+        stream = (self.agent.carry_on() if carry
+                  else self.agent.run_streaming(user_input, images=images))
         if self.trace is not None:
             # A TEE, not a consumer: the renderer still sees every event
             # (trace.watch). The turn is recorded when it ends, including
@@ -1340,6 +1349,8 @@ class Repl:
                 self._show_history()
             case "chats":
                 self._chats_command(arg)
+            case "carry":
+                self._carry_command()
             case "tests":
                 self._tests_command(arg)
             case "usage":
@@ -2055,6 +2066,26 @@ class Repl:
         except Exception as exc:
             self.console.print(f"[yellow]conversation not kept: {exc}[/yellow]")
 
+    def _carry_command(self) -> None:
+        """/carry: the job this conversation stopped in, or else the last
+        terminal conversation a restart stopped, carried on (carry.py)."""
+        from yantra import carry
+        if getattr(self.agent, "unfinished", None) is None:
+            stopped = self.log.stopped("terminal") if self.log is not None else None
+            if stopped is None:
+                self.console.print("[yellow]nothing to carry on: no job was "
+                                   "stopped part way[/yellow]")
+                return
+            self._open_chat(stopped[0])
+            if getattr(self.agent, "unfinished", None) is None:
+                return
+        self.console.print(f"[dim]carrying on "
+                           f"{escape(carry.describe(self.agent.unfinished))}[/dim]")
+        try:
+            self.run_turn("", carry=True)
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow](cancelled)[/yellow]")
+
     def _chats_command(self, arg: str) -> None:
         """/chats [WORDS] | N | open N | delete N -- answered here, never a
         turn: reading your own conversations costs nothing."""
@@ -2224,6 +2255,12 @@ class Repl:
         self.conversation_id = conversation_id
         self.console.print(f"[green]back in: {escape(payload_title(payload))} "
                            f"-- {len(self.agent.history)} message(s)[/green]")
+        if getattr(self.agent, "unfinished", None):
+            from yantra import carry
+            self.console.print(
+                f"[yellow]it stopped part way through a job: "
+                f"{escape(carry.describe(self.agent.unfinished))} -- /carry carries "
+                "it on from there, or say what you want instead[/yellow]")
 
     def _export_chat(self, conversation_id: str, path: str) -> None:
         """One conversation as a Markdown file: in this folder under its
@@ -2386,3 +2423,10 @@ class Repl:
             f"cwd={self.agent.ctx.cwd}{gated}"
         )
         self.console.print("[dim]/help for commands, ctrl-c cancels a turn[/dim]\n")
+        stopped = self.log.stopped("terminal") if self.log is not None else None
+        if stopped is not None:
+            from yantra import carry
+            self.console.print(
+                f"[yellow]a job stopped part way when Yantra last closed: "
+                f"{escape(carry.describe(stopped[1]))} -- /carry carries it on"
+                "[/yellow]\n")

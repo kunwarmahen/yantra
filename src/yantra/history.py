@@ -15,10 +15,12 @@ shape (session.snapshot), so one can be carried on as well as read.
 
 WRITTEN AS IT GOES, NOT AT THE END. A conversation that ends in a crash,
 a closed laptop lid or a killed server is the one most likely to be
-looked for later. Each turn replaces the row: one row per conversation,
-never one per turn -- this is a record of what was said, not the
-append-only checkpoints of session.py, whose promise is about a session
-that may continue.
+looked for later. The terminal and the page write it after every STEP
+of a turn too (carry.py), so a job a restart stopped is here as far as
+it got, and ``stopped`` finds it to be carried on. Each write replaces
+the row: one row per conversation, never one per turn -- this is a
+record of what was said, not the append-only checkpoints of session.py,
+whose promise is about a session that may continue.
 
 FOUND BY ITS WORDS. The person's words and the agent's answers go into
 an SQLite full-text index (FTS5): local, instant, no model and nothing
@@ -380,6 +382,18 @@ class ConversationLog:
                     "ORDER BY c.updated_at DESC, c.n DESC LIMIT ?",
                     (query, *args, limit)).fetchall()
         return [Kept(*r) for r in rows]
+
+    def stopped(self, road: str) -> tuple[str, dict] | None:
+        """The newest conversation on ``road``, when a restart stopped it
+        mid-turn (carry.py): its id and its ``unfinished`` block."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT id, payload FROM conversations WHERE road = ? "
+                "ORDER BY updated_at DESC, n DESC LIMIT 1", (road,)).fetchone()
+        if row is None:
+            return None
+        info = json.loads(row[1]).get("unfinished")
+        return (row[0], info) if info else None
 
     def count(self) -> int:
         with self._lock:

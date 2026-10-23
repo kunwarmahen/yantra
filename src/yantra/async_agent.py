@@ -46,7 +46,9 @@ import json
 import uuid
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
+from typing import Any
 
+from yantra import carry
 from yantra.agent import (
     INTERRUPTED_MESSAGE,
     MAX_PARALLEL_TOOLS,
@@ -199,6 +201,16 @@ class AsyncAgent:
         #: sub-agents (subagent.py shares it), cleared only by a new
         #: message -- a resumed hold is still the turn that read it.
         self.outside_read: list[str] = []
+        # ---- a job stopped by a restart (carry.py) ----
+        #: Set while a turn runs; still set in a checkpoint written by a
+        #: process that was killed or a task that was cancelled.
+        self.turn_open = False
+        self.turn_started = ""
+        #: Called as a turn begins and after every step, to checkpoint.
+        self.on_step: Callable[[Any], None] | None = None
+        self.step_error: str | None = None
+        #: A restored checkpoint's ``unfinished`` block, until carried on.
+        self.unfinished: dict | None = None
         #: The sync twin's hold, same contract (notes/88): the turn that
         #: stopped for approval, answered with ``resume``.
         self.held: Held | None = None
@@ -240,6 +252,7 @@ class AsyncAgent:
         outstanding tool calls get synthesized error results first.
         """
         self.abandon_held()   # the sync twin's rule (notes/88)
+        self.unfinished = None   # a new message, not a carry-on
         # The sync twin's memory rule, off the event loop: a store may be
         # slow, and one conversation's first message must not stall others.
         if getattr(self, "memory", None) is not None:
@@ -328,21 +341,41 @@ class AsyncAgent:
         self._approval_told = None
         self._clock_told = None
         self.turn_refusals = {}
+        self.turn_open = True               # until it ends (carry.py)
+        self.turn_started = carry.now_iso()
+
+    async def carry_on(self) -> AsyncIterator[AgentEvent]:
+        """The sync twin's ``carry_on``: a turn a restart stopped,
+        continued from its last saved step (carry.py)."""
+        info = carry.prepare(self)
+        if getattr(self, "memory", None) is not None:
+            await asyncio.to_thread(prime_if_new, self, info.get("message") or "")
+        self._begin_turn()
+        self.turn_started = info.get("started") or self.turn_started
+        async for event in self._turn_then_release():
+            yield event
 
     async def _turn_then_release(self) -> AsyncIterator[AgentEvent]:
         """The sync twin's ``_turn_then_release``; the release runs on a
         worker thread, because closing a browser blocks."""
         ended = False
+        carry.step_done(self)               # the sync twin's checkpoint
         try:
             async for event in self._turn():
                 if isinstance(event, TurnEnd):
                     ended = True
+                    self.turn_open = False
+                    carry.step_done(self)   # the sync twin's last checkpoint
                     if event.reason != "held":
                         await asyncio.to_thread(_release_turn_tools, self)
                     if event.response is not None:
                         note_used(self)     # its own thread: never blocks
                 yield event
-        except BaseException:
+        except BaseException as exc:
+            # A CANCELLED TASK IS A SHUTDOWN, and leaves the turn open to
+            # be carried on (carry.py); anything else ended it.
+            if not isinstance(exc, asyncio.CancelledError):
+                self.turn_open = False
             if not ended:   # cancelled: no awaiting from here
                 _release_turn_tools(self)
             raise
@@ -484,6 +517,7 @@ class AsyncAgent:
                     yield ToolExecuted(call=call, result=result,
                                        refusal=self._refusals.pop(call.id, None))
                 self.history.append(_batch_message(batch))
+                carry.step_done(self)       # a step done: checkpoint it
 
             # Ran out of iterations while the model still wanted tools.
             self._answer_outstanding({})

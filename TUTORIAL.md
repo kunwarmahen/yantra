@@ -2086,6 +2086,20 @@ containers, see §24.
   agent, provider_name=..., road=..., folder=...)`, then `listed(words,
   folder=...)`, `read(id)`, `delete(id)`.
 
+* **A job a restart stopped.** Every step of a turn is saved as it
+  happens, not only when the turn ends. If Yantra is killed in the middle
+  of a long job (a phone return, a site form), the next session's banner
+  says so, and `/carry` goes on from the last step without redoing any.
+  The page shows a **carry on / leave it** bar. The agent is told it
+  stopped and looks again before it acts, because the screen may have
+  moved. A scheduled run gets the same with `--job FILE`
+  ([notes/144](notes/144-a-job-a-restart-stopped.md)):
+
+  ```
+  a job stopped part way when Yantra last closed: "return the blue
+  kettle" (6 steps done: phone_open_app, phone_tap) -- /carry carries it on
+  ```
+
 * **Compaction.** Mask before summarize: old tool-result *output* is
   elided first (reversible, the calls stay verbatim), and only if the
   context is still in the red zone does a model summarize the middle —

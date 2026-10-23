@@ -232,6 +232,7 @@ async function fetchHistory() {
 function applyHeader(s) {
   ui.lastState = s;
   renderLesson(s.lesson);
+  renderCarry(s.carry);
   $("#provider-name").textContent = s.provider;
   $("#model-name").textContent = s.model;
   const yolo = s.mode === "yolo";
@@ -3726,6 +3727,27 @@ function renderLesson(lesson) {
   $("#lesson-words").textContent =
     `${how}: ${lesson.task} — ${lesson.told} step(s) so far; ${next}.`;
 }
+
+/* A job a restart stopped part way (carry.py): carry it on, or leave it. */
+function renderCarry(carry) {
+  const bar = $("#carry-bar");
+  bar.classList.toggle("hidden", !carry);
+  if (!carry) return;
+  $("#carry-words").textContent =
+    `A job stopped part way when Yantra restarted: ${carry.text}.`;
+}
+$("#carry-on").onclick = async () => {
+  if (ui.turnActive) { toast("wait for this step to finish"); return; }
+  const carry = ui.lastState?.carry;
+  if (!carry) return;
+  // the last conversation, not this one: open it first, so its words show
+  if (!carry.here) await carryOnChat(carry.id);
+  if (await post("/api/carry")) $("#carry-bar").classList.add("hidden");
+};
+$("#carry-leave").onclick = async () => {
+  const d = await post("/api/carry/leave");
+  if (d) applyHeader(d);
+};
 
 /* A word sent as if typed: the composer's own path, so it shows as yours. */
 function sendWords(text) {

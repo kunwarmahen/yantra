@@ -307,6 +307,13 @@ def build_parser() -> argparse.ArgumentParser:
                              "Dvara, when set), a question fails the turn, and a "
                              "browser handoff tells the agent to stop and say "
                              "what it needs instead of opening a window")
+    parser.add_argument("--job", metavar="FILE",
+                        help="with a one-shot prompt: save the run after every "
+                             "step in FILE. If FILE holds a run a restart "
+                             "stopped, that run is carried on from its last "
+                             "step instead of starting the prompt again (the "
+                             "model is told, and looks again before it acts). "
+                             "For a scheduler that may be restarted mid-run")
     parser.add_argument("--allow-tools", action="append", default=[],
                         metavar="GRANT", dest="allow_tools",
                         help="approve these tools ahead of time (repeatable; "
@@ -2684,6 +2691,11 @@ def main(argv: list[str] | None = None) -> int:
         # handoff and anything Yantra starts as a child read it there.
         os.environ["YANTRA_UNATTENDED"] = "1"
 
+    if args.job and args.prompt is None and not args.prompt_positional:
+        print("error: --job keeps one prompt's run: give it --prompt or a "
+              "positional PROMPT", file=sys.stderr)
+        return 2
+
     if args.image and args.prompt is None and not args.prompt_positional:
         print("error: --image needs a prompt to attach to (--prompt or a "
               "positional PROMPT); interactive image input is not "
@@ -3327,9 +3339,12 @@ def main(argv: list[str] | None = None) -> int:
             except ImageError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 2
+            carrying = _open_job(args, agent, console)
             try:
                 prompt = args.prompt or args.prompt_positional
-                repl.run_turn(prompt, images=images)  # same rendering path as the REPL
+                # same rendering path as the REPL; a job a restart stopped
+                # goes on from its last step instead (carry.py)
+                repl.run_turn(prompt, images=images, carry=carrying)
                 # A one-shot answer is a whole conversation, and it ends here.
                 repl.end_conversation()
             except KeyboardInterrupt:
@@ -3359,6 +3374,43 @@ def main(argv: list[str] | None = None) -> int:
         # pool and gives it back, rather than leaving it to interpreter
         # teardown ([notes/38](../notes/38-giving-it-back.md)).
         agent.provider.close()
+
+
+#: The one conversation a ``--job`` file holds.
+JOB_SESSION = "job"
+
+
+def _open_job(args, agent, console) -> bool:
+    """``--job FILE``: checkpoint after every step, and True when FILE
+    held a run a restart stopped -- restored into ``agent`` to carry on.
+    A file whose run finished starts over: it is the next run's."""
+    if not args.job:
+        return False
+    import fcntl
+
+    from yantra import carry
+    path = Path(args.job).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # HELD FOR AS LONG AS THIS RUNS: whoever would carry the job on sees a
+    # Yantra still at it, and leaves it alone (Samay's still_running).
+    lock = open(f"{path}.lock", "a")  # noqa: SIM115 -- open until the process ends
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        raise SystemExit(f"error: --job {path}: another Yantra is running this job") from None
+    agent.job_lock = lock
+    store = SessionStore(path)
+    provider_name = agent.provider.name
+    saved = store.load_latest(JOB_SESSION)
+    carrying = bool(saved and saved.get(carry.KEY))
+    if carrying:
+        apply_payload(agent, saved, history_only=True)
+        console.print(f"[yellow]carrying on {carry.describe(saved[carry.KEY])}, "
+                      "stopped by a restart[/yellow]")
+    agent.on_step = lambda a: store.save(a, provider_name=provider_name,
+                                         session_id=JOB_SESSION)
+    return carrying
 
 
 def _conversation_log(args, console):

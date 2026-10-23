@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from yantra.budget import Budget
 from yantra.context import (
@@ -34,6 +34,7 @@ from yantra.errors import ToolError
 from yantra import outside
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
+from yantra import carry
 from yantra.memory import note_used, prime_if_new
 from yantra.memory.reflect import before_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
@@ -377,6 +378,16 @@ class Agent:
         #: sub-agents (subagent.py shares it), cleared only by a new
         #: message -- a resumed hold is still the turn that read it.
         self.outside_read: list[str] = []
+        # ---- a job stopped by a restart (carry.py) ----
+        #: Set while a turn runs; still set in a checkpoint written by a
+        #: process that was killed or a task that was cancelled.
+        self.turn_open = False
+        self.turn_started = ""
+        #: Called as a turn begins and after every step, to checkpoint.
+        self.on_step: Callable[[Any], None] | None = None
+        self.step_error: str | None = None
+        #: A restored checkpoint's ``unfinished`` block, until carried on.
+        self.unfinished: dict | None = None
         #: The turn stopped for approval, or None (notes/88, yantra/hold.py).
         #: Answer it with ``resume``; a new message sets it aside.
         self.held: Held | None = None
@@ -430,6 +441,8 @@ class Agent:
         # the next message: its waiting calls are answered as abandoned,
         # so the history this message joins is valid again (notes/88).
         self.abandon_held()
+        # A new message instead of /carry: the stopped job is left as it is.
+        self.unfinished = None
         # A conversation's first message fills the memory layer, once --
         # before the message joins history, which is how "first" is told
         # (memory/__init__.py). Nothing happens without ``agent.memory``.
@@ -536,6 +549,19 @@ class Agent:
         self._approval_told = None
         self._clock_told = None
         self.turn_refusals = {}
+        self.turn_open = True               # until it ends (carry.py)
+        self.turn_started = carry.now_iso()
+
+    def carry_on(self) -> Iterator[AgentEvent]:
+        """Continue a turn a restart stopped, from its last saved step
+        (carry.py): the model is told it stopped, and looks again before
+        it acts. ``agent.unfinished`` is the restored checkpoint's block;
+        ValueError when there is none."""
+        info = carry.prepare(self)
+        prime_if_new(self, info.get("message") or "")
+        self._begin_turn()
+        self.turn_started = info.get("started") or self.turn_started
+        yield from self._turn_then_release()
 
     def _turn_then_release(self) -> Iterator[AgentEvent]:
         """``_turn``, with the tools released as it ends (notes/92).
@@ -547,10 +573,15 @@ class Agent:
         needs the page it was about to act on.
         """
         ended = False
+        # the person's message (or the answered hold, or the carry-on
+        # note) is in: a checkpoint here holds the job from its start
+        carry.step_done(self)
         try:
             for event in self._turn():
                 if isinstance(event, TurnEnd):
                     ended = True
+                    self.turn_open = False
+                    carry.step_done(self)   # and as it ends: no longer open
                     if event.reason != "held":
                         _release_turn_tools(self)
                     if event.response is not None:
@@ -559,6 +590,9 @@ class Agent:
                         note_used(self)
                 yield event
         except BaseException:
+            # A Ctrl-C, a Stop, a closed stream: the person ended it. Only
+            # a process killed outright leaves a turn open (carry.py).
+            self.turn_open = False
             # interrupted or failed: over too -- but a consumer dropping
             # the stream AFTER the TurnEnd (run() does) is not a new end
             if not ended:
@@ -706,6 +740,7 @@ class Agent:
                     yield ToolExecuted(call=call, result=result,
                                        refusal=self._refusals.pop(call.id, None))
                 self.history.append(_batch_message(batch))
+                carry.step_done(self)       # a step done: checkpoint it
 
             # Ran out of iterations while the model still wanted tools.
             self._answer_outstanding({})

@@ -297,7 +297,7 @@ class TestCliAgentFlag:
         monkeypatch.setattr(cli_main, "get_provider", lambda *a, **k: provider)
         seen: dict = {}
 
-        def fake_run_turn(self, text, *, images=None):
+        def fake_run_turn(self, text, *, images=None, carry=False):
             seen["agent"] = self.agent
 
         monkeypatch.setattr(cli_main.Repl, "run_turn", fake_run_turn)

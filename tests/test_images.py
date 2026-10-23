@@ -243,7 +243,7 @@ class TestCliImageFlag:
         monkeypatch.setattr(cli_main, "get_provider", lambda *a, **k: provider)
         captured: dict = {}
 
-        def fake_run_turn(self, text, *, images=None):
+        def fake_run_turn(self, text, *, images=None, carry=False):
             captured["text"], captured["images"] = text, images
 
         monkeypatch.setattr(cli_main.Repl, "run_turn", fake_run_turn)
@@ -271,7 +271,7 @@ class TestCliImageFlag:
 
         called = False
 
-        def boom(self, text, *, images=None):
+        def boom(self, text, *, images=None, carry=False):
             nonlocal called
             called = True
 

@@ -149,6 +149,10 @@ uv run yantra --yolo                                 # no permission prompts (ca
 uv run yantra --cache                                # prompt-cache breakpoints on
 uv run yantra --max-usd 0.50                         # stop a turn once it costs this much
 uv run yantra --resume                               # restore the newest checkpoint
+uv run yantra --unattended --json --job run.sqlite --prompt "..."
+                                                      # saved after every step; a run a
+                                                      #   restart stopped carries on from
+                                                      #   its last step (notes/144)
 uv run yantra --env-context local                    # machine facts only (default: full)
 uv run yantra --skills-dir ~/shared-skills           # extra skills root (repeatable)
 uv run yantra --no-skills                            # ignore skills entirely
@@ -1274,7 +1278,12 @@ those, every conversation is kept by itself as it goes, to read again:
 writes it as a Markdown file to share and `/chats delete N` deletes it
 for good; the page's **history** button is the same list, with **share**
 (save as PDF, download, or the phone's share sheet)
-([notes/130](notes/130-every-conversation-kept.md));
+([notes/130](notes/130-every-conversation-kept.md)). It's kept after
+every STEP, too: a job Yantra was killed in the middle of is named in the
+next banner, and `/carry` carries it on from its last step without
+redoing any (the page: a **carry on / leave it** bar). The agent is
+told it stopped and looks again before it acts
+([notes/144](notes/144-a-job-a-restart-stopped.md));
 `/compact` force-clears context pressure — auto-compaction also fires by
 itself at 80% of the window (`--context-window` to set it; the web UI's
 meter shows the same number live).
@@ -2566,7 +2575,10 @@ src/yantra/
 │                   separate held block -- an older reader loads a valid
 │                   conversation, this one resumes it
 │                   ([notes/88](notes/88-not-yet.md)); snapshot() is the
-│                   payload a save appends, shared with history.py
+│                   payload a save appends, shared with history.py; a turn
+│                   still going carries an `unfinished` block, and
+│                   unfinished() lists the sessions a restart stopped
+│                   ([notes/144](notes/144-a-job-a-restart-stopped.md))
 ├── images.py       --image PATH and pictures from tools: read, checked
 │                   (png/jpeg/gif/webp, 5 MB), and whether this model may
 │                   take one at all ([notes/15](notes/15-images.md));
@@ -2791,6 +2803,13 @@ src/yantra/
 │                   (SETU_HOME, for a service serving several people), and
 │                   an allow key may name one account (gmail:work)
 │                   ([notes/110](notes/110-which-account-and-who-may-use-it.md))
+├── carry.py        a job a restart stopped: on_step saves every step (and the
+│                   turn's start and end), turn_open says it was still going
+│                   (a kill or a cancelled task leaves it, Ctrl-C clears it),
+│                   snapshot writes the `unfinished` block, carry_on goes on
+│                   from the last step after telling the model to look again;
+│                   /carry, the page's bar, `--job FILE`, Dvara's /carry,
+│                   Samay's restart ([notes/144](notes/144-a-job-a-restart-stopped.md))
 ├── calling.py      one tool, run once, no model: the rule `--call` keeps
 │                   (only a tool that reads, or one call granted word for
 │                   word), shared with Dvara's `POST /call`, a look made as

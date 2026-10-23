@@ -285,6 +285,10 @@ class WebSession:
         #: row this one is written to. None when nothing is kept.
         self.log: Any | None = None
         self.conversation_id = new_id()
+        #: The page's last conversation, when a restart stopped it part
+        #: way (carry.py): (id, its unfinished block), offered on a bar
+        #: until carried on, left, or a new message is sent.
+        self.stopped: tuple[str, dict] | None = None
         #: The agent History's "Keep as a test" keeps a conversation as a
         #: test of (kept_tests.py): the package's name, None for yantra.
         self.tests_for: str | None = None
@@ -336,6 +340,14 @@ class WebSession:
             self._load_tray()
         except Exception as exc:     # a tray that will not load costs nothing else
             self._last_look = f"the to-keep tray was not restored: {exc}"
+        if self.log is not None:
+            # kept after every step, and a job the last server was stopped
+            # in the middle of is offered back (carry.py)
+            agent.on_step = lambda _agent: self._keep_conversation()
+            try:
+                self.stopped = self.log.stopped("page")
+            except Exception:  # a log that cannot be read offers nothing
+                self.stopped = None
 
     @property
     def channel(self) -> WebSession:
@@ -545,8 +557,54 @@ class WebSession:
     def start_turn(self, text: str, images: list[ImageBlock]) -> None:
         """Spawn the worker thread. Caller has already refused concurrent
         turns; this is single-operator, one-turn-at-a-time by design."""
+        self.stopped = None             # a new message leaves a stopped job
         self._begin(lambda: self.agent.run_streaming(
             text, images=images or None), text)
+
+    def open_conversation(self, conversation_id: str) -> None:
+        """A kept conversation, carried on here; the one open now stays
+        kept. LookupError: gone; ValueError: it would not load."""
+        payload = self.log.payload(conversation_id) if self.log is not None else None
+        if payload is None:
+            raise LookupError("that conversation is gone")
+        self.agent.held = None
+        self.end_conversation()         # looked back over behind, not now
+        try:
+            apply_payload(self.agent, payload, history_only=True)
+        except Exception as exc:
+            raise ValueError(f"could not open it: {exc}") from exc
+        recompose(self.agent)
+        mark_reviewed(self.agent)
+        self.conversation_id = conversation_id
+        self._start_look(turn=False)
+        if self.lesson is not None:
+            from yantra.skills.lesson import DROPPED
+            self.lesson = None
+            self.broadcast({"type": "lesson", "text": DROPPED})
+
+    def carry_view(self) -> dict | None:
+        """The bar offering a stopped job back: this conversation's, or
+        the last one a restart stopped."""
+        from yantra import carry
+        info = getattr(self.agent, "unfinished", None)
+        if info:
+            return {"id": self.conversation_id, "here": True,
+                    "text": carry.describe(info)}
+        if self.stopped is not None:
+            return {"id": self.stopped[0], "here": False,
+                    "text": carry.describe(self.stopped[1])}
+        return None
+
+    def start_carry(self) -> None:
+        """Carry on the stopped job (carry.py); opens it first when it is
+        the last conversation rather than this one. ValueError: none."""
+        if not getattr(self.agent, "unfinished", None):
+            if self.stopped is None:
+                raise ValueError("nothing to carry on")
+            self.open_conversation(self.stopped[0])
+        self.stopped = None
+        task = (self.agent.unfinished or {}).get("message") or "carry on"
+        self._begin(lambda: self.agent.carry_on(), task)
 
     def start_resume(self, answers: dict[str, Any]) -> None:
         """Answer a held turn from the page and carry it on (notes/88).
@@ -1418,6 +1476,8 @@ class WebSession:
             # A job being taught step by step (/learn start): what for,
             # how, and how far it got -- the page's lesson bar draws it.
             "lesson": self.lesson.describe() if self.lesson is not None else None,
+            # A job a restart stopped part way (carry.py): Carry on / Leave it.
+            "carry": self.carry_view(),
             "tools": agent.registry.names(),
             # Runtime-disabled subset of ``tools`` (the /api/tools panel's
             # toggles); empty for a stock session.
@@ -2943,23 +3003,34 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     def open_chat(conversation_id: str) -> dict[str, Any]:
         """Carry an old conversation on here; the one open now stays kept."""
         require_idle()
-        payload = require_log().payload(conversation_id)
-        if payload is None:
-            raise HTTPException(404, "that conversation is gone")
-        session.agent.held = None
-        session.end_conversation()      # looked back over behind, not now
+        require_log()
         try:
-            apply_payload(session.agent, payload, history_only=True)
-        except Exception as exc:
-            raise HTTPException(400, f"could not open it: {exc}") from exc
-        recompose(session.agent)
-        mark_reviewed(session.agent)
-        session.conversation_id = conversation_id
-        session._start_look(turn=False)
-        if session.lesson is not None:
-            from yantra.skills.lesson import DROPPED
-            session.lesson = None
-            session.broadcast({"type": "lesson", "text": DROPPED})
+            session.open_conversation(conversation_id)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return session.state()
+
+    @app.post("/api/carry")
+    def carry_on() -> dict[str, Any]:
+        """Carry on the job a restart stopped (carry.py), from its last
+        step: the bar's Carry on."""
+        require_idle()
+        try:
+            session.start_carry()
+        except LookupError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True}
+
+    @app.post("/api/carry/leave")
+    def carry_leave() -> dict[str, Any]:
+        """Leave it: the bar goes, the conversation stays in History."""
+        require_ready()
+        session.stopped = None
+        session.agent.unfinished = None
         return session.state()
 
     @app.get("/api/chats/{conversation_id}/export")
