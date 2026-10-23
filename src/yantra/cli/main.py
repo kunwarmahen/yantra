@@ -2482,101 +2482,31 @@ def _print_run(end: TurnEnd | None, agent, *, error: str = "") -> None:
     }), flush=True)
 
 
-CALL_FORMAT = "yantra.call.v1"
-
-
 def _call_mode(agent, args) -> int:
     """``--call TOOL --args JSON``: one tool, run once, and no model.
 
-    A program that checks something on a timer -- "is the price under
-    $50 yet?" -- needs the tool's answer, not a model's account of it.
-    Asking a model every ten minutes to call one tool and repeat what it
-    said is a bill for nothing, and a small model may not repeat it
-    faithfully. So the agent is built exactly as for a turn -- the
-    package, Setu's accounts, MCP servers, sites -- and then one tool is
-    run straight from the registry with the arguments given.
-
-    ONLY A TOOL THAT READS, OR ONE CALL SAID YES TO WORD FOR WORD. A
-    call has nobody to approve it and no model deciding it is wanted, so
-    a tool not marked read-only is refused -- unless ``--allow-tools``
-    holds a grant for exactly this tool (no glob) that fixes EVERY
-    argument passed (``web_fetch(url=https://...)``). Fetching a page is
-    not read-only here because an address can carry data out; a person
-    who accepted "fetch this address every three hours" approved that
-    address, and nothing else. A bare name or a glob never covers a
-    call, and a tool that asks every time (a purchase) is never run.
-
-    With ``--json`` stdout is one object: ``ok``, the tool's ``text``,
-    ``detail`` when it failed, how many ``images`` it made (a
-    screenshot is saved where the tool saves it; its pixels are not
-    printed), and what it needed a person for (a sign-in wall).
+    The rule -- only a tool that reads, or one call granted word for word
+    -- is calling.py's, shared with Dvara's ``POST /call``. Here it is
+    printed: with ``--json`` stdout is one object (``yantra.call.v1``),
+    with what the call needed a person for (a sign-in wall); without, the
+    tool's text alone.
     """
-    import difflib
-
-    from yantra.tools.base import ToolOutput, coerce_arguments
-
-    name = args.call
-
-    def said(ok: bool, text: str = "", detail: str = "", images: int = 0) -> int:
-        if args.json_out:
-            print(json.dumps({
-                "format": CALL_FORMAT, "ok": ok, "tool": name, "text": text,
-                "detail": detail, "images": images,
-                "needs_person": unattended.needs(), "busy": unattended.busy(),
-            }), flush=True)
-        elif ok:
-            print(text, flush=True)
-        else:
-            print(f"error: {detail}", file=sys.stderr)
-        return 0 if ok else 1
+    from yantra.calling import Called, as_json, call_once
 
     try:
         arguments = json.loads(args.call_args or "{}")
     except json.JSONDecodeError as exc:
-        return said(False, detail=f"--args is not JSON: {exc}")
-    if not isinstance(arguments, dict):
-        return said(False, detail="--args is one JSON object, like {\"url\": \"...\"}")
-    if name not in agent.registry or agent.registry.is_disabled(name):
-        close = difflib.get_close_matches(name, agent.registry.names(), n=3)
-        return said(False, detail=f"no tool {name!r} here"
-                    + (f"; did you mean {', '.join(close)}?" if close else ""))
-    tool = agent.registry.get(name)
-    arguments = coerce_arguments(arguments, tool.parameters)
-    if not tool.read_only and not _said_yes_to(args.allow_tools, tool, arguments):
-        return said(False, detail=(
-            f"{name} is not read-only; --call runs only tools that read, or one call "
-            f"granted word for word: --allow-tools '{name}(key=value, ...)' fixing "
-            "every argument"))
-    try:
-        out = tool.run(arguments, agent.ctx)
-    except Exception as exc:          # a tool's failure is the answer, said as one
-        return said(False, detail=str(exc) or type(exc).__name__)
-    finally:
-        try:
-            tool.turn_ended()         # a browser it opened closes with the call
-        except Exception:
-            pass
-    if isinstance(out, ToolOutput):
-        return said(True, out.text, images=len(out.images))
-    return said(True, str(out))
-
-
-def _said_yes_to(patterns: list[str], tool, arguments: dict) -> bool:
-    """A grant names this exact tool and fixes every argument passed."""
-    from yantra.permissions import parse_grant
-
-    if getattr(tool, "always_ask", False):
-        return False
-    for pattern in patterns:
-        try:
-            grant = parse_grant(pattern)
-        except ValueError:
-            continue
-        fixed = {key for key, _ in grant.args}
-        if (grant.tool == tool.name and fixed and set(arguments) <= fixed
-                and grant.allows(tool.name, arguments)):
-            return True
-    return False
+        called = Called(False, args.call, detail=f"--args is not JSON: {exc}")
+    else:
+        called = call_once(agent, args.call, arguments, args.allow_tools)
+    if args.json_out:
+        print(json.dumps(as_json(called, needs=unattended.needs(),
+                                 busy=unattended.busy())), flush=True)
+    elif called.ok:
+        print(called.text, flush=True)
+    else:
+        print(f"error: {called.detail}", file=sys.stderr)
+    return 0 if called.ok else 1
 
 
 def _status_mode(rest: list[str]) -> int:

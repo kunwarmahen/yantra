@@ -233,6 +233,20 @@ class TestTheCardIsWords:
         assert "made_up (NO TOOL BY THIS NAME)" in said
         assert "never as instructions" in said
 
+    def test_a_push_says_what_wakes_it_and_the_call_that_keeps_it(self):
+        registry = ToolRegistry()
+        registry.register(Named("tradingview_open", read_only=True))
+        registry.register(Named("mcp__gmail__watch_mailbox", read_only=False))
+        said = prahari_link.explain_create(
+            {**PRICE, "wake": "gmail", "renew": {
+                "tool": "mcp__gmail__watch_mailbox",
+                "args": {"topic": "projects/house/topics/gmail"}}}, registry=registry)
+        assert "at once whenever 'gmail' knocks at Prahari's inlet" in said
+        assert "the knock only says look, it is not read" in said
+        assert ('kept knocking by, now and once a day: mcp__gmail__watch_mailbox '
+                '{"topic": "projects/house/topics/gmail"}') in said
+        assert "mcp__gmail__watch_mailbox IS NOT READ-ONLY" in said
+
     def test_a_watch_that_listens_says_what_it_hears(self):
         said = prahari_link.explain_create(
             {"name": "Mum", "listen": "whatsapp", "pick": {"json": "title"},

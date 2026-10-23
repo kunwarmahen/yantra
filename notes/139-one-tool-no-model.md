@@ -112,6 +112,17 @@ The first try named the account `gmail:personal` and the tool said
 call returns the tool's own error like that, so the agent writing a
 check can fix it.
 
+## The same rule, as someone else in the house
+
+A watch made by somebody else in the house must look with *their*
+accounts, not the computer's. Dvara builds each person's agent with
+their own Setu folder, so a look for them goes there: `POST /call`
+([Dvara's note 56](https://github.com/kunwarmahen/dvara/blob/main/notes/56-a-look-as-them.md)).
+The rule lives in one module, `calling.py`, that both doors call: the
+terminal's `--call` and Dvara's `/call`. A look through Dvara can't be
+let do what a look at the terminal is refused, because there is only
+one place that decides.
+
 ## Not here
 
 - **No list of tools to call.** The agent writing a check already has

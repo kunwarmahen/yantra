@@ -2712,6 +2712,10 @@ src/yantra/
 │                   (SETU_HOME, for a service serving several people), and
 │                   an allow key may name one account (gmail:work)
 │                   ([notes/110](notes/110-which-account-and-who-may-use-it.md))
+├── calling.py      one tool, run once, no model: the rule `--call` keeps
+│                   (only a tool that reads, or one call granted word for
+│                   word), shared with Dvara's `POST /call`, a look made as
+│                   one person of the house ([notes/139](notes/139-one-tool-no-model.md))
 ├── samay_link.py   doing things later: Samay found by `samay status --json`
 │                   (samay.status.v1), its tools started `--for local` and
 │                   `--agent` this package, skipped when unattended; the
@@ -2735,8 +2739,10 @@ src/yantra/
 │                   started `--for local` and `--agent` this package, skipped
 │                   when unattended; the create card in words (the exact call
 │                   and how often, NOT READ-ONLY said in capitals, when it
-│                   tells you and what it sees now, what happens then) and a
-│                   `watches` prompt layer ([notes/140](notes/140-a-watch-offered.md))
+│                   tells you and what it sees now, what happens then; a
+│                   knock that wakes it and the call that keeps that push
+│                   alive, said the same way) and a `watches` prompt layer
+│                   ([notes/140](notes/140-a-watch-offered.md))
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and

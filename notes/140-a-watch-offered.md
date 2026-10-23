@@ -88,6 +88,39 @@ Changes get short cards: *Delete watch w-1, its looks and what it saw,
 for good*. And a mended recipe says *its memory starts over: the next
 look only learns*, because that's what Prahari does with it.
 
+## Mail that knocks
+
+A watch on mail looks every half hour, so a mail waits that long to be
+news. Prahari can be told sooner: a mail folder it keeps open (IMAP
+IDLE), or Gmail's own push, knocks on a word at its inlet, and a watch
+with `wake` looks the moment that word knocks
+([Prahari's note 02](https://github.com/kunwarmahen/prahari/blob/main/notes/02-a-watch-for-everyone.md)).
+The card says both parts of that yes: what wakes it, and the call that
+keeps Gmail knocking, which runs once a day with nobody asked:
+
+```
+New watch: Mail from the bank
+
+What it looks at, with no model
+  every 6h: mcp__gmail__search_threads {"account": "personal", "query": "from:alerts@bank.example newer_than:2d"}
+  and at once whenever 'gmail' knocks at Prahari's inlet (a mailbox, Gmail's push): the knock only says look, it is not read
+  kept knocking by, now and once a day: mcp__gmail__watch_mailbox {"account": "personal", "topic": "projects/my-house/topics/gmail-push"}
+  mcp__gmail__watch_mailbox IS NOT READ-ONLY: saying yes lets Prahari run exactly this call once a day, with nobody asked again
+Tells you when
+  the items found by 'thread (\\w+)' has something new
+Then
+  you get a line saying what it saw; no model is asked
+
+At most 10 times a day. News goes to mahen's chat, through Dvara.
+```
+
+*The knock only says look* is the important line. Whatever sent the
+knock can't put words into the watch: its body isn't read, and the look
+is the same check the person accepted. The `watches` prompt layer tells
+the model when to offer this: a mailbox the person keeps in Prahari, or
+a Gmail push topic they set up, never one it invents. It also tells the
+model that `inlet_address` gives each person their own knock key.
+
 ## One finding from the live run
 
 The second card the live run drew was for a watch on a file, and its

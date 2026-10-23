@@ -179,9 +179,15 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "1h-6h, a page a day.",
         "5. For something that can tell Prahari itself -- an Android phone's "
         "notification (MacroDroid or Tasker), a Home Assistant automation, a webhook -- "
-        "make a watch that listens (`listen`: one word) instead of a check, and tell "
-        "the person to send to Prahari's inlet (its page shows the address and key).",
-        "6. A watch that paused because its pick found nothing: preview a new pick and "
+        "make a watch that listens (`listen`: one word) instead of a check, and give "
+        "the person the address and their own key from `mcp__prahari__inlet_address`.",
+        "6. Mail they want to hear about AT ONCE: a mailbox Prahari keeps open (the "
+        "person adds it at the computer, `prahari mailbox add NAME`) knocks on its NAME "
+        "with each new mail's sender and subject -- listen for it, or keep the mail "
+        "search as the check and add `wake`: NAME so it looks the moment mail lands. "
+        "Gmail's own push is `wake` plus `renew` with `mcp__gmail__watch_mailbox`, only "
+        "when the person has a Pub/Sub topic for it.",
+        "7. A watch that paused because its pick found nothing: preview a new pick and "
         "call `mcp__prahari__update_watch`.",
         seen_at,
     ]
@@ -256,6 +262,21 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
         elif not getattr(registry.get(tool), "read_only", False):
             lines.append(f"  {tool} IS NOT READ-ONLY: saying yes lets Prahari run exactly "
                          f"this call every {every}, with nobody asked again")
+        wake = str(args.get("wake") or "").strip()
+        if wake:
+            lines.append(f"  and at once whenever '{wake}' knocks at Prahari's inlet (a "
+                         "mailbox, Gmail's push): the knock only says look, it is not read")
+        renew = args.get("renew") if isinstance(args.get("renew"), dict) else {}
+        if renew:
+            rtool = str(renew.get("tool") or "?")
+            lines.append(f"  kept knocking by, now and once a day: {rtool} "
+                         f"{json.dumps(renew.get('args') or {}, ensure_ascii=False)}")
+            if rtool not in registry:
+                lines.append("  NO TOOL BY THIS NAME in this agent -- the push would "
+                             "never start")
+            elif not getattr(registry.get(rtool), "read_only", False):
+                lines.append(f"  {rtool} IS NOT READ-ONLY: saying yes lets Prahari run "
+                             "exactly this call once a day, with nobody asked again")
     lines += ["Tells you when",
               f"  {_pick_words(args.get('pick'))} {_when_words(args.get('when'))}"]
     if preview:
@@ -312,7 +333,8 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
             }.get(verb, f"{verb} {watch}")
     lines = [head] + ([f"  {found}"] if found else [])
     if verb == "update_watch":
-        for key in ("name", "check", "pick", "when", "every", "then", "max_per_day"):
+        for key in ("name", "check", "pick", "when", "every", "wake", "renew", "then",
+                    "max_per_day"):
             if key in args:
                 lines.append(f"  {key}: {_words(args[key])}")
         if {"check", "pick", "when", "every"} & set(args):
@@ -338,7 +360,7 @@ def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None) -> Any:
             said = ""
             if not args.get("listen"):
                 text, failed = ask("preview_watch", {k: args[k] for k in (
-                    "check", "pick", "when", "every") if k in args})
+                    "check", "pick", "when", "every", "wake") if k in args})
                 said = "" if failed else (text.splitlines()[1] if "\n" in text else "")
             return explain_create(args, registry=registry, setu=setu_of(), preview=said,
                                   where=where() if where is not None else "")
