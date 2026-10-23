@@ -1173,6 +1173,9 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   keeps the page for follow-up turns and closes it after 300 idle
   seconds instead; `YANTRA_BROWSER_CLOSE=model` leaves closing to
   `browser_close` ([notes/92](notes/92-the-window-that-stayed-open.md)).
+  Whatever the setting, a site's browser closes before Prahari tries a
+  watch that looks with it: one browser can use a signed-in profile at a
+  time ([notes/140](notes/140-a-watch-offered.md)).
 - **browser_handoff** gives the open page to you. `mode="finish"`
   opens it in YOUR browser for the part that is yours — paying,
   booking, personal details — and the agent stops there.
@@ -2803,8 +2806,10 @@ src/yantra/
 │                   and how often, NOT READ-ONLY said in capitals, when it
 │                   tells you and what it sees now, what happens then; a
 │                   knock that wakes it and the call that keeps that push
-│                   alive, said the same way) and a `watches` prompt layer
-│                   ([notes/140](notes/140-a-watch-offered.md))
+│                   alive, said the same way) and a `watches` prompt layer;
+│                   before a preview looks, this session's own browser on
+│                   the check's profile is closed, so the look isn't left
+│                   waiting on the chat's lock ([notes/140](notes/140-a-watch-offered.md))
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and
@@ -3128,6 +3133,9 @@ src/yantra/
 │   │               with open's class, attached only for a model that
 │   │               sees (ToolContext.sees_pictures, images.sight)
 │   │               ([notes/137](notes/137-a-picture-of-the-page.md))
+│   │               a page still saying it is loading ("Your messages are
+│   │               downloading") gets up to 60s before it is read
+│   │               ([notes/140](notes/140-a-watch-offered.md))
 │   ├── discover.py tools from OUTSIDE this tree: a package's own Tool
 │   │               subclasses, loaded from tools/*.py by path under a
 │   │               private per-directory module name (sys.path untouched,
