@@ -57,6 +57,12 @@ FORMAT = "prahari.status.v1"
 SERVER = "prahari"
 LOCAL = "local"
 STATUS_TIMEOUT = 15.0
+#: How long a preview may take: it LOOKS, and Prahari gives a look 180s
+#: (its looking.LOOK_LIMIT) -- a page like WhatsApp Web takes most of a
+#: minute. The 30s every other MCP call gets would cut it off.
+LOOK_WAIT = 200.0
+#: Prahari's tools that look before they answer.
+LOOKING = ("preview_watch",)
 #: How much of a then-prompt the card shows.
 THEN_SHOWN = 240
 SHOWN = 6
@@ -350,7 +356,8 @@ def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None) -> Any:
 
     def ask(name: str, args: dict[str, Any]) -> tuple[str, bool]:
         try:
-            return session.call_tool(name, args)
+            return session.call_tool(name, args,
+                                     timeout=LOOK_WAIT if name in LOOKING else None)
         except Exception as exc:              # the card must still show
             return str(exc), True
 
@@ -409,6 +416,8 @@ class Prahari:
                           if n.startswith("mcp__prahari__")]
         for name in self.tools:
             tool = agent.registry.get(name)
+            if tool.raw_name in LOOKING:
+                tool.timeout = LOOK_WAIT
             hook = explain(tool, agent.registry, lambda: getattr(agent, "setu", None),
                            self.news_goes)
             if hook is not None:

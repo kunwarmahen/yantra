@@ -916,6 +916,10 @@ class MCPToolWrapper(Tool):
         #: wired the server (sparsh_link.explain_confirm); see
         #: ``permissions.card_picture``.
         self.card_picture: Any = None
+        #: How long a call may take, in seconds; None is the session's own
+        #: wait (30s). Set by whoever knows a call really works that long
+        #: (prahari_link: a preview that LOOKS).
+        self.timeout: float | None = None
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         raw = (f"{self.name}({json.dumps(args, default=str)}) "
@@ -931,9 +935,10 @@ class MCPToolWrapper(Tool):
         try:
             if self.images() if callable(self.images) else self.images:
                 text, is_error, images = self.session.call_tool_full(
-                    self.raw_name, args, images=True)
+                    self.raw_name, args, images=True, timeout=self.timeout)
             else:
-                (text, is_error), images = self.session.call_tool(self.raw_name, args), []
+                (text, is_error), images = self.session.call_tool(
+                    self.raw_name, args, timeout=self.timeout), []
         except MCPError as exc:
             raise ToolError(str(exc)) from None
         if is_error:

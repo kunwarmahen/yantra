@@ -131,6 +131,31 @@ since a timer shouldn't be reading through the person's home folder. It
 also means watches are for accounts, pages and APIs, not files. The
 README says so.
 
+## A preview waits as long as a look
+
+Asked to watch a WhatsApp group, `qwen3.8-64k:latest` opened WhatsApp Web, read the
+chat list and wrote a pick, then called `preview_watch` four times. Each
+call came back the same way:
+
+```
+mcp server 'prahari' timed out after 30.0s during 'tools/call'
+```
+
+The model then told the person a watch on WhatsApp couldn't be done. The
+30 seconds weren't Prahari's. They're the wait Yantra gives every MCP
+call, and a preview isn't an ordinary call: it LOOKS, running the watch's
+tool once. Prahari gives a look 180 seconds, and WhatsApp Web takes most
+of a minute to load in a fresh browser. So the client cut off a call the
+server would have finished.
+
+A tool wrapper can now carry its own wait (`MCPToolWrapper.timeout`, set
+by whoever wired the server). The Prahari link sets 200 seconds on
+`preview_watch`, and on the preview the create card asks for. Every other
+Prahari call keeps the 30 seconds, so a Prahari that hangs on
+`list_watches` is still noticed quickly. The test drives a slow fake
+Prahari with the session's own wait shrunk below the look, and the
+preview still answers.
+
 ## Not here
 
 - **A Watches panel on the page.** Samay has a panel in `yantra --web`;

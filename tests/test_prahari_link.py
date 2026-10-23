@@ -73,6 +73,9 @@ FAKE_PRAHARI = """\
                 send({{"jsonrpc": "2.0", "id": mid, "result": {{"tools": TOOLS}}}})
             elif method == "tools/call":
                 name = msg["params"]["name"]
+                import os, time
+                if os.path.exists({state!r} + "-slow"):    # a look at a slow page
+                    time.sleep(1.0)
                 text = {{"preview_watch": "The watch, in words: every 3 hours ...\\n"
                                           "It sees 61.2 now: no match yet.",
                          "list_watches": "w-1 [active] ALAB under 50: every 3 hours"
@@ -160,6 +163,22 @@ class TestFound:
         try:
             assert agent.registry.get("mcp__prahari__preview_watch").read_only is True
             assert agent.registry.get("mcp__prahari__create_watch").read_only is False
+        finally:
+            manager.shutdown()
+
+
+    def test_a_preview_may_take_as_long_as_a_look(self, fake, tmp_path):
+        # A preview LOOKS: WhatsApp Web takes most of a minute, Prahari
+        # gives a look 180s, and the 30s every MCP call gets cut it off.
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            preview = agent.registry.get("mcp__prahari__preview_watch")
+            assert preview.timeout == prahari_link.LOOK_WAIT
+            assert agent.registry.get("mcp__prahari__list_watches").timeout is None
+            preview.session.timeout = 0.3          # the session's own wait, shrunk
+            (tmp_path / "state-slow").touch()
+            assert "It sees 61.2 now" in preview.run({}, agent.ctx)
+            assert "now: It sees 61.2" in card(agent, "create_watch", PRICE)
         finally:
             manager.shutdown()
 
