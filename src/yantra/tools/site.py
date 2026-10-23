@@ -94,6 +94,13 @@ ROBOT_HINTS = ("captcha", "are you a robot", "not a robot", "are you human",
 #: How long a page that builds itself in the browser (X) gets to put
 #: some text on the screen before the snapshot is taken anyway.
 PAINT_TIMEOUT_MS = 8_000
+#: Words a page shows while it is still fetching what it will show --
+#: WhatsApp Web's first screen on a fresh launch. Enough text to pass
+#: the paint wait, and none of the chats a look came for.
+LOADING_HINTS = ("your messages are downloading", "loading your chats",
+                 "loading messages")
+#: How long such a page gets to finish (WhatsApp Web: 15-40s).
+LOADING_TIMEOUT_MS = 60_000
 #: Words in a script link's label that mean it changes something:
 #: ``follow`` never presses one, even where the site's links are scripts.
 ACT_WORDS = ("delete", "remove", "trash", "archive", "spam", "block", "report",
@@ -288,6 +295,13 @@ class SiteSession(BrowserSession):
                 timeout=PAINT_TIMEOUT_MS)
         except Exception:
             pass        # a page with little text is still a page; snap it
+        try:
+            self._page.wait_for_function(
+                "(hints) => { const t = (document.body ? document.body.innerText : '')"
+                ".toLowerCase(); return !hints.some(h => t.includes(h)); }",
+                arg=list(LOADING_HINTS), timeout=LOADING_TIMEOUT_MS)
+        except Exception:
+            pass        # still loading after a minute: snap what is there
 
     def _landed(self, before: str) -> None:
         """After anything that can navigate: off the site means back."""

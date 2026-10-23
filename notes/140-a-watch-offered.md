@@ -156,6 +156,52 @@ Prahari call keeps the 30 seconds, so a Prahari that hangs on
 Prahari with the session's own wait shrunk below the look, and the
 preview still answers.
 
+## The browser the chat was holding
+
+With the wait fixed, the same request on `qwen3.8-64k:latest` got a
+different refusal, six times over:
+
+```
+The look didn't work: the browser profile .../profiles/whatsapp-personal is in
+use by another Yantra (pid 2, since 23:03, for a person); waited 120s.
+```
+
+The model told the person to close the other WhatsApp window. There
+wasn't one. The "other Yantra" was the chat itself. It had opened
+WhatsApp to find the group's name, and a site's browser stays open until
+the turn ends. Prahari's look is a second Yantra on the same profile,
+and one browser may hold a profile at a time
+([note 114](114-nobody-watching.md)). So the look waited on a lock the chat would
+only give back after the look answered. Each time the model read
+WhatsApp again before retrying, it took the lock back.
+
+THE CHAT LETS GO BEFORE PRAHARI LOOKS. Just before `preview_watch` (and
+the preview the create card asks for), the Prahari link finds the
+check's tool in this session and closes its browser, whatever
+`YANTRA_BROWSER_CLOSE` says (`BrowserSession.let_go`). Only that tool's
+browser closes. Amazon, open in the same turn, stays open. If the chat
+needs WhatsApp again it opens it fresh, which costs one page load.
+
+The same run showed a second problem. Half the looks that did get the
+profile picked nothing, because WhatsApp Web's first screen on a fresh
+launch says *Your messages are downloading*. That's enough text to pass
+the 8-second paint wait, and it has none of the chats. Every look a
+watch makes is a fresh launch, so a watch would have seen that screen on
+most looks. A site page that shows one of a few loading phrases
+(`LOADING_HINTS`) now gets up to a minute for them to go away before it
+is read. A page that never shows them pays one check.
+
+Live, on a page that showed the WhatsApp loading text for three
+seconds and then a chat row:
+
+```
+4.1 s
+Bad Company
+06:45
+Sarika: happy Friday
+open after let_go: False
+```
+
 ## Not here
 
 - **A Watches panel on the page.** Samay has a panel in `yantra --web`;

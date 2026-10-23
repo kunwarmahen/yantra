@@ -757,6 +757,19 @@ class BrowserSession:
                 "example: sign in again), and report anything you found "
                 "before this point.")
 
+    def let_go(self) -> None:
+        """Close now, whatever the policy: another program is about to
+        need this profile, and waits on the lock while we hold it.
+
+        A chat that read WhatsApp, then asked Prahari to try a watch on
+        it, kept the profile for the rest of its turn -- and Prahari's
+        look, a second Yantra on that profile, waited 120s for a lock the
+        chat would only give back once Prahari answered (prahari_link).
+        """
+        if self._pw is None and self._exec is None:
+            return
+        self.close()
+
     def release(self) -> None:
         """End of turn: close now, close later, or leave it -- by policy.
 

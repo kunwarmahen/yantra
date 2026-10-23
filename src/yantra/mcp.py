@@ -923,6 +923,10 @@ class MCPToolWrapper(Tool):
         #: wait (30s). Set by whoever knows a call really works that long
         #: (prahari_link: a preview that LOOKS).
         self.timeout: float | None = None
+        #: Called with the arguments just before the call, by whoever
+        #: knows the server needs something of ours let go of first
+        #: (prahari_link: the browser a preview will look with).
+        self.before: Any = None
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         raw = (f"{self.name}({json.dumps(args, default=str)}) "
@@ -935,6 +939,11 @@ class MCPToolWrapper(Tool):
             return raw
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str | ToolOutput:
+        if self.before is not None:
+            try:
+                self.before(args)
+            except Exception:
+                pass                      # the call itself says what went wrong
         try:
             if self.images() if callable(self.images) else self.images:
                 text, is_error, images = self.session.call_tool_full(

@@ -182,6 +182,43 @@ class TestFound:
         finally:
             manager.shutdown()
 
+    def test_a_preview_first_lets_go_of_the_browser_it_will_look_with(self, fake,
+                                                                       tmp_path):
+        # The chat read WhatsApp to find the group, then asked for a try:
+        # its own browser held the profile, and Prahari's look waited on it.
+        from yantra.tools.base import Tool
+        from yantra.tools.browser import BrowserSession
+
+        class Held(BrowserSession):
+            def __init__(self):
+                self.closed = 0
+
+            def let_go(self):
+                self.closed += 1
+
+        class Opener(Tool):
+            def __init__(self, name):
+                self.name, self.description, self.parameters = name, "reads", {}
+                self.read_only, self.session = True, Held()
+
+            def summary(self, args, ctx):
+                return self.name
+
+            def run(self, args, ctx):
+                return "page"
+
+        mine, other = Opener("whatsapp_open"), Opener("amazon_open")
+        _, agent, manager, _ = start(fake[0], tmp_path, tools=(mine, other))
+        try:
+            look = {"check": {"tool": "whatsapp_open", "args": {}}, "every": "5m",
+                    "pick": {"text": "Bad Company.*"}, "when": {"changed": True}}
+            agent.registry.get("mcp__prahari__preview_watch").run(look, agent.ctx)
+            assert (mine.session.closed, other.session.closed) == (1, 0)
+            card(agent, "create_watch", look)          # the card's own preview too
+            assert mine.session.closed == 2
+        finally:
+            manager.shutdown()
+
 
 class TestWhenItIsNotThere:
     def test_auto_with_none_is_silence(self, fake, tmp_path):

@@ -2715,6 +2715,14 @@ you and what happens then ([notes/140](notes/140-a-watch-offered.md)).
 Leave `then` out and you just get a line; no model is asked even when
 it fires.
 
+A watch on a site the chat has just read works too: "tell me when the
+Bad Company group gets a new message on my WhatsApp". The agent opens
+WhatsApp Web to find the group, then closes its own browser before
+Prahari tries the watch, because one browser can use a signed-in
+profile at a time. A try can take most of a minute, since WhatsApp Web
+first shows *Your messages are downloading* and the look waits for the
+chats.
+
 **Things that can tell you themselves.** A WhatsApp message on an
 Android phone, a door in Home Assistant, a price tracker's webhook:
 these don't need looking at. They knock on Prahari's *inlet*, and a

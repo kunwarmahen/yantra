@@ -349,12 +349,36 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
     return "\n".join(lines)
 
 
+def let_go_of_check(registry: Any, args: dict[str, Any]) -> None:
+    """Before Prahari LOOKS: close this session's own browser on the
+    profile the check uses.
+
+    Prahari looks with a second Yantra (``yantra --call``), and one
+    browser may use a profile at a time. A chat that had just read
+    WhatsApp to find the group held its profile for the rest of the turn,
+    so every try waited 120s on a lock the chat itself held, and the
+    person was told some other program had WhatsApp open. The check's
+    next call from the chat simply opens it again."""
+    check = args.get("check")
+    name = check.get("tool") if isinstance(check, dict) else None
+    if not isinstance(name, str) or name not in registry:
+        return
+    from yantra.tools.browser import BrowserSession
+
+    tool = registry.get(name)
+    for held in (getattr(tool, "session", None), getattr(tool, "browser", None)):
+        if isinstance(held, BrowserSession):
+            held.let_go()
+
+
 def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None) -> Any:
     """The ``explain`` hook for one of Prahari's write tools, or None."""
     verb = tool.raw_name
     session = tool.session
 
     def ask(name: str, args: dict[str, Any]) -> tuple[str, bool]:
+        if name in LOOKING:
+            let_go_of_check(registry, args)
         try:
             return session.call_tool(name, args,
                                      timeout=LOOK_WAIT if name in LOOKING else None)
@@ -418,6 +442,8 @@ class Prahari:
             tool = agent.registry.get(name)
             if tool.raw_name in LOOKING:
                 tool.timeout = LOOK_WAIT
+                tool.before = (lambda args, registry=agent.registry:
+                               let_go_of_check(registry, args))
             hook = explain(tool, agent.registry, lambda: getattr(agent, "setu", None),
                            self.news_goes)
             if hook is not None:
