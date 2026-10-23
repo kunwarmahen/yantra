@@ -423,6 +423,12 @@ memory: local, for asha -- 1 remembered
  * #1  Lives near RDU (Raleigh-Durham International Airport)
 ```
 
+A memory an answer drew on says when, `(used 2026-10-23)`, and is
+listed among the newest again, so a fact you rely on doesn't age out of
+the twenty a conversation starts with. Only what the answer or a tool's
+arguments carried counts, not everything that was shown
+([notes/143](notes/143-a-memory-in-use.md)).
+
 `/memory forget ID` removes one (the start of a long id is enough),
 `/memory add TEXT` keeps one in your words, `/memory find WORDS`
 searches, and `/memory copy local` copies the built-in file into a store
@@ -440,7 +446,7 @@ A cleverer store (embeddings, a server the whole house shares) plugs in
 as an MCP server: `--memory NAME` (or `[memory] via = "NAME"`) keeps
 memories in the store behind the connected server of that name. Its
 tools are called `remember`, `recall`, `forget` and `list_memories`
-unless `[memory] verbs` maps them to other names. A server that lacks
+(and optionally `used`) unless `[memory] verbs` maps them to other names. A server that lacks
 some of them still works, and `/memory` says what it can't do. Your
 identity goes on every call, so set `YANTRA_USER` to the name the store
 knows you by ([notes/102](notes/102-kept-somewhere-else.md)).
@@ -2600,6 +2606,11 @@ src/yantra/
 │                   ([notes/100](notes/100-what-it-knows-about-you.md)); the
 │                   layer is twenty lines, search first, then the newest
 │                   ([notes/109](notes/109-fewer-lines-fewer-facts.md));
+│                   note_used, as a turn ends, tells the store (optional
+│                   fifth verb, used) which memories the answer or a tool's
+│                   arguments drew on, past the person's own words, so a
+│                   memory in use is listed as new
+│                   ([notes/143](notes/143-a-memory-in-use.md));
 │                   reflect.py looks back ONCE when a conversation ends
 │                   (/quit, /clear, /load, before compaction, /remember);
 │                   set_aside copies one the session goes on from, so a

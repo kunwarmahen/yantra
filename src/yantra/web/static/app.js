@@ -2086,7 +2086,8 @@ function renderMemory() {
     main.innerHTML = `<div class="conn-title">${item.in_prompt ? "● " : ""}${esc(item.statement)}</div>
       <div class="conn-sub">#${esc(item.id)}${item.kind ? " · " + esc(item.kind) : ""}
         ${item.package ? " · from " + esc(item.package) : ""}
-        ${item.created ? " · " + esc(item.created.slice(0, 10)) : ""}</div>`;
+        ${item.created ? " · " + esc(item.created.slice(0, 10)) : ""}
+        ${item.used ? " · used " + esc(item.used.slice(0, 10)) : ""}</div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";
     if (!cannot.includes("forget")) {

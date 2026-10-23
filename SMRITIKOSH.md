@@ -384,7 +384,28 @@ systemctl --user enable --now smritikosh
 loginctl enable-linger "$USER"     # keep it running when you're logged out
 ```
 
+**After a `git pull`, build the tables again** before you start it. A
+newer Smritikosh may add a column, and the server's queries fail until
+the database has it:
+
+```
+cd ~/src/smritikosh && uv sync --extra mcp && uv run alembic upgrade head
+```
+
+To do this on every start, add
+`ExecStartPre=%h/.local/bin/uv run alembic upgrade head` to the service
+above, after the `podman start` line. Sarathi already does it on every
+`sarathi up`.
+
 ## Good to know
+
+**A memory Yantra uses stays new.** When an answer leans on something
+Smritikosh gave it, Yantra says so (the `used` tool), and Smritikosh
+counts that memory's age from then. A year-old *"lives near RDU"* that
+answers your flight questions every week ranks like one you said
+yesterday, and `/memory` shows `(used 2026-10-23)` beside it
+([notes/143](notes/143-a-memory-in-use.md)). A Smritikosh too old to have
+the `used` tool still works. It just isn't told.
 
 **See your memories in a browser.** Smritikosh has a dashboard of its own,
 in its `ui/` folder. It needs Node.js 20 or newer:

@@ -15,6 +15,11 @@ follows them from one working tree to the next. Every row carries its
 ``user``; every read and delete is scoped by it, so two identities on one
 machine never see each other's rows.
 
+A MEMORY IN USE IS LISTED AS NEW. ``used`` stamps ``used_at``, and
+``list`` (which tops up the prompt layer) orders by the later of that
+and ``created_at``: "lives near RDU" from a year ago, drawn on last
+week, stays among the twenty a conversation starts with.
+
 SAYING IT TWICE STORES IT ONCE. The same statement (ignoring case and
 spacing) for the same person returns the existing id rather than a
 second row -- a model that remembers "uses uv, not pip" in three
@@ -45,6 +50,8 @@ CREATE TABLE IF NOT EXISTS memories (
 );
 CREATE INDEX IF NOT EXISTS memories_user ON memories (user, norm);
 """
+#: Added after the first files were written: an older file gains it.
+USED_COLUMN = "ALTER TABLE memories ADD COLUMN used_at TEXT"
 
 #: Words too common to say anything about what matches.
 STOPWORDS = frozenset(
@@ -82,6 +89,9 @@ class LocalStore:
         self._lock = threading.Lock()
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.executescript(SCHEMA)
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(memories)")}
+        if "used_at" not in columns:
+            self._db.execute(USED_COLUMN)
         self._db.commit()
 
     def remember(self, user: str, statement: str, meta: dict[str, Any]) -> str:
@@ -122,11 +132,27 @@ class LocalStore:
             return cur.rowcount > 0
 
     def list(self, user: str, limit: int) -> list[MemoryItem]:
-        return self._all(user)[:limit]
+        return self._all(user, by_use=True)[:limit]
 
-    def _all(self, user: str) -> list[MemoryItem]:
+    def used(self, user: str, memory_ids: list[str]) -> int:
+        ids = [str(i).strip() for i in memory_ids if str(i).strip()]
+        if not ids:
+            return 0
+        now = datetime.now(UTC).isoformat(timespec="seconds")
+        with self._lock:
+            cur = self._db.execute(
+                f"UPDATE memories SET used_at = ? WHERE user = ? AND id IN "
+                f"({','.join('?' * len(ids))})", (now, user, *ids))
+            self._db.commit()
+            return cur.rowcount
+
+    def _all(self, user: str, *, by_use: bool = False) -> list[MemoryItem]:
+        # ISO times in one zone sort as text; in a tie (to the second) the
+        # one in use goes first, then the newest row
+        order = ("MAX(created_at, COALESCE(used_at, created_at)) DESC, "
+                 "used_at IS NOT NULL DESC, id DESC" if by_use else "id DESC")
         with self._lock:
             rows = self._db.execute(
-                "SELECT id, statement, created_at, package, kind FROM memories "
-                "WHERE user = ? ORDER BY id DESC", (user,)).fetchall()
-        return [MemoryItem(str(i), s, c, p, k) for i, s, c, p, k in rows]
+                "SELECT id, statement, created_at, package, kind, used_at "
+                f"FROM memories WHERE user = ? ORDER BY {order}", (user,)).fetchall()
+        return [MemoryItem(str(i), s, c, p, k, u or "") for i, s, c, p, k, u in rows]

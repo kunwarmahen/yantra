@@ -34,7 +34,7 @@ from yantra.errors import ToolError
 from yantra import outside
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
-from yantra.memory import prime_if_new
+from yantra.memory import note_used, prime_if_new
 from yantra.memory.reflect import before_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
@@ -553,6 +553,10 @@ class Agent:
                     ended = True
                     if event.reason != "held":
                         _release_turn_tools(self)
+                    if event.response is not None:
+                        # the memories this answer drew on stop ageing
+                        # (memory/__init__.py); sent behind the answer
+                        note_used(self)
                 yield event
         except BaseException:
             # interrupted or failed: over too -- but a consumer dropping

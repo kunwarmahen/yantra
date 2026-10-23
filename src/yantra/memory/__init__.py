@@ -53,12 +53,27 @@ built-in ``local`` store (memory/local.py) is sqlite and keyword search,
 there so the feature works with nothing installed. Any other store runs
 an MCP server and is named by it: ``--memory NAME`` or ``[memory] via =
 "NAME"`` reaches it through a verb map (memory/mcp.py).
+
+A MEMORY IN USE DOES NOT AGE. A store ranks and lists by how new a
+memory is, so "lives near RDU", written a year ago and leaned on every
+week, would sink behind last month's trivia and fall out of the layer's
+top-up. When a turn ends, the memories the model was SHOWN (the layer,
+``recall_memory``'s results) that the answer or a tool call DREW ON are
+reported with an optional fifth verb, ``used``; the store counts age
+from then. Shown is not used: every fact in the layer is shown on every
+turn. Drawn on is decided without a model (``drew_on``): the answer, or
+a tool's arguments, carry a name, number or two words of the memory
+that the person's own message did not. A store without ``used`` just
+does not get told.
 """
 
 from __future__ import annotations
 
 import getpass
+import json
 import os
+import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
@@ -93,13 +108,19 @@ class MemoryItem:
     created: str = ""                 # ISO time, when the store keeps one
     package: str | None = None        # which agent wrote it, if any
     kind: str | None = None           # "fact", "preference", "correction"
+    used: str = ""                    # ISO time an answer last drew on it
 
 
 @runtime_checkable
 class MemoryStore(Protocol):
     """What a store must do. Four verbs: no ``ingest``, because a store is
     never handed a transcript, and no ``context_for``, because building
-    the prompt block is this side's job."""
+    the prompt block is this side's job.
+
+    A fifth is optional, so a store written against these four still
+    plugs in: ``used(user, ids) -> int`` says an answer drew on these
+    memories, and ``list`` then puts the most recently used or written
+    first (``supports(store, "used")``)."""
 
     name: str
 
@@ -141,7 +162,10 @@ def check_mode(value: str, where: str = "memory") -> str:
 
 def supports(store: MemoryStore, verb: str) -> bool:
     """Whether a store can do ``verb``. Stores that do not say can do all
-    four; one reached over MCP may lack a tool for some (memory/mcp.py)."""
+    four, and ``used`` when they have it; one reached over MCP may lack a
+    tool for some (memory/mcp.py)."""
+    if not callable(getattr(store, verb, None)):
+        return False
     check = getattr(store, "supports", None)
     return check(verb) if callable(check) else True
 
@@ -221,6 +245,13 @@ class Memory:
         self.ended: list[list[Any]] = []
         #: The trace's redaction pattern, when the session has one.
         self.redact: Any = None
+        # ---- memories in use (note_used) ----
+        #: What ``recall_memory`` handed the model this conversation.
+        self.recalled: dict[str, MemoryItem] = {}
+        #: Ids already reported used this conversation: once is enough.
+        self.marked: set[str] = set()
+        #: Whether a failed ``used`` has been said; said once a session.
+        self.used_failed = False
 
     # ---- the verbs, scoped to this person --------------------------------
 
@@ -230,6 +261,9 @@ class Memory:
 
     def recall(self, query: str, limit: int = 10) -> list[MemoryItem]:
         return self.store.recall(self.user, query, limit)
+
+    def used(self, memory_ids: list[str]) -> int:
+        return self.store.used(self.user, list(memory_ids))
 
     def forget(self, memory_id: str) -> bool:
         return self.store.forget(self.user, self.resolve(memory_id))
@@ -288,6 +322,8 @@ class Memory:
         by words alone the fact has to be there anyway.
         """
         self.primed = True
+        self.recalled = {}
+        self.marked = set()
         try:
             chosen: list[MemoryItem] = []
             seen: set[str] = set()
@@ -357,6 +393,129 @@ class Memory:
         return [verb for verb in ("remember", "recall", "forget", "list")
                 if not supports(self.store, verb)]
 
+    # ---- memories in use --------------------------------------------------
+
+    def drawn_on(self, said: str, answered: str) -> list[str]:
+        """Ids of the memories shown this conversation that ``answered``
+        (the turn's replies and tool arguments) drew on, past what the
+        person ``said``; none already reported."""
+        shown = {item.id: item for item in self.in_prompt}
+        shown.update(self.recalled)
+        return [memory_id for memory_id, item in shown.items()
+                if memory_id not in self.marked
+                and drew_on(item.statement, said, answered)]
+
+    def report_used(self, memory_ids: list[str]) -> threading.Thread | None:
+        """Tell the store, behind the answer: a slow store must not hold
+        up the next message. Marked here first, so a turn that ends
+        before the call does is not reported twice."""
+        if not memory_ids or not supports(self.store, "used"):
+            return None
+        self.marked.update(memory_ids)
+
+        def send() -> None:
+            try:
+                self.used(memory_ids)
+            except Exception as exc:  # fails open, said once a session
+                if not self.used_failed:
+                    self.used_failed = True
+                    self._fail(f"memory ({self.store.name}) could not be told "
+                               f"which memories were used: {exc}")
+
+        thread = threading.Thread(target=send, name="memory-used", daemon=True)
+        thread.start()
+        return thread
+
+
+# ---- did an answer draw on a memory? -------------------------------------------
+
+#: Words that say nothing about WHICH memory: grammar, and the verbs every
+#: statement about a person starts with.
+_COMMON = frozenset(
+    "a an and are as at be but by can do for from have how i if in is it "
+    "me my of on or so that the this to was what when where who why will "
+    "with you your find show get want need please lives live living near "
+    "uses use using prefers prefer likes like loves love works work has "
+    "had their they them he she his her its also not no yes always usually "
+    "often every one which than then there here into about over just very "
+    "more most some any all our we us".split())
+_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9'-]*")
+
+
+def _stem(word: str) -> str:
+    word = word.lower().strip("'-")
+    return word[:-1] if len(word) > 4 and word.endswith("s") else word
+
+
+def _marks(statement: str) -> tuple[set[str], set[str]]:
+    """A statement's NAMES (a capital past the first word, an acronym, a
+    number: RDU, Priya, 2019) and its plain WORDS of four letters or more."""
+    names, words = set(), set()
+    for i, token in enumerate(_TOKEN.findall(statement)):
+        low = _stem(token)
+        if low in _COMMON or len(low) < 2:
+            continue
+        if (any(c.isdigit() for c in token) or (token.isupper() and len(token) > 1)
+                or (i > 0 and token[0].isupper())):
+            names.add(low)
+        elif len(low) >= 4:
+            words.add(low)
+    return names, words
+
+
+def drew_on(statement: str, said: str, answered: str) -> bool:
+    """Whether ``answered`` carries this memory past what was ``said``.
+
+    One of its names, or two of its words (all of them, when only one is
+    left), found in the answer, counting only what the person's message
+    did NOT say: "from RDU, as before" draws on "lives near RDU"; "an
+    aisle seat, as you prefer" draws on "prefers aisle seats" though
+    "seat" was in the question; an answer about Python to a question
+    about Python does not draw on "prefers Python". Errs towards not used
+    -- a memory wrongly kept fresh is the smaller harm, but a layer full
+    of facts all reported every turn would make ``used`` mean shown.
+    """
+    names, words = _marks(statement)
+    asked = {_stem(t) for t in _TOKEN.findall(said)}
+    found = {_stem(t) for t in _TOKEN.findall(answered)}
+    if (names - asked) & found:
+        return True
+    left = words - asked
+    return bool(left) and len(left & found) >= min(2, len(left))
+
+
+def _turn_text(history: list[Any]) -> tuple[str, str]:
+    """(what the person said, what the turn answered and passed to tools)
+    for the turn that just ended: back to the person's last message."""
+    from yantra.types import TextBlock, ToolCall
+
+    answered: list[str] = []
+    for message in reversed(history):
+        if message.role == "user":
+            text = "".join(b.text for b in message.content if isinstance(b, TextBlock))
+            if text:
+                return text, "\n".join(reversed(answered))
+            continue
+        for block in message.content:
+            if isinstance(block, TextBlock):
+                answered.append(block.text)
+            elif isinstance(block, ToolCall):
+                answered.append(json.dumps(block.arguments, default=str))
+    return "", "\n".join(reversed(answered))
+
+
+def note_used(agent: Any) -> threading.Thread | None:
+    """The agents' other hook: when a turn ends with an answer, report the
+    memories it drew on (``Memory.drawn_on``). Never raises."""
+    memory = getattr(agent, "memory", None)
+    if memory is None or not supports(memory.store, "used"):
+        return None
+    try:
+        said, answered = _turn_text(agent.history)
+        return memory.report_used(memory.drawn_on(said, answered))
+    except Exception:  # deciding is ours; a bug here must not cost the turn
+        return None
+
 
 def _fit(items: list[MemoryItem]) -> list[MemoryItem]:
     kept, used = [], 0
@@ -416,8 +575,10 @@ __all__ = [
     "MemoryItem",
     "MemoryStore",
     "check_mode",
+    "drew_on",
     "enable_memory",
     "memory_mode",
+    "note_used",
     "short_id",
     "prime_if_new",
     "resolve_user",

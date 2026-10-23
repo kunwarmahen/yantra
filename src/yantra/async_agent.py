@@ -68,7 +68,7 @@ from yantra.errors import ToolError
 from yantra import outside
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
-from yantra.memory import prime_if_new
+from yantra.memory import note_used, prime_if_new
 from yantra.memory.reflect import abefore_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
@@ -339,6 +339,8 @@ class AsyncAgent:
                     ended = True
                     if event.reason != "held":
                         await asyncio.to_thread(_release_turn_tools, self)
+                    if event.response is not None:
+                        note_used(self)     # its own thread: never blocks
                 yield event
         except BaseException:
             if not ended:   # cancelled: no awaiting from here

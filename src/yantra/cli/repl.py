@@ -1027,7 +1027,8 @@ class Repl:
         for item in items:
             mark = "*" if item.id in shown else " "
             where = f"  [{item.package}]" if item.package else ""
-            lines.append(f" {mark} #{short_id(item.id)}  {item.statement}{where}")
+            when = f"  (used {item.used[:10]})" if item.used else ""
+            lines.append(f" {mark} #{short_id(item.id)}  {item.statement}{where}{when}")
         if not items and not verb:
             lines.append("  nothing yet -- tell the agent about yourself, or "
                          "/memory add TEXT")

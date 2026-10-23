@@ -23,7 +23,12 @@ remember   ``statement``, ``user_id``, ``metadata`` (kind, package)
 recall     ``query``, ``limit``, ``user_id``
 forget     ``memory_id``, ``user_id``
 list       ``limit``, ``user_id``
+used       ``memory_ids``, ``user_id``
 =========  ===============================================
+
+``used`` is optional, like every verb a server has no tool for: it says
+an answer drew on these memories (memory/__init__.py), and a server
+that has it counts their age from now.
 
 ``user_id`` is ALWAYS sent. Whose memories these are was settled when the
 session started (memory/__init__.py), and a server that fell back on its
@@ -34,7 +39,9 @@ WHAT COMES BACK is read leniently, because it is the server's shape, not
 ours: JSON, with an id under ``id`` / ``memory_id`` / ``event_id`` and the
 text under ``statement`` / ``content`` / ``text`` / ``raw_text``; a list
 of those at the top level or under ``memories`` / ``results`` / ``items``
-/ ``events``. ``forget`` answers ``forgotten`` or ``deleted``.
+/ ``events``. ``forget`` answers ``forgotten`` or ``deleted``; ``used``
+answers ``marked``. A row's ``last_used_at`` (or ``used``) is when it was
+last used.
 
 BOUND LATE. Memory is attached while the agent is built; MCP servers
 connect after, in the host. So the store starts unbound, and the host
@@ -58,10 +65,10 @@ from typing import Any
 
 from yantra.memory import MemoryItem, MemoryStoreError
 
-VERBS = ("remember", "recall", "forget", "list")
+VERBS = ("remember", "recall", "forget", "list", "used")
 #: A verb the map leaves out calls the tool of this name.
 DEFAULT_TOOLS = {"remember": "remember", "recall": "recall",
-                 "forget": "forget", "list": "list_memories"}
+                 "forget": "forget", "list": "list_memories", "used": "used"}
 #: A server name, as ``--memory`` or ``[memory] via`` would give it.
 SERVER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
@@ -148,6 +155,13 @@ class McpStore:
         return _items(self._call("list", {"limit": limit,
                                           "user_id": user}))[:limit]
 
+    def used(self, user: str, memory_ids: list[str]) -> int:
+        data = self._call("used", {"memory_ids": [str(i) for i in memory_ids],
+                                   "user_id": user})
+        if isinstance(data, dict) and isinstance(data.get("marked"), int):
+            return data["marked"]
+        return len(memory_ids)                  # it ran and did not complain
+
     # ---- the wire ------------------------------------------------------------
 
     def _call(self, verb: str, args: dict[str, Any]) -> Any:
@@ -198,6 +212,7 @@ def _items(data: Any) -> list[MemoryItem]:
         items.append(MemoryItem(
             id=str(memory_id), statement=" ".join(text.split()),
             created=str(row.get("created_at") or row.get("created") or ""),
+            used=str(row.get("last_used_at") or row.get("used") or ""),
             package=meta.get("package"), kind=row.get("kind") or meta.get("kind")))
     return items
 

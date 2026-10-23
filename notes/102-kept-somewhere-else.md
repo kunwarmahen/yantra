@@ -74,13 +74,14 @@ mind needs no map at all.
 | recall | `query`, `limit`, `user_id` |
 | forget | `memory_id`, `user_id` |
 | list | `limit`, `user_id` |
+| used | `memory_ids`, `user_id` (optional: [note 143](143-a-memory-in-use.md)) |
 
 **What comes back is read leniently**, because it is the store's shape,
 not ours. JSON is expected, with the id under `id`, `memory_id` or
 `event_id`, and the text under `statement`, `content`, `text` or
 `raw_text`. Several come back as a list, either bare or under
 `memories`, `results`, `items` or `events`. `forget` answers `forgotten`
-or `deleted`. A store that already has a search tool probably fits
+or `deleted`, and `used` answers `marked`. A store that already has a search tool probably fits
 without changing anything.
 
 ## `user_id` is always sent
@@ -153,6 +154,8 @@ first store to plug in, now has them:
   to the user it was asked for before deleting it. An admin key acting
   for one person can't delete another's.
 * **Its tools use Yantra's verb names**, so it plugs in with no map.
+* **`used`**, so a memory an answer drew on stops ageing: search and
+  `list_memories` count from its last use ([note 143](143-a-memory-in-use.md)).
 
 Its embeddings run wherever Smritikosh is configured to run them,
 including Ollama. That is the store's business. Yantra sends sentences

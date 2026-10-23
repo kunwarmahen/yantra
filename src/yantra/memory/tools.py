@@ -115,4 +115,6 @@ class RecallMemory(Tool):
         if not found:
             return (f"nothing remembered matches {query!r} -- if the person "
                     f"has not said, ask them")
+        # shown to the model now: an answer that draws on one reports it
+        self.memory.recalled.update((item.id, item) for item in found)
         return "\n".join(f"- {item.statement}" for item in found)

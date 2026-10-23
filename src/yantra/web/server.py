@@ -2057,7 +2057,8 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         shown = {item.id for item in memory.in_prompt}
         return {**memory.describe(),
                 "items": [{"id": i.id, "statement": i.statement,
-                           "created": i.created, "package": i.package,
+                           "created": i.created, "used": i.used,
+                           "package": i.package,
                            "kind": i.kind, "in_prompt": i.id in shown}
                           for i in items]}
 

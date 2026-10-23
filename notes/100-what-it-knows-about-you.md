@@ -224,5 +224,10 @@ person. … ask for the departure city.
   appears in Yantra's code — [note 102](102-kept-somewhere-else.md).
 * **Clever search.** Embeddings would need a model and a dependency. A
   store that has them can offer them.
+* ~~**Telling the store what was used.**~~ The top-up is the most recent
+  memories, so an old memory still in use fell out behind newer, unused
+  ones. Built since: when an answer draws on a memory, Yantra tells the
+  store (an optional fifth verb, `used`), and `list` puts it first again
+  ([note 143](143-a-memory-in-use.md)).
 * **Rewriting the layer mid-conversation.** It would cost the cached
   prefix on every change. Changes apply from the next conversation.
