@@ -2757,6 +2757,24 @@ you and what happens then ([notes/140](notes/140-a-watch-offered.md)).
 Leave `then` out and you just get a line; no model is asked even when
 it fires.
 
+**Seeing your watches.** On the page, the **eye** chip in the header
+(*1 watching*) opens the Watches panel: each watch in a sentence, its
+last look, and buttons for **looks**, **look now**, **pause** and
+**delete**. When a watch fires, a second chip appears (*1 seen*) and the
+panel opens with **what they saw** at the top:
+
+```
+Mum on WhatsApp
+fired 18:12 · heard at the inlet
+title: Mum · text: Dinner at 8?
+```
+
+**look now** doesn't wait: the look shows under **looks** when it's
+done (a few seconds for a price, most of a minute for WhatsApp Web). If
+the top of the panel says Prahari isn't running, nothing is looked at on
+its own until `prahari serve` is
+([notes/147](notes/147-the-watches-on-the-page.md)).
+
 A watch on a site the chat has just read works too: "tell me when the
 Bad Company group gets a new message on my WhatsApp". The agent opens
 WhatsApp Web to find the group, then closes its own browser before

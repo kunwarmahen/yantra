@@ -945,7 +945,15 @@ words for what it sees now; and what it asks the agent to do then, with
 what that may use unasked. A look runs in the watch's own work folder,
 like a schedule's run, so file tools there see only that folder: watches
 are for accounts, pages and APIs
-([notes/140](notes/140-a-watch-offered.md)).
+([notes/140](notes/140-a-watch-offered.md)). In the browser UI an
+**eye** chip (*2 watching*) opens the Watches panel: each watch in
+Prahari's own sentence, what happens when it fires, its last look and
+every look (*fired · heard at the inlet*), and *look now*,
+*pause*/*resume*, *delete*. It runs Prahari's own commands (`prahari
+list --json` …), so it works whether or not `prahari serve` is up, and
+says at the top when it isn't. A **seen** chip lights when one of your
+watches fired since you last looked, and the panel opens with **what
+they saw** ([notes/147](notes/147-the-watches-on-the-page.md)).
 
 **Your phone, through Sparsh.** [Sparsh](https://github.com/kunwarmahen/sparsh)
 works an Android phone (or the emulator on this computer) through `adb`,
@@ -2871,7 +2879,12 @@ src/yantra/
 │                   alive, said the same way) and a `watches` prompt layer;
 │                   before a preview looks, this session's own browser on
 │                   the check's profile is closed, so the look isn't left
-│                   waiting on the chat's lock ([notes/140](notes/140-a-watch-offered.md))
+│                   waiting on the chat's lock ([notes/140](notes/140-a-watch-offered.md));
+│                   the page's Watches panel through `prahari list|looks|
+│                   pause|resume|rm --json` and a look now (`prahari look`,
+│                   given this Yantra when nothing names one), and the seen
+│                   chip: this person's looks that fired
+│                   ([notes/147](notes/147-the-watches-on-the-page.md))
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and

@@ -1475,6 +1475,10 @@ class WebSession:
             # was not found, and then the Schedules chip stays hidden.
             "samay": (agent.samay.describe()
                       if getattr(agent, "samay", None) is not None else None),
+            # Telling the person when something happens (prahari_link.py):
+            # None when Prahari is off or was not found; the Watches chip hides.
+            "prahari": (agent.prahari.describe()
+                        if getattr(agent, "prahari", None) is not None else None),
             # The person's phone (sparsh_link.py): None when Sparsh is off
             # or found no phone at the start, and the phone chip stays hidden.
             "sparsh": (agent.sparsh.describe()
@@ -2313,6 +2317,66 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         if verb is None:
             raise HTTPException(404, f"no schedule action {action!r}")
         return {"done": action, "result": samay_call(samay, verb, schedule_id)}
+
+    # ---- watches: what Prahari keeps (prahari_link.py) -------------------------
+
+    def require_prahari() -> Any:
+        prahari = getattr(session.agent, "prahari", None)
+        if prahari is None:
+            raise HTTPException(400, "Prahari is not linked to this session: put "
+                                     "`prahari` on PATH, or start Yantra with "
+                                     "--prahari /path/to/prahari")
+        return prahari
+
+    def prahari_call(prahari: Any, verb: str, watch: str | None = None) -> Any:
+        from yantra.prahari_link import PrahariLinkError
+        try:
+            return prahari.call(verb, watch)
+        except PrahariLinkError as exc:
+            said = str(exc)
+            status = 404 if "no watch" in said else 400 if "not an id" in said else 503
+            raise HTTPException(status, f"prahari: {said}") from None
+
+    @app.get("/api/watches")
+    def watches_list() -> dict[str, Any]:
+        """The Watches panel: every watch on this computer, in its own
+        sentence, with its last look -- read with no model and no token,
+        through the prahari program."""
+        prahari = require_prahari()
+        prahari.refresh()
+        return {**prahari.describe(), "watches": prahari_call(prahari, "list")}
+
+    @app.get("/api/watches/seen")
+    def watches_seen() -> dict[str, Any]:
+        """What this person's watches fired on lately, newest first: the
+        chip that says there is something new."""
+        from yantra.prahari_link import PrahariLinkError
+        prahari = require_prahari()
+        try:
+            return {"seen": prahari.seen()}
+        except PrahariLinkError as exc:
+            raise HTTPException(503, f"prahari: {exc}") from None
+
+    @app.get("/api/watches/{watch_id}/looks")
+    def watches_looks(watch_id: str) -> dict[str, Any]:
+        return {"looks": prahari_call(require_prahari(), "looks", watch_id)}
+
+    @app.post("/api/watches/{watch_id}/{action}")
+    def watches_act(watch_id: str, action: str) -> dict[str, Any]:
+        """Pause, resume, delete -- the person's own hand, so no card -- or
+        start a look without waiting for it."""
+        from yantra.prahari_link import PrahariLinkError
+        prahari = require_prahari()
+        if action == "look":
+            try:
+                prahari.look_now(watch_id)
+            except PrahariLinkError as exc:
+                raise HTTPException(400, f"prahari: {exc}") from None
+            return {"started": watch_id}
+        verb = {"pause": "pause", "resume": "resume", "delete": "rm"}.get(action)
+        if verb is None:
+            raise HTTPException(404, f"no watch action {action!r}")
+        return {"done": action, "result": prahari_call(prahari, verb, watch_id)}
 
     # ---- the phone: what Sparsh sees (sparsh_link.py) -------------------------
 

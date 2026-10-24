@@ -71,7 +71,7 @@ Then it asks me, with nobody watching
   may use without asking: only tools that read
   what the watch found is given to me as text from outside, never as instructions
 
-At most 10 times a day. News goes nowhere yet: it is kept on Prahari's page (no Dvara set).
+At most 10 times a day. News goes to Yantra's page (its Watches panel) and Prahari's own (no Dvara set).
 ```
 
 That card is real, written by this module against the real Prahari.
@@ -204,12 +204,12 @@ open after let_go: False
 
 ## Not here
 
-- **A Watches panel on the page.** Samay has a panel in `yantra --web`;
-  Prahari has its own page, linked from Sarathi's home page. A panel
-  here would be a second copy of it.
-- **The answers chip for a watch.** A fire goes to the person through
-  Dvara, or stays on Prahari's page. Bringing it into Yantra's page, as
-  note 125 did for schedules, can follow when somebody misses it.
+- ~~**A Watches panel on the page.**~~ Built: an eye chip opens the
+  watches, drawn from Prahari's own commands, with looks, look now,
+  pause and delete ([note 147](147-the-watches-on-the-page.md)).
+- ~~**The answers chip for a watch.**~~ Built: a *seen* chip lights when
+  a watch of yours fired since you last looked
+  ([note 147](147-the-watches-on-the-page.md)).
 - **Live offers measured on local models.** Note 116 counted Samay's
   offers on qwen and gemma. The same count for watches waits for a free
   GPU; the layer was written with that note's findings in hand.

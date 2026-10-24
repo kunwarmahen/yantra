@@ -1149,7 +1149,7 @@ pre.output { color: var(--ink); }
    7. overlays — modal, dialog, tools panel
    ===================================================================== */
 
-#modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #sched-backdrop, #phone-backdrop, #mem-backdrop, #kept-backdrop, #chats-backdrop, #steps-backdrop, #dialog-backdrop {
+#modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #sched-backdrop, #watch-backdrop, #phone-backdrop, #mem-backdrop, #kept-backdrop, #chats-backdrop, #steps-backdrop, #dialog-backdrop {
   position: fixed;
   inset: 0;
   display: flex;
@@ -1161,7 +1161,7 @@ pre.output { color: var(--ink); }
   backdrop-filter: blur(4px);
   animation: fade-in var(--med) var(--ease);
 }
-#tools-backdrop, #turns-backdrop, #conn-backdrop, #sched-backdrop, #phone-backdrop, #mem-backdrop, #kept-backdrop, #chats-backdrop, #steps-backdrop { z-index: 40; }  /* BELOW the approval modal on purpose */
+#tools-backdrop, #turns-backdrop, #conn-backdrop, #sched-backdrop, #watch-backdrop, #phone-backdrop, #mem-backdrop, #kept-backdrop, #chats-backdrop, #steps-backdrop { z-index: 40; }  /* BELOW the approval modal on purpose */
 #dialog-backdrop { z-index: 45; }
 #modal-backdrop  { z-index: 50; }  /* approvals pop over everything */
 
@@ -1171,7 +1171,7 @@ pre.output { color: var(--ink); }
   to   { opacity: 1; transform: none; }
 }
 
-.sheet, #modal, #tools-panel, #turns-panel, #conn-panel, #sched-panel, #phone-panel, #mem-panel, #kept-panel, #chats-panel, #steps-panel, #dialog {
+.sheet, #modal, #tools-panel, #turns-panel, #conn-panel, #sched-panel, #watch-panel, #phone-panel, #mem-panel, #kept-panel, #chats-panel, #steps-panel, #dialog {
   background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--r-5);
@@ -1471,7 +1471,7 @@ pre.output { color: var(--ink); }
    8. tools panel
    ===================================================================== */
 
-#tools-panel, #turns-panel, #conn-panel, #sched-panel, #phone-panel, #mem-panel, #kept-panel, #chats-panel, #steps-panel {
+#tools-panel, #turns-panel, #conn-panel, #sched-panel, #watch-panel, #phone-panel, #mem-panel, #kept-panel, #chats-panel, #steps-panel {
   width: 100%;
   max-width: 780px;
   max-height: min(86vh, 860px);
@@ -1891,11 +1891,11 @@ pre.output { color: var(--ink); }
 }
 
 @media (max-width: 620px) {
-  #modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #sched-backdrop, #phone-backdrop, #mem-backdrop, #kept-backdrop, #chats-backdrop, #steps-backdrop, #dialog-backdrop {
+  #modal-backdrop, #tools-backdrop, #turns-backdrop, #conn-backdrop, #sched-backdrop, #watch-backdrop, #phone-backdrop, #mem-backdrop, #kept-backdrop, #chats-backdrop, #steps-backdrop, #dialog-backdrop {
     padding: 0;
     align-items: flex-end;
   }
-  #modal, #tools-panel, #turns-panel, #conn-panel, #sched-panel, #phone-panel, #mem-panel, #kept-panel, #chats-panel, #steps-panel, #dialog {
+  #modal, #tools-panel, #turns-panel, #conn-panel, #sched-panel, #watch-panel, #phone-panel, #mem-panel, #kept-panel, #chats-panel, #steps-panel, #dialog {
     max-width: none;
     max-height: 92vh;
     border-radius: var(--r-5) var(--r-5) 0 0;
@@ -2102,7 +2102,7 @@ pre.output { color: var(--ink); }
 }
 
 /* ---- schedules (samay_link.py) ---- */
-#sched-body, #phone-body { overflow-y: auto; padding: 0 22px 20px; }
+#sched-body, #watch-body, #phone-body { overflow-y: auto; padding: 0 22px 20px; }
 .sched-row .conn-title { font-weight: 600; }
 .sched-does { color: var(--ink); }
 .sched-last { font-family: var(--mono); font-size: 12px; }

@@ -271,6 +271,15 @@ function applyHeader(s) {
     $("#chip-sched").title = "schedules — what the agent does later or on a repeat"
       + (sam.serving ? "" : "\n\nSamay's clock is NOT running: nothing runs on time until `samay serve` is");
   }
+  // watches chip: hidden unless Prahari is linked to this session
+  const pr = s.prahari;
+  $("#chip-watch").classList.toggle("hidden", !pr || !pr.found);
+  if (pr && pr.found) {
+    startSeen();
+    $("#watch-count").textContent = `${pr.counts.active || 0} watching`;
+    $("#chip-watch").title = "watches — what the agent tells you when it happens"
+      + (pr.serving ? "" : "\n\nPrahari is NOT running: nothing is looked at until `prahari serve` is");
+  }
   // phone chip: hidden unless Sparsh is linked to this session
   const sp = s.sparsh;
   $("#chip-phone").classList.toggle("hidden", !sp || !sp.found);
@@ -2402,6 +2411,220 @@ function renderSchedules() {
           ${(r.refused || []).length ? `<div>refused (not allowed ahead): ${r.refused.map((t) => `<code>${esc(t)}</code>`).join(" ")}</div>` : ""}</div>`).join("")
         : '<div class="sched-run">no runs yet</div>';
       row.append(runs);
+    }
+    body.append(row);
+  }
+}
+
+/* ---------- watches panel (prahari_link.py) ----------
+
+   What Prahari keeps for this computer: each watch in its own sentence,
+   what happens when it fires, its last look, and the person's own
+   switches. Schedules' shape on purpose: nothing here is a model turn and
+   nothing asks -- the person is the one pressing. A look started here is
+   not waited for; it shows in the watch's looks when it is done. */
+
+const watch = { data: null, open: new Set(), looks: {} };
+
+$("#chip-watch").onclick = openWatchPanel;
+$("#chip-seen").onclick = openWatchPanel;
+$("#watch-refresh").onclick = () => loadWatches(true);
+$("#watch-close").onclick = () => $("#watch-backdrop").classList.add("hidden");
+$("#watch-backdrop").addEventListener("click", (e) => {
+  if (e.target === $("#watch-backdrop")) $("#watch-backdrop").classList.add("hidden");
+});
+
+async function openWatchPanel() {
+  $("#watch-backdrop").classList.remove("hidden");
+  $("#watch-body").innerHTML = '<div class="panel-loading">loading…</div>';
+  await loadSeen();
+  await loadWatches(false);
+  markSeenSeen();
+}
+
+/* What the watches saw, back on the page they were made on: every look
+   that fired (or needs the person), from Prahari's own record. Which
+   ones you've seen is this browser's to remember, as for answers. */
+
+const SEEN_SEEN = "yantra-watches-seen";
+const seen = { list: [], seenAt: "", timer: null, shownSeen: "" };
+
+function seenSeen() {
+  try { return localStorage.getItem(SEEN_SEEN) || ""; } catch { return seen.seenAt; }
+}
+
+function lookAt(l) { return l.ended_at || l.started_at || ""; }
+
+function startSeen() {
+  if (seen.timer) return;
+  loadSeen();
+  seen.timer = setInterval(() => { if (!document.hidden) loadSeen(); }, ANSWERS_EVERY);
+}
+
+async function loadSeen() {
+  try {
+    const res = await fetch("/api/watches/seen");
+    if (!res.ok) return;
+    seen.list = (await res.json()).seen || [];
+  } catch { return; }
+  const before = seenSeen();
+  const fresh = seen.list.filter((l) => lookAt(l) > before).length;
+  $("#chip-seen").classList.toggle("hidden", !fresh);
+  $("#seen-count").textContent = `${fresh} seen`;
+}
+
+function markSeenSeen() {
+  seen.shownSeen = seenSeen();
+  const newest = seen.list.map(lookAt).sort().pop();
+  if (!newest) return;
+  seen.seenAt = newest;
+  try { localStorage.setItem(SEEN_SEEN, newest); } catch { /* private mode */ }
+  $("#chip-seen").classList.add("hidden");
+}
+
+const LOOK_TONE = { failed: "bad", broken: "bad", needs_person: "warn", limited: "warn",
+                    interrupted: "warn" };
+const CAME_BY = { clock: "", now: "looked now", inlet: "heard at the inlet",
+                  wake: "woken by a knock", renew: "kept its push alive" };
+
+/* One look in a line: how it ended, when, and what it saw. */
+function lookLine(l) {
+  const came = CAME_BY[l.came_by] || l.came_by || "";
+  const what = (l.found || []).join(" · ") || l.value || l.detail || "";
+  return `<b class="${LOOK_TONE[l.outcome] || ""}">${esc(l.outcome)}</b> ${esc(clockTime(lookAt(l)))}`
+    + (came ? ` · ${esc(came)}` : "") + (l.notified ? " · sent to you" : "")
+    + (l.cost_usd ? ` · $${Number(l.cost_usd).toFixed(4)}` : "")
+    + (what ? `<div>${esc(what)}</div>` : "");
+}
+
+function renderSeen(body) {
+  const list = seen.list.slice(0, 8);
+  if (!list.length) return;
+  section(body, "what they saw", "newest first; every look is under each watch's looks");
+  const box = document.createElement("div");
+  box.className = "sched-answers";
+  const before = seen.shownSeen || seenSeen();
+  for (const l of list) {
+    const card = document.createElement("div");
+    card.className = `sched-answer ${LOOK_TONE[l.outcome] || ""}`
+      + (lookAt(l) > before ? " is-new" : "");
+    card.innerHTML = `<div class="conn-title">${esc(l.name || l.watch)}</div>
+      <div class="conn-sub">${lookLine(l)}</div>
+      ${l.reply ? `<div class="reply">${renderMarkdown(l.reply)}</div>` : ""}`;
+    box.append(card);
+  }
+  body.append(box);
+}
+
+async function loadWatches(said) {
+  const res = await fetch("/api/watches");
+  const data = await res.json();
+  if (!res.ok) {
+    $("#watch-body").innerHTML = `<div class="conn-box warn"><span>${esc(data.detail)}</span></div>`;
+    return;
+  }
+  watch.data = data;
+  $("#watch-count").textContent = `${data.counts.active || 0} watching`;
+  for (const id of watch.open) await loadLooks(id);
+  renderWatches();
+  if (said) toast("asked Prahari again");
+}
+
+async function loadLooks(id) {
+  const res = await fetch(`/api/watches/${encodeURIComponent(id)}/looks`);
+  watch.looks[id] = res.ok ? (await res.json()).looks : [];
+}
+
+async function watchAct(id, action) {
+  const res = await fetch(`/api/watches/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) { addBanner(`watches: ${data.detail}`, true); return; }
+  toast({ pause: `paused ${id}`, resume: `resumed ${id}`, delete: `deleted ${id}`,
+          look: `${id} is looking — it shows in its looks when it is done` }[action]);
+  if (action === "delete") watch.open.delete(id);
+  await loadWatches(false);
+}
+
+function renderWatches() {
+  const d = watch.data;
+  const body = $("#watch-body");
+  body.textContent = "";
+  if (!d.serving) {
+    const warn = document.createElement("div");
+    warn.className = "conn-box warn";
+    warn.innerHTML = "<span>Prahari is not running on this computer: nothing is looked "
+      + "at until it is. Start it in a terminal with <code>prahari serve</code>.</span>";
+    body.append(warn);
+  }
+  renderSeen(body);
+  const list = d.watches || [];
+  section(body, `${list.length} watch${list.length === 1 ? "" : "es"}`,
+    (d.serving && d.url ? `Prahari's own page: ${d.url}` : "kept by Prahari on this computer")
+    + (d.news ? ` · news goes ${d.news}` : ""));
+  if (!list.length) {
+    const p = document.createElement("div");
+    p.className = "conn-foot";
+    p.textContent = "nothing yet — ask the agent to tell you when something happens "
+      + "(\"tell me when a mail from the bank arrives\"); it offers, and you say yes on its card.";
+    body.append(p);
+    return;
+  }
+  for (const w of list) {
+    const row = document.createElement("div");
+    row.className = "conn-card sched-row";
+    const dot = document.createElement("span");
+    dot.className = w.state === "active" ? "dot" : "dot dead";
+    dot.title = w.state;
+    const main = document.createElement("div");
+    const last = w.last_look;
+    const tags = [esc(w.id)];
+    if (w.listen) tags.push(`listens for <code>${esc(w.listen)}</code>`);
+    if (w.wake) tags.push(`woken by <code>${esc(w.wake)}</code>`);
+    if (w.owner && w.owner !== "local") tags.push("for " + esc(w.owner));
+    if (w.fired_today) tags.push(`fired ${w.fired_today} today (at most ${w.max_per_day})`);
+    if (w.state === "active" && w.next_at && !w.listen) tags.push("next " + esc(clockTime(w.next_at)));
+    main.innerHTML = `<div class="conn-title">${esc(w.name)}</div>
+      <div class="conn-sub sched-does">${esc(w.sentence)}</div>
+      <div class="conn-sub">${esc(w.does)}</div>
+      <div class="conn-sub">${tags.join(" · ")}</div>
+      ${w.paused_because ? `<div class="conn-sub conn-warn">paused: ${esc(w.paused_because)}</div>` : ""}
+      <div class="conn-sub sched-last ${LOOK_TONE[last?.outcome] || ""}">${last
+        ? `last: ${esc(last.outcome)} ${esc(clockTime(lookAt(last)))} — ${esc((last.found || []).join(" · ") || last.value || last.detail || "")}`
+        : (w.listen ? "nothing heard yet" : "not looked yet")}</div>`;
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    const button = (label, cls, fn) => {
+      const b = document.createElement("button");
+      b.className = `m-btn ${cls}`;
+      b.textContent = label;
+      b.onclick = fn;
+      actions.append(b);
+    };
+    button(watch.open.has(w.id) ? "hide looks" : "looks", "", async () => {
+      if (watch.open.has(w.id)) watch.open.delete(w.id);
+      else { watch.open.add(w.id); await loadLooks(w.id); }
+      renderWatches();
+    });
+    if (!w.listen && w.state === "active") button("look now", "", () => watchAct(w.id, "look"));
+    if (w.state === "active") button("pause", "", () => watchAct(w.id, "pause"));
+    if (w.state === "paused") button("resume", "primary", () => watchAct(w.id, "resume"));
+    button("delete", "danger", async () => {
+      const ok = await confirmDialog({
+        title: "delete this watch?",
+        body: `"${w.name}" — its looks and what it remembers seeing. Pausing keeps it instead.`,
+        confirm: "delete", tone: "danger",
+      });
+      if (ok) watchAct(w.id, "delete");
+    });
+    row.append(dot, main, actions);
+    if (watch.open.has(w.id)) {
+      const looks = document.createElement("div");
+      looks.className = "sched-runs";
+      const got = watch.looks[w.id] || [];
+      looks.innerHTML = got.length
+        ? got.map((l) => `<div class="sched-run">${lookLine(l)}</div>`).join("")
+        : '<div class="sched-run">no looks yet</div>';
+      row.append(looks);
     }
     body.append(row);
   }

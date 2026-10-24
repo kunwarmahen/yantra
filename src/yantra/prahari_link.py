@@ -37,6 +37,16 @@ is asked to do then, with what it may use unasked.
 THE MODEL IS TOLD, BRIEFLY. A ``watches`` prompt layer says the tools
 exist, how a watch differs from a schedule, to preview first and fix the
 pick from what the tool actually said, and to create only after a yes.
+
+THE PAGE'S PANEL USES THE PROGRAM, AS SAMAY'S DOES. ``prahari list
+--json``, ``looks``, ``pause``, ``resume`` and ``rm`` work whether
+``prahari serve`` is running or not and need no token: the Watches panel
+on Yantra's page is drawn from the same JSON as Prahari's own page
+(``Prahari.call``). Look now starts ``prahari look`` and does not wait --
+a look may take minutes on a page like WhatsApp Web -- and what it saw
+shows in the watch's looks. ``seen`` is the panel's chip: what this
+person's watches fired on lately, from Prahari's own record, so it is
+the same whether or not anything was sent anywhere.
 """
 
 from __future__ import annotations
@@ -45,6 +55,8 @@ import json
 import os
 import shutil
 import subprocess
+import sys
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -66,6 +78,12 @@ LOOKING = ("preview_watch",)
 #: How much of a then-prompt the card shows.
 THEN_SHOWN = 240
 SHOWN = 6
+#: The panel's verbs, and whether each names one watch.
+VERBS = {"list": False, "looks": True, "pause": True, "resume": True, "rm": True}
+#: The looks a person should hear about on the page: it mattered, or it
+#: needs them. A quiet look, a learning one and a broken one are left out
+#: (a watch broken too often pauses, and its row says why).
+SEEN = ("fired", "limited", "needs_person")
 
 #: A test in the words the card uses (the value goes in {}).
 WHEN_WORDS = {"below": "is below {}", "above": "is above {}",
@@ -406,6 +424,24 @@ def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None) -> Any:
     return None
 
 
+def looking_env(environ: dict[str, str] | None = None) -> dict[str, str]:
+    """The environment a look started from the page runs in.
+
+    A look is ``yantra --call``, and Prahari finds that Yantra by
+    ``PRAHARI_YANTRA`` -- which ``prahari serve`` is given, and this
+    page's process often is not. So when nothing names one, the look gets
+    THIS Yantra, started where this page was: the same program, the same
+    ``.env``, the same accounts the page reads with."""
+    env = dict(os.environ if environ is None else environ)
+    if not env.get("PRAHARI_YANTRA", "").strip():
+        beside = os.path.join(os.path.dirname(sys.executable), "yantra")
+        own = beside if os.path.exists(beside) else shutil.which("yantra")
+        if own:
+            env["PRAHARI_YANTRA"] = own
+            env.setdefault("PRAHARI_YANTRA_HOME", os.getcwd())
+    return env
+
+
 # ---- the live handle ------------------------------------------------------------
 
 
@@ -448,16 +484,122 @@ class Prahari:
                            self.news_goes)
             if hook is not None:
                 tool.explain = hook
+                tool.run = self._then_refresh(tool.run)
         prompt = attach_prompt(agent)
         prompt.set("watches", prompt_text(self.data, self.seen_at, self.off))
         prompt.apply()
         return len(self.tools)
 
+    def _then_refresh(self, run: Any) -> Any:
+        """A write's run, followed by a fresh look at Prahari -- so the
+        page's count is right when the turn ends, not at the next launch."""
+        def wrapped(args: dict[str, Any], ctx: Any) -> Any:
+            try:
+                return run(args, ctx)
+            finally:
+                self.refresh()
+        return wrapped
+
+    def refresh(self) -> dict[str, Any] | None:
+        """Ask Prahari again (the panel does, for whether it is watching and
+        the counts). A page asking is the person asking: not found is said."""
+        try:
+            found = load("on" if self.mode == "auto" else self.mode,
+                         self.path or self.program)
+        except PrahariLinkError as exc:
+            self.error = str(exc)
+            return self.data
+        if found is not None:
+            self.data, self.program = found
+            self.error = ""
+        return self.data
+
+    def call(self, verb: str, watch: str | None = None, *, limit: int = 20) -> Any:
+        """One of the panel's verbs, through the prahari program, as JSON."""
+        if verb not in VERBS:
+            raise PrahariLinkError(f"no verb {verb!r}")
+        if VERBS[verb] and (not watch or not WORD_RE.match(watch)):
+            raise PrahariLinkError(f"which watch? {watch!r} is not an id")
+        argv = [*self._base(), verb, *([watch] if VERBS[verb] else [])]
+        if verb == "looks":
+            argv += ["--limit", str(max(1, min(int(limit), 200)))]
+        return self._json(argv, verb)
+
+    def _json(self, argv: list[str], verb: str) -> Any:
+        try:
+            done = subprocess.run([*argv, "--json"], capture_output=True, text=True,
+                                  timeout=STATUS_TIMEOUT)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise PrahariLinkError(f"prahari {verb}: {exc}") from None
+        if done.returncode != 0:
+            why = (done.stderr or done.stdout).strip().splitlines()
+            raise PrahariLinkError(why[-1].removeprefix("error: ") if why
+                                   else f"prahari {verb} failed")
+        try:
+            return json.loads(done.stdout)
+        except json.JSONDecodeError:
+            raise PrahariLinkError(f"prahari {verb} did not print JSON") from None
+
+    def seen(self, limit: int = 30) -> list[dict[str, Any]]:
+        """What this person's watches saw lately that they should hear
+        about, newest first: the page's chip. Each look with its watch's
+        name and sentence."""
+        listed = {w["id"]: w for w in self.call("list")
+                  if isinstance(w, dict) and w.get("owner") == self.person}
+        if not listed:
+            return []
+        try:
+            looks = self._json([*self._base(), "looks", "--limit",
+                                str(max(1, min(int(limit), 200)))], "looks")
+        except PrahariLinkError:
+            looks = []
+        out = []
+        for look in looks if isinstance(looks, list) else []:
+            watch = listed.get(look.get("watch"))
+            if watch is None or look.get("outcome") not in SEEN:
+                continue
+            out.append({**look, "name": watch.get("name", ""),
+                        "sentence": watch.get("sentence", "")})
+        return out
+
+    def look_now(self, watch: str) -> None:
+        """Start one look and do not wait for it: a look may take minutes,
+        and Prahari records it whether or not this page is still open."""
+        if not WORD_RE.match(watch):
+            raise PrahariLinkError(f"which watch? {watch!r} is not an id")
+        try:
+            child = subprocess.Popen([*self._base(), "look", watch], env=looking_env(),
+                                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError as exc:
+            raise PrahariLinkError(f"prahari look: {exc}") from None
+        # reaped when it ends, so it never lingers as a zombie of this page
+        threading.Thread(target=child.wait, daemon=True, name="yantra-prahari-look").start()
+
+    def _base(self) -> list[str]:
+        if self.data is None or not self.program:
+            raise PrahariLinkError(self.error or "Prahari was not found")
+        return [self.program, "--state", str(self.data.get("state") or "")]
+
+    def describe(self) -> dict[str, Any]:
+        """For the page's chip and panel: never a key (the inlet's is
+        Prahari's own to show, on its page or by `prahari inlet`)."""
+        data = self.data or {}
+        return {"mode": self.mode, "found": self.data is not None, "error": self.error,
+                "person": self.person, "serving": bool(data.get("serving")),
+                "url": data.get("url"), "counts": dict(data.get("watches") or {}),
+                "news": self.news_goes(), "version": data.get("version"),
+                "tools": len(self.tools)}
+
     def news_goes(self) -> str:
-        """Where a fire reaches the person, for the card."""
+        """Where a fire reaches the person, for the card and the panel. At
+        this computer it is always on Yantra's page (the Watches panel reads
+        Prahari's record), and through Dvara too when the running Prahari
+        sends there."""
         data = self.data or {}
         if self.person != LOCAL:
             return "to your chat"
         if data.get("dvara") and data.get("local_to"):
-            return f"to {data['local_to']}'s chat, through Dvara"
-        return "nowhere yet: it is kept on Prahari's page (no Dvara set)"
+            return (f"to {data['local_to']}'s chat through Dvara, and to Yantra's "
+                    "page (its Watches panel)")
+        return "to Yantra's page (its Watches panel) and Prahari's own (no Dvara set)"

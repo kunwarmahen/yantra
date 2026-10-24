@@ -16,6 +16,10 @@ Also designed against:
 * **Offers from a run nobody watches** -- no Prahari tools at all.
 * **A Prahari that speaks another format** -- refused, never guessed at.
 * **Someone else's watches** -- the server is started ``--for`` one person.
+* **A panel that acts behind the person's back, or on an option** -- the
+  Watches panel on the page goes through the program's own verbs with an
+  id that is an id, and its "seen" chip is only this person's looks that
+  mattered (a quiet look, or somebody else's watch, never lights it).
 """
 
 from __future__ import annotations
@@ -58,6 +62,32 @@ FAKE_PRAHARI = """\
                           "dvara": "http://dvara:8765", "inlet": None,
                           "mcp": {{"command": {python!r},
                                   "args": [sys.argv[0], "--state", {state!r}, "mcp"]}}}}))
+    elif args == ["list", "--json"]:
+        print(json.dumps([
+            {{"id": "w-1", "owner": "local", "name": "ALAB under 50", "state": "active",
+              "sentence": "every 3 hours: the number is below 50", "listen": "",
+              "does": "You get a line saying what it saw; no model is asked",
+              "last_look": None, "fired_today": 0}},
+            {{"id": "w-2", "owner": "asha", "name": "Mum on WhatsApp", "state": "active",
+              "sentence": "when whatsapp says Mum", "listen": "whatsapp",
+              "does": "", "last_look": None, "fired_today": 0}}]))
+    elif args[0] == "looks" and len(args) > 1 and args[1] == "--limit":
+        print(json.dumps([
+            {{"id": "l3", "watch": "w-1", "outcome": "fired", "value": "48.5",
+              "found": ["the value is now 48.5"], "ended_at": "2026-10-24T09:00:00+00:00"}},
+            {{"id": "l2", "watch": "w-1", "outcome": "quiet", "value": "61.2",
+              "ended_at": "2026-10-24T06:00:00+00:00"}},
+            {{"id": "l1", "watch": "w-2", "outcome": "fired", "found": ["Mum"],
+              "ended_at": "2026-10-24T05:00:00+00:00"}}]))
+    elif args[0] == "looks":
+        print(json.dumps([{{"id": "l3", "watch": args[1], "outcome": "fired"}}]))
+    elif args[0] in ("pause", "resume"):
+        print(json.dumps({{"id": args[1], "state": "paused" if args[0] == "pause"
+                                                  else "active"}}))
+    elif args[0] == "rm":
+        print(json.dumps({{"removed": args[1]}}))
+    elif args[0] == "look":
+        pass
     elif args[0] == "mcp":
         TOOLS = [tool("preview_watch", True), tool("list_watches", True),
                  tool("create_watch", False), tool("update_watch", False),
@@ -261,7 +291,7 @@ class TestTheCardIsWords:
         assert "is below 50" in said
         assert "now: It sees 61.2 now: no match yet." in said
         assert "you get a line saying what it saw; no model is asked" in said
-        assert "to mahen's chat, through Dvara" in said
+        assert "to mahen's chat through Dvara, and to Yantra's page" in said
 
     def test_a_call_that_is_not_read_only_is_said_in_capitals(self):
         registry = ToolRegistry()
@@ -332,3 +362,102 @@ def test_a_watch_and_a_schedule_are_told_apart_in_both_layers():
     assert "is a schedule instead (`mcp__samay__`), not a watch" in watches
     assert "WAITING FOR SOMETHING TO HAPPEN is not a schedule" in schedules
     assert "Only without them" in schedules
+
+
+class TestThePanel:
+    def served(self, program, tmp_path):
+        pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+
+        from yantra.web.server import WebSession, make_app
+
+        _, agent, manager, _ = start(program, tmp_path)
+        session = WebSession()
+        session.attach(agent, None, mcp=manager)
+        return manager, TestClient(make_app(session))
+
+    def test_the_page_state_says_prahari_is_here_and_where_news_goes(self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            prahari = client.get("/api/state").json()["prahari"]
+            assert prahari["found"] is True and prahari["person"] == "local"
+            assert prahari["counts"]["active"] == 2 and prahari["serving"] is False
+            assert "through Dvara" in prahari["news"]
+        finally:
+            manager.shutdown()
+
+    def test_the_list_looks_and_switches_go_through_the_program(self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            listed = client.get("/api/watches").json()
+            assert [w["id"] for w in listed["watches"]] == ["w-1", "w-2"]
+            assert client.get("/api/watches/w-1/looks").json()["looks"][0]["outcome"] == "fired"
+            assert client.post("/api/watches/w-1/pause").json()["result"]["state"] == "paused"
+            assert client.post("/api/watches/w-1/delete").json()["result"] == {
+                "removed": "w-1"}
+            assert client.post("/api/watches/w-1/look").json() == {"started": "w-1"}
+            state = str(tmp_path / "state")
+            made = calls(fake[1])
+            assert ["--state", state, "pause", "w-1", "--json"] in made
+            assert ["--state", state, "rm", "w-1", "--json"] in made
+        finally:
+            manager.shutdown()
+
+    def test_seen_is_this_persons_looks_that_mattered(self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            got = client.get("/api/watches/seen").json()["seen"]
+            # the quiet look and asha's watch are left out
+            assert [look["id"] for look in got] == ["l3"]
+            assert got[0]["name"] == "ALAB under 50" and "below 50" in got[0]["sentence"]
+        finally:
+            manager.shutdown()
+
+    def test_an_option_is_not_a_watch_id_and_an_unknown_action_is_refused(self, fake,
+                                                                          tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            assert client.post("/api/watches/--help/pause").status_code == 400
+            assert client.post("/api/watches/--help/look").status_code == 400
+            assert client.post("/api/watches/w-1/allow").status_code == 404
+            assert not any("--help" in c for c in calls(fake[1]))
+        finally:
+            manager.shutdown()
+
+    def test_with_no_prahari_the_panel_says_how_to_get_one(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(prahari_link.shutil, "which", lambda _name: None)
+        monkeypatch.delenv(prahari_link.ENV, raising=False)
+        pytest.importorskip("fastapi")
+        from fastapi.testclient import TestClient
+
+        from yantra.web.server import WebSession, make_app
+
+        _, agent, manager, _ = start(None, tmp_path, flag="auto")
+        session = WebSession()
+        session.attach(agent, None, mcp=manager)
+        client = TestClient(make_app(session))
+        assert client.get("/api/state").json()["prahari"] is None
+        answer = client.get("/api/watches")
+        assert answer.status_code == 400 and "prahari" in answer.json()["detail"]
+
+    def test_a_watch_made_in_the_turn_is_counted_when_the_turn_ends(self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            before = len([c for c in calls(fake[1]) if c[-2:] == ["status", "--json"]])
+            agent.registry.get("mcp__prahari__delete_watch").run({"id": "w-1"}, agent.ctx)
+            after = len([c for c in calls(fake[1]) if c[-2:] == ["status", "--json"]])
+            assert after == before + 1
+        finally:
+            manager.shutdown()
+
+
+def test_a_look_from_the_page_is_given_this_yantra_when_nothing_names_one(tmp_path,
+                                                                           monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    env = prahari_link.looking_env({"PATH": "/usr/bin"})
+    assert env["PRAHARI_YANTRA"].endswith("yantra")
+    assert env["PRAHARI_YANTRA_HOME"] == str(tmp_path)
+    # one already named is kept, home and all
+    kept = prahari_link.looking_env({"PRAHARI_YANTRA": "uv run yantra",
+                                     "PRAHARI_YANTRA_HOME": "/srv"})
+    assert kept["PRAHARI_YANTRA"] == "uv run yantra" and kept["PRAHARI_YANTRA_HOME"] == "/srv"
