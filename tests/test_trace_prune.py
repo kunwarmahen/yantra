@@ -94,7 +94,9 @@ class TestWhatAPruneRemoves:
 class TestTheFlag:
     def test_it_prunes_and_says_what_went(self, tmp_path, capsys):
         path = tmp_path / "t.jsonl"
-        recorded(path, 4000, 0)          # one ancient, one from today
+        # one ancient, one from today: the flag reads the real clock, so
+        # "today" is counted back from NOW's fixed day to now
+        recorded(path, 4000, (NOW - time.time()) / DAY)
         assert main(["--trace", str(path), "--trace-prune", "30"]) == 0
         out = " ".join(capsys.readouterr().out.split())
         assert "removed 1 turn(s) recorded more than 30 day(s) ago, kept 1" in out
