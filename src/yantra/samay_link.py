@@ -28,7 +28,8 @@ schedule made while talking to your mail agent runs your mail agent.
 The model has no argument with which to name anybody else. A host that
 serves several people (Dvara) makes a ``Samay`` per turn with that
 turn's ``person``, its own ``runner``, where its people see their
-schedules (``seen_at``) and who starts a stopped clock (``clock_off``);
+schedules (``seen_at``), who starts a stopped clock (``clock_off``) and
+the person's own time zone (``zone``, given to the server as SAMAY_TZ);
 Yantra still never learns who that host is.
 
 THE CARD SAYS WHAT A YES COVERS. Samay marks its writes as writes, so a
@@ -552,6 +553,9 @@ class Samay:
     runner: str = ""
     #: This turn has the person's phone (Dvara): schedules made work it.
     phone: bool = False
+    #: The person's own time zone (Dvara), when not this machine's: Samay's
+    #: server gets it as SAMAY_TZ, so "at 7" is 7 on their clock.
+    zone: str = ""
     seen_at: str = SEEN_HERE
     clock_off: str = CLOCK_HERE
     error: str = ""
@@ -578,6 +582,8 @@ class Samay:
 
         assert self.data is not None
         cfg = server_config(self.data, self.person, self.agent, self.runner, self.phone)
+        if self.zone:
+            cfg.env = {**(cfg.env or {}), "SAMAY_TZ": self.zone}
         existing = manager.sessions.get(SERVER)
         if existing is None:
             # a package's tool list may refuse some (or all): only what

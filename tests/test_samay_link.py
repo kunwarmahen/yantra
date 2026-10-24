@@ -545,3 +545,22 @@ def test_a_schedule_here_may_work_the_phone_only_with_sparsh_and_a_dvara(
         assert code is None and agent.samay.phone is phone
     finally:
         manager.shutdown()
+
+
+def test_a_person_on_another_clock_gets_a_server_that_keeps_it():
+    """"Every day at 7" for someone abroad is 7 on their clock: the host
+    names their zone, and Samay's server is started with it as SAMAY_TZ."""
+    from conftest import ScriptedProvider
+    from yantra.agent import Agent
+
+    data = {"mcp": {"command": "samay", "args": ["mcp"]}, "serving": True}
+    started = []
+    manager = SimpleNamespace(sessions={},
+                              connect=lambda cfg, origin: started.append(cfg) or [])
+    agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry())
+    samay_link.Samay(mode="on", data=data, program="samay", person="raj",
+                     zone="Europe/London").connect(manager, agent)
+    samay_link.Samay(mode="on", data=data, program="samay", person="asha").connect(
+        manager, agent)
+    assert started[0].env == {"SAMAY_TZ": "Europe/London"}
+    assert not started[1].env

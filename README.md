@@ -2677,7 +2677,9 @@ src/yantra/
 ├── env_context.py  the env layer: time zone, host, working dir, city from one
 │                   ipinfo lookup -- frozen at session start so --cache holds;
 │                   the CURRENT time instead rides with each request, sent and
-│                   never stored ([notes/29](notes/29-environment-awareness.md))
+│                   never stored ([notes/29](notes/29-environment-awareness.md));
+│                   a host may set the person's own zone (set_zone), and
+│                   every time line reads on their clock
 ├── skills/         procedural knowledge on disk: a folder + SKILL.md (flat
 │                   frontmatter, hand-parsed). Three cost tiers -- description
 │                   in the prompt every turn, body via the load_skill tool,
@@ -2868,7 +2870,9 @@ src/yantra/
 │                   a grant fixed to arguments said as "only with ...", a
 │                   job nothing listed can do said in capitals, where its
 │                   questions go (asks_go), and allow_for_schedule's card
-│                   ([notes/126](notes/126-a-yes-that-covers-the-job.md))
+│                   ([notes/126](notes/126-a-yes-that-covers-the-job.md));
+│                   a host's person on another clock gets a server with
+│                   SAMAY_TZ, so "at 7" is their 7 (dvara's notes/66)
 ├── prahari_link.py telling you when something happens: Prahari found by
 │                   `prahari status --json` (prahari.status.v1), its tools
 │                   started `--for local` and `--agent` this package, skipped

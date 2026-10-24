@@ -74,6 +74,16 @@ minute — a ten-call tool loop does not repeat the same line ten times.
 The weekday rides along because *"next Friday"* needs it. At `off`
 nothing is said, as with everything else here.
 
+WHOSE CLOCK. At a keyboard it is this machine's, because the person is
+sitting at it. A host serving a household can't assume that: a son at
+university in London messages the agents on a computer in North
+Carolina. So a host may name the person's own zone (`set_zone`, an IANA
+name like `Europe/London`): the start time and every *Current time* line
+are then read on their clock, and the location line from the public IP
+says *This computer's location*, because it isn't theirs. Dvara does
+this from the actors file's `zone` (its notes/66); a name that isn't a
+zone is refused before anything is told the wrong time.
+
 ## Graded by default: full > local > off
 
 - **full** (the default): machine facts + location. The honest cost:

@@ -287,3 +287,49 @@ class TestLiveClock:
         self._fixed_now(monkeypatch, 15, 52)
         agent.run("later")
         assert "15:52" in agent.provider.last_request()["messages"][-1].text()
+
+
+class TestTheirOwnClock:
+    """A host may serve someone who isn't where this computer is. Told
+    this machine's time, their agent counts "in an hour" and "today" from
+    somebody else's day -- so a zone given is the zone every time line
+    is read in, and the location is said to be the computer's."""
+
+    def _offset(self, zone):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        seconds = int(datetime.now(ZoneInfo(zone)).utcoffset().total_seconds())
+        sign = "-" if seconds < 0 else "+"
+        return f"UTC{sign}{abs(seconds) // 3600:02d}:{abs(seconds) % 3600 // 60:02d}"
+
+    def test_the_live_time_and_the_start_are_on_their_clock(self):
+        ctx = _ctx()
+        ctx.ensure_facts()
+        ctx.set_zone("Pacific/Chatham")
+        assert self._offset("Pacific/Chatham") in ctx.now_line()
+        assert self._offset("Pacific/Chatham") in ctx.render_block()
+
+    def test_the_location_is_said_to_be_the_computers(self, monkeypatch):
+        monkeypatch.setattr("yantra.env_context._http_get",
+                            _geo({"city": "Raleigh", "country": "US"}))
+        ctx = _ctx("full")
+        ctx.set_zone("Europe/London")
+        block = ctx.render_block()
+        assert "This computer's location: Raleigh, US" in block
+        assert "the person keeps Europe/London time" in block
+
+    def test_no_zone_is_this_machines_clock_again(self):
+        ctx = _ctx()
+        ctx.set_zone("Pacific/Chatham")
+        ctx.set_zone(None)
+        from datetime import datetime
+        here = datetime.now().astimezone().utcoffset()
+        seconds = int(here.total_seconds())
+        sign = "-" if seconds < 0 else "+"
+        assert f"UTC{sign}{abs(seconds) // 3600:02d}" in ctx.now_line()
+
+    def test_a_name_that_isnt_a_zone_is_refused_before_anything_is_told(self):
+        ctx = _ctx()
+        with pytest.raises(ValueError, match="not a time zone"):
+            ctx.set_zone("Europe/Londn")
+        assert ctx.zone is None

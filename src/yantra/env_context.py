@@ -37,6 +37,11 @@ Design constraints worth remembering:
   here edits the operator's words -- and since skills append a roster
   too, the joining lives in yantra.prompt: this module owns exactly
   one named layer (``env``) and never touches the whole string.
+* A PERSON MAY KEEP ANOTHER CLOCK. A host serving a household (Dvara)
+  may know that this turn's person is somewhere else -- a child at
+  university, a parent on holiday -- and says so with ``set_zone``: the
+  start time and the live time are then read on THEIR clock, and the
+  location line says it is this computer's, not theirs.
 * FLIPS ARE LIVE. The loop rebuilds each request from ``agent.system``
   (agent.py passes it per iteration), so /env (REPL) and the env chip
   (web) recompose mid-session and the very next model call sees the new
@@ -98,10 +103,18 @@ def _utc_offset(offset) -> str:
     return f"{sign}{total // 3600:02d}:{total % 3600 // 60:02d}"
 
 
-def _collect_local(cwd: Path) -> dict[str, str]:
+def _now(zone: str | None = None) -> datetime:
+    """Now, on a named zone's clock, else this machine's."""
+    if zone:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(zone))
+    return datetime.now().astimezone()
+
+
+def _collect_local(cwd: Path, zone: str | None = None) -> dict[str, str]:
     """Machine-local facts. Stdlib only; no IO beyond asking the OS
     about itself."""
-    now = datetime.now().astimezone()
+    now = _now(zone)
     tz = now.tzname() or "local time"
     return {
         "time": (f"{now.strftime('%Y-%m-%d %H:%M')} "
@@ -147,6 +160,7 @@ class EnvContext:
         self._base_captured = False                # capture exactly once
         self._agent: Any = None                    # set by attach()
         self._prompt: Any = None                   # the agent's SystemPrompt
+        self.zone: str | None = None               # the person's, when not ours
 
     # ---- collection ---------------------------------------------------------
 
@@ -157,7 +171,7 @@ class EnvContext:
         if self.mode == "off":
             return
         if self._local is None:
-            self._local = _collect_local(self.cwd)
+            self._local = _collect_local(self.cwd, self.zone)
         if self.mode == "full" and not self._geo_done:
             self._geo_done = True
             try:
@@ -174,7 +188,7 @@ class EnvContext:
         Friday" have something true to count from."""
         if self.mode == "off":
             return None
-        now = datetime.now().astimezone()
+        now = _now(self.zone)
         tz = now.tzname() or "local time"
         return (f"Current time: {now.strftime('%A %Y-%m-%d %H:%M')} "
                 f"({tz}, UTC{_utc_offset(now.utcoffset())})")
@@ -194,7 +208,9 @@ class EnvContext:
             f"- Working directory: {self._local['cwd']}",
         ]
         if self.mode == "full" and self._location:
-            lines.append(f"- Location: {self._location} (from public IP)")
+            lines.append(f"- This computer's location: {self._location} (from its "
+                         f"public IP; the person keeps {self.zone} time)" if self.zone
+                         else f"- Location: {self._location} (from public IP)")
         lines.append(POLICY)
         return "\n".join(lines)
 
@@ -236,6 +252,20 @@ class EnvContext:
             return
         self._prompt.set("env", self.render_block())
         self._prompt.apply()
+
+    def set_zone(self, zone: str | None) -> None:
+        """Read the clock in the person's own zone (an IANA name) from now
+        on, or this machine's again with None. An unknown name is a
+        ValueError, said before anything is told the wrong time."""
+        if zone:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+            try:
+                ZoneInfo(zone)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError(f"{zone!r} is not a time zone's name") from None
+        self.zone = zone or None
+        self._local = None                 # the start time, read again
+        self.reapply()
 
     def flip(self, mode: str) -> str:
         """Switch level, collecting anything the new level still needs
