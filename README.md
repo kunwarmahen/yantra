@@ -2915,6 +2915,10 @@ src/yantra/
 │                   several named phones told apart in the prompt and on
 │                   /phone, /phone use NAME for one
 │                   ([notes/134](notes/134-several-phones-by-name.md))
+├── version.py      `yantra --version` and status's "version": the day of
+│                   the last commit and that day's count (2026.10.25.3),
+│                   with the commit; from git, else the VERSION file
+│                   `sarathi image` writes into the image
 ├── status.py       `yantra status [--json]`: the release, the provider and
 │                   model a turn would use (and which setting chose
 │                   them), whether a local model is served and pulled

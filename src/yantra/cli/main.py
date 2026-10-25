@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.prompt import Prompt
 
-from yantra import unattended
+from yantra import unattended, version
 from yantra.agent import Agent, TurnEnd
 from yantra.budget import Budget
 from yantra.builder import BUILD_SYSTEM, BuildSpec, default_checks, run_build
@@ -85,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="yantra",
         description="Yantra -- a from-scratch LLM agent harness (learning project).",
     )
+    parser.add_argument("--version", action=version.Show)
     parser.add_argument("--provider", type=canonical_provider,
                         choices=["anthropic", "openai", "responses", "ollama"],
                         metavar="{anthropic,openai,responses,ollama,local}",

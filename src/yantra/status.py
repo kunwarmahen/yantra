@@ -47,7 +47,6 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 
 import httpx
@@ -65,10 +64,16 @@ LOCAL_TIMEOUT = 2.0
 
 
 def _version() -> str:
-    try:
-        return version("yantra")
-    except PackageNotFoundError:
-        return "unknown"
+    """The day of the last commit and that day's count (version.py)."""
+    from yantra import version
+
+    return version.version()
+
+
+def _commit() -> str:
+    from yantra import version
+
+    return version.commit()
 
 
 def _why(provider: str) -> str:
@@ -207,6 +212,7 @@ def report() -> dict:
     return {
         "format": FORMAT,
         "version": _version(),
+        "commit": _commit(),
         "python": sys.executable,
         "provider": provider,
         "chosen_by": why,
