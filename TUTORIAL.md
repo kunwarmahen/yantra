@@ -741,7 +741,8 @@ your next message. Disconnect takes them away again. **If Gmail stops working
 after a week,** Google has expired the sign-in (it does that every seven
 days for an app still in *Testing*). The startup line says `sign-in
 expired, not started: gmail:mine`, `setu list` says `SIGN-IN EXPIRED`,
-and the agent tells you the command: run `setu connect gmail --as mine`,
+and the agent tells you the command: run `setu connect gmail --as mine`
+(or press **Sign in again** on its card on Setu's page),
 and your next message has Gmail again, with nothing to restart. Publish
 your Google app once (Setu's README) and it stops expiring. To find a
 stopped sign-in before you need it, run `setu check`; behind Dvara it
