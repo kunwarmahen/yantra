@@ -192,6 +192,10 @@ one on into its own row, and starts a new row after clear.
   found it on some page" turns out to be how people remember, it is one
   more column in the index.
 * ~~**Export.**~~ Built: see *Sharing one* above.
+* ~~**A PDF where there is no print window.**~~ Telegram has none, so
+  Dvara makes one for `/chats export N pdf`: the same reasoning as
+  above, with the browser run headless on the server instead of in
+  front of the person (Dvara's notes/69).
 * ~~**What each step did.**~~ Built: every step's time, its wait for a
   yes, who said it and its pictures are kept with the conversation, and
   each answer here has a **steps** link
