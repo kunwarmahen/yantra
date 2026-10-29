@@ -772,10 +772,18 @@ class AsyncAgent:
 
         # Build the human-facing summary defensively: a broken summary()
         # must never block the approval flow itself.
+        #
+        # OFF THE LOOP, card and picture both. A card may ask its server
+        # first (Prahari's create_watch previews the watch; a phone's card
+        # takes a screenshot), and that can take minutes. Inline, it froze
+        # every conversation a service holds -- and on Dvara's road the
+        # preview is a look that comes back to that same service's loop,
+        # so it waited out Prahari's whole look limit for nothing.
         try:
-            summary = tool.summary(call.arguments, self.ctx)
+            summary = await asyncio.to_thread(tool.summary, call.arguments, self.ctx)
         except Exception:
             summary = f"{call.name}({json.dumps(call.arguments)})"
+        picture = await asyncio.to_thread(card_picture, tool, call.arguments)
 
         request = self._last_request = PermissionRequest(
             tool_name=call.name,
@@ -796,7 +804,7 @@ class AsyncAgent:
             summarize=lambda args: tool.summary(args, self.ctx),
             # What the card shows beside its words, if anything (a phone's
             # screen, what it would tap ringed); never sent to the model.
-            picture=card_picture(tool, call.arguments),
+            picture=picture,
         )
         # After outside text, a call that changes something asks, whatever
         # would have allowed it (outside.py).

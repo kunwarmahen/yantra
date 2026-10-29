@@ -202,6 +202,38 @@ Sarika: happy Friday
 open after let_go: False
 ```
 
+## The card that waited on itself
+
+Through Dvara, a person said yes to a GOOGL price watch and Dvara went
+quiet. The page stopped updating, a second question lapsed with *nobody
+answered within 2 minutes*, and the watch's first look failed with *the
+look took longer than 180s*. The chat model, asked why, blamed the
+broker's quote tool for being slow. A look made by hand took 16 seconds.
+
+Dvara's log, timestamped, had gaps of exactly 180 seconds: one before
+each question, and one at the second each watch was saved. The number is
+Prahari's look limit. Yantra's async loop built the card inline, and the
+card's *now:* line is a preview, which is a look. On Dvara's road a look
+is Dvara's own `POST /call`, served by the same event loop that was
+blocked building the card. So the preview waited for a loop that was
+waiting for the preview, until Prahari gave up. For those three minutes
+every conversation the service held stood still, the first look among
+them.
+
+A CARD IS BUILT OFF THE LOOP. `AsyncAgent._decide` now runs the tool's
+summary and its card picture on a worker thread, the way a tool's own
+run already was. A card may call its server: Prahari previews the watch,
+and a phone's card takes a screenshot. Now the loop is free to answer
+the preview, and the *now:* line shows the real value again instead of
+an empty one. The test gives a tool a card that can only finish when
+something else on the loop answers it. Built inline, the card comes back
+*starved*.
+
+Dvara had the same freeze a second time, in its own code: the step line
+it shows on the page asked for the same summary after the call ran. It
+now says such steps by their call ([Dvara's note
+56](https://github.com/kunwarmahen/dvara/blob/main/notes/56-a-look-as-them.md)).
+
 ## Not here
 
 - ~~**A Watches panel on the page.**~~ Built: an eye chip opens the

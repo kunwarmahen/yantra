@@ -410,3 +410,47 @@ class TestApproveWithEdits:
         asyncio.run(_run())
         assert seen[0].summarize is not None
         assert seen[0].summarize({"text": "yo"}) == "echo 'yo'"
+
+
+class TestCardOffTheLoop:
+    """A card that asks its server must not stop the loop (Prahari's
+    create_watch previews the watch; on Dvara's road that preview comes
+    back to the very loop that asked, and froze it for the look limit)."""
+
+    def test_a_card_waiting_on_the_loop_gets_its_answer(self):
+        import threading
+
+        answered = threading.Event()
+
+        class CardTool(EchoTool):
+            name = "card"
+
+            def summary(self, args, ctx):
+                # Only something else on the loop can set this; inline,
+                # the loop is the one waiting, and it never comes.
+                return "answered" if answered.wait(timeout=2) else "starved"
+
+        seen = []
+
+        def gate(request):
+            seen.append(request.summary)
+            return True
+
+        script = [
+            assistant_tool_call("call_1", "card", {"text": "hi"}),
+            assistant_text("done"),
+        ]
+        agent = make_agent(script, tools=[CardTool()], permissions=gate)
+
+        async def _run():
+            async def answer():
+                await asyncio.sleep(0.05)
+                answered.set()
+
+            helper = asyncio.ensure_future(answer())
+            events = [event async for event in agent.run_streaming("use card")]
+            await helper
+            return events
+
+        asyncio.run(_run())
+        assert seen == ["answered"]
