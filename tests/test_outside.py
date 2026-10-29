@@ -13,6 +13,11 @@ yes, or a way the guard could cost a person something it should not:
 * **One turn, and a hold is still that turn**: the next message clears
   the mark, a resume (even after a reload) keeps it.
 * **A sub-agent shares the list**, both ways.
+* **Trust is narrow**: a trusted server's answers are not outside text,
+  but a trust list cannot hold a wildcard, cannot name the web, and a
+  read from anywhere else still marks the change.
+* **Only the reading is waivable**: a spend after a read is marked as
+  asking for itself, so no "yes for the rest of the turn" covers it.
 """
 
 from __future__ import annotations
@@ -258,3 +263,122 @@ class TestTheAsyncTwin:
         send, done = asyncio.run(go())
         assert send.sent == []
         assert done["s"].refusal == REFUSED_NEEDS_PERSON
+
+
+class Schedules(Tool):
+    name = "mcp__samay__list_schedules"
+    description = "list my schedules"
+    parameters = {"type": "object", "properties": {}}
+    read_only = True
+    outside = True
+
+    def summary(self, args, ctx):
+        return "list schedules"
+
+    def run(self, args, ctx):
+        return "every morning: check the weather"
+
+
+class Spend(Send):
+    name = "mcp__shop__buy"
+    always_ask = True
+
+
+class TestTrustIsNarrow:
+    def trusting(self, script, trust, gate=yolo):
+        agent, send = agent_with(script, gate)
+        agent.registry.register(Schedules())
+        agent.trusted_reads = trust
+        return agent, send
+
+    def test_a_trusted_servers_answer_is_not_outside_text(self):
+        agent, send = self.trusting(
+            [step(("l", "mcp__samay__list_schedules", {})), step(SEND),
+             assistant_text("ok")], ("samay",))
+        list(agent.run_streaming("go"))
+        assert agent.outside_read == []
+        assert send.sent == ["evil@example.com"]
+
+    def test_one_tool_can_be_trusted_by_its_full_name(self):
+        agent, _ = self.trusting(
+            [step(("l", "mcp__samay__list_schedules", {})), assistant_text("ok")],
+            ("mcp__samay__list_schedules",))
+        list(agent.run_streaming("go"))
+        assert agent.outside_read == []
+
+    def test_a_read_from_an_untrusted_server_still_marks_the_change(self):
+        agent, send = self.trusting([step(READ), step(SEND), assistant_text("ok")],
+                                    ("samay",))
+        done = results(agent.run_streaming("go"))
+        assert send.sent == []
+        assert done["s"].refusal == REFUSED_NEEDS_PERSON
+
+    def test_a_server_name_does_not_cover_another_that_starts_the_same(self):
+        assert not outside.trusted(Schedules(), ("sam",))
+
+    def test_this_programs_own_tools_are_never_trusted(self):
+        assert not outside.trusted(Open(), ("browser_open",))
+
+    def test_a_wildcard_is_refused_with_the_fix(self):
+        try:
+            outside.check_trusted(["mcp__samay__*"])
+        except ValueError as exc:
+            assert "mcp__samay__list_schedules" in str(exc)
+        else:
+            raise AssertionError("a wildcard was accepted")
+
+    def test_a_tool_that_is_not_a_servers_is_refused(self):
+        try:
+            outside.check_trusted(["tradingview__open"])
+        except ValueError as exc:
+            assert "mcp__SERVER__TOOL" in str(exc)
+        else:
+            raise AssertionError("a non-MCP tool name was accepted")
+
+    def test_a_list_is_kept_in_order_without_repeats(self):
+        assert outside.check_trusted([" samay", "homeassistant", "samay"]) \
+            == ("samay", "homeassistant")
+        assert outside.check_trusted(None) == ()
+
+    def test_a_sub_agent_shares_the_trust(self):
+        from yantra.subagent import SubagentSpawner
+        parent, _ = agent_with([], yolo)
+        parent.trusted_reads = ("samay",)
+        child = SubagentSpawner(parent)._build(system="s", allowed=[],
+                                               max_iterations=2, number=1)
+        assert child.trusted_reads == ("samay",)
+
+    def test_the_async_twin_honours_it(self):
+        async def go():
+            agent, send = agent_with(
+                [step(("l", "mcp__samay__list_schedules", {})), step(SEND),
+                 assistant_text("ok")], yolo, cls=AsyncAgent)
+            agent.registry.register(Schedules())
+            agent.trusted_reads = ("samay",)
+            [e async for e in agent.run_streaming("go")]
+            return send
+        assert asyncio.run(go()).sent == ["evil@example.com"]
+
+
+class TestOnlyTheReadingIsWaivable:
+    def asked_after_read(self, tool, call):
+        asked: list[PermissionRequest] = []
+
+        def person(request):
+            if not request.read_only:
+                asked.append(request)
+            return request.read_only
+        agent, _ = agent_with([step(READ), step(call), assistant_text("ok")], person)
+        if tool is not None:
+            agent.registry.register(tool)
+        list(agent.run_streaming("go"))
+        return asked[0]
+
+    def test_a_send_asks_only_because_of_the_read(self):
+        request = self.asked_after_read(None, ("s", "mcp__gmail__send", {"to": "x"}))
+        assert request.always_ask and request.only_after_reading
+
+    def test_a_spend_asks_for_itself_whatever_was_read(self):
+        request = self.asked_after_read(Spend(), ("b", "mcp__shop__buy", {"to": "x"}))
+        assert request.always_ask and not request.only_after_reading
+        assert request.after_reading  # the card still says what was read

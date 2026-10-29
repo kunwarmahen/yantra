@@ -35,6 +35,22 @@ its parent's list -- what a child read reaches the parent through its
 answer, and what the parent read reached the child through its
 objective -- so a read in either marks a write in both.
 
+A SOURCE THE OWNER TRUSTS IS NOT OUTSIDE. Some servers answer with the
+person's own words: Samay's list is the schedules they made, Home
+Assistant's states are their own lights. Asking before every change
+after reading one of those protects nobody, and teaches the person to
+say yes without looking -- which is the one habit this rule depends on
+them not having. So the host may name trusted sources
+(``Agent.trusted_reads``, Dvara's ``trusted`` per person): a whole
+server by its name (``samay``), or one tool by its full name
+(``mcp__prahari__list_watches``). NO WILDCARDS, for the reason Dvara's
+``allow`` rules take none: trust that is too wide costs a page nobody
+looked at, and a pattern cannot say in advance which tools a server
+will grow. A trusted read is not noted at all, so it puts nothing on a
+card either. Only an MCP server's tools can be trusted: ``web_fetch``,
+the browser and the site tools read the open web, which is never
+anyone's own words.
+
 What this does NOT do, on purpose:
 
 * A LOOK CAN STILL CARRY WORDS OUT. ``web_fetch`` to an address with
@@ -73,6 +89,43 @@ def brings_outside(tool: Any) -> bool:
     return bool(getattr(tool, "outside", False))
 
 
+def check_trusted(entries: Any) -> tuple[str, ...]:
+    """A trust list as written, or ValueError with the words to fix it.
+
+    Each entry is a server's name or one MCP tool's full name, and
+    nothing with a wildcard in it."""
+    if entries is None:
+        return ()
+    if isinstance(entries, str) or not isinstance(entries, (list, tuple)):
+        raise ValueError('trusted must be a list of names, like ["samay"]')
+    out: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ValueError("each trusted entry must be a server or tool name")
+        entry = entry.strip()
+        if any(ch in entry for ch in "*?["):
+            raise ValueError(
+                f"trusted {entry!r} has a wildcard; name the server (samay) "
+                f"or the one tool (mcp__samay__list_schedules) instead")
+        if "__" in entry and not entry.startswith("mcp__"):
+            raise ValueError(
+                f"trusted {entry!r} is not a server's tool; only an MCP "
+                f"server's tools can be trusted (mcp__SERVER__TOOL)")
+        if entry not in out:
+            out.append(entry)
+    return tuple(out)
+
+
+def trusted(tool: Any, sources: Sequence[str]) -> bool:
+    """This tool's answers come from a source the owner trusts: its own
+    full name is listed, or it is an MCP tool of a listed server. Never
+    a tool of this program's own: those read the open web."""
+    name = str(getattr(tool, "name", ""))
+    if not name.startswith("mcp__"):
+        return False
+    return any(name == s or name.startswith(f"mcp__{s}__") for s in sources)
+
+
 def acts(tool: Any) -> bool:
     """A call to this tool changes something: its own ``acts`` when it
     says, else anything not read-only."""
@@ -96,10 +149,11 @@ def what_was_read(name: str, arguments: dict[str, Any], text: str) -> str:
 
 
 def noted(read: list[str], tool: Any, arguments: dict[str, Any],
-          text: str) -> None:
+          text: str, trust: Sequence[str] = ()) -> None:
     """Add one finished call's read to the turn's list, if it brought
-    outside text. In place: a sub-agent holds the same list."""
-    if not brings_outside(tool):
+    outside text from a source nobody trusts. In place: a sub-agent
+    holds the same list."""
+    if not brings_outside(tool) or trusted(tool, trust):
         return
     words = what_was_read(getattr(tool, "name", "?"), arguments, text)
     if words not in read:
@@ -120,6 +174,7 @@ def mark(request: Any, tool: Any, read: Sequence[str]) -> None:
     nobody's standing yes can answer -- and say why on its card."""
     if not read or not acts(tool):
         return
+    request.only_after_reading = not request.always_ask
     request.always_ask = True
     request.after_reading = tuple(read)
     line = after_reading(read)

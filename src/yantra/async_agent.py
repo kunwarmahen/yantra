@@ -202,6 +202,11 @@ class AsyncAgent:
         #: sub-agents (subagent.py shares it), cleared only by a new
         #: message -- a resumed hold is still the turn that read it.
         self.outside_read: list[str] = []
+        #: Sources the owner trusts (outside.py): an MCP server by its name,
+        #: or one of its tools by its full name. Their answers are not
+        #: noted as outside text. Set by the host after building; a
+        #: sub-agent shares its parent's.
+        self.trusted_reads: tuple[str, ...] = ()
         # ---- a job stopped by a restart (carry.py) ----
         #: Set while a turn runs; still set in a checkpoint written by a
         #: process that was killed or a task that was cancelled.
@@ -872,7 +877,8 @@ class AsyncAgent:
                                     images=output.images)
             else:
                 result = ToolResult(call.id, _truncate_middle(output))
-        outside.noted(self.outside_read, tool, call.arguments, result.content)
+        outside.noted(self.outside_read, tool, call.arguments, result.content,
+                      self.trusted_reads)
         self.on_after_tool(call, result)
         return result
 

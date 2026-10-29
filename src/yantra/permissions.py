@@ -166,6 +166,11 @@ class PermissionRequest:
     #: line says it already; this is the same thing for a host or a gate
     #: that wants to name it in a refusal. () for every ordinary call.
     after_reading: tuple[str, ...] = ()
+    #: Reading is the ONLY reason this call asks: the tool itself does not
+    #: always ask (a spend, a phone's ``confirm``). A host that offers "yes
+    #: for the rest of this turn" offers it on these and nothing else --
+    #: a purchase is asked about every time, whatever was read before it.
+    only_after_reading: bool = False
     #: Who answered, in words, when somebody was asked: "you, in the
     #: terminal", "asha on telegram". Written by a gate that asks a person;
     #: None when nobody was (a read-only tool, yolo, a standing rule). The

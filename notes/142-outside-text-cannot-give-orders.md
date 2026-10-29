@@ -160,6 +160,9 @@ No cloud model was run. That trial waits on a key.
   has spoken again, and the cost of carrying the mark for the whole
   conversation is a question on every change, forever. The turn is the
   unit the person is watching.
+* ~~**Asking less without asking never.**~~ Two ways were added:
+  servers you trust aren't outside text, and one yes can cover the rest
+  of a task. See [note 148](148-a-source-you-trust.md).
 * **Kept tests are unaffected.** Their stand-ins say they're read-only
   ([note 141](141-a-test-you-already-had.md)).
 

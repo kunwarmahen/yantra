@@ -750,7 +750,11 @@ tool is classed by Setu's manifest, not by the server's own hint: reads
 run, writes ask, anything that spends asks every time even under `--yolo`,
 and once a turn has read an email, a page or any server's answer, every
 change after it asks too, with what was read on the card's first line
-([notes/142](notes/142-outside-text-cannot-give-orders.md)),
+([notes/142](notes/142-outside-text-cannot-give-orders.md)). A server
+whose answers are your own words (your Samay schedules, your lights) can
+be named trusted, and then reading it asks nothing new; a host can offer
+"approve all for this task" on a question asked only because of a read
+([notes/148](notes/148-a-source-you-trust.md)),
 and a tool the manifest does not list is not registered at all, unless
 the manifest says `"*" = "write"` for a server whose tool names are its
 own (Home Assistant's), and then it is asked about
@@ -2574,7 +2578,12 @@ src/yantra/
 │                   standing rule covers it, and the card's first line
 │                   says what was read. One list per turn, shared with
 │                   sub-agents, kept across a hold
-│                   ([notes/142](notes/142-outside-text-cannot-give-orders.md))
+│                   ([notes/142](notes/142-outside-text-cannot-give-orders.md)).
+│                   Agent.trusted_reads names servers whose answers are
+│                   the person's own words (no wildcards, never the web),
+│                   and only_after_reading marks a call a host may let one
+│                   "yes for this task" cover
+│                   ([notes/148](notes/148-a-source-you-trust.md))
 ├── hold.py         a turn that STOPS for an approval and carries on when
 │                   it comes: Held (the batch, what already ran, what
 │                   waits), resume()'s answer checks -- all before anything
