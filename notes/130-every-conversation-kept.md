@@ -163,9 +163,23 @@ from the page. The `notes.txt` conversation above was exported over
 HTTP: `read_file` is named, and the tool's own output line (`1	The spare
 key…`) is not in the file.
 
+## Named, pinned, and every road it went on
+
+A title from the first words is right until the person has a better one.
+`rename(id, title)` keeps a title of the person's own in the row
+(`named`), which the list shows and the search finds instead; the next
+turn rewrites the first-words title underneath without touching it, and
+an empty name gives the first words back. `pin(id)` keeps a row above
+the newest: `listed` orders by pinned first, so `/chats N` counts the
+same rows a page shows. Each row also remembers every road it went on
+(`roads`), not only the one it is on now, so a conversation carried from
+Telegram to the page says both. All three are columns an older file
+gains when it is opened. Dvara's page is the first to set them (Dvara's
+notes/71); the terminal and Yantra's page show the titles and the order.
+
 ## Tests
 
-`tests/test_history.py` (33): a shared one names its tools and never shows their output, counts a tool used twice once per answer, is named by its local date and first words, is written by `/chats export` and never over a file, and comes from the page as `text/markdown`; kept with its first words as its title;
+`tests/test_history.py` (40): a shared one names its tools and never shows their output, counts a tool used twice once per answer, is named by its local date and first words, is written by `/chats export` and never over a file, and comes from the page as `text/markdown`; kept with its first words as its title;
 each turn replaces the row; nothing kept before the person says
 anything; newest first; search finds words in the answer; every word
 must match, by prefix; typed syntax is never FTS5 syntax; tools read
@@ -175,7 +189,11 @@ terminal keeps every turn, `/clear` starts a second row, `/chats`
 lists, searches and reads, `open` grows the same row, `delete` asks and
 a no keeps it, the open one can't be deleted; the page lists one as
 open now, searches, reads, deletes, refuses the open one (409), carries
-one on into its own row, and starts a new row after clear.
+one on into its own row, and starts a new row after clear; a name shows
+and is searched, survives the next turn, and an empty one gives the
+first words back; renaming or pinning one that's gone says so; a pin
+stays above newer rows until unpinned; one carried on another road
+remembers both; an older file gains the columns.
 
 ## What is not here yet
 
@@ -188,6 +206,9 @@ one on into its own row, and starts a new row after clear.
 * ~~**A conversation as a test.**~~ Built: one is kept as a case that
   replays its last turn with the tools answering from what they said
   then ([note 141](141-a-test-you-already-had.md)).
+* **Naming and pinning from the terminal.** The log can (above); the
+  terminal's `/chats` and Yantra's page don't offer it yet, only Dvara's
+  page does.
 * **Searching tool output.** Left out on purpose (above). If "the agent
   found it on some page" turns out to be how people remember, it is one
   more column in the index.

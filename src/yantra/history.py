@@ -34,6 +34,12 @@ can only hide is a history you cannot trust with anything. What it does
 NOT reach is a ``/save`` you made by hand: that was a separate, deliberate
 copy, and ``/load``'s store still has it.
 
+NAMED AND PINNED BY THE PERSON. ``rename`` gives one a title of the
+person's own, which the list shows and the search finds instead of its
+first words (an empty one gives those back); ``pin`` keeps it above the
+newest. Each row also remembers every road it went on, not only the one
+it is on now, so one carried from a phone to the page says both.
+
 SHARED AS WORDS, NOT AS A RECORD. ``export_markdown`` writes one
 conversation as a Markdown file to send somebody, save, or print to PDF:
 the person's words, the agent's answers, and under each answer the NAMES
@@ -84,6 +90,14 @@ CREATE TABLE IF NOT EXISTS conversations (
 CREATE VIRTUAL TABLE IF NOT EXISTS conversation_words
     USING fts5(title, body);
 """
+#: Added after the first files were written: an older file gains them.
+#: ``named`` is a title the person gave it (kept over the first words),
+#: ``pinned`` keeps it at the top, ``roads`` is every road it went on.
+LATER_COLUMNS = (
+    ("named", "ALTER TABLE conversations ADD COLUMN named TEXT NOT NULL DEFAULT ''"),
+    ("pinned", "ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"),
+    ("roads", "ALTER TABLE conversations ADD COLUMN roads TEXT NOT NULL DEFAULT ''"),
+)
 
 
 def default_path() -> Path | None:
@@ -122,9 +136,13 @@ class Kept:
     #: each match between HIT and END (control characters, so nothing a
     #: conversation says can be mistaken for a mark).
     snippet: str = ""
+    #: Every road it went on, first first ("Telegram", "the page"): one
+    #: conversation carried on in two places says both.
+    roads: tuple[str, ...] = ()
+    pinned: bool = False
 
     def as_dict(self) -> dict:
-        return dict(self.__dict__)
+        return {**self.__dict__, "roads": list(self.roads)}
 
 
 # ---- what a payload says, in words ----------------------------------------------
@@ -279,6 +297,10 @@ class ConversationLog:
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.execute("PRAGMA secure_delete = ON")
         self._db.executescript(SCHEMA)
+        have = {r[1] for r in self._db.execute("PRAGMA table_info(conversations)")}
+        for column, alter in LATER_COLUMNS:
+            if column not in have:
+                self._db.execute(alter)
         self._db.commit()
 
     def close(self) -> None:
@@ -308,33 +330,64 @@ class ConversationLog:
         title = title_of(payload)
         with self._lock:
             row = self._db.execute(
-                "SELECT n FROM conversations WHERE id = ?",
+                "SELECT n, named, roads FROM conversations WHERE id = ?",
                 (conversation_id,)).fetchone()
             if row is None:
                 cur = self._db.execute(
                     "INSERT INTO conversations (id, started_at, updated_at, "
-                    "title, road, folder, model, turns, payload) "
-                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    "title, road, folder, model, turns, payload, roads) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (conversation_id, now, now, title, road, folder,
-                     payload.get("model") or "", turns, json.dumps(payload)))
-                n = cur.lastrowid
+                     payload.get("model") or "", turns, json.dumps(payload), road))
+                n, named = cur.lastrowid, ""
             else:
-                n = row[0]
+                n, named, roads = row
                 # The road is where it is going on NOW: a conversation
                 # carried on from the page to the terminal says terminal.
+                # ``roads`` remembers every one it went on.
+                went = [r for r in roads.split("\n") if r]
+                if road not in went:
+                    went.append(road)
                 self._db.execute(
                     "UPDATE conversations SET updated_at = ?, title = ?, "
-                    "road = ?, folder = ?, model = ?, turns = ?, payload = ? "
-                    "WHERE n = ?",
+                    "road = ?, folder = ?, model = ?, turns = ?, payload = ?, "
+                    "roads = ? WHERE n = ?",
                     (now, title, road, folder, payload.get("model") or "",
-                     turns, json.dumps(payload), n))
+                     turns, json.dumps(payload), "\n".join(went), n))
                 self._db.execute("DELETE FROM conversation_words WHERE rowid = ?",
                                  (n,))
             self._db.execute(
                 "INSERT INTO conversation_words (rowid, title, body) "
-                "VALUES (?,?,?)", (n, title, body_of(payload)))
+                "VALUES (?,?,?)", (n, named or title, body_of(payload)))
             self._db.commit()
         return True
+
+    def rename(self, conversation_id: str, title: str) -> bool:
+        """The person's own title for it, found by search too; an empty
+        one gives its first words back. False when there's no such one."""
+        named = " ".join(title.split())[:TITLE]
+        with self._lock:
+            row = self._db.execute(
+                "SELECT n, title, payload FROM conversations WHERE id = ?",
+                (conversation_id,)).fetchone()
+            if row is None:
+                return False
+            n, first, payload = row
+            self._db.execute("UPDATE conversations SET named = ? WHERE n = ?", (named, n))
+            self._db.execute("DELETE FROM conversation_words WHERE rowid = ?", (n,))
+            self._db.execute(
+                "INSERT INTO conversation_words (rowid, title, body) VALUES (?,?,?)",
+                (n, named or first, body_of(json.loads(payload))))
+            self._db.commit()
+        return True
+
+    def pin(self, conversation_id: str, pinned: bool = True) -> bool:
+        """Kept at the top of the list (or not). False when there's no such one."""
+        with self._lock:
+            done = self._db.execute("UPDATE conversations SET pinned = ? WHERE id = ?",
+                                    (int(pinned), conversation_id)).rowcount
+            self._db.commit()
+        return bool(done)
 
     def delete(self, conversation_id: str) -> bool:
         """Gone for good: the row, its words, and the pages they were on."""
@@ -356,32 +409,42 @@ class ConversationLog:
 
     # ---- reading -------------------------------------------------------------
 
-    _COLUMNS = ("c.id, c.title, c.road, c.folder, c.model, c.turns, "
-                "c.started_at, c.updated_at")
+    # A title the person gave wins over the first words.
+    _COLUMNS = ("c.id, CASE WHEN c.named != '' THEN c.named ELSE c.title END, "
+                "c.road, c.folder, c.model, c.turns, c.started_at, c.updated_at")
+    _MARKS = "c.roads, c.pinned"
+
+    @staticmethod
+    def _kept(row) -> Kept:
+        *head, roads, pinned = row
+        # a row kept before roads were has only the one it is on
+        went = tuple(r for r in (roads or "").split("\n") if r) or (head[2],)
+        return Kept(*head, roads=went, pinned=bool(pinned))
 
     def listed(self, words: str = "", *, folder: str | None = None,
                limit: int = 200) -> list[Kept]:
-        """Newest first; with ``words``, only the ones that say all of them;
-        with ``folder``, only the ones held there (a host that keeps one
-        log per person and names each agent as the folder: Dvara)."""
+        """Pinned ones first, then newest first; with ``words``, only the
+        ones that say all of them; with ``folder``, only the ones held
+        there (a host that keeps one log per person and names each agent
+        as the folder: Dvara)."""
         query = match_of(words)
         where, args = ("AND c.folder = ? ", [folder]) if folder is not None else ("", [])
         with self._lock:
             if not query:
                 rows = self._db.execute(
-                    f"SELECT {self._COLUMNS}, '' FROM conversations c "
+                    f"SELECT {self._COLUMNS}, '', {self._MARKS} FROM conversations c "
                     f"WHERE 1 {where}"
-                    "ORDER BY c.updated_at DESC, c.n DESC LIMIT ?",
+                    "ORDER BY c.pinned DESC, c.updated_at DESC, c.n DESC LIMIT ?",
                     (*args, limit)).fetchall()
             else:
                 rows = self._db.execute(
                     f"SELECT {self._COLUMNS}, snippet(conversation_words, 1, "
-                    "char(2), char(3), '…', 12) FROM conversation_words w "
+                    f"char(2), char(3), '…', 12), {self._MARKS} FROM conversation_words w "
                     "JOIN conversations c ON c.n = w.rowid "
                     f"WHERE conversation_words MATCH ? {where}"
-                    "ORDER BY c.updated_at DESC, c.n DESC LIMIT ?",
+                    "ORDER BY c.pinned DESC, c.updated_at DESC, c.n DESC LIMIT ?",
                     (query, *args, limit)).fetchall()
-        return [Kept(*r) for r in rows]
+        return [self._kept(r) for r in rows]
 
     def stopped(self, road: str) -> tuple[str, dict] | None:
         """The newest conversation on ``road``, when a restart stopped it
@@ -411,11 +474,11 @@ class ConversationLog:
         """One conversation for the reading view: its row and its entries."""
         with self._lock:
             row = self._db.execute(
-                f"SELECT {self._COLUMNS}, '', c.payload FROM conversations c "
+                f"SELECT {self._COLUMNS}, '', {self._MARKS}, c.payload FROM conversations c "
                 "WHERE c.id = ?", (conversation_id,)).fetchone()
         if row is None:
             return None
-        return {**Kept(*row[:-1]).as_dict(), "entries": entries(json.loads(row[-1]))}
+        return {**self._kept(row[:-1]).as_dict(), "entries": entries(json.loads(row[-1]))}
 
 
 def open_log(path: Path | None = None) -> ConversationLog | None:

@@ -1299,7 +1299,7 @@ builder agent in its own workspace and reports BUILD GREEN/RED without
 touching this session's history. `/save`+`--resume` persist
 sessions to `.yantra/session.sqlite3` (append-only versions). Apart from
 those, every conversation is kept by itself as it goes, to read again:
-`/chats` lists them newest first, `/chats WORDS` searches what was said,
+`/chats` lists them newest first (pinned ones above), `/chats WORDS` searches what was said,
 `/chats N` reads one, `/chats open N` carries it on, `/chats export N`
 writes it as a Markdown file to share and `/chats delete N` deletes it
 for good; the page's **history** button is the same list, with **share**
@@ -2623,7 +2623,8 @@ src/yantra/
 │                   YANTRA_HISTORY=off|PATH, --no-history; a host keeping
 │                   one log per person narrows by folder (Dvara's /chats);
 │                   export_markdown shares one: words, answers, the tools'
-│                   NAMES, never their output
+│                   NAMES, never their output; rename and pin, and every
+│                   road a row went on (notes/130)
 │                   ([notes/130](notes/130-every-conversation-kept.md))
 ├── keeps.py        `yantra keeps [--json]`: where what is yours alone is kept
 │                   (the state home, ~/.yantra/skills, a moved History), for

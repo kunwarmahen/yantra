@@ -392,3 +392,80 @@ def test_the_page_says_when_nothing_is_kept():
     assert client.get("/api/chats").json() == {"kept": False, "rows": [],
                                                 "current": None, "total": 0}
     assert client.get("/api/chats/x").status_code == 404
+
+
+# ---- named, pinned, and every road it went on --------------------------------------
+
+
+def test_a_renamed_conversation_shows_and_is_found_by_its_new_title(log):
+    talked(log, "a", "how do I reset the router", "Hold the button.")
+    assert log.rename("a", "  Router   fix ")
+    assert log.listed()[0].title == "Router fix"
+    assert [r.id for r in log.listed("fix")] == ["a"]
+    assert log.read("a")["title"] == "Router fix"
+
+
+def test_a_new_turn_keeps_the_title_the_person_gave(log):
+    agent = talked(log, "a", "how do I reset the router", "Hold the button.")
+    log.rename("a", "Router fix")
+    agent.provider.script.append(assistant_text("Ten seconds."))
+    list(agent.run_streaming("how long"))
+    log.record("a", agent, provider_name="scripted", road="terminal", folder="/w")
+    assert log.listed()[0].title == "Router fix"
+    assert [r.id for r in log.listed("fix")] == ["a"]
+
+
+def test_an_empty_name_gives_the_first_words_back(log):
+    talked(log, "a", "how do I reset the router", "Hold the button.")
+    log.rename("a", "Router fix")
+    log.rename("a", "")
+    assert log.listed()[0].title == "how do I reset the router"
+    assert log.listed("fix") == []
+
+
+def test_renaming_or_pinning_one_that_is_gone_says_so(log):
+    assert not log.rename("nope", "x")
+    assert not log.pin("nope")
+
+
+def test_a_pinned_conversation_stays_above_newer_ones_until_unpinned(log):
+    talked(log, "old", "first question", "first answer")
+    talked(log, "new", "second question", "second answer")
+    assert log.pin("old")
+    rows = log.listed()
+    assert [r.id for r in rows] == ["old", "new"]
+    assert rows[0].pinned and not rows[1].pinned
+    log.pin("old", False)
+    assert [r.id for r in log.listed()] == ["new", "old"]
+
+
+def test_one_carried_on_another_road_remembers_both(log):
+    talked(log, "a", "hello", "hi")
+    payload = log.payload("a")
+    log.keep("a", payload, road="Telegram")
+    log.keep("a", payload, road="terminal")
+    row = log.listed()[0]
+    assert row.road == "terminal"
+    assert row.roads == ("terminal", "Telegram")
+    assert row.as_dict()["roads"] == ["terminal", "Telegram"]
+
+
+def test_a_file_written_before_names_and_pins_gains_them(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.sqlite"
+    db = sqlite3.connect(path)
+    db.executescript("""
+    CREATE TABLE conversations (n INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL
+      UNIQUE, started_at TEXT NOT NULL, updated_at TEXT NOT NULL, title TEXT NOT NULL,
+      road TEXT NOT NULL, folder TEXT NOT NULL, model TEXT NOT NULL, turns INTEGER
+      NOT NULL, payload TEXT NOT NULL);
+    CREATE VIRTUAL TABLE conversation_words USING fts5(title, body);
+    INSERT INTO conversations VALUES (1, 'a', '2026-01-01T00:00:00+00:00',
+      '2026-01-01T00:00:00+00:00', 'old one', 'page', '/w', 'm', 1, '{"history": []}');
+    """)
+    db.commit()
+    db.close()
+    log = ConversationLog(path)
+    row = log.listed()[0]
+    assert (row.title, row.roads, row.pinned) == ("old one", ("page",), False)
+    assert log.pin("a") and log.rename("a", "kept")

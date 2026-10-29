@@ -1967,7 +1967,7 @@ is kept by itself as it goes. You don't have to save anything. Later,
 when you want that answer from last week again:
 
 ```
-/chats                 every conversation kept, newest first
+/chats                 every conversation kept, newest first (pinned ones on top)
 /chats boiler          only the ones that mention "boiler"
 /chats 2               read number 2 from the list
 /chats open 2          go on with it from where it stopped
