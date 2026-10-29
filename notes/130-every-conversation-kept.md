@@ -202,7 +202,8 @@ remembers both; an older file gains the columns.
   one file per person, each agent named as the row's folder
   (`listed(folder=...)`); what its old `/new` book held came over with
   its own dates (`keep(at=...)`). Its `/chats` searches and deletes, and
-  Sarathi's home page has a History button (Dvara's notes/50).
+  Sarathi's home page lists them beside its chat (Dvara's notes/50,
+  Sarathi's notes/33).
 * ~~**A conversation as a test.**~~ Built: one is kept as a case that
   replays its last turn with the tools answering from what they said
   then ([note 141](141-a-test-you-already-had.md)).
