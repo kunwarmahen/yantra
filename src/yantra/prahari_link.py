@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -80,6 +81,8 @@ THEN_SHOWN = 240
 SHOWN = 6
 #: The panel's verbs, and whether each names one watch.
 VERBS = {"list": False, "looks": True, "pause": True, "resume": True, "rm": True}
+#: How often, as the panel's box takes it: "30m", "3h", "1d", "90 min".
+EVERY_RE = re.compile(r"^\d{1,4}\s*[a-z]{1,8}$")
 #: The looks a person should hear about on the page: it mattered, or it
 #: needs them. A quiet look, a learning one and a broken one are left out
 #: (a watch broken too often pauses, and its row says why).
@@ -561,6 +564,17 @@ class Prahari:
             out.append({**look, "name": watch.get("name", ""),
                         "sentence": watch.get("sentence", "")})
         return out
+
+    def every(self, watch: str, step: str) -> Any:
+        """How often a watch looks, changed from the panel: ``prahari edit
+        ID --every STEP``, which keeps what it saw. Prahari says no to a
+        step too short, in words."""
+        if not WORD_RE.match(watch):
+            raise PrahariLinkError(f"which watch? {watch!r} is not an id")
+        step = step.strip()
+        if not EVERY_RE.match(step):
+            raise PrahariLinkError(f"{step!r} isn't how often: say 30m, 3h or 1d")
+        return self._json([*self._base(), "edit", watch, "--every", step], "edit")
 
     def look_now(self, watch: str) -> None:
         """Start one look and do not wait for it: a look may take minutes,

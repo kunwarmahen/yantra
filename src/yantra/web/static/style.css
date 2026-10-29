@@ -2069,6 +2069,8 @@ pre.output { color: var(--ink); }
 .conn-count { font-size: 12px; color: var(--ink-2); }
 .conn-sub code, .conn-cmd code { font-family: var(--mono); font-size: 12px; }
 .conn-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.watch-every { width: 4.5em; padding: 2px 6px; font: inherit; color: inherit;
+  background: transparent; border: 1px solid var(--line); border-radius: 4px; }
 .conn-form {
   grid-column: 2 / 4;
   display: flex; gap: 8px; flex-wrap: wrap; align-items: center;

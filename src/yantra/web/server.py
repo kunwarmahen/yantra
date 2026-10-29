@@ -2361,6 +2361,16 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     def watches_looks(watch_id: str) -> dict[str, Any]:
         return {"looks": prahari_call(require_prahari(), "looks", watch_id)}
 
+    @app.post("/api/watches/{watch_id}/every")
+    def watches_every(watch_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """How often it looks, from the panel's box; what it saw is kept."""
+        from yantra.prahari_link import PrahariLinkError
+        try:
+            return {"done": "every", "result": require_prahari().every(
+                watch_id, str(body.get("every") or ""))}
+        except PrahariLinkError as exc:
+            raise HTTPException(400, f"prahari: {exc}") from None
+
     @app.post("/api/watches/{watch_id}/{action}")
     def watches_act(watch_id: str, action: str) -> dict[str, Any]:
         """Pause, resume, delete -- the person's own hand, so no card -- or

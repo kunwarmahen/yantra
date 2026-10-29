@@ -22,6 +22,11 @@ An **eye** chip in the header, `2 watching`, opens a **Watches** panel:
   now*, *heard at the inlet*, *woken by a knock* — and what it saw),
   **look now**, **pause** / **resume**, **delete** (asked once, in a
   dialog, because a watch's memory of what it has seen goes with it);
+* on each watch that looks, a box with how often (*30m*, *3h*, *1d*) and
+  **set**: `prahari edit ID --every STEP`, which keeps what it saw and
+  brings the next look nearer when the step got shorter. The box takes a
+  number and a word and nothing else, so nothing typed there reaches
+  Prahari's command line as a flag;
 * a warning at the top when `prahari serve` isn't running, and where news
   goes (*to Yantra's page (its Watches panel) and Prahari's own*, or *to
   mahen's chat through Dvara, and to Yantra's page*).

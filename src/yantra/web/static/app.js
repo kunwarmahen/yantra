@@ -2545,6 +2545,17 @@ async function watchAct(id, action) {
   await loadWatches(false);
 }
 
+async function watchEvery(id, every) {
+  const res = await fetch(`/api/watches/${encodeURIComponent(id)}/every`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ every: every.trim() }),
+  });
+  const data = await res.json();
+  if (!res.ok) { addBanner(`watches: ${data.detail}`, true); return; }
+  toast(`${id} looks every ${data.result.every} now — what it saw is kept`);
+  await loadWatches(false);
+}
+
 function renderWatches() {
   const d = watch.data;
   const body = $("#watch-body");
@@ -2606,6 +2617,16 @@ function renderWatches() {
       renderWatches();
     });
     if (!w.listen && w.state === "active") button("look now", "", () => watchAct(w.id, "look"));
+    if (!w.listen) {
+      // how often it looks; what it saw is kept (Prahari's watches.update)
+      const box = document.createElement("input");
+      box.className = "watch-every";
+      box.value = w.every || "";
+      box.size = 5;
+      box.setAttribute("aria-label", "how often it looks, like 30m, 3h or 1d");
+      actions.append(box);
+      button("set", "", () => watchEvery(w.id, box.value));
+    }
     if (w.state === "active") button("pause", "", () => watchAct(w.id, "pause"));
     if (w.state === "paused") button("resume", "primary", () => watchAct(w.id, "resume"));
     button("delete", "danger", async () => {

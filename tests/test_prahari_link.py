@@ -86,6 +86,8 @@ FAKE_PRAHARI = """\
                                                   else "active"}}))
     elif args[0] == "rm":
         print(json.dumps({{"removed": args[1]}}))
+    elif args[0] == "edit":
+        print(json.dumps({{"id": args[1], "every": args[args.index("--every") + 1]}}))
     elif args[0] == "look":
         pass
     elif args[0] == "mcp":
@@ -400,6 +402,20 @@ class TestThePanel:
             made = calls(fake[1])
             assert ["--state", state, "pause", "w-1", "--json"] in made
             assert ["--state", state, "rm", "w-1", "--json"] in made
+        finally:
+            manager.shutdown()
+
+    def test_how_often_goes_to_prahari_and_a_word_that_isnt_a_step_does_not(
+            self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            got = client.post("/api/watches/w-1/every", json={"every": "30m"})
+            assert got.status_code == 200 and got.json()["result"]["every"] == "30m"
+            for wrong in ("", "soon", "30m; rm -rf /", "--state /x"):
+                said = client.post("/api/watches/w-1/every", json={"every": wrong})
+                assert said.status_code == 400 and "30m, 3h or 1d" in said.json()["detail"]
+            assert ["--state", str(tmp_path / "state"), "edit", "w-1", "--every", "30m",
+                    "--json"] in calls(fake[1])
         finally:
             manager.shutdown()
 

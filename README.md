@@ -949,7 +949,8 @@ are for accounts, pages and APIs
 **eye** chip (*2 watching*) opens the Watches panel: each watch in
 Prahari's own sentence, what happens when it fires, its last look and
 every look (*fired · heard at the inlet*), and *look now*,
-*pause*/*resume*, *delete*. It runs Prahari's own commands (`prahari
+*pause*/*resume*, *delete*, and how often it looks (a box, *30m*, and
+*set*; what it saw is kept). It runs Prahari's own commands (`prahari
 list --json` …), so it works whether or not `prahari serve` is up, and
 says at the top when it isn't. A **seen** chip lights when one of your
 watches fired since you last looked, and the panel opens with **what
@@ -2885,7 +2886,7 @@ src/yantra/
 │                   the check's profile is closed, so the look isn't left
 │                   waiting on the chat's lock ([notes/140](notes/140-a-watch-offered.md));
 │                   the page's Watches panel through `prahari list|looks|
-│                   pause|resume|rm --json` and a look now (`prahari look`,
+│                   pause|resume|rm|edit --every --json` and a look now (`prahari look`,
 │                   given this Yantra when nothing names one), and the seen
 │                   chip: this person's looks that fired
 │                   ([notes/147](notes/147-the-watches-on-the-page.md))
