@@ -70,7 +70,9 @@ programs or as Podman containers.
 * **[Vaani](https://github.com/kunwarmahen/vaani)** makes a Home Assistant Voice puck answer with your
   agents, through dvara: the wake word, the question heard by a Whisper
   on your computer, whoever asked told apart by voice, the answer
-  spoken by Piper. Yantra knows nothing of it.
+  spoken by Piper; the agent's questions asked there too, a yes in the
+  asker's voice and a spoken PIN for an `always_ask` step. Yantra knows
+  nothing of it.
 * **[dvara](https://github.com/kunwarmahen/dvara)** serves agents to many people over Telegram or HTTP. It
   imports Yantra as a library; Yantra knows nothing of it.
   [Its tutorial](https://github.com/kunwarmahen/dvara/blob/main/TUTORIAL.md) starts where this one ends.
