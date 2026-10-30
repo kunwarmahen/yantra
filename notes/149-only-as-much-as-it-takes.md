@@ -73,6 +73,29 @@ and the words say plainly that the rest isn't there to quote.
 The newest three are still kept whatever happens. A summary is still
 made only when masking alone leaves the window red.
 
+## Live receipt
+
+The same brief, run again with `samay run-now` on `qwen3.8-64k:latest`
+after the two rules above (before the start was kept): 31 tool
+results, 7 elided, all of them older listings and mail searches of
+1,500 characters or more. Every phone reading (61-88 characters) and
+both schedule listings (168) were still there when it wrote:
+
+```
+**Phone** — Nexus: 100 %, charging. iPhone: battery not reported;
+missed-call read not available on either.
+
+**Tests** — no test-running schedule on Samay other than this brief
+itself.
+```
+
+Each line of the brief traces to a result it could see. Its money
+line said one account held $0 and the other returned nothing, and
+that is what those two calls returned (`"total_value":"0"`, and
+`API error 404`). It had read the wrong two accounts, a choice made
+from the account list early in the turn, but it no longer invented a
+total.
+
 ## The tradeoff
 
 Masking now happens more often and less each time. A turn that crosses
