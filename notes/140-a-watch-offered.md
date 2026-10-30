@@ -52,6 +52,13 @@ rules. The ones that matter most:
   watches made by voice on one flights page, both called *browser_open
   watch*, sent *the number is now 58*, and the person read it as the
   temperature (Prahari's notes/03).
+  On `qwen3.8-64k:latest`, asked *"keep an eye on bitcoin's price and
+  tell me if it goes under 200 thousand dollars"*, the model planned
+  `name` "Bitcoin below $200K" and `asked` "notify me when Bitcoin falls
+  below $200,000" (its own paraphrase, not the person's words), and its
+  preview carried `thing: "BTC's USD spot price"` unasked; Prahari's
+  sentence came back *tells you when BTC's USD spot price is below
+  200,000*. It then stopped for the person's yes, as told.
 * **Leave `then` out to just tell them.** A watch with no `then` sends
   the person a line and asks no model at all. Most watches need nothing
   more.
