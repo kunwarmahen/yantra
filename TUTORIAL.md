@@ -563,7 +563,8 @@ Tell it once, in passing, that you live near RDU:
 ```
 
 The model decided that fact was worth keeping, and it asked before
-keeping it. Quit, start a new session tomorrow, and ask *"find me
+keeping it. (With `--yolo` it keeps it without asking, like every other
+tool. Dvara then names what was kept under the answer.) Quit, start a new session tomorrow, and ask *"find me
 flights to Austin"*. It starts from RDU without being told, and says
 so: *"From RDU (near where you live) → AUS"*. It didn't look anything
 up. What it remembers about you is in its instructions from the first
@@ -599,7 +600,10 @@ run a memory server with real search (Smritikosh is one), connect it as
 an MCP server and point memory at it by name:
 `--memory smritikosh --mcp-config smritikosh.json`. Everything above
 works the same, and the memories live there instead
-([notes/102](notes/102-kept-somewhere-else.md)). Setting up Smritikosh,
+([notes/102](notes/102-kept-somewhere-else.md)). The server's own tools
+are hidden from the model, so everything it keeps goes through
+`remember` and your permission mode. A package that wants one of them
+back names it: `[memory] show = ["get_context"]`. Setting up Smritikosh,
 step by step on either road, is in [SMRITIKOSH.md](SMRITIKOSH.md). If you
 start Yantra through [Sarathi](https://github.com/kunwarmahen/sarathi),
 `sarathi smritikosh` does all of it in about a minute, and also starts

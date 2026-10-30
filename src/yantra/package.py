@@ -93,7 +93,7 @@ SCHEMA: dict[str, frozenset[str]] = {
     "budget": frozenset({"max_usd_per_turn"}),
     "permissions": frozenset({"mode"}),
     "env": frozenset({"context"}),
-    "memory": frozenset({"via", "verbs"}),
+    "memory": frozenset({"via", "verbs", "show"}),
     "connections": frozenset({"needs"}),
 }
 
@@ -573,6 +573,7 @@ def load_package(where: Path) -> AgentSpec:
         # reach an agent somebody else wrote only when it asks for them.
         memory=_str(memory, "via", manifest, "memory") or "off",
         memory_verbs=_verbs(memory, manifest),
+        memory_show=_str_list(memory, "show", manifest, "memory") or (),
         # Likewise connected accounts: none unless asked for here, and
         # then only once the person says yes (setu_link.py).
         connections=_needs(connections, manifest),

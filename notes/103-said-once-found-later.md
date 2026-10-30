@@ -199,7 +199,9 @@ can't find, a false keep, and a dead store.
   ([note 109](109-fewer-lines-fewer-facts.md)).
 * **Smritikosh's own context block.** Its `get_context` tool builds a
   prompt block from its graph and profile. The verb map deliberately
-  uses only the four verbs, and the prompt layer is Yantra's job.
+  uses only the four verbs, and the prompt layer is Yantra's job. The
+  model doesn't see the tool either, unless a package names it in
+  `[memory] show` ([note 102](102-kept-somewhere-else.md#one-road-to-memory)).
 * **An `EvalCase` for this.** Package evals ([note 10](10-evals.md)) are
   one conversation each, with memory off. Two sessions with a look back
   in between is a different shape, so it lives beside them as a trial,

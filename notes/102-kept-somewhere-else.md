@@ -131,10 +131,43 @@ memory: mcp server 'smritikosh' is not connected (add it with --mcp-config, the 
 The server's own tools would reach the model too, as
 `mcp__smritikosh__remember` and so on, next to Yantra's `remember`. That
 is two ways to write the same thing, and one of them skips the ask-first
-prompt and the identity rule. **Binding takes the mapped tools out of
-the model's list.** The server's other tools stay. The model still
-writes through `remember`, which asks first, and nothing it writes can
-go under somebody else's name.
+prompt and the identity rule. **Binding takes every tool of the store's
+server out of the model's list**, not only the ones the verb map names.
+The model writes through `remember`, under the person's permission mode,
+and nothing it writes can go under somebody else's name.
+
+Taking only the mapped tools away was not enough. A store's author
+offers what suits a client with no memory of its own. Smritikosh offers
+`store_memory`, which writes under the server's default user and runs
+its own extraction, and `get_context`, which loads what Yantra's prompt
+layer already carries. Left in the list, a model was told a home
+address and called `mcp__smritikosh__store_memory` with `remember`
+sitting right beside it. That write never asked, never got Yantra's
+fact wording, and never showed in the host's list of what was kept.
+
+A package that wants one of those tools for the model anyway names it:
+
+```toml
+[memory]
+via = "smritikosh"
+show = ["get_context"]        # this one stays for the model
+```
+
+A mapped tool stays hidden whatever `show` says. Its verb is the road.
+
+Against the real `smritikosh-mcp` and a live store, binding and then
+listing:
+
+```
+the server offers: ['mcp__smritikosh__forget', 'mcp__smritikosh__get_context', 'mcp__smritikosh__list_memories', 'mcp__smritikosh__recall', 'mcp__smritikosh__remember', 'mcp__smritikosh__store_memory', 'mcp__smritikosh__used']
+bound: ok
+left for the model: none
+Yantra's own: ['recall_memory', 'remember']
+```
+
+The store still answers through Yantra's verbs. `list` returned the
+person's memories, including the address that had gone in through
+`store_memory`.
 
 ## The store's side
 

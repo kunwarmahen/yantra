@@ -408,7 +408,8 @@ of each conversation, because a model has no reason to go looking for a
 home airport you never mentioned. It's framed as *what you said before,
 which may be out of date; the current message wins*. The model keeps a
 new fact with a `remember` tool, one short sentence, and **asks before
-keeping it**. `recall_memory` searches when it needs more.
+keeping it** (under `yolo` it keeps it unasked, and a host such as Dvara
+names it under the answer). `recall_memory` searches when it needs more.
 
 Most facts are said in passing, though, and a model answering a
 question about flights won't always stop to write one down. So when a
@@ -1668,6 +1669,8 @@ via = "local"                   # local | off | an [[mcp]] server's name -- the
                                 # nothing gets off (notes/100, notes/102)
 verbs = { list = "all_memories" }   # only for a server: its tool per verb,
                                 # when not remember/recall/forget/list_memories
+show = ["get_context"]          # only for a server: its tools the model may
+                                # still call; the rest are hidden (notes/102)
 
 [connections]
 needs = ["gmail:read"]          # your Setu accounts it may use: connector,

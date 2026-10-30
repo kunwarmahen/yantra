@@ -74,7 +74,11 @@ memory: you see it in the reply, and `/memory forget 3` removes it.
 The model writes a memory with a `remember` tool, as one short
 sentence. That tool isn't read-only, so it **asks before writing**,
 like `write_file` does. You see the exact sentence that will be kept
-about you before it is kept.
+about you before it is kept. Under `yolo` it writes without asking,
+as every tool does there. The tool still records what it kept
+(`memory.kept`) so a host can name it: Dvara puts a *Kept about you*
+line under the answer, so a write nobody was asked about is never one
+nobody saw.
 
 The store never reads a transcript and never decides anything. It is
 handed finished sentences, keeps them, and searches them. That keeps

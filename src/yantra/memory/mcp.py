@@ -52,8 +52,15 @@ the memory layer turns into a notice and carries on (fails open).
 ONE ROAD TO MEMORY. The server's own tools would reach the model too, as
 ``mcp__<server>__remember`` and so on, beside Yantra's ``remember`` --
 two ways to write the same thing, one of which skips the identity check.
-Binding takes the mapped tools out of the model's roster; the server's
-other tools stay.
+Binding takes EVERY TOOL OF THE STORE'S SERVER out of the model's roster,
+not only the mapped ones. A store's author offers what suits a client
+with no memory of its own: a ``store_memory`` that writes under the
+server's default user, a ``get_context`` that loads what Yantra's prompt
+layer already carries. Left in, a model called ``store_memory`` for a
+home address while ``remember`` sat beside it, and the write skipped the
+person's permission mode, the fact wording and whose memory it was.
+``[memory] show`` names a tool the model may still call itself; a mapped
+tool stays hidden whatever ``show`` says, since Yantra's verb is the road.
 """
 
 from __future__ import annotations
@@ -94,10 +101,13 @@ class McpStore:
     """``MemoryStore`` over one connected MCP server's tools."""
 
     def __init__(self, server: str, verbs: dict[str, str] | None = None, *,
+                 show: tuple[str, ...] | list[str] = (),
                  timeout: float = 20.0) -> None:
         self.name = server
         self.server = server
         self.tools = check_verbs(verbs)
+        #: Unmapped tools of the server the model may still call itself.
+        self.show = frozenset(show) - set(self.tools.values())
         # A slow store taxes one call, not the session: retrieval on local
         # hardware has been seen at 8s, so the ceiling sits above that.
         self.timeout = timeout
@@ -224,8 +234,8 @@ def _short(data: Any) -> str:
 
 def bind_memory_server(agent: Any, manager: Any) -> str | None:
     """The host's half: bind the store to its server, once the host has
-    connected the servers, and take the mapped tools out of the model's
-    roster.
+    connected the servers, and take the server's tools out of the model's
+    roster -- all of them but the ones ``[memory] show`` names.
 
     Returns a sentence saying what is wrong, or None when bound. Never
     raises: memory fails open, like everywhere else.
@@ -243,9 +253,8 @@ def bind_memory_server(agent: Any, manager: Any) -> str | None:
     offered = {name.removeprefix(prefix)
                for name in manager.tool_names.get(server, [])}
     store.bind(lambda: manager.sessions.get(server), offered)
-    for verb, tool in store.tools.items():
-        if verb not in store.missing:
-            agent.registry.unregister(prefix + tool)
+    for tool in sorted(offered - store.show):
+        agent.registry.unregister(prefix + tool)
     return None
 
 

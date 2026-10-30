@@ -104,6 +104,11 @@ class TestVerbs:
         assert spec.memory == "kosh"
         assert dict(spec.memory_verbs) == {"remember": "store_statement"}
 
+    def test_a_package_can_show_a_tool_of_its_store(self, tmp_path):
+        (tmp_path / "agent.toml").write_text(
+            '[memory]\nvia = "kosh"\nshow = ["get_context"]\n')
+        assert load_package(tmp_path).memory_show == ("get_context",)
+
     def test_a_package_with_a_bad_verb_fails_at_load(self, tmp_path):
         (tmp_path / "agent.toml").write_text(
             '[memory]\nvia = "kosh"\nverbs = { ingest = "x" }\n')
@@ -215,18 +220,31 @@ class TestBinding:
         agent.memory.remember("Lives near RDU")
         assert server.rows == {"evt-1": ("asha", "Lives near RDU")}
 
-    def test_binding_takes_the_mapped_tools_away_from_the_model(self, monkeypatch):
+    def test_binding_takes_every_tool_of_the_store_away_from_the_model(self, monkeypatch):
         agent = self._agent(monkeypatch)
-        server = FakeServer()
+        server = FakeServer(tools=("remember", "recall", "forget", "list_memories",
+                                   "get_context", "store_memory"))
         manager = _manager_for(agent, server)
         manager.connect(server.config)
         bind_memory_server(agent, manager)
         names = set(agent.registry.names())
-        assert not {"mcp__kosh__remember", "mcp__kosh__recall",
-                    "mcp__kosh__forget", "mcp__kosh__list_memories"} & names
-        assert "mcp__kosh__get_context" in names     # not a verb: stays
+        assert not {n for n in names if n.startswith("mcp__kosh__")}
         assert {"remember", "recall_memory"} <= names  # Yantra's own road
+        agent.memory.remember("Lives near RDU")        # the store still works
+        assert server.rows == {"evt-1": ("asha", "Lives near RDU")}
         manager.shutdown()                             # still closes cleanly
+
+    def test_show_leaves_a_named_tool_for_the_model_but_never_a_mapped_one(self, monkeypatch):
+        monkeypatch.setenv("YANTRA_USER", "asha")
+        agent = AgentSpec(memory="kosh", memory_show=("get_context", "remember")).build(
+            provider=ScriptedProvider([]), provider_name="anthropic", model="m")
+        server = FakeServer(tools=("remember", "recall", "get_context", "store_memory"))
+        manager = _manager_for(agent, server)
+        manager.connect(server.config)
+        bind_memory_server(agent, manager)
+        kosh = {n for n in agent.registry.names() if n.startswith("mcp__kosh__")}
+        assert kosh == {"mcp__kosh__get_context"}
+        manager.shutdown()
 
     def test_a_server_nobody_declared_is_said_plainly(self, monkeypatch):
         agent = self._agent(monkeypatch)

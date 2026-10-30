@@ -237,6 +237,11 @@ class Memory:
         #: Candidates found mid-turn (before compaction), waiting for the
         #: host to offer them when the turn ends.
         self.pending: list[Any] = []
+        #: What the model's ``remember`` wrote, as (id, statement), for the
+        #: host to say under the answer -- a write the person's permission
+        #: mode let through unasked is still never a silent one. The host
+        #: takes them and clears the list, as with ``pending``.
+        self.kept: list[tuple[str, str]] = []
         #: Candidates the person dropped: not offered again this session.
         self.declined: set[str] = set()
         #: Conversations that ended (/clear, /load) before they were looked

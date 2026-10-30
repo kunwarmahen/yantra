@@ -219,6 +219,19 @@ class TestBuild:
         assert agent.memory.user == "asha"
         assert {"remember", "recall_memory"} <= set(agent.registry.names())
 
+    def test_what_the_model_kept_waits_for_the_host_to_say(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+        monkeypatch.setenv("YANTRA_USER", "asha")
+        agent = AgentSpec(memory="local").build(provider=ScriptedProvider([]),
+                                                provider_name="anthropic", model="m")
+        tool = agent.registry.get("remember")
+        said = tool.run({"statement": "Lives  near RDU"}, None)
+        (memory_id, statement), = agent.memory.kept
+        assert statement == "Lives near RDU"
+        assert f"#{memory_id}" in said
+        agent.memory.remember("Uses uv")       # a host's own write is not the model's
+        assert len(agent.memory.kept) == 1
+
     def test_a_service_names_whose_memories_not_the_login_it_runs_as(self, monkeypatch):
         monkeypatch.setenv("YANTRA_USER", "owner-of-the-machine")
         for build in ("build", "build_async"):

@@ -164,6 +164,10 @@ class AgentSpec:
     #: ``[memory] verbs``: (verb, tool) pairs naming the MCP server's tool
     #: for each verb it calls something else. Only read for a server store.
     memory_verbs: tuple[tuple[str, str], ...] = ()
+    #: ``[memory] show``: tools of that server the model may still call
+    #: itself. Every other tool of a store's server is hidden
+    #: (memory.mcp.bind_memory_server).
+    memory_show: tuple[str, ...] = ()
     #: ``[connections] needs``: the connected accounts a package asks for,
     #: as ``connector:level`` (setu_link.parse_need). Only a package's
     #: session (``root`` set) is held to it; your own sees everything.
@@ -489,7 +493,8 @@ class AgentSpec:
             # (memory.mcp.bind_memory_server); until then it fails open.
             from yantra.memory import enable_memory
             from yantra.memory.mcp import McpStore
-            enable_memory(agent, McpStore(self.memory, dict(self.memory_verbs)),
+            enable_memory(agent, McpStore(self.memory, dict(self.memory_verbs),
+                                          show=self.memory_show),
                           user=memory_user,
                           package=(self.name if self.root is not None else None))
 

@@ -77,7 +77,9 @@ class Remember(Tool):
         except Exception as exc:
             raise ToolError(f"memory unavailable ({self.memory.store.name}: "
                             f"{exc}); nothing was remembered") from None
-        return f"remembered (#{memory_id}): {' '.join(statement.split())}"
+        said = " ".join(statement.split())
+        self.memory.kept.append((str(memory_id), said))
+        return f"remembered (#{memory_id}): {said}"
 
 
 class RecallMemory(Tool):
