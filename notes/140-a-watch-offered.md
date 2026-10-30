@@ -43,6 +43,15 @@ rules. The ones that matter most:
   `preview_watch` looks once and, when the pick found nothing, hands
   back the start of the tool's answer. So the model is told to read that
   and write a better pick before the person is asked anything.
+* **Say what it is for.** `create_watch` carries a `name` the person
+  will know it by (never the tool's), `asked` — what they asked for, in
+  their own words — and `thing`, what the number is ("the fare"). Prahari
+  refuses a watch from an agent without a name and `asked`, and a second
+  one on the same call and pick; the preview names the one there is, and
+  the model is told to offer to mend it. Learned the hard way: two
+  watches made by voice on one flights page, both called *browser_open
+  watch*, sent *the number is now 58*, and the person read it as the
+  temperature (Prahari's notes/03).
 * **Leave `then` out to just tell them.** A watch with no `then` sends
   the person a line and asks no model at all. Most watches need nothing
   more.
@@ -59,12 +68,13 @@ card leads with the call, then says whether that call only reads:
 
 ```
 New watch: BTC under 60k
+  you asked: "tell me if bitcoin goes under 60k"
 
 What it looks at, with no model
   every 1h: web_fetch {"url": "https://api.coinbase.com/v2/prices/BTC-USD/spot"}
   web_fetch IS NOT READ-ONLY: saying yes lets Prahari run exactly this call every 1h, with nobody asked again
 Tells you when
-  the value at data.amount is below 60000
+  BTC's price is below 60000
   now: web_fetch isn't a tool that only reads, so it can't be tried before the person accepts it; every look will run exactly this call once they do.
 Then it asks me, with nobody watching
   Tell me the price and how far it fell this week.

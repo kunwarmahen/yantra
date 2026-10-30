@@ -2595,6 +2595,7 @@ function renderWatches() {
     if (w.fired_today) tags.push(`fired ${w.fired_today} today (at most ${w.max_per_day})`);
     if (w.state === "active" && w.next_at && !w.listen) tags.push("next " + esc(clockTime(w.next_at)));
     main.innerHTML = `<div class="conn-title">${esc(w.name)}</div>
+      ${w.asked ? `<div class="conn-sub">You asked: “${esc(w.asked)}”</div>` : ""}
       <div class="conn-sub sched-does">${esc(w.sentence)}</div>
       <div class="conn-sub">${esc(w.does)}</div>
       <div class="conn-sub">${tags.join(" · ")}</div>

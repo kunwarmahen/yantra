@@ -13,8 +13,10 @@ The two "later" things the agent offers were seen in two different places.
 
 An **eye** chip in the header, `2 watching`, opens a **Watches** panel:
 
-* each watch in its own sentence (Prahari's: *every hour, looks with
-  web_fetch; tells you when the value is below 1,000,000*), what happens
+* each watch with what you asked for, in your words (*You asked: "tell
+  me if bitcoin is under a million"*), and in its own sentence
+  (Prahari's: *every hour, looks at api.coinbase.com/v2/prices (with
+  web_fetch); tells you when BTC's price is below 1,000,000*), what happens
   when it fires, its id, *listens for whatsapp* or *woken by gmail-mail*,
   *for asha* when it is somebody else's, how many times it fired today,
   when it looks next, why it paused, and its last look;

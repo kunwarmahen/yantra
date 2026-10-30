@@ -198,13 +198,16 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "Put everything that narrows it in the arguments.",
         "2. Call `mcp__prahari__preview_watch` first. If its pick found nothing, read the "
         "tool's answer it shows you and fix the pick (a pattern with a group, or a JSON "
-        "path) before going on.",
+        "path) before going on. If it says the person already has a watch on exactly "
+        "this, offer to mend that one (`mcp__prahari__update_watch`) instead of making "
+        "a second.",
         "3. Tell the person the sentence and what it sees now; only after they say yes, "
         "call `mcp__prahari__create_watch` with a `name` the person will know it by -- "
-        "what and the line, \"Flight to Delhi under $571\", never the tool's name. "
-        "Leave `then` out to just tell them what was "
-        "seen (no model at all); give `then` only when there is work to do when it "
-        "fires, written as a complete instruction to yourself.",
+        "what and the line, \"Flight to Delhi under $571\", never the tool's name -- "
+        "`asked`: what they asked for, in their own words, and `thing`: what the "
+        "number or text is (\"the fare\", \"the temperature\"). Leave `then` out to "
+        "just tell them what was seen (no model at all); give `then` only when there "
+        "is work to do when it fires, written as a complete instruction to yourself.",
         "4. `every`: as often as the thing really changes -- mail 15m-1h, a price "
         "1h-6h, a page a day.",
         "5. For something that can tell Prahari itself -- an Android phone's "
@@ -274,9 +277,13 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     card could get them; ``where`` is where the news goes.
     """
     name = " ".join(str(args.get("name") or "").split()) or "(no name)"
+    asked = " ".join(str(args.get("asked") or "").split())
     check = args.get("check") if isinstance(args.get("check"), dict) else {}
     listen = str(args.get("listen") or "").strip()
-    lines = [f"New watch: {name}", ""]
+    lines = [f"New watch: {name}"]
+    if asked:
+        lines.append(f"  you asked: \"{asked}\"")
+    lines.append("")
     if listen:
         lines += ["What it listens for",
                   f"  anything sent to Prahari's inlet as '{listen}' (a phone app, a "
@@ -307,8 +314,9 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
             elif not getattr(registry.get(rtool), "read_only", False):
                 lines.append(f"  {rtool} IS NOT READ-ONLY: saying yes lets Prahari run "
                              "exactly this call once a day, with nobody asked again")
+    thing = " ".join(str(args.get("thing") or "").split())
     lines += ["Tells you when",
-              f"  {_pick_words(args.get('pick'))} {_when_words(args.get('when'))}"]
+              f"  {thing or _pick_words(args.get('pick'))} {_when_words(args.get('when'))}"]
     if preview:
         lines += [f"  now: {' '.join(preview.split())[:300]}"]
     then = " ".join(str(args.get("then") or "").split())
@@ -363,8 +371,8 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
             }.get(verb, f"{verb} {watch}")
     lines = [head] + ([f"  {found}"] if found else [])
     if verb == "update_watch":
-        for key in ("name", "check", "pick", "when", "every", "wake", "renew", "then",
-                    "max_per_day"):
+        for key in ("name", "asked", "thing", "check", "pick", "when", "every", "wake",
+                    "renew", "then", "max_per_day"):
             if key in args:
                 lines.append(f"  {key}: {_words(args[key])}")
         if {"check", "pick", "when", "every"} & set(args):

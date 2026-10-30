@@ -304,6 +304,14 @@ class TestTheCardIsWords:
         assert ("web_fetch IS NOT READ-ONLY: saying yes lets Prahari run exactly this "
                 "call every 3h") in said
 
+    def test_the_card_says_what_it_is_for_in_the_persons_words(self):
+        said = prahari_link.explain_create(
+            {**PRICE, "asked": "tell me if ALAB  gets cheap", "thing": "ALAB's price"},
+            registry=ToolRegistry())
+        assert said.startswith('New watch: ALAB under 50\n  you asked: "tell me if ALAB '
+                               'gets cheap"\n')
+        assert "ALAB's price is below 50" in said
+
     def test_a_tool_this_agent_lacks_would_fail_every_look(self):
         said = prahari_link.explain_create(PRICE, registry=ToolRegistry())
         assert "NO TOOL BY THIS NAME in this agent" in said
