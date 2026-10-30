@@ -2010,7 +2010,8 @@ answer earlier in the conversation, use the small *keep this answer as a
 test* link under it. **kept tests** at the top of History lists them,
 with how each did last time, and **delete** takes one back. From
 then on, `yantra --eval --kept` asks the same question again with every
-tool answering from what it said that day, so nothing real happens: no
+tool answering from what it said that day (a screenshot it returned
+included), so nothing real happens: no
 email is sent, nothing is bought. It checks that the answer still says
 your words, still uses the same tools, and gives the same facts. Run it
 after you change the model or a prompt, and it tells you what broke.

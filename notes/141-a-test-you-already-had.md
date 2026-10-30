@@ -81,6 +81,29 @@ the calls made up to the end of that turn. A later call's answer was not
 there the first time, and a replay that could look it up would be
 asking an easier question than the one kept.
 
+## Pictures, replayed
+
+A tool that answered with a picture (a screenshot, the phone's screen,
+`read_image`) is replayed with it. The recording keeps each call's
+pictures, shared out as the steps view shares them (a batch's pictures
+follow its results, the step notes say how many each gave), and the
+stand-in answers with the text and the picture together, as the tool
+did. A call with no picture is written to `replay/<id>.json` exactly as
+it always was.
+
+**WITHOUT IT, THE TEST ASKS ABOUT A SCREEN NOBODY CAN SEE.** A kept turn
+where `read_image` looked at a red square and the agent said *Red*,
+replayed on `gemma4:12b` through Ollama:
+
+```
+with the picture: passed=True tools=['read_image'] answer='Red' failures=[]
+text only (as before): passed=False tools=['read_image'] answer='Blue' failures=['answer does not say: red']
+```
+
+Text only, the model guessed, and the test went red for a reason that
+had nothing to do with the agent. The recording grows by the picture's
+size, which is the price of a replay that is one.
+
 ## Seeing them, and taking one back
 
 ```
@@ -255,5 +278,5 @@ gate is the unattended one. They check:
   under each answer (above).
 * ~~**Taking one back.**~~ Built: `/tests delete N`, and **delete** in
   the page's kept tests (above).
-* **Pictures.** A screenshot a tool returned is replayed as its text
-  only.
+* ~~**Pictures.** A screenshot a tool returned is replayed as its text
+  only.~~ Replayed with the picture (above, *Pictures, replayed*).

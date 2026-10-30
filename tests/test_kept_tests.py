@@ -3,9 +3,10 @@
 THE BIAS these tests encode is against a replay that is not one: a real
 tool running during a test (an email sent again at 3am), a fake that
 only answers the identical call (red every time a model rephrases), a
-kept turn asked without the conversation before it, and a judge or a
-word check that passes when nobody checked. Every tool here that is
-not a fake raises if it runs.
+kept turn asked without the conversation before it, a judge or a
+word check that passes when nobody checked, and a turn that looked at a
+picture replayed blind. Every tool here that is not a fake raises if it
+runs.
 """
 
 from __future__ import annotations
@@ -102,6 +103,48 @@ class TestWhatIsRecorded:
             "search_mail": {"description": "d", "parameters": {}},
             "bash": {"description": "b", "parameters": {}}})
         assert set(rec.tools) == {"search_mail"}
+
+
+class TestPictures:
+    """A tool that answered with a picture is replayed with it."""
+
+    @staticmethod
+    def payload() -> dict:
+        shot = {"kind": "image", "media_type": "image/png", "data": "iVBORw0KGgo="}
+        return {"format": 1, "history": [
+            {"role": "user", "content": [{"kind": "text", "text": "is the page red?"}]},
+            {"role": "assistant", "content": [
+                {"kind": "tool_call", "id": "c1", "name": "read_image",
+                 "arguments": {"path": "page.png"}},
+                {"kind": "tool_call", "id": "c2", "name": "search_mail",
+                 "arguments": {"q": "red"}}]},
+            {"role": "user", "content": [
+                {"kind": "tool_result", "tool_call_id": "c1", "content": "page.png"},
+                {"kind": "tool_result", "tool_call_id": "c2", "content": "no mail"},
+                shot]},
+            {"role": "assistant", "content": [{"kind": "text", "text": "Yes, red."}]},
+        ], "steps": {"c1": {"pictures": 1}, "c2": {}}}
+
+    def test_each_calls_pictures_are_recorded_and_kept_in_the_file(self):
+        recording = from_payload(self.payload())
+        shot, mail = recording.calls
+        assert shot.pictures == [{"media_type": "image/png", "data": "iVBORw0KGgo="}]
+        assert mail.pictures == []
+        raw = recording.to_json()
+        assert "pictures" not in raw["calls"][1]                 # written as it always was
+        assert Recording.from_json(json.loads(json.dumps(raw))).calls[0].pictures == \
+            shot.pictures
+
+    def test_the_stand_in_answers_with_the_picture(self):
+        from yantra.kept_tests import ReplayTool
+        from yantra.tools.base import ToolOutput
+        recording = from_payload(self.payload())
+        tool = ReplayTool("read_image", "reads an image", {"type": "object"}, recording)
+        got = tool.run({"path": "page.png"}, None)
+        assert isinstance(got, ToolOutput) and got.text == "page.png"
+        assert [(i.media_type, i.data) for i in got.images] == [("image/png", "iVBORw0KGgo=")]
+        mail = ReplayTool("search_mail", "searches", {"type": "object"}, recording)
+        assert mail.run({"q": "red"}, None) == "no mail"         # text alone, as before
 
 
 class TestSameNameBestMatch:

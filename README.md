@@ -2644,7 +2644,8 @@ src/yantra/
 │                   replay/<id>.json, a [[case]] in the person's own suite
 │                   per agent (~/.local/state/yantra/tests/<agent>/,
 │                   YANTRA_TESTS); fakes answer same name, best match and
-│                   nothing real runs; stand-ins for tools tonight's agent
+│                   nothing real runs, a picture a tool returned included;
+│                   stand-ins for tools tonight's agent
 │                   lacks; --keep-test [--turn N], /chats test N [turn K],
 │                   the page's History (a link under each answer);
 │                   /tests and the page's kept tests list each one's last

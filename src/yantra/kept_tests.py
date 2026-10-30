@@ -29,6 +29,13 @@ The last one is information, not an error the model has to fight: an
 agent that wanders into a tool it never needed is told so, and either
 comes back or goes red on the answer.
 
+PICTURES ARE PART OF WHAT IT SAID. A screenshot, a phone's screen, an
+image read: a tool that answered with a picture is replayed with that
+picture, from the recording, so a test kept from a turn that looked at a
+page still looks at the page. Without it the model is asked tonight about
+a screen it can't see, and goes red for the wrong reason. The recording
+grows by the picture's size; a call with none is written as before.
+
 THE AGENT UNDER TEST IS TONIGHT'S. Its prompt, its package and its tool
 list are whatever they are when the run starts -- that is the point of
 running it: a changed prompt or a swapped model is what the test is
@@ -73,7 +80,9 @@ from typing import Any, ClassVar
 
 from yantra.errors import ConfigError, ToolError
 from yantra.eval_suite import _toml_list, _toml_str
-from yantra.tools.base import Tool, ToolContext, ToolRegistry
+from yantra.steps import _share_images
+from yantra.tools.base import Tool, ToolContext, ToolOutput, ToolRegistry
+from yantra.types import ImageBlock
 
 #: The folder under a suite that holds each case's recording.
 REPLAY_DIR = "replay"
@@ -132,6 +141,15 @@ class Call:
     arguments: dict[str, Any]
     content: str
     is_error: bool = False
+    #: The pictures it returned, {"media_type", "data"} each (base64).
+    pictures: list[dict[str, str]] = field(default_factory=list)
+
+    def to_json(self) -> dict[str, Any]:
+        out = {"name": self.name, "arguments": self.arguments, "content": self.content,
+               "is_error": self.is_error}
+        if self.pictures:              # a call with none is written as it always was
+            out["pictures"] = self.pictures
+        return out
 
 
 @dataclass
@@ -158,7 +176,7 @@ class Recording:
     def to_json(self) -> dict[str, Any]:
         return {"format": 1, "question": self.question, "answer": self.answer,
                 "before": self.before,
-                "calls": [c.__dict__ for c in self.calls],
+                "calls": [c.to_json() for c in self.calls],
                 "used": self.used, "tools": self.tools, "model": self.model,
                 "kept_at": self.kept_at, "conversation": self.conversation}
 
@@ -167,7 +185,10 @@ class Recording:
         return cls(question=raw.get("question", ""), answer=raw.get("answer", ""),
                    before=list(raw.get("before") or []),
                    calls=[Call(c["name"], c.get("arguments") or {},
-                               c.get("content", ""), bool(c.get("is_error")))
+                               c.get("content", ""), bool(c.get("is_error")),
+                               [{"media_type": str(p.get("media_type", "")),
+                                 "data": str(p.get("data", ""))}
+                                for p in c.get("pictures") or []])
                           for c in raw.get("calls") or []],
                    used=list(raw.get("used") or []),
                    tools=dict(raw.get("tools") or {}),
@@ -221,10 +242,15 @@ def from_payload(payload: dict, *, conversation: str = "",
     asked = turns[place - 1]
     end = turns[place] if place < len(turns) else len(history)
     results: dict[str, dict] = {}
+    # each result's pictures, shared out as the steps view shares them
+    pictured: dict = {"images": {}}
     for message in history[:end]:
-        for block in message.get("content") or []:
-            if block.get("kind") == "tool_result":
-                results[block.get("tool_call_id", "")] = block
+        found = [b for b in message.get("content") or [] if b.get("kind") == "tool_result"]
+        for block in found:
+            results[block.get("tool_call_id", "")] = block
+        _share_images(pictured, found,
+                      [b for b in message.get("content") or [] if b.get("kind") == "image"],
+                      payload.get("steps") or {})
     calls: list[Call] = []
     used: list[str] = []
     answer = ""
@@ -237,7 +263,9 @@ def from_payload(payload: dict, *, conversation: str = "",
                 continue        # asked and never answered: a held call
             calls.append(Call(block.get("name", ""), block.get("arguments") or {},
                               str(result.get("content", "")),
-                              bool(result.get("is_error"))))
+                              bool(result.get("is_error")),
+                              [{"media_type": i.get("media_type", ""), "data": i.get("data", "")}
+                               for i in pictured["images"].get(block.get("id", ""), [])]))
             if i > asked and block.get("name") not in used:
                 used.append(block.get("name", ""))
         if i > asked and message.get("role") == "assistant" and _text(message):
@@ -354,12 +382,16 @@ class ReplayTool(Tool):
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
         return f"{self.name} (replayed from the recording)"
 
-    def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
+    def run(self, args: dict[str, Any], ctx: ToolContext) -> str | ToolOutput:
         call = best_match(self._recording.calls, self.name, args)
         if call is None:
             return NOT_RECORDED.format(name=self.name)
         if call.is_error:
             raise ToolError(call.content)
+        if call.pictures:
+            return ToolOutput(text=call.content,
+                              images=[ImageBlock(p["media_type"], p["data"])
+                                      for p in call.pictures])
         return call.content
 
 
