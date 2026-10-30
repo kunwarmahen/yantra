@@ -59,6 +59,7 @@ import subprocess
 import sys
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from yantra.mcp import MCPServerConfig
@@ -209,7 +210,13 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "just tell them what was seen (no model at all); give `then` only when there "
         "is work to do when it fires, written as a complete instruction to yourself.",
         "4. `every`: as often as the thing really changes -- mail 15m-1h, a price "
-        "1h-6h, a page a day.",
+        "1h-6h, a page a day. When the thing has days, give them: `ends` after the day "
+        "it stops mattering (a fare for Saturday's flight ends after Saturday), "
+        "`starts` when it should begin (\"my flight tomorrow\" starts tomorrow "
+        "morning), `stop` for what ends it (a flight's status {\"contains\": "
+        "\"Landed\"}) -- ISO times with the person's offset. A watch that ends tells "
+        "the person and is kept 30 days; if they say keep it, `update_watch` with "
+        "keep: true.",
         "5. For something that can tell Prahari itself -- an Android phone's "
         "notification (MacroDroid or Tasker), a Home Assistant automation, a webhook -- "
         "make a watch that listens (`listen`: one word) instead of a check, and give "
@@ -317,6 +324,9 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     thing = " ".join(str(args.get("thing") or "").split())
     lines += ["Tells you when",
               f"  {thing or _pick_words(args.get('pick'))} {_when_words(args.get('when'))}"]
+    span = _span_words(args, thing or _pick_words(args.get("pick")))
+    if span:
+        lines += ["How long", *[f"  {line}" for line in span]]
     if preview:
         lines += [f"  now: {' '.join(preview.split())[:300]}"]
     then = " ".join(str(args.get("then") or "").split())
@@ -339,6 +349,27 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     lines += ["", f"At most {most} times a day." + (f" News goes {where}." if where
                                                      else "")]
     return "\n".join(lines)
+
+
+def _at(stamp: Any) -> str:
+    """An ISO time on this computer's clock, as a person reads it."""
+    try:
+        when = datetime.fromisoformat(str(stamp))
+    except ValueError:
+        return str(stamp)
+    return f"{(when if when.tzinfo else when.astimezone()).astimezone():%a %-d %b %H:%M}"
+
+
+def _span_words(args: dict[str, Any], thing: str) -> list[str]:
+    """When a watch starts and stops by itself, in lines; none for always."""
+    out = []
+    if args.get("starts"):
+        out.append(f"from {_at(args['starts'])}")
+    if args.get("ends"):
+        out.append(f"until {_at(args['ends'])}, then it ends by itself")
+    if isinstance(args.get("stop"), dict) and args["stop"]:
+        out.append(f"ends once {thing} {_when_words(args['stop'])}")
+    return out
 
 
 def _allowed(allow: list[str], registry: Any) -> list[str]:
@@ -372,7 +403,7 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
     lines = [head] + ([f"  {found}"] if found else [])
     if verb == "update_watch":
         for key in ("name", "asked", "thing", "check", "pick", "when", "every", "wake",
-                    "renew", "then", "max_per_day"):
+                    "renew", "then", "max_per_day", "starts", "ends", "stop", "keep"):
             if key in args:
                 lines.append(f"  {key}: {_words(args[key])}")
         if {"check", "pick", "when", "every"} & set(args):

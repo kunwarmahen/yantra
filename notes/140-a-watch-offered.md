@@ -59,6 +59,14 @@ rules. The ones that matter most:
   preview carried `thing: "BTC's USD spot price"` unasked; Prahari's
   sentence came back *tells you when BTC's USD spot price is below
   200,000*. It then stopped for the person's yes, as told.
+* **Give it its days.** A fare for Saturday's flight `ends` after
+  Saturday; "my flight tomorrow" `starts` tomorrow morning and has a
+  `stop` — the status says Landed. The model turns what was said into
+  ISO times with the person's offset, and the card says them under **How
+  long** (*from Thu 1 Jan 07:00 · until Sat 3 Jan 00:00, then it ends by
+  itself · ends once the fare says 'Landed'*). An ended watch tells the
+  person and is kept 30 days; *keep it* is `update_watch` with `keep:
+  true` (Prahari's notes/04).
 * **Leave `then` out to just tell them.** A watch with no `then` sends
   the person a line and asks no model at all. Most watches need nothing
   more.

@@ -2592,6 +2592,7 @@ function renderWatches() {
     if (w.listen) tags.push(`listens for <code>${esc(w.listen)}</code>`);
     if (w.wake) tags.push(`woken by <code>${esc(w.wake)}</code>`);
     if (w.owner && w.owner !== "local") tags.push("for " + esc(w.owner));
+    if (w.state === "ended") tags.push("ended" + (w.ended_at ? " " + esc(clockTime(w.ended_at)) : ""));
     if (w.fired_today) tags.push(`fired ${w.fired_today} today (at most ${w.max_per_day})`);
     if (w.state === "active" && w.next_at && !w.listen) tags.push("next " + esc(clockTime(w.next_at)));
     main.innerHTML = `<div class="conn-title">${esc(w.name)}</div>

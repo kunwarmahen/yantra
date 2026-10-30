@@ -312,6 +312,15 @@ class TestTheCardIsWords:
                                'gets cheap"\n')
         assert "ALAB's price is below 50" in said
 
+    def test_the_card_says_when_it_starts_and_stops(self):
+        said = prahari_link.explain_create(
+            {**PRICE, "thing": "the fare", "starts": "2099-01-01T07:00",
+             "ends": "2099-01-03T00:00", "stop": {"contains": "Landed"}},
+            registry=ToolRegistry())
+        assert ("How long\n  from Thu 1 Jan 07:00\n  until Sat 3 Jan 00:00, then it ends "
+                "by itself\n  ends once the fare says 'Landed'") in said
+        assert "How long" not in prahari_link.explain_create(PRICE, registry=ToolRegistry())
+
     def test_a_tool_this_agent_lacks_would_fail_every_look(self):
         said = prahari_link.explain_create(PRICE, registry=ToolRegistry())
         assert "NO TOOL BY THIS NAME in this agent" in said
