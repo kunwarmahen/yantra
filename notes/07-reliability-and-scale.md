@@ -150,8 +150,11 @@ Two layers, strictly ordered:
 
 1. **Mask** (`mask_old_results`): keep the newest 3 ToolResults verbatim,
    elide older ones to `"[tool result elided ... call_id=...; re-run if
-   needed]"`. Reversible, idempotent, preserves is_error, keeps every call
-   answered -- the invariant doesn't even notice.
+   needed]"`, oldest first and only until the window is back under
+   yellow; a result under 500 characters is never elided
+   ([notes/149](149-only-as-much-as-it-takes.md)). Reversible,
+   idempotent, preserves is_error, keeps every call answered -- the
+   invariant doesn't even notice.
 2. **Summarize** (only if still red): replace a validated middle span with
    ONE user message containing an LLM summary. The first user message (the
    goal) survives verbatim. The summarizer prompt REQUIRES enumerating

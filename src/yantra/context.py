@@ -6,6 +6,12 @@ Two-layer strategy (book ch7-8, adapted), in strict order:
    stays verbatim; only its bulky OUTPUT becomes a placeholder telling
    the model it can re-run if needed. Tool results dominate transcripts
    (often 70-90% by turn ten), so this alone usually clears red zone.
+   ONLY AS MUCH AS IT TAKES, OLDEST FIRST: results are elided from the
+   oldest until the window is back under yellow, and one shorter than
+   SHORT_RESULT never is -- eliding it frees nothing and loses the
+   fact. A model rarely re-runs what was elided; it writes from what it
+   remembers, and a brief whose every portfolio read was elided at once
+   wrote its money lines from nothing (notes/149).
 2. SUMMARIZE the old middle segment -- lossy, so only if still over.
    The first user message (the goal) survives verbatim; the summarizer
    must enumerate every tool call + outcome, because "the record of
@@ -36,6 +42,7 @@ from yantra.types import (
 
 MASK_MARKER = "[tool result elided"
 KEEP_RESULTS = 3          # newest tool results stay verbatim under masking
+SHORT_RESULT = 500        # chars: a result this small is never masked
 KEEP_TURNS = 6            # newest messages stay verbatim under summarization
 YELLOW, RED = 0.60, 0.80  # utilization thresholds of the usable window
 
@@ -112,10 +119,13 @@ def _mask_text(call_id: str, original_len: int) -> str:
 
 
 def mask_old_results(history: list[Message],
-                     *, keep_recent: int = KEEP_RESULTS) -> tuple[list[Message], int]:
-    """Return a NEW list where all but the newest ``keep_recent``
-    ToolResults have elided content. Idempotent: already-masked blocks
-    keep their placeholder (and count toward recency, harmlessly)."""
+                     *, keep_recent: int = KEEP_RESULTS,
+                     target_tokens: int | None = None) -> tuple[list[Message], int]:
+    """Return a NEW list where ToolResults older than the newest
+    ``keep_recent`` have elided content, oldest first, stopping once the
+    history's estimate is at or under ``target_tokens`` (None: every one).
+    A result shorter than SHORT_RESULT is kept. Idempotent: already-masked
+    blocks keep their placeholder (and count toward recency, harmlessly)."""
     positions: list[tuple[int, int]] = []
     for mi, message in enumerate(history):
         for bi, block in enumerate(message.content):
@@ -123,12 +133,17 @@ def mask_old_results(history: list[Message],
                 positions.append((mi, bi))
 
     masked_count = 0
+    total = estimate_history(history) if target_tokens is not None else 0
     out = [None] * len(history)  # type: ignore[list-item]
-    for mi, bi in reversed(positions[:-keep_recent] if keep_recent else positions):
+    for mi, bi in positions[:-keep_recent] if keep_recent else positions:
+        if target_tokens is not None and total <= target_tokens:
+            break
         block = history[mi].content[bi]
         assert isinstance(block, ToolResult)
         if block.content.startswith(MASK_MARKER):
             continue  # idempotent: masking twice must not stack placeholders
+        if len(block.content) < SHORT_RESULT:
+            continue  # frees nothing; the fact is worth more than the room
         replacement = ToolResult(block.tool_call_id,
                                  _mask_text(block.tool_call_id, len(block.content)),
                                  is_error=block.is_error)
@@ -136,10 +151,17 @@ def mask_old_results(history: list[Message],
         content = list(message.content)
         content[bi] = replacement
         out[mi] = Message(message.role, content)
+        total -= estimate_tokens(message) - estimate_tokens(out[mi])
         masked_count += 1
 
     return [out[i] if out[i] is not None else m
             for i, m in enumerate(history)], masked_count
+
+
+def _yellow_target(context_window: int, max_tokens: int, fixed_tokens: int) -> int:
+    """The history's share of the usable window at yellow (never below 0)."""
+    usable = max(context_window - max_tokens, 1)
+    return max(int(usable * YELLOW) - fixed_tokens, 0)
 
 
 # ---- layer 2: summarize the middle -----------------------------------------
@@ -202,14 +224,19 @@ def compact_history(
     summarize: Callable[[str], str] | None = None,
     context_window: int,
     max_tokens: int,
+    fixed_tokens: int = 0,
 ) -> tuple[list[Message], dict]:
     """Run both layers as needed; returns (new_history, stats).
 
     ``summarize`` receives the rendered segment text and returns the
     summary (a real implementation makes an LLM call; tests pass stubs).
+    ``fixed_tokens`` is what every request carries besides the history
+    (system prompt, tool schemas): masking aims under yellow with it
+    counted, or a real request would still be red.
     """
     stats: dict = {"masked": 0, "summarized": False, "segment_size": 0}
-    new_history, masked = mask_old_results(history)
+    new_history, masked = mask_old_results(
+        history, target_tokens=_yellow_target(context_window, max_tokens, fixed_tokens))
     stats["masked"] = masked
 
     still_red = utilization(new_history, context_window=context_window,
@@ -236,6 +263,7 @@ async def acompact_history(
     asummarize: Callable[[str], Awaitable[str]] | None = None,
     context_window: int,
     max_tokens: int,
+    fixed_tokens: int = 0,
 ) -> tuple[list[Message], dict]:
     """Async twin of :func:`compact_history`.
 
@@ -244,7 +272,8 @@ async def acompact_history(
     the single line that differs from the sync function.
     """
     stats: dict = {"masked": 0, "summarized": False, "segment_size": 0}
-    new_history, masked = mask_old_results(history)
+    new_history, masked = mask_old_results(
+        history, target_tokens=_yellow_target(context_window, max_tokens, fixed_tokens))
     stats["masked"] = masked
 
     still_red = utilization(new_history, context_window=context_window,

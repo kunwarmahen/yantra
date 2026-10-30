@@ -906,6 +906,7 @@ class Agent:
             summarize=self._summarize_segment,
             context_window=self.context_window,
             max_tokens=self.max_tokens,
+            fixed_tokens=self._fixed_tokens(),
         )
         stats["messages_before"] = before
         stats["messages_after"] = len(self.history)

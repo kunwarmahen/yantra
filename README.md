@@ -2592,7 +2592,9 @@ src/yantra/
 │                   loop's, because only the loop may leave a call
 │                   unanswered and mend it ([notes/88](notes/88-not-yet.md))
 ├── context.py      compaction: mask old tool results, then summarize (red
-│                   zone) -- sync + async twins share all the arithmetic
+│                   zone) -- sync + async twins share all the arithmetic;
+│                   masks oldest first, only to yellow, never a short one
+│                   ([notes/149](notes/149-only-as-much-as-it-takes.md))
 ├── leases.py       TTL leases for shared resources -- parallel batch writes
 │                   to one path serialize instead of racing
 ├── unattended.py   a run with nobody in front of it (--unattended,

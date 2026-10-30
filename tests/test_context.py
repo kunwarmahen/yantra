@@ -121,10 +121,39 @@ class TestCompactHistory:
         new, stats = compact_history(
             history,
             summarize=lambda text: "SHOULD NOT BE CALLED",
-            context_window=10**9, max_tokens=1000,
+            context_window=8000, max_tokens=1000,
         )
         assert stats["masked"] == 2 and stats["summarized"] is False
         assert_history_resumable(_fake_agent(new))
+
+    def test_masking_stops_once_under_yellow_oldest_first(self):
+        # ~6.3k tokens in 5 results of 5k chars; yellow of 7000 usable is
+        # 4200: two of the oldest go and the third oldest is still there
+        history = big_results_history(5)
+        new, stats = compact_history(history, context_window=8000, max_tokens=1000)
+        contents = [m.content[0].content for m in new if _result_msg(m)]
+        assert [c.startswith(MASK_MARKER) for c in contents] == [
+            True, True, False, False, False]
+
+    def test_the_request_besides_the_history_is_counted(self):
+        # 1000 tokens of system prompt and tool schemas on every request:
+        # one more result has to go than for the history alone
+        history = big_results_history(7)
+        _, alone = compact_history(history, context_window=12000, max_tokens=1000)
+        _, carried = compact_history(history, context_window=12000, max_tokens=1000,
+                                     fixed_tokens=1000)
+        assert (alone["masked"], carried["masked"]) == (2, 3)
+
+    def test_a_short_result_is_never_masked(self):
+        # a phone's battery or "no schedules" frees nothing when elided,
+        # and the model then says the tool isn't there
+        history = big_results_history(5)
+        history.insert(3, Message("assistant", [ToolCall("s", "phone_status", {})]))
+        history.insert(4, Message("user", [ToolResult("s", "battery 81%, charging")]))
+        new, _ = mask_old_results(history)
+        short = next(m.content[0] for m in new
+                     if _result_msg(m) and m.content[0].tool_call_id == "s")
+        assert short.content == "battery 81%, charging"
 
     def test_summarizer_runs_when_still_red_after_masking(self):
         # Huge results + tiny window: even after masking, estimate stays red.
