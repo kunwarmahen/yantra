@@ -25,6 +25,16 @@ part said *No such tool in this session*, last night's tests *No
 list_schedules tool available*, and the money lines were made up. Three
 briefs in three days gave three different portfolio totals.
 
+The stored conversation of that run settles where they came from. When
+the model wrote, 24 of its 33 results were placeholders: every mail
+search and every brokerage read. The brief opened with a to-do, *Red
+Hat access approval from Pradeep — 14 approvals pending; he asked
+before 6pm ET*, that its person had no such mail for, and a cash line
+of *≈ $5.2M*. Neither is in any result it could still see. Its own
+thinking, just before it wrote, called a figure "$3,729,970 total
+cash, which is the authoritative figure I should use". It was
+remembering text it no longer had, and remembering it wrong.
+
 ## Two rules
 
 **A SHORT RESULT IS NEVER ELIDED.** The placeholder is about 125
@@ -44,6 +54,22 @@ same figure the agent forecasts with). Without it, masking would aim
 under yellow by its own count while the real request was still red,
 and every call after would compact again.
 
+**THE START STAYS.** An elided result keeps its first few lines, up
+to `HEAD_KEPT` (300 characters, and never more than a quarter of the
+result), after words that say what is missing:
+
+```
+[tool result elided to save context; call_id=call_xe1vvcca; original
+4929 chars, of which only the start is below. Call the tool again
+before you state anything else from it]
+## mine (kunwarmahen@gmail.com)
+3 threads since Oct 29 ...
+[...]
+```
+
+A model that re-runs nothing still has the heading and first figures,
+and the words say plainly that the rest isn't there to quote.
+
 The newest three are still kept whatever happens. A summary is still
 made only when masking alone leaves the window red.
 
@@ -60,7 +86,6 @@ is made from costs the answer.
 
 * **A model that re-runs what was elided.** The placeholder asks, and
   `qwen3.8-64k:latest` ignored it. Elided results are now fewer and
-  older, but one the answer needs can still go on a long enough turn.
-* **Keeping the shape of an elided result** (its first lines, a total)
-  rather than nothing. The summary layer already previews 300
-  characters of each result; the mask layer could too.
+  older and keep their start, but a fact past the first lines of one
+  the answer needs can still go on a long enough turn.
+* ~~**Keeping the shape of an elided result**~~ -- the start stays, above.

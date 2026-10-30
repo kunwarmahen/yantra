@@ -149,8 +149,8 @@ headline number, and tool results dominate transcripts (often 70-90%).
 Two layers, strictly ordered:
 
 1. **Mask** (`mask_old_results`): keep the newest 3 ToolResults verbatim,
-   elide older ones to `"[tool result elided ... call_id=...; re-run if
-   needed]"`, oldest first and only until the window is back under
+   elide older ones to `"[tool result elided ... call_id=...; call the
+   tool again ...]"` plus the result's first few lines, oldest first and only until the window is back under
    yellow; a result under 500 characters is never elided
    ([notes/149](149-only-as-much-as-it-takes.md)). Reversible,
    idempotent, preserves is_error, keeps every call answered -- the

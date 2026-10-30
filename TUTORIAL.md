@@ -2147,7 +2147,8 @@ containers, see §24.
 * **Compaction.** Mask before summarize: old tool-result *output* is
   elided first (reversible, the calls stay verbatim), oldest first and
   only until the window is back under 60% — a short result, like a
-  battery reading, is never elided ([notes/149](notes/149-only-as-much-as-it-takes.md)) — and only if the
+  battery reading, is never elided, and an elided one keeps its first
+  few lines ([notes/149](notes/149-only-as-much-as-it-takes.md)) — and only if the
   context is still in the red zone does a model summarize the middle —
   goal message intact, every tool call accounted for. Auto-fires at 80%
   of the window; `/compact` forces it.

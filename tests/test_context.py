@@ -56,8 +56,19 @@ class TestMasking:
         first_result = next(m for m in masked if _result_msg(m)).content[0]
         assert isinstance(first_result, ToolResult)
         assert first_result.tool_call_id in first_result.content
-        assert "re-run" in first_result.content
+        assert "Call the tool again" in first_result.content
         assert first_result.is_error is False          # error flag preserved
+
+    def test_the_start_of_a_masked_result_stays(self):
+        # a model that never re-runs still has the heading and first figures
+        history = big_results_history(4)
+        history[2] = Message("user", [ToolResult(
+            "c0", "Total value $41,203.17\n" + "y" * 5_000, is_error=False)])
+        masked, _ = mask_old_results(history)
+        kept = masked[2].content[0].content
+        assert kept.startswith(MASK_MARKER)
+        assert "Total value $41,203.17" in kept
+        assert len(kept) < 600                         # the rest is gone
 
     def test_masking_is_idempotent(self):
         history = big_results_history(4)

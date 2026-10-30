@@ -4,7 +4,9 @@ Two-layer strategy (book ch7-8, adapted), in strict order:
 
 1. MASK older tool results -- reversible and precise. The tool CALL
    stays verbatim; only its bulky OUTPUT becomes a placeholder telling
-   the model it can re-run if needed. Tool results dominate transcripts
+   the model it can re-run if needed, after the result's first few
+   lines (a model that never re-runs still has the heading and first
+   figures). Tool results dominate transcripts
    (often 70-90% by turn ten), so this alone usually clears red zone.
    ONLY AS MUCH AS IT TAKES, OLDEST FIRST: results are elided from the
    oldest until the window is back under yellow, and one shorter than
@@ -43,6 +45,7 @@ from yantra.types import (
 MASK_MARKER = "[tool result elided"
 KEEP_RESULTS = 3          # newest tool results stay verbatim under masking
 SHORT_RESULT = 500        # chars: a result this small is never masked
+HEAD_KEPT = 300           # chars of a masked result's start that stay
 KEEP_TURNS = 6            # newest messages stay verbatim under summarization
 YELLOW, RED = 0.60, 0.80  # utilization thresholds of the usable window
 
@@ -112,10 +115,14 @@ def utilization(history: list[Message], *, context_window: int,
 # ---- layer 1: mask tool-result outputs -------------------------------------
 
 
-def _mask_text(call_id: str, original_len: int) -> str:
+def _mask_text(call_id: str, original: str) -> str:
+    # THE START STAYS: a model that never re-runs a tool still has the
+    # heading and first figures, and the words say what is missing
+    head = original[:min(HEAD_KEPT, len(original) // 4)].rstrip()
     return (f"{MASK_MARKER} to save context; call_id={call_id}; "
-            f"original {original_len} chars; re-run the tool if you need "
-            "this output again]")
+            f"original {len(original)} chars, of which only the start is "
+            "below. Call the tool again before you state anything else "
+            f"from it]\n{head}\n[...]")
 
 
 def mask_old_results(history: list[Message],
@@ -145,7 +152,7 @@ def mask_old_results(history: list[Message],
         if len(block.content) < SHORT_RESULT:
             continue  # frees nothing; the fact is worth more than the room
         replacement = ToolResult(block.tool_call_id,
-                                 _mask_text(block.tool_call_id, len(block.content)),
+                                 _mask_text(block.tool_call_id, block.content),
                                  is_error=block.is_error)
         message = out[mi] if out[mi] is not None else history[mi]
         content = list(message.content)
