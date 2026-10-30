@@ -200,7 +200,9 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "tool's answer it shows you and fix the pick (a pattern with a group, or a JSON "
         "path) before going on.",
         "3. Tell the person the sentence and what it sees now; only after they say yes, "
-        "call `mcp__prahari__create_watch`. Leave `then` out to just tell them what was "
+        "call `mcp__prahari__create_watch` with a `name` the person will know it by -- "
+        "what and the line, \"Flight to Delhi under $571\", never the tool's name. "
+        "Leave `then` out to just tell them what was "
         "seen (no model at all); give `then` only when there is work to do when it "
         "fires, written as a complete instruction to yourself.",
         "4. `every`: as often as the thing really changes -- mail 15m-1h, a price "
