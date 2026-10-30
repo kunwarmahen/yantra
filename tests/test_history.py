@@ -69,6 +69,14 @@ def test_a_conversation_is_kept_with_its_first_words_as_its_title(log):
     assert (row.road, row.folder, row.turns) == ("terminal", "/w", 1)
 
 
+def test_a_host_that_wraps_the_persons_words_names_it_by_its_own_reading(tmp_path):
+    log = ConversationLog(tmp_path / "c.sqlite", titled=lambda payload: "the boiler")
+    talked(log, "a", "(wrapped) is the boiler on?", "yes")
+    [row] = log.listed()
+    assert row.title == "the boiler"
+    assert log.listed("boiler")
+
+
 def test_each_turn_replaces_the_row_rather_than_adding_one(log):
     agent = agent_with([assistant_text("one"), assistant_text("two")])
     list(agent.run_streaming("first"))

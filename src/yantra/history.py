@@ -288,8 +288,12 @@ def match_of(words: str) -> str:
 
 
 class ConversationLog:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, titled=None) -> None:
         self.path = Path(path)
+        # How a conversation is named from its words: its first ones, unless
+        # the host knows its own wrapping (a voice note's line, say) that
+        # would make a poor name in a list.
+        self._titled = titled or title_of
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Same reasoning as SessionStore: built on one thread, used from
         # the page's endpoints on another; one lock serializes it.
@@ -327,7 +331,7 @@ class ConversationLog:
         # To the microsecond: two turns in one second (a page, a fast
         # model) must still come out newest first.
         now = at or datetime.now(UTC).isoformat(timespec="microseconds")
-        title = title_of(payload)
+        title = self._titled(payload)
         with self._lock:
             row = self._db.execute(
                 "SELECT n, named, roads FROM conversations WHERE id = ?",

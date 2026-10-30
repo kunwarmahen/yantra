@@ -2633,7 +2633,8 @@ src/yantra/
 │                   one log per person narrows by folder (Dvara's /chats);
 │                   export_markdown shares one: words, answers, the tools'
 │                   NAMES, never their output; rename and pin, and every
-│                   road a row went on (notes/130)
+│                   road a row went on; `titled=` for a host whose own
+│                   wrapping of the person's words makes a poor name (notes/130)
 │                   ([notes/130](notes/130-every-conversation-kept.md))
 ├── keeps.py        `yantra keeps [--json]`: where what is yours alone is kept
 │                   (the state home, ~/.yantra/skills, a moved History), for
