@@ -49,6 +49,19 @@ answer. And what it plainly implies: "Lives in Chennai." ranked
 eighteenth for "what time is that for me?", while the same fact with
 its time zone ranked second (notes/109).
 
+A FACT SAYS WHERE IT GOES. Each line carries its topic and a key in
+brackets -- ``fact [home/city]: Lives in Cary, NC (Eastern time).`` --
+the topic from the short list in memory/__init__.py, the key naming the
+one thing it is, someone else's with their name first
+(``contact/ravi.email``). The topic sets how long it lasts; topic and
+key are its slot, so "moved to Austin" under ``home/city`` replaces
+Cary (``remember_replacing``). The look back is shown each kept fact
+with its own ``[topic/key]``, so the same thing gets the same key. A
+line that leaves the bracket or the key out is still read -- kept with
+no topic, or with a topic and no slot -- because a look back that keeps
+the fact unlabelled beats one that loses it (a first wording of the
+kind prefix lost every fact, notes/107).
+
 WHAT WAS SAID, NOT WHAT WAS THOUGHT. The model's reasoning and the
 arguments of its tool calls are left out of the transcript. Both are the
 assistant's, and both read the system prompt: a model thinking "the user
@@ -122,7 +135,9 @@ there.)
 
 Only what the person said or plainly showed. Not what the assistant \
 suggested, guessed or looked up. Nothing already remembered (listed \
-below). No passwords, tokens, keys or account numbers.
+below), unless it has changed: then the new one, which replaces it. No \
+passwords, tokens, keys, card numbers or ID numbers; which bank or \
+brokerage they use, and its account numbers, are fine.
 
 Plainly showed includes HOW they say things: the currency they quote \
 prices in, the units they measure in, the language they write in. Said \
@@ -138,11 +153,16 @@ dog is named Biscuit", not "Biscuit"; "Lives in Lisbon, Portugal \
 (Western European Time)", not "Lives in Lisbon".
 
 Reply with one line per fact, at most {limit}. Start every line with its \
-kind -- fact:, preference: or correction: -- then one short \
-self-contained sentence in the third person, like these:
-fact: Lives near RDU (Raleigh-Durham airport).
-preference: Prefers short answers.
-correction: Their manager is Priya, not Sam.
+kind -- fact:, preference: or correction: -- with, in square brackets \
+before the colon, its topic (one of: {topics}), a slash, and a short key \
+for the one thing it names; for someone else's, their name first. Use \
+the same key as an already-remembered fact about the same thing: that \
+one is then replaced. Then one short self-contained sentence in the \
+third person, like these:
+fact [home/city]: Lives near RDU (Raleigh-Durham airport).
+preference [preference/answer_length]: Prefers short answers.
+correction [work/manager]: Their manager is Priya, not Sam.
+fact [contact/ravi.email]: Their brother Ravi's email is ravi@example.org.
 If nothing passes, reply with exactly: NONE
 
 The conversation:
@@ -151,6 +171,7 @@ The conversation:
 >>>"""
 
 _LINE = re.compile(r"^\s*(?:[-*•]|\d+[.)])?\s*\**(fact|preference|correction)"
+                   r"\**\s*(?:[\[(]\s*([a-z]+)(?:\s*/\s*([a-z0-9_.\- ]+?))?\s*[\])])?"
                    r"\**\s*[:\-–—]\s*(.+?)\s*$", re.IGNORECASE)
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _WORD = re.compile(r"[a-z0-9]+")
@@ -162,6 +183,8 @@ class Candidate:
 
     statement: str
     kind: str = "fact"
+    topic: str | None = None          # one of memory.TOPICS, when given
+    key: str | None = None            # the one thing it names: "city", "ravi.email"
 
 
 def reflect_mode(flag: str | None = None,
@@ -229,9 +252,12 @@ def spoken(messages: list[Message]) -> list[Message]:
 
 
 def build_prompt(transcript: str, remembered: list[str]) -> str:
+    """``remembered`` as the look back is shown it: each with its
+    ``[topic/key]`` when it has one (memory.label), so a key is reused."""
     known = "\n".join(f"- {s}" for s in remembered) or "(nothing yet)"
+    from yantra.memory import TOPICS
     return PROMPT.format(remembered=known, limit=MAX_CANDIDATES,
-                         transcript=transcript)
+                         topics=", ".join(TOPICS), transcript=transcript)
 
 
 def parse_reply(text: str, remembered: list[str],
@@ -247,8 +273,11 @@ def parse_reply(text: str, remembered: list[str],
         match = _LINE.match(line)
         if match is None:
             continue
+        from yantra.memory import TOPICS
         kind = match.group(1).lower()
-        statement = " ".join(match.group(2).strip().strip('"').split())
+        topic = (match.group(2) or "").lower() or None
+        key = " ".join((match.group(3) or "").split()).lower() or None
+        statement = " ".join(match.group(4).strip().strip('"').split())
         norm = _norm(statement)
         if not statement or REDACTED in statement or len(statement) > 300:
             continue
@@ -260,7 +289,10 @@ def parse_reply(text: str, remembered: list[str],
         if any(norm == k or (words and words <= kw) for k, kw in known):
             continue
         seen.add(norm)
-        out.append(Candidate(statement, kind if kind in KINDS else "fact"))
+        known_topic = topic in TOPICS
+        out.append(Candidate(statement, kind if kind in KINDS else "fact",
+                             topic if known_topic else None,
+                             key if known_topic else None))
         if len(out) == MAX_CANDIDATES:
             break
     return out
@@ -300,10 +332,13 @@ def _prepare(agent: Any, messages: list[Message] | None = None
         if messages is None:
             memory.reviewed = len(agent.history)
         return None
-    remembered = [item.statement for item in memory.list(100)]
+    from yantra.memory import label
+    items = memory.list(100)
+    remembered = [item.statement for item in items]
     transcript = _clip(scrub(render_segment(spoken(tail)), memory.redact),
                        TRANSCRIPT_CHARS)
-    return memory, build_prompt(transcript, remembered), remembered
+    shown = [f"{label(item)}{item.statement}" for item in items]
+    return memory, build_prompt(transcript, shown), remembered
 
 
 def _account(agent: Any, response: Any) -> None:
@@ -427,13 +462,28 @@ async def areflect(agent: Any) -> list[Candidate]:
 
 def keep(memory: Any, candidates: list[Candidate]) -> list[str]:
     """Remember each; returns the ids. Scrubbed once more on the way in."""
-    ids = []
+    return [memory_id for memory_id, _ in _keep(memory, candidates)]
+
+
+def keep_lines(memory: Any, candidates: list[Candidate]) -> list[tuple[str, str]]:
+    """Remember each; returns (id, what was kept as the person is told
+    it): a new home says the old one it replaced ("… (instead of: …)")."""
+    return _keep(memory, candidates)
+
+
+def _keep(memory: Any, candidates: list[Candidate]) -> list[tuple[str, str]]:
+    from yantra.memory.tools import kept_line
+    out = []
     for candidate in candidates:
         statement = scrub(candidate.statement, memory.redact)
         if REDACTED in statement:
             continue
-        ids.append(memory.remember(statement, kind=candidate.kind))
-    return ids
+        about, _, key = (candidate.key or "").rpartition(".")
+        memory_id, replaced = memory.remember_replacing(
+            statement, kind=candidate.kind, topic=candidate.topic,
+            about=about or None, key=key or None)
+        out.append((memory_id, kept_line(" ".join(statement.split()), replaced)))
+    return out
 
 
 def decline(memory: Any, candidates: list[Candidate]) -> None:
@@ -498,6 +548,7 @@ __all__ = [
     "before_compaction",
     "decline",
     "keep",
+    "keep_lines",
     "look_back_ended",
     "mark_reviewed",
     "parse_reply",

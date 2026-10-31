@@ -206,6 +206,8 @@ class Trial:
         except Exception as exc:
             found, row["error"] = [], f"look back failed: {exc}"
         row["proposed"] = [c.statement for c in found]
+        # where the look back filed each (notes/150): "home/city", "tool", or ""
+        row["proposed_where"] = ["/".join(p for p in (c.topic, c.key) if p) for c in found]
         keep(one.memory, found)                 # the person says "a"
         kept = [i.statement for i in one.memory.list(200)]
         row["kept"] = kept

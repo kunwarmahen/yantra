@@ -22,10 +22,17 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from yantra.errors import ToolError
-from yantra.memory import Memory, MemoryStoreError
+from yantra.memory import TOPICS, Memory, MemoryStoreError, slot
 from yantra.tools.base import Tool, ToolContext, require_str
 
 KINDS = ("fact", "preference", "correction")
+
+
+def kept_line(said: str, replaced: list[Any]) -> str:
+    """What was kept, and what it was kept instead of."""
+    if not replaced:
+        return said
+    return f"{said} (instead of: {'; '.join(item.statement for item in replaced)})"
 
 
 class Remember(Tool):
@@ -41,7 +48,11 @@ class Remember(Tool):
         "says what the thing IS and what it plainly implies: 'Uses Fish as "
         "their command-line shell', not 'Uses Fish'; 'Lives in Lisbon, "
         "Portugal (Western European Time)', not 'Lives in Lisbon'. Not the "
-        "task at hand, not plans for next week."
+        "task at hand, not plans for next week. Give it a topic; for "
+        "someone else's fact say who in `about`; when it names one thing "
+        "that can change (an email, a brokerage, a city) give that a `key`, "
+        "so a newer one replaces it. Account numbers are fine; passwords, "
+        "tokens, card or ID numbers never."
     )
     parameters: ClassVar[dict] = {
         "type": "object",
@@ -53,6 +64,18 @@ class Remember(Tool):
             "kind": {"type": "string", "enum": list(KINDS),
                      "description": "fact (default), preference, or "
                                     "correction."},
+            "topic": {"type": "string", "enum": list(TOPICS),
+                      "description": "What it is about; sets how long it "
+                                     "is kept unused."},
+            "about": {"type": "string",
+                      "description": "Who it is about, when not the person "
+                                     "talking: 'Naina', 'their daughter'."},
+            "key": {"type": "string",
+                    "description": "The one thing it names, e.g. 'city', "
+                                   "'email', 'brokerage': a later memory "
+                                   "with the same topic, about and key "
+                                   "replaces it. Reuse the key of a "
+                                   "remembered fact about the same thing."},
         },
         "required": ["statement"],
         "additionalProperties": False,
@@ -63,21 +86,34 @@ class Remember(Tool):
         self.memory = memory
 
     def summary(self, args: dict[str, Any], ctx: ToolContext) -> str:
-        return f"remember: {require_str(args, 'statement')}"
+        """What is asked about: the words to be kept, and what they would
+        replace -- forgetting is part of the write, so it is in the ask."""
+        said = f"remember: {require_str(args, 'statement')}"
+        try:
+            before = self.memory.in_slot(slot(args.get("topic"), args.get("about"),
+                                              args.get("key")))
+        except Exception:      # the ask still shows the words
+            before = []
+        if before:
+            said += f" (instead of: {'; '.join(i.statement for i in before)})"
+        return said
 
     def run(self, args: dict[str, Any], ctx: ToolContext) -> str:
         statement = require_str(args, "statement")
         kind = args.get("kind") or "fact"
         if kind not in KINDS:
             raise ToolError(f"kind {kind!r} is not one of {', '.join(KINDS)}")
+        topic = args.get("topic") or None
         try:
-            memory_id = self.memory.remember(statement, kind=kind)
+            memory_id, replaced = self.memory.remember_replacing(
+                statement, kind=kind, topic=topic, about=args.get("about"),
+                key=args.get("key"))
         except MemoryStoreError as exc:
             raise ToolError(str(exc)) from None
         except Exception as exc:
             raise ToolError(f"memory unavailable ({self.memory.store.name}: "
                             f"{exc}); nothing was remembered") from None
-        said = " ".join(statement.split())
+        said = kept_line(" ".join(statement.split()), replaced)
         self.memory.kept.append((str(memory_id), said))
         return f"remembered (#{memory_id}): {said}"
 

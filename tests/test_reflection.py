@@ -381,7 +381,7 @@ class TestWeb:
         waiting = client.get("/api/kept").json()["memories"]
         assert got["found"] == 1 and waiting == [
             {"statement": "Lives near RDU (Raleigh-Durham airport).",
-             "kind": "fact"}]
+             "kind": "fact", "topic": None, "key": None}]
         assert store.list("asha", 5) == []
         kept = client.post("/api/memory/keep",
                            json={"keep": waiting, "drop": []}).json()
@@ -436,7 +436,9 @@ class TestWording:
 
         rule, examples = PROMPT.split("Start every line with its kind", 1)
         assert "say what the thing IS" in rule
-        assert examples.split("\n", 2)[1].startswith("fact: ")
+        form, shown = examples.split("like these:\n", 1)
+        assert "say what" not in form          # nothing between format and examples
+        assert shown.startswith("fact [home/city]: ")
 
     def test_its_examples_are_not_the_trials_answers(self):
         import json

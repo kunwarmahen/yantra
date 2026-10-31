@@ -268,5 +268,5 @@ class TestPage:
         if look is not None:
             look.join(5)
         waiting = client.get("/api/kept").json()["memories"]
-        assert waiting == [{"statement": STATEMENT, "kind": "fact"}]
+        assert waiting == [{"statement": STATEMENT, "kind": "fact", "topic": None, "key": None}]
         assert store.list("asha", 5) == []

@@ -23,7 +23,13 @@ week, stays among the twenty a conversation starts with.
 SAYING IT TWICE STORES IT ONCE. The same statement (ignoring case and
 spacing) for the same person returns the existing id rather than a
 second row -- a model that remembers "uses uv, not pip" in three
-conversations should not fill the prompt with three copies.
+conversations should not fill the prompt with three copies. Said again
+with a topic it lacked, the row gains the label.
+
+A LIFETIME IS KEPT TO. A memory written with ``lifetime_days``
+(memory/__init__.py, TOPICS) is let go once that many days have passed
+since it was written or last used, whichever is later. Checked on every
+read, so a lapsed project never reaches the prompt layer.
 """
 
 from __future__ import annotations
@@ -50,8 +56,9 @@ CREATE TABLE IF NOT EXISTS memories (
 );
 CREATE INDEX IF NOT EXISTS memories_user ON memories (user, norm);
 """
-#: Added after the first files were written: an older file gains it.
-USED_COLUMN = "ALTER TABLE memories ADD COLUMN used_at TEXT"
+#: Added after the first files were written: an older file gains them.
+ADDED_COLUMNS = {"used_at": "TEXT", "topic": "TEXT", "slot": "TEXT",
+                 "lifetime_days": "INTEGER"}
 
 #: Words too common to say anything about what matches.
 STOPWORDS = frozenset(
@@ -90,8 +97,9 @@ class LocalStore:
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.executescript(SCHEMA)
         columns = {row[1] for row in self._db.execute("PRAGMA table_info(memories)")}
-        if "used_at" not in columns:
-            self._db.execute(USED_COLUMN)
+        for column, kind in ADDED_COLUMNS.items():
+            if column not in columns:
+                self._db.execute(f"ALTER TABLE memories ADD COLUMN {column} {kind}")
         self._db.commit()
 
     def remember(self, user: str, statement: str, meta: dict[str, Any]) -> str:
@@ -101,12 +109,20 @@ class LocalStore:
                 "SELECT id FROM memories WHERE user = ? AND norm = ?",
                 (user, norm)).fetchone()
             if row is not None:
+                if meta.get("topic"):
+                    self._db.execute(
+                        "UPDATE memories SET topic = ?, slot = ?, lifetime_days = ? "
+                        "WHERE id = ?", (meta.get("topic"), meta.get("slot"),
+                                         meta.get("lifetime_days"), row[0]))
+                    self._db.commit()
                 return str(row[0])
             cur = self._db.execute(
                 "INSERT INTO memories (user, statement, norm, kind, package, "
-                "created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "created_at, topic, slot, lifetime_days) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (user, statement, norm, meta.get("kind"), meta.get("package"),
-                 datetime.now(UTC).isoformat(timespec="seconds")))
+                 datetime.now(UTC).isoformat(timespec="seconds"),
+                 meta.get("topic"), meta.get("slot"), meta.get("lifetime_days")))
             self._db.commit()
             return str(cur.lastrowid)
 
@@ -152,7 +168,30 @@ class LocalStore:
         order = ("MAX(created_at, COALESCE(used_at, created_at)) DESC, "
                  "used_at IS NOT NULL DESC, id DESC" if by_use else "id DESC")
         with self._lock:
+            self._lapse(user)
             rows = self._db.execute(
-                "SELECT id, statement, created_at, package, kind, used_at "
+                "SELECT id, statement, created_at, package, kind, used_at, topic, slot "
                 f"FROM memories WHERE user = ? ORDER BY {order}", (user,)).fetchall()
-        return [MemoryItem(str(i), s, c, p, k, u or "") for i, s, c, p, k, u in rows]
+        return [MemoryItem(str(i), s, c, p, k, u or "", t, sl)
+                for i, s, c, p, k, u, t, sl in rows]
+
+    def _lapse(self, user: str) -> None:
+        """Let go of this person's memories unused past their lifetime.
+        The caller holds the lock."""
+        rows = self._db.execute(
+            "SELECT id, created_at, used_at, lifetime_days FROM memories "
+            "WHERE user = ? AND lifetime_days IS NOT NULL", (user,)).fetchall()
+        now = datetime.now(UTC)
+        gone = []
+        for memory_id, created, used, days in rows:
+            try:
+                since = max(datetime.fromisoformat(created),
+                            datetime.fromisoformat(used or created))
+            except ValueError:
+                continue
+            if (now - since).days > days:
+                gone.append(memory_id)
+        if gone:
+            self._db.execute(f"DELETE FROM memories WHERE id IN "
+                             f"({','.join('?' * len(gone))})", gone)
+            self._db.commit()

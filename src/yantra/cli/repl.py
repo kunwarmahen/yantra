@@ -46,7 +46,7 @@ from yantra.history import title_of as payload_title
 from yantra.history import export_markdown, export_name
 from yantra.images import load_image_block
 from yantra.memory import short_id
-from yantra.memory.reflect import (Candidate, LookFailed, decline, keep,
+from yantra.memory.reflect import (Candidate, LookFailed, decline, keep, keep_lines,
                                    look_back_ended, mark_reviewed, reflect,
                                    set_aside)
 from yantra.pricing import is_free, session_cost
@@ -1107,8 +1107,8 @@ class Repl:
             chosen = found
         else:
             lines = ["worth remembering about you, for later conversations?"]
-            lines += [f"  {i}. {c.kind}: {c.statement}"
-                      for i, c in enumerate(found, 1)]
+            lines += [f"  {i}. {c.kind}{f' [{c.topic}]' if c.topic else ''}: "
+                      f"{c.statement}" for i, c in enumerate(found, 1)]
             self.console.print("\n".join(lines), markup=False)
             try:
                 answer = self._input("keep [a]ll, numbers (1 3), or [N]one > ")
@@ -1117,11 +1117,15 @@ class Repl:
             chosen = _chosen(answer, found)
             decline(memory, [c for c in found if c not in chosen])
         try:
-            ids = keep(memory, chosen)
+            kept = keep_lines(memory, chosen)
         except Exception as exc:
             self.console.print(f"[red]memory ({memory.store.name}): {exc}; "
                                f"nothing kept[/red]")
             return
+        ids = [memory_id for memory_id, _ in kept]
+        for _, line in kept:
+            if "(instead of: " in line:
+                self.console.print(f"  {line}", style="dim", markup=False)
         if ids:
             self.console.print(f"[green]remembered {len(ids)}[/green] "
                                f"[dim](#{', #'.join(ids)} -- from the next "

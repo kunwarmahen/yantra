@@ -410,6 +410,30 @@ yesterday, and `/memory` shows `(used 2026-10-23)` beside it
 ([notes/143](notes/143-a-memory-in-use.md)). A Smritikosh too old to have
 the `used` tool still works. It just isn't told.
 
+**Each memory goes in its own place.** Yantra keeps every memory with a
+topic and a key, like `home/city` or `account/brokerage`. Smritikosh puts
+each one straight into its fact graph, word for word, under a matching
+category: no second model rewrites it. When you move, the new
+`home/city` replaces the old one, and its fact goes with it. Smritikosh's
+dashboard shows these facts under **Identity → Fact graph**
+([notes/150](notes/150-a-place-for-each-fact.md)).
+
+**Tidy facts made before this.** Memories kept before topics existed
+went through Smritikosh's own extraction, which made duplicate and
+messy facts and hundreds of beliefs. Smritikosh can make them again from
+your memories. Look first; it changes nothing:
+
+```
+cd ~/src/smritikosh
+uv run python scripts/rebuild_facts_beliefs.py --user asha --label
+```
+
+It lists a topic for each memory, then your facts now and the facts and
+beliefs a rebuild would make. On a local model this takes some minutes.
+If you like what you see, run it again with `--apply`. It saves the old
+facts and beliefs to a file in that folder first, and never touches the
+memories themselves.
+
 **See your memories in a browser.** Smritikosh has a dashboard of its own,
 in its `ui/` folder. It needs Node.js 20 or newer:
 

@@ -706,8 +706,8 @@ class WebSession:
             guides = list(self.kept_guides.items())
         return {"recipes": [{"id": key, **offer.view(cwd, home=learner.home)}
                             for key, (learner, offer) in recipes],
-                "memories": [{"statement": c.statement, "kind": c.kind}
-                             for c in memories],
+                "memories": [{"statement": c.statement, "kind": c.kind,
+                              "topic": c.topic, "key": c.key} for c in memories],
                 "guides": [{"id": key, "site": g.site, "name": g.name, "old": g.old,
                             "new": g.new, "calls": g.calls} for key, g in guides],
                 "looking": self.looking, "status": self._look_status,
@@ -2215,23 +2215,25 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         """The person's answer to a look back: what to keep, what to drop.
         Dropped ones are not offered again this session; both leave the
         tray."""
-        from yantra.memory.reflect import Candidate, decline, keep
+        from yantra.memory.reflect import Candidate, decline, keep_lines
         memory = require_memory()
         body = await req.json()
 
         def candidates(key: str) -> list[Candidate]:
             return [Candidate(str(c.get("statement") or ""),
-                              str(c.get("kind") or "fact"))
+                              str(c.get("kind") or "fact"), c.get("topic") or None,
+                              c.get("key") or None)
                     for c in body.get(key) or [] if isinstance(c, dict)]
         decline(memory, candidates("drop"))
         try:
-            kept = keep(memory, [c for c in candidates("keep") if c.statement])
+            kept = keep_lines(memory, [c for c in candidates("keep") if c.statement])
         except Exception as exc:
             raise HTTPException(400, f"memory ({memory.store.name}): {exc}") from None
         session.settle_memories({c.statement for c in
                                  candidates("keep") + candidates("drop")})
         session.broadcast({"type": "state", **session.state()})
-        return {**memory_view(memory), "kept": len(kept)}
+        return {**memory_view(memory), "kept": len(kept),
+                "replaced": [line for _, line in kept if "(instead of: " in line]}
 
     # ---- connections, through Setu (notes/99) --------------------------------
 

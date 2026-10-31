@@ -65,6 +65,32 @@ turn. Drawn on is decided without a model (``drew_on``): the answer, or
 a tool's arguments, carry a name, number or two words of the memory
 that the person's own message did not. A store without ``used`` just
 does not get told.
+
+A MEMORY SAYS WHAT IT IS ABOUT. Each one may carry a ``topic`` from a
+short fixed list (``TOPICS``: home, work, family, account, …), an
+``about`` when it is someone else's (their daughter's school, not
+theirs) and a ``key`` naming the one thing it is (``email``,
+``brokerage``). Two things follow, both decided here and not by the
+store:
+
+* A NEW ONE IN THE SAME PLACE REPLACES THE OLD. "Moved to Austin" and
+  "Lives in Cary" both kept would both come back, and the model would
+  pick one. Their place -- the SLOT, topic plus about plus key -- is the
+  same (``home/city``), so writing the new one forgets the old
+  (``remember_replacing``), and what was let go is said beside what was
+  kept. ONLY A KEY MAKES A SLOT: "one home per person" with no key
+  would have let "their stairs light is switch.lights_2", filed under
+  home, replace where they live -- a labeller did file a house's
+  thermostats under home. It is done with ``list`` and ``forget``, so
+  it works on any store that has them.
+* HOW LONG IT LASTS UNUSED. Time is a poor signal for where someone
+  lives -- they move, and say so, and that is a replace. It is a good
+  one for "working on the Q3 launch". So each topic carries a lifetime
+  (``TOPICS``): none for home, work, family, contact, health and diet;
+  months for accounts, tools, preferences and habits; two for projects.
+  It travels to the store as ``lifetime_days``, counted from the later
+  of written and last used, and the store lets the memory go past it --
+  an account a brief reads every morning never goes.
 """
 
 from __future__ import annotations
@@ -98,6 +124,50 @@ PROMPT_CHARS = 2_000
 #: One statement's ceiling. A memory is a sentence, not a document.
 MAX_STATEMENT_CHARS = 300
 
+#: What a memory can be about, and how many days it lasts unused (None:
+#: until replaced or forgotten). A short list on purpose: a local model
+#: picks from twelve words reliably, and a store that files facts by
+#: category maps each of these to one of its own.
+TOPICS: dict[str, int | None] = {
+    "home": None,         # where they live, their time zone
+    "work": None,         # employer, role
+    "family": None,       # the people in their life
+    "contact": None,      # their names, emails, handles
+    "health": None,
+    "diet": None,
+    "account": 365,       # banks, brokerages, services (identifiers, never secrets)
+    "tool": 365,          # software, devices, the stack they use
+    "preference": 365,
+    "habit": 180,
+    "project": 60,        # what they are working on now
+    "other": None,
+}
+_KEY = re.compile(r"[^a-z0-9]+")
+
+
+def slot(topic: str | None, about: str | None = None,
+         key: str | None = None) -> str | None:
+    """Where a memory sits, as ``topic|about|key`` -- two memories in the
+    same slot cannot both be true. None when it has no single place: no
+    topic, or no key saying which one thing it is."""
+    if not topic or topic not in TOPICS:
+        return None
+    key = _KEY.sub("_", (key or "").lower()).strip("_")
+    if not key:
+        return None
+    who = _KEY.sub("_", (about or "").lower()).strip("_")
+    return f"{topic}|{who}|{key}"
+
+
+def label(item: MemoryItem) -> str:
+    """``[home/city]`` for a memory with a slot, ``[tool]`` with a topic
+    only, empty without -- how a look back is shown what is kept, so it
+    reuses the key for the same thing."""
+    if item.slot:
+        topic, who, key = (item.slot.split("|") + ["", ""])[:3]
+        return f"[{topic}/{f'{who}.' if who else ''}{key}] "
+    return f"[{item.topic}] " if item.topic else ""
+
 
 @dataclass(frozen=True, slots=True)
 class MemoryItem:
@@ -109,6 +179,8 @@ class MemoryItem:
     package: str | None = None        # which agent wrote it, if any
     kind: str | None = None           # "fact", "preference", "correction"
     used: str = ""                    # ISO time an answer last drew on it
+    topic: str | None = None          # one of TOPICS, when labelled
+    slot: str | None = None           # topic|about|key, when it has one place
 
 
 @runtime_checkable
@@ -260,9 +332,46 @@ class Memory:
 
     # ---- the verbs, scoped to this person --------------------------------
 
-    def remember(self, statement: str, *, kind: str | None = None) -> str:
-        meta = {"kind": kind, "package": self.package}
-        return self.store.remember(self.user, _clean(statement), meta)
+    def remember(self, statement: str, *, kind: str | None = None,
+                 topic: str | None = None, about: str | None = None,
+                 key: str | None = None) -> str:
+        return self.remember_replacing(statement, kind=kind, topic=topic,
+                                       about=about, key=key)[0]
+
+    def remember_replacing(self, statement: str, *, kind: str | None = None,
+                           topic: str | None = None, about: str | None = None,
+                           key: str | None = None) -> tuple[str, list[MemoryItem]]:
+        """Write it; forget what sat in its slot before. Returns the id and
+        the memories let go. Written FIRST, forgotten after: a store that
+        fails between the two keeps both, never neither."""
+        if topic is not None and topic not in TOPICS:
+            raise MemoryStoreError(f"topic {topic!r} is not one of "
+                                   f"{', '.join(TOPICS)}")
+        where = slot(topic, about, key)
+        meta = {"kind": kind, "package": self.package, "topic": topic,
+                "about": (about or "").strip() or None,
+                "key": (key or "").strip() or None, "slot": where,
+                "lifetime_days": TOPICS.get(topic) if topic else None}
+        before = self.in_slot(where)
+        memory_id = str(self.store.remember(self.user, _clean(statement), meta))
+        replaced = []
+        for item in before:
+            if item.id == memory_id or not supports(self.store, "forget"):
+                continue
+            try:
+                if self.store.forget(self.user, item.id):
+                    replaced.append(item)
+            except Exception as exc:  # the new one is kept; say the old stayed
+                self._fail(f"kept the new memory, but could not let go of "
+                           f"#{short_id(item.id)} ({exc}); /memory forget it")
+        return memory_id, replaced
+
+    def in_slot(self, where: str | None) -> list[MemoryItem]:
+        """This person's memories already in ``where``; none when it is no
+        slot or the store cannot list."""
+        if where is None or not supports(self.store, "list"):
+            return []
+        return [item for item in self.list(1000) if item.slot == where]
 
     def recall(self, query: str, limit: int = 10) -> list[MemoryItem]:
         return self.store.recall(self.user, query, limit)
@@ -307,7 +416,9 @@ class Memory:
                 skipped += 1
                 continue
             self.store.remember(self.user, _clean(item.statement),
-                                {"kind": item.kind, "package": item.package})
+                                {"kind": item.kind, "package": item.package,
+                                 "topic": item.topic, "slot": item.slot,
+                                 "lifetime_days": TOPICS.get(item.topic or "")})
             here.add(norm(item.statement))
             copied += 1
         return copied, skipped
@@ -579,12 +690,15 @@ __all__ = [
     "MemoryStoreError",
     "MemoryItem",
     "MemoryStore",
+    "TOPICS",
     "check_mode",
     "drew_on",
     "enable_memory",
     "memory_mode",
     "note_used",
+    "label",
     "short_id",
+    "slot",
     "prime_if_new",
     "resolve_user",
     "supports",

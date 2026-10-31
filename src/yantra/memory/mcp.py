@@ -19,7 +19,8 @@ WHAT IS SENT. Each verb calls its tool with fixed argument names, so a
 server that wants to plug in knows what arrives:
 
 =========  ===============================================
-remember   ``statement``, ``user_id``, ``metadata`` (kind, package)
+remember   ``statement``, ``user_id``, ``metadata`` (kind, package,
+           topic, about, key, slot, lifetime_days -- the ones set)
 recall     ``query``, ``limit``, ``user_id``
 forget     ``memory_id``, ``user_id``
 list       ``limit``, ``user_id``
@@ -41,7 +42,10 @@ text under ``statement`` / ``content`` / ``text`` / ``raw_text``; a list
 of those at the top level or under ``memories`` / ``results`` / ``items``
 / ``events``. ``forget`` answers ``forgotten`` or ``deleted``; ``used``
 answers ``marked``. A row's ``last_used_at`` (or ``used``) is when it was
-last used.
+last used. Its ``topic`` and ``slot``, at the top or in its ``metadata``,
+are what Yantra wrote; a store that hands them back gets replacing
+(memory/__init__.py), and one that does not still remembers, but a new
+home sits beside the old one.
 
 BOUND LATE. Memory is attached while the agent is built; MCP servers
 connect after, in the host. So the store starts unbound, and the host
@@ -223,7 +227,9 @@ def _items(data: Any) -> list[MemoryItem]:
             id=str(memory_id), statement=" ".join(text.split()),
             created=str(row.get("created_at") or row.get("created") or ""),
             used=str(row.get("last_used_at") or row.get("used") or ""),
-            package=meta.get("package"), kind=row.get("kind") or meta.get("kind")))
+            package=meta.get("package"), kind=row.get("kind") or meta.get("kind"),
+            topic=row.get("topic") or meta.get("topic"),
+            slot=row.get("slot") or meta.get("slot")))
     return items
 
 

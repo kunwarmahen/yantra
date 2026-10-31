@@ -419,7 +419,7 @@ back over it once** and proposes what it learned about you:
 
 ```
 worth remembering about you, for later conversations?
-  1. fact: Lives near RDU (Raleigh-Durham area).
+  1. fact [home/city]: Lives near RDU (Raleigh-Durham area).
 keep [a]ll, numbers (1 3), or [N]one > a
 ```
 
@@ -448,6 +448,22 @@ listed among the newest again, so a fact you rely on doesn't age out of
 the twenty a conversation starts with. Only what the answer or a tool's
 arguments carried counts, not everything that was shown
 ([notes/143](notes/143-a-memory-in-use.md)).
+
+Each memory says what it's about: a **topic** from a short list (home,
+work, family, contact, health, diet, account, tool, preference, habit,
+project, other) and a **key** for the one thing it names (`home/city`,
+`account/brokerage`, `contact/ravi.email` for your brother's). Two things
+follow. A new memory with the same topic and key **replaces** the old
+one, and says so: *Kept: Lives in Austin, TX (instead of: Lives in
+Cary, NC)*. A memory with no key replaces nothing, so your stairs light
+filed under home never pushes out where you live. And the topic sets
+**how long it lasts unused**: where you live, your family and your
+health stay until replaced or forgotten; accounts, tools and
+preferences go after a year nobody used them, habits after six months,
+a project after two. Being drawn on counts as use, so the account your
+morning brief reads every day never goes. Account numbers may be kept;
+passwords, tokens, card and ID numbers never are
+([notes/150](notes/150-a-place-for-each-fact.md)).
 
 `/memory forget ID` removes one (the start of a long id is enough),
 `/memory add TEXT` keeps one in your words, `/memory find WORDS`
@@ -2666,7 +2682,11 @@ src/yantra/
 │                   per conversation so the cached prefix survives; local.py
 │                   is the built-in sqlite + word-overlap store, tools.py the
 │                   remember (asks first) and recall_memory tools
-│                   ([notes/100](notes/100-what-it-knows-about-you.md)); the
+│                   ([notes/100](notes/100-what-it-knows-about-you.md));
+│                   a memory's topic + key is its slot: a new one in the
+│                   slot replaces the old (list + forget, any store), and
+│                   the topic's lifetime travels as lifetime_days
+│                   ([notes/150](notes/150-a-place-for-each-fact.md)); the
 │                   layer is twenty lines, search first, then the newest
 │                   ([notes/109](notes/109-fewer-lines-fewer-facts.md));
 │                   note_used, as a turn ends, tells the store (optional

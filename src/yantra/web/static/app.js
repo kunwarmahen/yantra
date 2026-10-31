@@ -4572,7 +4572,7 @@ function renderKept() {
     list.className = "mem-offer";
     list.innerHTML = d.memories.map((c, i) => `
       <label><input type="checkbox" data-i="${i}">
-        <span>${esc(c.statement)} <span class="kind">${esc(c.kind)}</span></span>
+        <span>${esc(c.statement)} <span class="kind">${esc(c.kind)}${c.topic ? " · " + esc(c.topic) : ""}</span></span>
       </label>`).join("");
     const actions = document.createElement("div");
     actions.className = "kept-mem-actions";
@@ -4587,7 +4587,8 @@ function renderKept() {
       const drop = d.memories.filter((c) => !keep.includes(c));
       const r = await keptPost("/api/memory/keep", { keep, drop });
       if (!r.ok) { toast(r.data.detail || "memory did not answer"); return; }
-      if (r.data.kept) toast(`remembered ${r.data.kept} — from the next conversation on`);
+      if (r.data.kept) toast(`remembered ${r.data.kept} — from the next conversation on`
+        + (r.data.replaced || []).map((line) => `\n${line}`).join(""));
     };
     body.append(list, actions);
   }

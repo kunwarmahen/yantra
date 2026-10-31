@@ -75,7 +75,8 @@ def save(cwd: Path, recipes: dict[str, tuple[Any, Any]], memories: list[Any],
         "format": FORMAT,
         "cwd": str(Path(cwd).resolve()),
         "recipes": [{"id": key, **_offer_data(offer)} for key, (_, offer) in recipes.items()],
-        "memories": [{"statement": c.statement, "kind": c.kind} for c in memories],
+        "memories": [{"statement": c.statement, "kind": c.kind, "topic": c.topic, "key": c.key}
+                     for c in memories],
         "guides": [{"id": key, **dataclasses.asdict(g)} for key, g in guides.items()],
     }
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -123,7 +124,9 @@ def load(cwd: Path, agent: Any, learner: Any, *,
                          "or the skill it updated are gone")
             continue
         recipes[str(item["id"])] = (learner, offer)
-    memories = [Candidate(str(m["statement"]), str(m.get("kind") or "fact"))
+    memories = [Candidate(str(m["statement"]), str(m.get("kind") or "fact"),
+                          m.get("topic") or None,
+                          m.get("key") or None)
                 for m in data.get("memories") or [] if m.get("statement")]
     guides = {}
     for g in data.get("guides") or []:

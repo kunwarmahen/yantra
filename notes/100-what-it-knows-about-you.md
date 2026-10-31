@@ -233,5 +233,10 @@ person. … ask for the departure city.
   ones. Built since: when an answer draws on a memory, Yantra tells the
   store (an optional fifth verb, `used`), and `list` puts it first again
   ([note 143](143-a-memory-in-use.md)).
+* ~~**Knowing two memories are about the same thing.**~~ "Moved to
+  Austin" sat beside "Lives in Cary", and a project from last spring was
+  offered forever. Built since: each memory has a topic and a key; a new
+  one with the same key replaces the old, and the topic sets how long it
+  lasts unused ([note 150](150-a-place-for-each-fact.md)).
 * **Rewriting the layer mid-conversation.** It would cost the cached
   prefix on every change. Changes apply from the next conversation.
