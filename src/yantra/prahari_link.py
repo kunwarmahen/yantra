@@ -22,7 +22,9 @@ ONE SERVER, FOR ONE PERSON, as for Samay: ``--for`` the person this
 agent serves (``local`` here) and ``--agent`` the package this session
 runs, so a watch made while talking to your mail agent looks with, and
 wakes, your mail agent. A host serving several people (Dvara) makes a
-``Prahari`` per turn with that turn's person and road.
+``Prahari`` per turn with that turn's person and road, and their own
+time zone (``--zone``): someone in London is told a watch's days on
+London's clock, not the house's.
 
 THE CARD SAYS WHAT A YES COVERS. A ``create_watch`` arrives as a
 permission card, and its raw arguments -- a tool name, JSON arguments, a
@@ -60,6 +62,7 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any
 
 from yantra.mcp import MCPServerConfig
@@ -157,7 +160,7 @@ def load(mode: str, path: str | None = None) -> tuple[dict[str, Any], str] | Non
 
 
 def server_config(data: dict[str, Any], person: str = LOCAL, agent: str = "",
-                  runner: str = "") -> MCPServerConfig:
+                  runner: str = "", zone: str = "") -> MCPServerConfig:
     if not WORD_RE.match(person):
         raise PrahariLinkError(f"{person!r} is not a person Prahari can keep watches for")
     mcp = data["mcp"]
@@ -166,6 +169,8 @@ def server_config(data: dict[str, Any], person: str = LOCAL, agent: str = "",
         args += ["--agent", agent]
     if runner:
         args += ["--runner", runner]
+    if zone:
+        args += ["--zone", zone]
     return MCPServerConfig(name=SERVER, command=mcp["command"], args=args)
 
 
@@ -267,7 +272,7 @@ def _pick_words(pick: Any) -> str:
 
 
 def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
-                   preview: str = "", where: str = "") -> str:
+                   preview: str = "", where: str = "", zone: str = "") -> str:
     """The permission card for ``create_watch``, in plain words.
 
     LAID OUT LIKE A FORM, as Samay's card is: what it looks at and how
@@ -324,7 +329,7 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     thing = " ".join(str(args.get("thing") or "").split())
     lines += ["Tells you when",
               f"  {thing or _pick_words(args.get('pick'))} {_when_words(args.get('when'))}"]
-    span = _span_words(args, thing or _pick_words(args.get("pick")))
+    span = _span_words(args, thing or _pick_words(args.get("pick")), zone)
     if span:
         lines += ["How long", *[f"  {line}" for line in span]]
     if preview:
@@ -351,22 +356,29 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     return "\n".join(lines)
 
 
-def _at(stamp: Any) -> str:
-    """An ISO time on this computer's clock, as a person reads it."""
+def _at(stamp: Any, zone: str = "") -> str:
+    """An ISO time as a person reads it, on their clock (``zone``, which a
+    time with no offset is on too, as Prahari takes it), or with none on
+    this computer's."""
     try:
         when = datetime.fromisoformat(str(stamp))
+        tz = ZoneInfo(zone) if zone else None
     except ValueError:
         return str(stamp)
-    return f"{(when if when.tzinfo else when.astimezone()).astimezone():%a %-d %b %H:%M}"
+    except ZoneInfoNotFoundError:
+        tz = None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=tz) if tz is not None else when.astimezone()
+    return f"{when.astimezone(tz):%a %-d %b %H:%M}"
 
 
-def _span_words(args: dict[str, Any], thing: str) -> list[str]:
+def _span_words(args: dict[str, Any], thing: str, zone: str = "") -> list[str]:
     """When a watch starts and stops by itself, in lines; none for always."""
     out = []
     if args.get("starts"):
-        out.append(f"from {_at(args['starts'])}")
+        out.append(f"from {_at(args['starts'], zone)}")
     if args.get("ends"):
-        out.append(f"until {_at(args['ends'])}, then it ends by itself")
+        out.append(f"until {_at(args['ends'], zone)}, then it ends by itself")
     if isinstance(args.get("stop"), dict) and args["stop"]:
         out.append(f"ends once {thing} {_when_words(args['stop'])}")
     return out
@@ -433,7 +445,8 @@ def let_go_of_check(registry: Any, args: dict[str, Any]) -> None:
             held.let_go()
 
 
-def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None) -> Any:
+def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None,
+            zone: str = "") -> Any:
     """The ``explain`` hook for one of Prahari's write tools, or None."""
     verb = tool.raw_name
     session = tool.session
@@ -457,7 +470,7 @@ def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None) -> Any:
                     "check", "pick", "when", "every", "wake") if k in args})
                 said = "" if failed else (text.splitlines()[1] if "\n" in text else "")
             return explain_create(args, registry=registry, setu=setu_of(), preview=said,
-                                  where=where() if where is not None else "")
+                                  where=where() if where is not None else "", zone=zone)
         return card
     if verb in ("update_watch", "pause_watch", "resume_watch", "delete_watch",
                 "allow_for_watch"):
@@ -500,6 +513,9 @@ class Prahari:
     person: str = LOCAL
     agent: str = ""
     runner: str = ""
+    #: The person's own time zone (Dvara), when not this machine's: the
+    #: watch's days are taken and said on it (``prahari mcp --zone``).
+    zone: str = ""
     seen_at: str = SEEN_HERE
     off: str = OFF_HERE
     error: str = ""
@@ -511,7 +527,7 @@ class Prahari:
         from yantra.prompt import attach_prompt
 
         assert self.data is not None
-        cfg = server_config(self.data, self.person, self.agent, self.runner)
+        cfg = server_config(self.data, self.person, self.agent, self.runner, self.zone)
         if manager.sessions.get(SERVER) is None:
             self.tools = [n for n in manager.connect(cfg, origin="prahari")
                           if n in agent.registry]
@@ -525,7 +541,7 @@ class Prahari:
                 tool.before = (lambda args, registry=agent.registry:
                                let_go_of_check(registry, args))
             hook = explain(tool, agent.registry, lambda: getattr(agent, "setu", None),
-                           self.news_goes)
+                           self.news_goes, self.zone)
             if hook is not None:
                 tool.explain = hook
                 tool.run = self._then_refresh(tool.run)

@@ -321,6 +321,22 @@ class TestTheCardIsWords:
                 "by itself\n  ends once the fare says 'Landed'") in said
         assert "How long" not in prahari_link.explain_create(PRICE, registry=ToolRegistry())
 
+    def test_the_card_says_its_days_on_the_persons_own_clock(self):
+        said = prahari_link.explain_create(
+            {**PRICE, "ends": "2099-07-01T17:00+00:00"}, registry=ToolRegistry(),
+            zone="Europe/London")
+        assert "until Wed 1 Jul 18:00, then it ends by itself" in said
+        naive = prahari_link.explain_create(
+            {**PRICE, "ends": "2099-07-01T18:00"}, registry=ToolRegistry(),
+            zone="Europe/London")
+        assert "until Wed 1 Jul 18:00" in naive         # on their clock, as Prahari takes it
+
+    def test_the_persons_zone_goes_to_prahari_and_none_adds_nothing(self):
+        data = {"mcp": {"command": "prahari", "args": ["mcp"]}}
+        cfg = prahari_link.server_config(data, person="asha", zone="Europe/London")
+        assert cfg.args[-2:] == ["--zone", "Europe/London"]
+        assert "--zone" not in prahari_link.server_config(data, person="asha").args
+
     def test_a_tool_this_agent_lacks_would_fail_every_look(self):
         said = prahari_link.explain_create(PRICE, registry=ToolRegistry())
         assert "NO TOOL BY THIS NAME in this agent" in said

@@ -64,7 +64,9 @@ rules. The ones that matter most:
   `stop` — the status says Landed. The model turns what was said into
   ISO times with the person's offset, and the card says them under **How
   long** (*from Thu 1 Jan 07:00 · until Sat 3 Jan 00:00, then it ends by
-  itself · ends once the fare says 'Landed'*). An ended watch tells the
+  itself · ends once the fare says 'Landed'*), on the person's own
+  clock: a host serving someone elsewhere gives `Prahari` their `zone`,
+  which goes to the server as `--zone` and to the card. An ended watch tells the
   person and is kept 30 days; *keep it* is `update_watch` with `keep:
   true` (Prahari's notes/04).
 * **Leave `then` out to just tell them.** A watch with no `then` sends
