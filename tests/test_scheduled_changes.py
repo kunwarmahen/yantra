@@ -137,6 +137,11 @@ class TestTheCardSaysWhenTheJobCannotWork:
         assert samay_link.would_change("use call_service on the fan", home()) == \
             "call_service"
 
+    def test_writing_its_own_answer_is_no_change_but_writing_to_a_file_is(self):
+        assert samay_link.would_change("Write my morning brief.", home()) == ""
+        assert samay_link.would_change("write the prices to prices.csv", home()) == \
+            "write the prices to"
+
     def test_a_check_that_only_reads_gets_no_warning(self):
         said = samay_link.explain_create(
             {"prompt": "check my mail and tell me what needs me", "when": "every 2h"},

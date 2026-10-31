@@ -281,7 +281,10 @@ def _grant(pattern: Any) -> Grant | None:
 CHANGE_WORDS = re.compile(
     r"\b(turn(?:s|ing)? (?:on|off)|switch(?:es)? (?:on|off)|dim|send|post|reply|"
     r"delete|remove|buy|order|book|pay|lock|unlock|open|close|start|stop|create|"
-    r"write|move|rename|archive|mark|set|call_service)\b", re.IGNORECASE)
+    r"write (?:\w+ ){0,3}?(?:to|into)|write (?:a |the )?file|move|rename|archive|mark|"
+    r"set|call_service)\b", re.IGNORECASE)
+# "write" alone is not on it: "Write my morning brief" is the run's own
+# answer, and only writing TO somewhere (a file, a page) changes anything.
 
 
 def would_change(prompt: str, registry: Any) -> str:
