@@ -2071,6 +2071,18 @@ pre.output { color: var(--ink); }
 .conn-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .watch-every { width: 4.5em; padding: 2px 6px; font: inherit; color: inherit;
   background: transparent; border: 1px solid var(--line); border-radius: 4px; }
+.watch-form { grid-column: 1 / -1; display: grid; gap: 8px 12px; margin: 10px 0 4px;
+  grid-template-columns: repeat(auto-fit, minmax(16ch, 1fr)); font-size: 12.5px;
+  color: var(--ink-2); }
+.watch-form label { display: flex; flex-direction: column; gap: 3px; }
+.watch-form label.wide, .watch-form .conn-actions, .watch-tried { grid-column: 1 / -1; }
+.watch-form input, .watch-form textarea { padding: 6px 8px; font: inherit; font-size: 13px;
+  color: var(--ink); background: var(--surface-1); border: 1px solid var(--line-strong);
+  border-radius: var(--r-2); min-width: 0; }
+.watch-form textarea { min-height: 3.2em; resize: vertical; }
+.watch-form .mono { font-family: var(--mono); font-size: 12px; }
+.watch-tried { margin: 0; padding: 8px 10px; white-space: pre-wrap; font-family: var(--mono);
+  font-size: 12px; background: var(--surface-2, var(--surface-1)); border-radius: var(--r-2); }
 .conn-form {
   grid-column: 2 / 4;
   display: flex; gap: 8px; flex-wrap: wrap; align-items: center;

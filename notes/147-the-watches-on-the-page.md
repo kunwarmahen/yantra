@@ -29,6 +29,13 @@ An **eye** chip in the header, `2 watching`, opens a **Watches** panel:
   brings the next look nearer when the step got shorter. The box takes a
   number and a word and nothing else, so nothing typed there reaches
   Prahari's command line as a flag;
+* **new watch**, a form for one written by hand (name, what it's for in
+  your words, the tool it looks with and its arguments, pick, when, how
+  often, what to ask the agent), with **try it** (`prahari preview`:
+  looks once, keeps nothing) and **add** (`prahari add`, for this page's
+  person and agent, as a chat's watch would be); and **edit** on each
+  watch that looks, the same form filled in, which sends only the boxes
+  that changed (`prahari edit`);
 * a warning at the top when `prahari serve` isn't running, and where news
   goes (*to Yantra's page (its Watches panel) and Prahari's own*, or *to
   mahen's chat through Dvara, and to Yantra's page*).
@@ -71,6 +78,26 @@ A count that moved in the turn is right when the turn ends: each of
 Prahari's write tools is followed by a fresh `prahari status --json`,
 as Samay's are.
 
+THE FORM'S WORDS ARE PRAHARI'S TO READ. *number*, *below 50*, *3h* go to
+`prahari add` / `edit` as typed, and Prahari's refusal comes back in its
+own words (*when below compares a number: pick one with {"number": ""}*).
+Yantra checks only what it must before a program runs: a name, a tool, a
+test, and arguments that are one JSON object. Every value goes as
+`--flag=value` and the name after `--`, so nothing typed in a box is
+ever read as one of Prahari's options (a watch named *--help* is named
+that).
+
+MENDING SENDS ONLY WHAT CHANGED. A new name, new words or a new
+then-prompt keep what the watch has seen; a new tool, pick or test
+starts it over (Prahari's own rule, `watches.update`), and the toast
+says which. The tool and its arguments go together, since one means
+nothing without the other. A watch that listens (WhatsApp, mail pushed
+to the inlet) has no **edit**: what it hears is set where it was made.
+
+NO CARD FOR YOUR OWN HAND. A watch the agent writes is a yes on a card,
+because the agent wrote it. One written in this form is the person's
+own, at this computer, like pause and delete.
+
 ## Live receipt
 
 A scratch Prahari state, the real `prahari` program, no model anywhere:
@@ -97,12 +124,29 @@ POST /api/watches/7925f9e9/pause   -> state paused; /resume -> active
 POST /api/watches/nope/pause       -> 404 "prahari: no watch nope"
 ```
 
+The form, driven in headless Chrome against the real `prahari` over a
+scratch state (`yantra --web --port 8811 --prahari …`, `qwen3.8-64k`
+named but never asked: none of it is a turn). **new watch**, filled in
+as *Example heading*, `web_fetch`, `{"url": "https://example.com"}`,
+`text:<h1>(.*?)</h1>`, `changed`, `6h`; **try it** said Prahari's own
+words, *every 6 hours, looks at example.com (with web_fetch); tells you
+when the text changes.* and that the look waits for a yes, since that
+scratch Prahari doesn't count `web_fetch` as reading; **add**, then
+**edit** and a new name:
+
+```
+ROWS: ['ALAB under $50', 'Example heading']
+ROWS: ['ALAB under $50', 'Example page heading']
+$ prahari list
+c0654a01  active  Example page heading
+          asked: "tell me if the example page changes"
+          every 6 hours, looks at example.com (with web_fetch); tells you when the text changes
+```
+
 ## Not here
 
-- **Making or changing a watch from the panel.** A watch is a recipe the
-  agent writes against a tool's real answer; the person's part is the
-  yes. Prahari's own page has a **New watch** form for anyone who wants
-  to write one by hand.
+- ~~**Making or changing a watch from the panel.**~~ **new watch** and
+  **edit** (above).
 - **The inlet's address and key.** They open a door from outside; they
   stay on Prahari's page and `prahari inlet`.
 - **Mailboxes.** Added at the computer (`prahari mailbox add`); listed on

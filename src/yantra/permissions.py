@@ -284,6 +284,41 @@ def hold(request: PermissionRequest, reason: str | None = None) -> bool:
     return False
 
 
+class TurnYes:
+    """"Yes, and the rest of this task", as a person's own gate remembers it.
+
+    After the turn reads text the person didn't write (a mail, a page),
+    every change asks (yantra/outside.py) -- right, but a task that sends
+    three replies after reading one inbox asks three times about the same
+    reading. A yes given with **for this task** covers the turn's later
+    calls that ask for THAT reason only (``only_after_reading``): a spend
+    or a phone's confirm still asks every time. NOTHING NEW READ SINCE: a
+    page opened after the yes is one the person never saw, so the next
+    call asks again and names it. It ends with the turn (a new
+    ``turn_id``), never carried to the next task.
+    """
+
+    def __init__(self) -> None:
+        self.turn = ""
+        self.read: frozenset[str] = frozenset()
+
+    @staticmethod
+    def offered(request: PermissionRequest) -> bool:
+        """Whether this card may offer "for this task" at all."""
+        return bool(request.only_after_reading and request.turn_id)
+
+    def covers(self, request: PermissionRequest) -> bool:
+        return (self.offered(request) and request.turn_id == self.turn
+                and frozenset(request.after_reading) <= self.read)
+
+    def given(self, request: PermissionRequest) -> None:
+        if not self.offered(request):
+            return
+        if request.turn_id != self.turn:
+            self.turn, self.read = request.turn_id, frozenset()
+        self.read |= frozenset(request.after_reading)
+
+
 def allow_read_only(request: PermissionRequest) -> bool:
     """Auto-approve tools that declared read_only; deny everything else.
 

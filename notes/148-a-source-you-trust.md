@@ -69,8 +69,17 @@ A spend never comes under it. A tool that always asks for itself
 `only_after_reading` False even after a read, so no "for this task"
 covers it. The card still says what was read.
 
-How the yes is kept is Dvara's business (its gate and ask desk). Yantra
-only had to say which questions are about reading and nothing else.
+How the yes is kept is each host's business. Dvara keeps it in its gate
+and ask desk; Yantra's own page and terminal keep it in `TurnYes`
+(permissions.py), one per gate: the turn it was given in and what had
+been read by then. On the page the card has a **yes to all for this
+task** button beside **approve**, only on a card that asks because of a
+read; at the terminal the prompt offers `t` beside `y/n/e/s`, said on a
+line above it (*t = yes, and the rest of this task (until it reads
+something new)*). A `t` on a card that didn't offer it can't be typed;
+the page's button sent for a card that didn't offer it is a plain yes.
+The step it covers says who answered: *your yes for this task, on the
+page* (or *in the terminal*).
 
 ## Live receipt
 
@@ -101,6 +110,24 @@ what settled each call:
  ["write_file", null, "for_turn"]]
 ```
 
+The same question on Yantra's own page (`yantra --web` on
+`qwen3.8-64k`, driven in headless Chrome, each card answered as it
+came up):
+
+```
+CARD: APPROVAL NEEDED | web_fetch() | fetch https://example.com | RAW ARGUMENTS | edit | deny | approve ⏎
+  -> approve
+CARD: APPROVAL NEEDED | write_file() | Asked because this turn read text you didn't write (https://example.com (web_fetch)). Check this is what you asked for. | NEW FILE title.txt (1 lines) | RAW ARGUMENTS | edit | deny | yes to all for this task
+  -> yes to all for this task
+CARDS SHOWN: 2
+$ cat title.txt first.txt
+Example Domain
+This domain is for use in documentation examples without needing permission.
+```
+
+The web_fetch card had no such button (it asks for itself), and the
+second write ran on the yes given for the task.
+
 The trusted-source half was not run against a live Samay. Its tests
 drive both loops with a stand-in `mcp__samay__list_schedules`.
 
@@ -110,11 +137,19 @@ drive both loops with a stand-in `mcp__samay__list_schedules`.
   asked for, and it's what the card is about. A wider yes is a standing
   rule, and a standing rule can't answer these questions at all.
 * **No trust for the open web**, however a host words it.
-* **Yantra's own page and terminal don't offer "for this task" yet.**
-  Dvara's channels do: Telegram, its page, Sarathi's chat and Vaani's
-  puck.
+* ~~**Yantra's own page and terminal don't offer "for this task" yet.**~~
+  They do (`TurnYes`, above; receipt below).
+* **A held turn's answers** (the page's resume, notes/88) are one per
+  waiting call, with no "for this task": a held turn already shows
+  every waiting call at once.
 
 ## Tests
+
+`tests/test_yes_for_this_task.py`: the yes covers the turn's later
+after-reading cards while nothing new is read, never the next turn,
+never a card that asks for itself; the terminal offers `t` only after a
+read and asks again when something new was read; the page's card offers
+the button only after a read, and the button on a spend is a plain yes.
 
 `tests/test_outside.py` (28, up from 16): a trusted server's answer is
 not outside text; one tool can be trusted by its full name; a read from

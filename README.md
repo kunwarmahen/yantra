@@ -782,8 +782,9 @@ and once a turn has read an email, a page or any server's answer, every
 change after it asks too, with what was read on the card's first line
 ([notes/142](notes/142-outside-text-cannot-give-orders.md)). A server
 whose answers are your own words (your Samay schedules, your lights) can
-be named trusted, and then reading it asks nothing new; a host can offer
-"approve all for this task" on a question asked only because of a read
+be named trusted, and then reading it asks nothing new; the page's card
+offers **yes to all for this task** (and the terminal `t`) on a question
+asked only because of a read, until something new is read
 ([notes/148](notes/148-a-source-you-trust.md)),
 and a tool the manifest does not list is not registered at all, unless
 the manifest says `"*" = "write"` for a server whose tool names are its
@@ -990,7 +991,9 @@ are for accounts, pages and APIs
 Prahari's own sentence, what happens when it fires, its last look and
 every look (*fired · heard at the inlet*), and *look now*,
 *pause*/*resume*, *delete*, and how often it looks (a box, *30m*, and
-*set*; what it saw is kept). It runs Prahari's own commands (`prahari
+*set*; what it saw is kept); **new watch** writes one by hand (**try it**
+looks once, **add** keeps it) and **edit** mends one, sending only what
+changed. It runs Prahari's own commands (`prahari
 list --json` …), so it works whether or not `prahari serve` is up, and
 says at the top when it isn't. A **seen** chip lights when one of your
 watches fired since you last looked, and the panel opens with **what
@@ -2631,7 +2634,8 @@ src/yantra/
 │                   Agent.trusted_reads names servers whose answers are
 │                   the person's own words (no wildcards, never the web),
 │                   and only_after_reading marks a call a host may let one
-│                   "yes for this task" cover
+│                   "yes for this task" cover (permissions.TurnYes, the
+│                   page's button and the terminal's t)
 │                   ([notes/148](notes/148-a-source-you-trust.md))
 ├── hold.py         a turn that STOPS for an approval and carries on when
 │                   it comes: Held (the batch, what already ran, what
@@ -2964,7 +2968,7 @@ src/yantra/
 │                   the check's profile is closed, so the look isn't left
 │                   waiting on the chat's lock ([notes/140](notes/140-a-watch-offered.md));
 │                   the page's Watches panel through `prahari list|looks|
-│                   pause|resume|rm|edit --every --json` and a look now (`prahari look`,
+│                   pause|resume|rm|edit|add|preview --json` and a look now (`prahari look`,
 │                   given this Yantra when nothing names one), and the seen
 │                   chip: this person's looks that fired
 │                   ([notes/147](notes/147-the-watches-on-the-page.md))

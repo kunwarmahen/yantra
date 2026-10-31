@@ -54,7 +54,7 @@ from yantra.prompt import recompose
 from yantra.trace import watch
 from yantra.types import ImageBlock
 from yantra.permissions import (REFUSED_USER, PermissionRequest,
-                                SwitchableGate, refuse, yolo)
+                                SwitchableGate, TurnYes, refuse, yolo)
 from yantra.providers import get_provider
 from yantra.sandbox import ToolSandbox
 from yantra.session import SessionStore, apply_payload
@@ -231,11 +231,19 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
     side-effect-free (the same flag allow_read_only trusts) has nothing
     to confirm, and a discovery hatch behind a permission wall would
     defeat the selection loop that pins it.
+
+    't' is yes, and the rest of this task: offered only on a card that
+    asks because the turn read outside text, it covers the turn's later
+    such cards until something new is read (``TurnYes``).
     """
     edit = editor or terminal_editor
+    for_task = TurnYes()
 
     def gate(request: PermissionRequest) -> bool:
         if request.read_only:
+            return True
+        if for_task.covers(request):
+            request.answered_by = "your yes for this task, in the terminal"
             return True
         edited = False
         while True:
@@ -249,9 +257,16 @@ def confirm_gate(console: Console, editor: EditFn | None = None):
                 if shown:
                     console.print("[dim]the phone's screen, what it would tap ringed: "
                                   f"[/dim]{escape(shown)}")
-            answer = Prompt.ask("run it?", choices=["y", "n", "e", "s"],
-                                default="n").lower()
+            offered = TurnYes.offered(request)
+            if offered:
+                console.print("[dim]t = yes, and the rest of this task "
+                              "(until it reads something new)[/dim]")
+            answer = Prompt.ask("run it?", choices=["y", "n", "e", "s"]
+                                + (["t"] if offered else []), default="n").lower()
             request.answered_by = "you, in the terminal"
+            if answer == "t":
+                for_task.given(request)
+                return True
             if answer == "y":
                 return True  # edits ride along: the loop adopts them
             if answer == "s":

@@ -87,7 +87,18 @@ FAKE_PRAHARI = """\
     elif args[0] == "rm":
         print(json.dumps({{"removed": args[1]}}))
     elif args[0] == "edit":
-        print(json.dumps({{"id": args[1], "every": args[args.index("--every") + 1]}}))
+        flags = dict(a[2:].split("=", 1) for a in args[2:] if "=" in a)
+        if "--every" in args:
+            flags["every"] = args[args.index("--every") + 1]
+        print(json.dumps({{"id": args[1], **flags}}))
+    elif args[0] == "add":
+        flags = dict(a[2:].split("=", 1) for a in args[1:] if "=" in a)
+        print(json.dumps({{"id": "w-9", "name": args[-1], **flags,
+                          "sentence": "every 1 hour: " + flags.get("when", "")}}))
+    elif args[0] == "preview":
+        flags = dict(a[2:].split("=", 1) for a in args[1:] if "=" in a)
+        print(json.dumps({{"sentence": "looks with " + flags.get("check", "?"),
+                          "said": "It sees 61.2 now: no match yet."}}))
     elif args[0] == "look":
         pass
     elif args[0] == "mcp":
@@ -449,6 +460,59 @@ class TestThePanel:
                 assert said.status_code == 400 and "30m, 3h or 1d" in said.json()["detail"]
             assert ["--state", str(tmp_path / "state"), "edit", "w-1", "--every", "30m",
                     "--json"] in calls(fake[1])
+        finally:
+            manager.shutdown()
+
+    def test_a_watch_written_by_hand_goes_to_prahari_add_as_typed(self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        form = {"name": "ALAB under 50", "asked": "tell me if ALAB is cheap",
+                "tool": "web_fetch", "args": '{"url": "https://example.com"}',
+                "pick": "number", "when": "below 50", "every": "3h", "then": ""}
+        try:
+            tried = client.post("/api/watches/preview", json=form).json()["preview"]
+            assert tried["sentence"] == "looks with web_fetch"
+            made = client.post("/api/watches", json=form).json()["result"]
+            assert made["id"] == "w-9" and made["name"] == "ALAB under 50"
+            state = str(tmp_path / "state")
+            assert ["--state", state, "add", "--check=web_fetch",
+                    '--args={"url": "https://example.com"}', "--pick=number",
+                    "--when=below 50", "--every=3h", "--asked=tell me if ALAB is cheap",
+                    "--json", "--", "ALAB under 50"] in calls(fake[1])
+            # a name that looks like an option is still the name
+            assert client.post("/api/watches", json={**form, "name": "--help"}
+                               ).json()["result"]["name"] == "--help"
+        finally:
+            manager.shutdown()
+
+    def test_a_form_missing_its_tool_or_test_or_with_bad_arguments_is_said(self, fake,
+                                                                          tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        base = {"name": "x", "tool": "web_fetch", "args": "{}", "when": "new"}
+        try:
+            for wrong, said in (({"name": ""}, "needs a name"),
+                                ({"tool": ""}, "which tool"),
+                                ({"when": ""}, "when it matters"),
+                                ({"args": "[1]"}, "one JSON object"),
+                                ({"args": "{url"}, "one JSON object")):
+                got = client.post("/api/watches", json={**base, **wrong})
+                assert got.status_code == 400 and said in got.json()["detail"]
+            assert not any(c[2:3] == ["add"] for c in calls(fake[1]))
+        finally:
+            manager.shutdown()
+
+    def test_mending_sends_only_what_changed(self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            got = client.post("/api/watches/w-1/edit", json={"name": "ALAB cheap",
+                                                              "then": ""})
+            assert got.status_code == 200
+            state = str(tmp_path / "state")
+            assert ["--state", state, "edit", "w-1", "--then=", "--name=ALAB cheap",
+                    "--json"] in calls(fake[1])
+            client.post("/api/watches/w-1/edit", json={"when": "below 40"})
+            assert ["--state", state, "edit", "w-1", "--when=below 40",
+                    "--json"] in calls(fake[1])
+            assert client.post("/api/watches/--help/edit", json={}).status_code == 400
         finally:
             manager.shutdown()
 

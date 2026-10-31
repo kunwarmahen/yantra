@@ -880,6 +880,8 @@ function showPermissionModal(env) {
     <div class="modal-actions">
       <button class="m-btn" data-act="edit">edit</button>
       <button class="m-btn danger" data-act="deny">deny</button>
+      ${env.for_task ? `<button class="m-btn" data-act="approve_task"
+        title="yes to the changes this task makes after what it read, until it reads something new">yes to all for this task</button>` : ""}
       <button class="m-btn primary" data-act="approve">approve ⏎</button>
     </div>`);
   startWaitClock(env);
@@ -914,6 +916,10 @@ function showPermissionModal(env) {
     const act = e.target?.dataset?.act;
     if (!act) return;
     if (act === "approve") { document.removeEventListener("keydown", onKey); approve(); }
+    if (act === "approve_task") {
+      document.removeEventListener("keydown", onKey);
+      answer({ decision: "approve_task" });
+    }
     if (act === "deny") {
       document.removeEventListener("keydown", onKey);
       // Whatever the person typed rides along with the no: the model
@@ -2424,7 +2430,7 @@ function renderSchedules() {
    nothing asks -- the person is the one pressing. A look started here is
    not waited for; it shows in the watch's looks when it is done. */
 
-const watch = { data: null, open: new Set(), looks: {} };
+const watch = { data: null, open: new Set(), looks: {}, form: null };
 
 $("#chip-watch").onclick = openWatchPanel;
 $("#chip-seen").onclick = openWatchPanel;
@@ -2572,6 +2578,15 @@ function renderWatches() {
   section(body, `${list.length} watch${list.length === 1 ? "" : "es"}`,
     (d.serving && d.url ? `Prahari's own page: ${d.url}` : "kept by Prahari on this computer")
     + (d.news ? ` · news goes ${d.news}` : ""));
+  if (watch.form === "new") body.append(watchForm(null));
+  else {
+    const add = document.createElement("button");
+    add.className = "m-btn";
+    add.textContent = "new watch";
+    add.title = "write one by hand: a tool to look with, what to pick out, and when it matters";
+    add.onclick = () => { watch.form = "new"; renderWatches(); };
+    body.append(add);
+  }
   if (!list.length) {
     const p = document.createElement("div");
     p.className = "conn-foot";
@@ -2629,6 +2644,7 @@ function renderWatches() {
       actions.append(box);
       button("set", "", () => watchEvery(w.id, box.value));
     }
+    if (!w.listen) button("edit", "", () => { watch.form = w.id; renderWatches(); });
     if (w.state === "active") button("pause", "", () => watchAct(w.id, "pause"));
     if (w.state === "paused") button("resume", "primary", () => watchAct(w.id, "resume"));
     button("delete", "danger", async () => {
@@ -2640,6 +2656,7 @@ function renderWatches() {
       if (ok) watchAct(w.id, "delete");
     });
     row.append(dot, main, actions);
+    if (watch.form === w.id) row.append(watchForm(w));
     if (watch.open.has(w.id)) {
       const looks = document.createElement("div");
       looks.className = "sched-runs";
@@ -2651,6 +2668,120 @@ function renderWatches() {
     }
     body.append(row);
   }
+}
+
+/* The form for a watch written by hand, or one mended: Prahari's own words
+   (number, below 50, 3h) go as typed, and Prahari reads them -- and says no
+   in its words. Mending sends only the boxes that changed, so a new name
+   keeps what the watch saw, and a new pick or test starts it over. */
+
+function pickWords(pick) {
+  const [kind, value] = Object.entries(pick || {})[0] || [];
+  if (!kind) return "";
+  if (kind === "items_json") return `items_json:${value}:${pick.key || ""}`;
+  if (Object.keys(pick).length > 1) return JSON.stringify(pick);
+  return value ? `${kind}:${value}` : kind;
+}
+
+function whenWords(when) {
+  const [kind, value] = Object.entries(when || {})[0] || [];
+  if (!kind) return "";
+  if (Object.keys(when).length > 1) return JSON.stringify(when);
+  return value === true ? kind : `${kind} ${value}`;
+}
+
+function watchForm(w) {
+  const was = w ? {
+    name: w.name || "", asked: w.asked || "", tool: w.check?.tool || "",
+    args: w.check ? JSON.stringify(w.check.args || {}) : "", pick: pickWords(w.pick),
+    when: whenWords(w.when), every: w.every || "", then: w.then || "",
+  } : { name: "", asked: "", tool: "web_fetch", args: "", pick: "", when: "", every: "1h",
+        then: "" };
+  const form = document.createElement("form");
+  form.className = "watch-form";
+  const boxes = {};
+  const box = (key, label, hint, wide = false) => {
+    const l = document.createElement("label");
+    if (wide) l.className = "wide";
+    l.textContent = label;
+    const input = key === "then" ? document.createElement("textarea")
+                                 : document.createElement("input");
+    input.value = was[key];
+    input.placeholder = hint;
+    if (["args", "pick", "when", "every", "tool"].includes(key)) input.className = "mono";
+    boxes[key] = input;
+    l.append(input);
+    form.append(l);
+  };
+  box("name", "name", "ALAB under $50");
+  box("asked", "what it's for, in your words", "tell me if ALAB drops under 50", true);
+  box("tool", "look with (a tool that reads)", "web_fetch");
+  box("args", "its arguments (JSON)", '{"url": "https://example.com/item"}', true);
+  box("pick", "pick", "number · text:Landed|Delayed · json:price");
+  box("when", "when", "below 50 · new · changed · contains Mum");
+  box("every", "every", "3h");
+  box("then", "then ask the agent (empty: just tell you)", "Tell me the new price.", true);
+  const tried = document.createElement("pre");
+  tried.className = "watch-tried hidden";
+  const values = () => Object.fromEntries(Object.entries(boxes).map(([k, b]) => [k, b.value]));
+  const changed = () => {
+    const now = values(), out = {};
+    for (const k of Object.keys(now)) if (now[k] !== was[k]) out[k] = now[k];
+    // a recipe goes whole: the tool's arguments mean nothing without it
+    if ("tool" in out || "args" in out) { out.tool = now.tool; out.args = now.args; }
+    return out;
+  };
+  const act = document.createElement("div");
+  act.className = "conn-actions";
+  const btn = (label, cls, fn) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `m-btn ${cls}`;
+    b.textContent = label;
+    b.onclick = fn;
+    act.append(b);
+    return b;
+  };
+  const post = async (path, body) => {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    return data;
+  };
+  const tryIt = btn("try it", "", async () => {
+    tried.classList.remove("hidden");
+    tried.textContent = "looking once…";
+    tryIt.disabled = true;
+    try {
+      const p = (await post("/api/watches/preview", values())).preview || {};
+      tried.textContent = `${p.sentence || ""}.\n${p.said || ""}`
+        + (p.items?.length ? "\n" + p.items.map((i) => "  • " + i).join("\n") : "")
+        + (p.result && p.found === false ? `\n\nwhat the tool said:\n${p.result}` : "");
+    } catch (err) { tried.textContent = err.message; }
+    tryIt.disabled = false;
+  });
+  btn(w ? "save" : "add", "primary", async () => {
+    try {
+      if (w) {
+        const body = changed();
+        if (!Object.keys(body).length) { watch.form = null; renderWatches(); return; }
+        await post(`/api/watches/${encodeURIComponent(w.id)}/edit`, body);
+        toast(("pick" in body || "when" in body || "tool" in body)
+          ? `${w.id} changed — it learns again at its next look`
+          : `${w.id} changed — what it saw is kept`);
+      } else {
+        const made = (await post("/api/watches", values())).result || {};
+        toast(`added ${made.id || "the watch"} — ${made.sentence || ""}`);
+      }
+      watch.form = null;
+      await loadWatches(false);
+    } catch (err) { addBanner(`watches: ${err.message}`, true); }
+  });
+  btn("cancel", "", () => { watch.form = null; renderWatches(); });
+  form.append(tried, act);
+  form.onsubmit = (e) => e.preventDefault();
+  return form;
 }
 
 /* ---------- phone panel (sparsh_link.py) ----------

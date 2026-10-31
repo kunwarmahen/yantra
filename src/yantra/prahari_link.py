@@ -48,7 +48,10 @@ on Yantra's page is drawn from the same JSON as Prahari's own page
 a look may take minutes on a page like WhatsApp Web -- and what it saw
 shows in the watch's looks. ``seen`` is the panel's chip: what this
 person's watches fired on lately, from Prahari's own record, so it is
-the same whether or not anything was sent anywhere.
+the same whether or not anything was sent anywhere. A watch written by
+hand on the panel is ``prahari preview`` / ``add``, and mended ``prahari
+edit`` with only what changed; the form's words go as typed for Prahari
+to read, each as ``--flag=value`` so none is ever taken for an option.
 """
 
 from __future__ import annotations
@@ -585,10 +588,12 @@ class Prahari:
             argv += ["--limit", str(max(1, min(int(limit), 200)))]
         return self._json(argv, verb)
 
-    def _json(self, argv: list[str], verb: str) -> Any:
+    def _json(self, argv: list[str], verb: str, *, timeout: float = STATUS_TIMEOUT,
+              env: dict[str, str] | None = None, json_flag: bool = True) -> Any:
         try:
-            done = subprocess.run([*argv, "--json"], capture_output=True, text=True,
-                                  timeout=STATUS_TIMEOUT)
+            done = subprocess.run([*argv, "--json"] if json_flag else argv,
+                                  capture_output=True, text=True,
+                                  timeout=timeout, env=env)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise PrahariLinkError(f"prahari {verb}: {exc}") from None
         if done.returncode != 0:
@@ -632,6 +637,80 @@ class Prahari:
         if not EVERY_RE.match(step):
             raise PrahariLinkError(f"{step!r} isn't how often: say 30m, 3h or 1d")
         return self._json([*self._base(), "edit", watch, "--every", step], "edit")
+
+    def preview(self, fields: dict[str, Any]) -> Any:
+        """The panel's form, looked once: ``prahari preview``, which says
+        what it sees and writes nothing. It LOOKS, so it gets a look's
+        time and the looking environment."""
+        return self._json([*self._base(), "preview", *self._form(fields, made=False)],
+                          "preview", timeout=LOOK_WAIT, env=looking_env())
+
+    def add(self, fields: dict[str, Any]) -> Any:
+        """A watch made by hand on the panel: ``prahari add``, for this
+        session's person and agent, as a chat's watch would be. The
+        person's own hand, so no card."""
+        name = str(fields.get("name") or "").strip()
+        if not name:
+            raise PrahariLinkError("a watch needs a name")
+        argv = [*self._base(), "add", *self._form(fields, made=True)]
+        if self.agent:
+            argv.append(f"--agent={self.agent}")
+        if self.runner:
+            argv.append(f"--runner={self.runner}")
+        if self.person != LOCAL:
+            argv.append(f"--as={self.person}")
+        # the name last, after "--": a name like "--help" is a name
+        return self._json([*argv, "--json", "--", name], "add", json_flag=False)
+
+    def edit(self, watch: str, fields: dict[str, Any]) -> Any:
+        """A watch mended on the panel: ``prahari edit``, only what the form
+        changed. A changed check, pick or test starts its memory over
+        (Prahari's watches.update); a name, the person's words or the
+        then-prompt alone don't."""
+        if not WORD_RE.match(watch):
+            raise PrahariLinkError(f"which watch? {watch!r} is not an id")
+        argv = [*self._base(), "edit", watch, *self._form(fields, made=True, partial=True)]
+        if "name" in fields and str(fields["name"]).strip():
+            argv.append(f"--name={str(fields['name']).strip()}")
+        return self._json(argv, "edit")
+
+    @staticmethod
+    def _form(fields: dict[str, Any], *, made: bool, partial: bool = False) -> list[str]:
+        """The form's boxes as prahari's own flags: the words (``below 50``,
+        ``number``, ``3h``) are Prahari's to read, so they go as typed and
+        Prahari's refusal comes back in its words. ``partial``: a box left
+        out is left as it was."""
+        out: list[str] = []      # each as --flag=value: a value is never an option
+
+        def given(key: str) -> str | None:
+            if key not in fields or fields[key] is None:
+                return None
+            return str(fields[key]).strip()
+        tool = given("tool")
+        if tool or not partial:
+            if not tool:
+                raise PrahariLinkError("say which tool it looks with (web_fetch, say)")
+            out.append(f"--check={tool}")
+            args = given("args") or "{}"
+            try:
+                if not isinstance(json.loads(args), dict):
+                    raise ValueError
+            except ValueError:
+                raise PrahariLinkError("the tool's arguments are one JSON object, "
+                                       "like {\"url\": \"https://…\"}") from None
+            out.append(f"--args={args}")
+        for key, flag in (("pick", "--pick"), ("when", "--when"), ("every", "--every")):
+            value = given(key)
+            if value or (key == "when" and not partial):
+                if not value:
+                    raise PrahariLinkError("say when it matters (below 50, new, changed)")
+                out.append(f"{flag}={value}")
+        if made:
+            for key, flag in (("asked", "--asked"), ("then", "--then")):
+                value = given(key)
+                if value is not None and (value or partial):
+                    out.append(f"{flag}={value}")
+        return out
 
     def look_now(self, watch: str) -> None:
         """Start one look and do not wait for it: a look may take minutes,

@@ -77,6 +77,7 @@ from yantra.permissions import (
     REFUSED_UNATTENDED,
     REFUSED_USER,
     PermissionRequest,
+    TurnYes,
     approval_notice,
     refuse,
     wait_spent,
@@ -445,12 +446,18 @@ class WebSession:
         """PermissionFn for the browser: approve / deny / deny-with-a-reason
         / edit, with full edit round-trips -- mirroring cli/repl.py's
         confirm_gate loop beat for beat, including the sentence a person
-        types instead of a bare no (notes/56)."""
+        types instead of a bare no (notes/56), and "yes to all for this
+        task" on a card that asks only because the turn read outside text
+        (``TurnYes``)."""
+        for_task = TurnYes()
 
         def gate(request: PermissionRequest) -> bool:
             if request.read_only:
                 # Same contract as the terminal gate: a tool that declared
                 # itself side-effect-free has nothing to confirm.
+                return True
+            if for_task.covers(request):
+                request.answered_by = "your yes for this task, on the page"
                 return True
             if threading.current_thread() is self._look:
                 # NOTHING IS ASKED FROM BEHIND: the look runs after the
@@ -478,6 +485,7 @@ class WebSession:
                     "summary": request.summary,
                     "arguments": request.arguments,
                     "edited": edited,
+                    "for_task": TurnYes.offered(request),
                     # the phone's screen, what it would tap ringed: the person's eyes only
                     "picture": None if edited else _picture(request),
                 }
@@ -499,8 +507,11 @@ class WebSession:
                             0.0, self._wait_left
                             - (time.monotonic() - started))
                 decision = answer.get("decision")
-                if decision in ("approve", "deny", "edit"):
+                if decision in ("approve", "approve_task", "deny", "edit"):
                     request.answered_by = "you, on the page"
+                if decision == "approve_task":
+                    for_task.given(request)        # a card that didn't offer it: a plain yes
+                    return True
                 if decision == "approve":
                     return True
                 if decision == "deny":
@@ -2370,6 +2381,37 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         try:
             return {"done": "every", "result": require_prahari().every(
                 watch_id, str(body.get("every") or ""))}
+        except PrahariLinkError as exc:
+            raise HTTPException(400, f"prahari: {exc}") from None
+
+    @app.post("/api/watches/preview")
+    def watches_preview(body: dict[str, Any]) -> dict[str, Any]:
+        """The panel's form, looked once: what it would see, nothing kept."""
+        from yantra.prahari_link import PrahariLinkError
+        try:
+            return {"preview": require_prahari().preview(body)}
+        except PrahariLinkError as exc:
+            raise HTTPException(400, f"prahari: {exc}") from None
+
+    @app.post("/api/watches")
+    def watches_add(body: dict[str, Any]) -> dict[str, Any]:
+        """A watch written by hand on the panel -- the person's own hand at
+        this computer, so no card -- for this session's person and agent."""
+        from yantra.prahari_link import PrahariLinkError
+        prahari = require_prahari()
+        try:
+            made = prahari.add(body)
+        except PrahariLinkError as exc:
+            raise HTTPException(400, f"prahari: {exc}") from None
+        prahari.refresh()
+        return {"done": "add", "result": made}
+
+    @app.post("/api/watches/{watch_id}/edit")
+    def watches_edit(watch_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Only what the form changed, through ``prahari edit``."""
+        from yantra.prahari_link import PrahariLinkError
+        try:
+            return {"done": "edit", "result": require_prahari().edit(watch_id, body)}
         except PrahariLinkError as exc:
             raise HTTPException(400, f"prahari: {exc}") from None
 
