@@ -418,6 +418,22 @@ category: no second model rewrites it. When you move, the new
 dashboard shows these facts under **Identity → Fact graph**
 ([notes/150](notes/150-a-place-for-each-fact.md)).
 
+**Your facts and beliefs reach the agent.** At the start of each
+conversation Yantra asks Smritikosh for your profile (the `profile`
+tool). It gets your facts: who you are, where you live and what you
+prefer every time, and the others, such as an account, when your first
+message reaches them. It gets your beliefs, which Yantra presents as
+guesses, and the memories no fact covers yet. A fact an answer leans on
+counts as use, and keeps the memories it came from too
+([notes/152](notes/152-what-the-store-made-of-you.md)). What goes in is
+up to Smritikosh's admin: in its dashboard, **Admin → Users** has **In
+the agent's prompt** for everyone below the list, and each user's page
+has the same card for that person. It holds Facts, Beliefs and Memories,
+each On, Off or Default, plus **What keeps a memory**: *Used* (only an
+answer that leaned on it, the default) or *Shown* (being in a prompt
+counts too, so nothing shown is ever pruned). A Smritikosh too old to
+have `profile` still works: Yantra gets the memories alone, as before.
+
 **Tidy facts made before this.** Memories kept before topics existed
 went through Smritikosh's own extraction, which made duplicate and
 messy facts and hundreds of beliefs. Smritikosh can make them again from

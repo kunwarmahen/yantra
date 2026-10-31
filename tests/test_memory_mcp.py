@@ -174,7 +174,7 @@ class TestStore:
 class TestMissingVerbs:
     def test_a_verb_the_server_lacks_is_unsupported_not_fatal(self):
         store, _ = _bound(FakeServer(tools=("remember", "recall")))
-        assert store.missing == {"forget", "list", "used"}
+        assert store.missing == {"forget", "list", "used", "profile"}
         with pytest.raises(MemoryStoreError, match="no tool for 'forget'"):
             store.forget("asha", "evt-1")
 

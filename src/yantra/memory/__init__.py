@@ -91,6 +91,20 @@ store:
   It travels to the store as ``lifetime_days``, counted from the later
   of written and last used, and the store lets the memory go past it --
   an account a brief reads every morning never goes.
+
+FACTS AND BELIEFS ARE WHAT THE STORE MADE OF THEM, AND THE PROMPT GETS
+THEM. A store that keeps a fact per place (one current value for "where
+they live") and finds beliefs across many memories ("prefers a chart to
+a table") answers an optional ``profile`` verb, and the layer is built
+from it: CORE facts always (who they are, where they live, what they
+prefer), the facts RELEVANT to the first message, the beliefs FRAMED AS
+GUESSES, and only the memories no fact covers -- a memory a fact was
+made from would say the same thing twice. What it hands over is the
+store's admin's call (Smritikosh's dashboard turns each of the three on
+or off). The built-in store answers ``profile`` too: a memory with a
+slot is its fact, and it has no beliefs. A fact or belief an answer
+leaned on is reported with ``used`` like a memory, by its own id, and
+the store keeps the memories behind it from ageing.
 """
 
 from __future__ import annotations
@@ -183,16 +197,67 @@ class MemoryItem:
     slot: str | None = None           # topic|about|key, when it has one place
 
 
+@dataclass(frozen=True, slots=True)
+class Fact:
+    """One current answer about the person, as a store's profile hands it."""
+
+    id: str                           # what ``used`` takes back
+    statement: str
+    group: str = ""                   # a store's category or a TOPICS word
+    core: bool = False                # always handed over, whatever was asked
+    sources: tuple[str, ...] = ()     # the memories it was made from
+
+
+@dataclass(frozen=True, slots=True)
+class Belief:
+    """A pattern a store found across many memories: a guess."""
+
+    id: str
+    statement: str
+    confidence: float = 0.0
+
+
+@dataclass(slots=True)
+class Profile:
+    """What a store's ``profile`` verb hands the layer."""
+
+    facts: list[Fact]
+    beliefs: list[Belief]
+    memories: list[MemoryItem]
+
+
+#: A fact's group, as the layer heads it. A store's categories and
+#: Yantra's TOPICS both land here; anything else is headed by its name.
+GROUP_HEADINGS: dict[str, str] = {
+    "identity": "Who they are", "contact": "Who they are",
+    "location": "Where they live", "home": "Where they live",
+    "role": "Work", "work": "Work", "education": "Work",
+    "relationship": "People in their life", "family": "People in their life",
+    "preference": "What they prefer", "habit": "What they prefer",
+    "finance": "Accounts", "account": "Accounts",
+    "tool": "What they use",
+    "health": "Health and diet", "diet": "Health and diet",
+    "project": "What they are working on",
+}
+#: Topics whose facts the built-in store always hands over.
+CORE_TOPICS = ("home", "contact", "preference")
+#: The layer's room for facts and for beliefs, in characters. Facts get
+#: the most: they are the clean form of what the memories said.
+FACT_CHARS = 3_500
+BELIEF_CHARS = 800
+
+
 @runtime_checkable
 class MemoryStore(Protocol):
     """What a store must do. Four verbs: no ``ingest``, because a store is
     never handed a transcript, and no ``context_for``, because building
     the prompt block is this side's job.
 
-    A fifth is optional, so a store written against these four still
+    Two more are optional, so a store written against these four still
     plugs in: ``used(user, ids) -> int`` says an answer drew on these
     memories, and ``list`` then puts the most recently used or written
-    first (``supports(store, "used")``)."""
+    first (``supports(store, "used")``); ``profile(user, query) ->
+    Profile`` hands over the store's facts and beliefs for the layer."""
 
     name: str
 
@@ -295,6 +360,9 @@ class Memory:
         self.primed = False
         #: What the layer was filled with, for /memory and the page.
         self.in_prompt: list[MemoryItem] = []
+        #: The facts and beliefs it was filled with, from ``profile``.
+        self.facts: list[Fact] = []
+        self.beliefs: list[Belief] = []
         #: The last failure, as a sentence, or None.
         self.notice: str | None = None
         #: Where a failure is said out loud. Hosts set it (terminal line,
@@ -440,6 +508,20 @@ class Memory:
         self.primed = True
         self.recalled = {}
         self.marked = set()
+        self.facts, self.beliefs = [], []
+        if supports(self.store, "profile"):
+            try:
+                got = self.store.profile(self.user, first_message)
+            except Exception as exc:  # fails open, to the four verbs
+                self._fail(f"memory ({self.store.name}) gave no facts or beliefs: "
+                           f"{exc}; using the memories alone")
+            else:
+                self.notice = None
+                self.facts = _fit_text(got.facts, FACT_CHARS)
+                self.beliefs = _fit_text(got.beliefs, BELIEF_CHARS)
+                self.in_prompt = _fit(got.memories)
+                self._set_layer(agent, self.layer_text(agent))
+                return
         try:
             chosen: list[MemoryItem] = []
             seen: set[str] = set()
@@ -465,15 +547,33 @@ class Memory:
     def layer_text(self, agent: Any) -> str | None:
         can_write = "remember" in getattr(agent, "registry", ())
         lines = ["# What you remember about this person"]
-        if self.in_prompt:
+        if self.in_prompt or self.facts or self.beliefs:
             lines.append(
                 "They told you these in earlier conversations. Any of them "
                 "may be out of date: when the current message says "
                 "otherwise, the current message wins. When an answer leans "
                 "on one, say so in a few words (\"from RDU, as before -- "
                 "say if not\") so a wrong one gets corrected.")
-            lines.append("")
-            lines.extend(f"- {item.statement}" for item in self.in_prompt)
+            groups: dict[str, list[str]] = {}
+            for fact in self.facts:
+                heading = GROUP_HEADINGS.get(fact.group) or \
+                    (fact.group or "other").replace("_", " ").capitalize()
+                groups.setdefault(heading, []).append(fact.statement)
+            for heading, statements in groups.items():
+                lines += ["", f"{heading}:", *(f"- {text}" for text in statements)]
+            if self.beliefs:
+                lines += ["", "What they seem to be like -- guesses drawn from many "
+                              "conversations, not things they said; check before "
+                              "an answer rests on one:"]
+                lines.extend(f"- {b.statement}" + (f" ({round(b.confidence * 100)}% sure)"
+                                                   if b.confidence else "")
+                             for b in self.beliefs)
+            if self.in_prompt:
+                if self.facts or self.beliefs:
+                    lines += ["", "Other things they told you:"]
+                else:
+                    lines.append("")
+                lines.extend(f"- {item.statement}" for item in self.in_prompt)
         elif not can_write:
             return None
         else:
@@ -501,7 +601,8 @@ class Memory:
     def describe(self) -> dict[str, Any]:
         """For the page's chip and panel."""
         return {"store": self.store.name, "user": self.user,
-                "in_prompt": len(self.in_prompt), "notice": self.notice,
+                "in_prompt": len(self.in_prompt), "facts": len(self.facts),
+                "beliefs": len(self.beliefs), "notice": self.notice,
                 "reflect": self.reflect, "cannot": self.cannot()}
 
     def cannot(self) -> list[str]:
@@ -515,11 +616,20 @@ class Memory:
         """Ids of the memories shown this conversation that ``answered``
         (the turn's replies and tool arguments) drew on, past what the
         person ``said``; none already reported."""
-        shown = {item.id: item for item in self.in_prompt}
-        shown.update(self.recalled)
-        return [memory_id for memory_id, item in shown.items()
+        shown = {item.id: item.statement for item in self.in_prompt}
+        shown.update({item.id: item.statement for item in self.recalled.values()})
+        shown.update({fact.id: fact.statement for fact in self.facts})
+        shown.update({belief.id: belief.statement for belief in self.beliefs})
+        return [memory_id for memory_id, statement in shown.items()
                 if memory_id not in self.marked
-                and drew_on(item.statement, said, answered)]
+                and drew_on(statement, said, answered)]
+
+    def shown_ids(self) -> set[str]:
+        """The memories this conversation's layer carries: shown as
+        themselves, or through a fact made from them."""
+        return ({item.id for item in self.in_prompt}
+                | {source for fact in self.facts for source in fact.sources}
+                | {fact.id for fact in self.facts})
 
     def report_used(self, memory_ids: list[str]) -> threading.Thread | None:
         """Tell the store, behind the answer: a slow store must not hold
@@ -633,6 +743,17 @@ def note_used(agent: Any) -> threading.Thread | None:
         return None
 
 
+def _fit_text(items: list[Any], room: int) -> list[Any]:
+    """As many as fit in ``room`` characters, in order."""
+    kept, used = [], 0
+    for item in items:
+        used += len(item.statement) + 3
+        if used > room:
+            break
+        kept.append(item)
+    return kept
+
+
 def _fit(items: list[MemoryItem]) -> list[MemoryItem]:
     kept, used = [], 0
     for item in items[:PROMPT_LIMIT]:
@@ -686,10 +807,13 @@ __all__ = [
     "ENV_MODE",
     "ENV_USER",
     "MODES",
+    "Belief",
+    "Fact",
     "Memory",
     "MemoryStoreError",
     "MemoryItem",
     "MemoryStore",
+    "Profile",
     "TOPICS",
     "check_mode",
     "drew_on",

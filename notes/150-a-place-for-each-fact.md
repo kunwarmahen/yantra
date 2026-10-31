@@ -151,10 +151,13 @@ under `home`, which is why only a key makes a slot.
 
 ## What was deliberately not built
 
-* **A topic in the prompt layer.** The layer still lists bare sentences.
-  `[home/city]` in front of each would show `remember` the keys too, but
-  it would also tempt the model to quote the brackets back. Keys reach
-  `remember` through its description and the person's own words.
+* ~~**A topic in the prompt layer.**~~ The layer lists bare sentences:
+  `[home/city]` in front of each would tempt the model to quote the
+  brackets back. It now heads them instead, as facts under *Where they
+  live*, *Who they are* ([notes/152](152-what-the-store-made-of-you.md)).
+* ~~**Facts and beliefs are for other agents.**~~ The model saw only the
+  memories it kept. It now gets the store's facts and beliefs too
+  ([notes/152](152-what-the-store-made-of-you.md)).
 * **Relabelling old memories in Yantra.** Memories kept before topics
   have none and replace nothing. Smritikosh's rebuild script can file
   them (`--label`). The built-in file has no such pass; a memory said

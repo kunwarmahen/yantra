@@ -1038,7 +1038,7 @@ class Repl:
             self.console.print(f"[red]memory ({memory.store.name}): "
                                f"{exc}[/red]")
             return
-        shown = {item.id for item in memory.in_prompt}
+        shown = memory.shown_ids()
         lines = [f"memory: {memory.store.name}, for {memory.user} -- {title}"]
         for item in items:
             mark = "*" if item.id in shown else " "

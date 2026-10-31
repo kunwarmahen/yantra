@@ -2124,7 +2124,7 @@ def make_app(session: WebSession, static_dir: Path | None = None,
             items = memory.list(200) if "list" not in memory.cannot() else []
         except Exception as exc:  # the store's failure, said plainly
             raise HTTPException(503, f"memory ({memory.store.name}): {exc}") from None
-        shown = {item.id for item in memory.in_prompt}
+        shown = memory.shown_ids()
         return {**memory.describe(),
                 "items": [{"id": i.id, "statement": i.statement,
                            "created": i.created, "used": i.used,

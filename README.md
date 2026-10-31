@@ -465,6 +465,19 @@ morning brief reads every day never goes. Account numbers may be kept;
 passwords, tokens, card and ID numbers never are
 ([notes/150](notes/150-a-place-for-each-fact.md)).
 
+What the store made of your memories goes in too. A store that answers
+`profile` (Smritikosh does, and so does the built-in one) gives the
+prompt your **facts**, headed by what they're about: who you are, where
+you live and what you prefer in every conversation, and the rest (your
+accounts, say) only when the first message reaches them. It also gives
+your **beliefs**, patterns the store found across many conversations
+("prefers a chart to a table, 70% sure"), framed as guesses to check.
+After those come the **memories no fact covers yet**, so nothing is said
+twice. Which of the three goes in is set in Smritikosh's dashboard, for
+everyone or one person. A fact an answer leans on counts as use, and
+keeps the memories it came from too
+([notes/152](notes/152-what-the-store-made-of-you.md)).
+
 `/memory forget ID` removes one (the start of a long id is enough),
 `/memory add TEXT` keeps one in your words, `/memory find WORDS`
 searches, and `/memory copy local` copies the built-in file into a store
@@ -2709,7 +2722,12 @@ src/yantra/
 │                   note_used, as a turn ends, tells the store (optional
 │                   fifth verb, used) which memories the answer or a tool's
 │                   arguments drew on, past the person's own words, so a
-│                   memory in use is listed as new
+│                   memory in use is listed as new; an optional verb,
+│                   profile, gives the layer the store's facts (core +
+│                   relevant, headed), beliefs (as guesses) and the
+│                   memories no fact covers; the built-in store's facts
+│                   are its slotted memories
+│                   ([notes/152](notes/152-what-the-store-made-of-you.md))
 │                   ([notes/143](notes/143-a-memory-in-use.md));
 │                   reflect.py looks back ONCE when a conversation ends
 │                   (/quit, /clear, /load, before compaction, /remember);

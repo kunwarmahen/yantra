@@ -42,7 +42,7 @@ from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
-from yantra.memory import MemoryItem
+from yantra.memory import Fact, MemoryItem, Profile
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -161,6 +161,28 @@ class LocalStore:
                 f"({','.join('?' * len(ids))})", (now, user, *ids))
             self._db.commit()
             return cur.rowcount
+
+    def profile(self, user: str, query: str) -> Profile:
+        """A memory with a slot is a fact (one current value for its
+        place): the core topics' always, the rest when the query shares a
+        word with them. The others are memories. No beliefs: nothing here
+        looks across memories."""
+        from yantra.memory import CORE_TOPICS, PROMPT_LIMIT
+
+        everything = self._all(user, by_use=True)
+        wanted = _words(query)
+        facts, rest = [], []
+        for item in everything:
+            if item.slot is None:
+                rest.append(item)
+            elif item.topic in CORE_TOPICS or wanted & _words(item.statement):
+                facts.append(Fact(id=item.id, statement=item.statement,
+                                  group=item.topic or "", core=item.topic in CORE_TOPICS,
+                                  sources=(item.id,)))
+        relevant = [i for i in self.recall(user, query, PROMPT_LIMIT) if i.slot is None]
+        memories = list({i.id: i for i in [*relevant, *rest]}.values())[:PROMPT_LIMIT]
+        return Profile(facts=sorted(facts, key=lambda f: not f.core), beliefs=[],
+                       memories=memories)
 
     def _all(self, user: str, *, by_use: bool = False) -> list[MemoryItem]:
         # ISO times in one zone sort as text; in a tie (to the second) the

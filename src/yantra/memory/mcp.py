@@ -25,11 +25,17 @@ recall     ``query``, ``limit``, ``user_id``
 forget     ``memory_id``, ``user_id``
 list       ``limit``, ``user_id``
 used       ``memory_ids``, ``user_id``
+profile    ``query``, ``user_id``
 =========  ===============================================
 
 ``used`` is optional, like every verb a server has no tool for: it says
 an answer drew on these memories (memory/__init__.py), and a server
-that has it counts their age from now.
+that has it counts their age from now. So is ``profile``: the store's
+facts and beliefs for the layer, as ``{"facts": [{"id", "value",
+"category", "core", "sources"}], "beliefs": [{"id", "statement",
+"confidence"}], "memories": [...]}``. A server without it gets the
+memories alone, as before; a fact's or belief's ``id`` comes back in
+``used`` when an answer leaned on it.
 
 ``user_id`` is ALWAYS sent. Whose memories these are was settled when the
 session started (memory/__init__.py), and a server that fell back on its
@@ -74,12 +80,13 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from yantra.memory import MemoryItem, MemoryStoreError
+from yantra.memory import Belief, Fact, MemoryItem, MemoryStoreError, Profile
 
-VERBS = ("remember", "recall", "forget", "list", "used")
+VERBS = ("remember", "recall", "forget", "list", "used", "profile")
 #: A verb the map leaves out calls the tool of this name.
 DEFAULT_TOOLS = {"remember": "remember", "recall": "recall",
-                 "forget": "forget", "list": "list_memories", "used": "used"}
+                 "forget": "forget", "list": "list_memories", "used": "used",
+                 "profile": "profile"}
 #: A server name, as ``--memory`` or ``[memory] via`` would give it.
 SERVER_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
@@ -175,6 +182,24 @@ class McpStore:
         if isinstance(data, dict) and isinstance(data.get("marked"), int):
             return data["marked"]
         return len(memory_ids)                  # it ran and did not complain
+
+    def profile(self, user: str, query: str) -> Profile:
+        data = self._call("profile", {"query": query, "user_id": user})
+        if not isinstance(data, dict):
+            raise MemoryStoreError(f"{self.server}'s profile was not an object "
+                                   f"({_short(data)})")
+        facts = [Fact(id=str(row["id"]), statement=" ".join(str(row["value"]).split()),
+                      group=str(row.get("category") or row.get("group") or ""),
+                      core=bool(row.get("core")),
+                      sources=tuple(str(i) for i in row.get("sources") or ()))
+                 for row in data.get("facts") or []
+                 if isinstance(row, dict) and row.get("id") and row.get("value")]
+        beliefs = [Belief(id=str(row["id"]), statement=" ".join(str(row["statement"]).split()),
+                          confidence=float(row.get("confidence") or 0.0))
+                   for row in data.get("beliefs") or []
+                   if isinstance(row, dict) and row.get("id") and row.get("statement")]
+        return Profile(facts=facts, beliefs=beliefs,
+                       memories=_items({"memories": data.get("memories") or []}))
 
     # ---- the wire ------------------------------------------------------------
 
