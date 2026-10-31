@@ -1309,6 +1309,19 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   with no knob at all. None of it is stealth — a bot check that
   refuses you still refuses you, and the snapshot shows the check
   ([notes/58](notes/58-the-browser-you-already-have.md)).
+- **A site that turns headless away gets one try with a window.**
+  Some shops' bot shields drop a headless browser outright
+  (`net::ERR_HTTP2_PROTOCOL_ERROR`, a reset, an empty reply, a 403) and
+  serve the same browser headed. Without `YANTRA_BROWSER_HEADED` set,
+  `browser_open` tries such a page once more with a window on an Xvfb
+  of its own — never your desktop, even when one is attached — and
+  stays headed until the browser closes. Turned away both ways, it says
+  the site is refusing automated browsers (not that your machine is
+  blocked) and points at `browser_handoff`, whose `finish` now hands over
+  the address last opened when no page loaded. `YANTRA_BROWSER_HEADED=0`
+  keeps it headless only. A failed `web_fetch` says to try the browser
+  before calling a site down
+  ([notes/151](notes/151-turned-away-headless.md)).
 
 REPL commands: `/help /model /provider /tools /history /chats /usage /save /load
 /compact /clear /keep /image /build /quit` (`//text` sends a literal leading slash; a
@@ -3211,6 +3224,10 @@ src/yantra/
 │   │               a window, on a self-started Xvfb when no display is
 │   │               attached; the automation flags are dropped either way
 │   │               ([notes/58](notes/58-the-browser-you-already-have.md)).
+│   │               A load headless is turned away from (an HTTP/2 drop, a
+│   │               403) is tried once more headed on its own Xvfb, and a
+│   │               handoff 'finish' gives the address last opened when
+│   │               nothing loaded ([notes/151](notes/151-turned-away-headless.md)).
 │   │               _COOKIE_KEY_ARG goes on BOTH doors -- Chromium picks its
 │   │               cookie encryption key from a launch flag and DELETES what
 │   │               it cannot decrypt, so two halves that disagree destroy the

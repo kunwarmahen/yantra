@@ -900,7 +900,12 @@ export YANTRA_BROWSER_HEADED=1                 # a real window, on an Xvfb
 uv run yantra --browse-login https://mail.google.com
 ```
 
-`YANTRA_BROWSER_HEADED=1` is worth setting on a stubborn site: headless
+You rarely need to set `YANTRA_BROWSER_HEADED=1` by hand: when a site
+turns the headless browser away (some shops drop it before sending a
+single byte), Yantra opens the page once more with a window on an
+invisible screen, and you see a line saying so above the page. Set it
+to `1` to be headed every time, or `0` to stay headless no matter
+what. Why a window helps at all: headless
 is a different Chromium build with its own fingerprints, and when no
 display is attached Yantra starts an Xvfb — a real X server with no
 monitor — so the window exists without anyone seeing it. If your

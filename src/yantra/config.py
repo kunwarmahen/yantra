@@ -363,6 +363,19 @@ def browser_headed() -> bool:
         f"YANTRA_BROWSER_HEADED must be 1|0 (or true/false), got {raw!r}")
 
 
+def browser_window_retry() -> bool:
+    """Try a page once more WITH a window when headless is turned away.
+
+    On unless $YANTRA_BROWSER_HEADED is set to 0. Unset means "headless
+    while it works": a site whose bot shield drops a headless browser is
+    opened again headed, on an invisible screen. Set to 0 says headless
+    and only headless -- the person chose that, so no window appears
+    behind their back, invisible or not.
+    """
+    raw = os.environ.get("YANTRA_BROWSER_HEADED", "").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def browser_close_policy() -> float | None:
     """When the browser_* tools close on their own ($YANTRA_BROWSER_CLOSE).
 

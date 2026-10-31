@@ -65,6 +65,14 @@ Scope decisions worth writing down:
   user-agent says HeadlessChrome and which carries no codecs, no
   Widevine and no API keys, and being a browser people actually run is
   all a robot check is asking. notes/58 argues the whole of it.
+* TURNED AWAY HEADLESS, TRY ONCE WITH A WINDOW. A bot shield that
+  knows headless Chromium does not send a robot check; it drops the
+  connection (ERR_HTTP2_PROTOCOL_ERROR) or answers 403, and the same
+  browser with a window loads the page. So a headless load that ends
+  that way is made once more headed, on an Xvfb screen of its own --
+  never the person's desktop -- and the session stays headed until it
+  closes. Not faking anything: the window is real, nobody looks at it.
+  $YANTRA_BROWSER_HEADED=0 turns the second try off (notes/151).
 * HONEST ABOUT WALLS. Captchas and bot detection still refuse us --
   none of the above is stealth, and no profile changes that. Login
   walls refuse us only until the profile carries a login; when a site
@@ -97,7 +105,8 @@ from typing import Any, ClassVar
 
 from yantra.config import BROWSER_CHANNELS, browser_close_policy, \
     browser_executable, browser_handoff, browser_headed, \
-    browser_login_command, browser_profile, has_screen, shadowed_by_shell
+    browser_login_command, browser_profile, browser_window_retry, \
+    has_screen, shadowed_by_shell
 from yantra import unattended
 from yantra.errors import ToolError
 from yantra.tools.base import Tool, ToolContext, ToolOutput, require_str
@@ -530,7 +539,8 @@ class BrowserSession:
     def __init__(self, profile: Path | None | str = "default",
                  executable: str | None = "default",
                  headed: bool | None = None,
-                 close_after: float | None | str = "default") -> None:
+                 close_after: float | None | str = "default",
+                 window_retry: bool | None = None) -> None:
         #: ``"default"``/None sentinels: read the environment once, at
         #: construction -- tests (and embedders) pass values instead.
         self._profile: Path | None = (
@@ -539,6 +549,18 @@ class BrowserSession:
             browser_executable() if executable == "default" else executable)
         self._headed: bool = (
             browser_headed() if headed is None else headed)
+        #: What a close goes back to: the retry's window lasts one browser.
+        self._headed_asked = self._headed
+        #: Headless turned away => one more try with a window (notes/151).
+        self._window_retry: bool = (
+            browser_window_retry() if window_retry is None else window_retry)
+        #: This browser is the retry's: its window goes on Xvfb even
+        #: where a desktop is attached, so nothing pops up mid-turn.
+        self._retried_headed = False
+        #: The last address browser_open was given -- what a handoff
+        #: gives the person when that load failed or the browser has
+        #: closed since. Their approval named it, as it names a page.
+        self._tried = ""
         #: 0 = close as a turn ends, N = after N idle seconds, None = only
         #: when asked (config.browser_close_policy, notes/92).
         self._close_after: float | None = (
@@ -600,8 +622,9 @@ class BrowserSession:
                 options["channel"] = self._executable
             else:
                 options["executable_path"] = self._executable
-        if self._headed and not (os.environ.get("DISPLAY")
-                                 or os.environ.get("WAYLAND_DISPLAY")):
+        if self._headed and (self._retried_headed
+                             or not (os.environ.get("DISPLAY")
+                                     or os.environ.get("WAYLAND_DISPLAY"))):
             self._display = _VirtualDisplay()
             # env= reaches the BROWSER process only: nothing else in this
             # Yantra learns about a display it has no business drawing on.
@@ -727,8 +750,10 @@ class BrowserSession:
 
     @property
     def url(self) -> str:
-        """The page a handoff would show; "" when none is open."""
-        return self._url
+        """The page a handoff would show: the open one, else the last
+        address opened (a load that failed, a browser closed since);
+        "" when there has been neither."""
+        return self._url or self._tried
 
     def handoff(self, mode: str, reach: str, reason: str = "") -> str:
         """Give the open page to the person (browser_handoff)."""
@@ -744,7 +769,7 @@ class BrowserSession:
         form it cannot finish."""
         # a load that failed leaves the browser on its blank page, which
         # is no place to send a person to
-        url = "" if self._url.startswith("about:") else self._url
+        url = "" if self.url.startswith("about:") else self.url
         where = url or "the page"
         if url and reason:
             unattended.note(f"{url}: {reason}")
@@ -874,23 +899,58 @@ class BrowserSession:
             raise ToolError("no page open -- pass a url to open one")
         if self._pw is None:
             self._launch()
-        if url:
-            try:
-                response = self._page.goto(url, wait_until="domcontentloaded",
-                                           timeout=GOTO_TIMEOUT_MS)
-            except ToolError:
-                raise
-            except Exception as exc:
-                said = f"could not load {url}: {type(exc).__name__}: {exc}"
-                if REFUSED_LOAD in str(exc):
-                    said += refused_nobody_note(url)
-                raise ToolError(said) from exc
-            self._settle()
-            status = getattr(response, "status", None)
-            if status in REFUSED_STATUS:
-                return (f"(HTTP {status}: {url} refused this browser.)"
-                        + refused_nobody_note(url) + "\n\n" + self._snapshot())
+        if not url:
+            return self._snapshot()
+        self._tried = url
+        response, failed = self._goto(url)
+        retried = False
+        if self._turned_away(response, failed) and self._can_retry_headed():
+            self._go_headed()
+            response, failed = self._goto(url)
+            retried = True
+        if failed:
+            said = f"could not load {url}: {failed}"
+            if retried:
+                said += TURNED_AWAY_TWICE
+            if REFUSED_LOAD in failed or retried:
+                said += refused_nobody_note(url)
+            raise ToolError(said)
+        self._settle()
+        status = getattr(response, "status", None)
+        if status in REFUSED_STATUS:
+            return (f"(HTTP {status}: {url} refused this browser"
+                    + (", with a window too" if retried else "") + ".)"
+                    + refused_nobody_note(url) + "\n\n" + self._snapshot())
+        if retried:
+            return RETRIED_HEADED + self._snapshot()
         return self._snapshot()
+
+    def _goto(self, url: str) -> tuple[Any, str]:
+        """(the response, "") or (None, what went wrong). A failed load
+        leaves no page behind it to hand anyone but the address."""
+        try:
+            return self._page.goto(url, wait_until="domcontentloaded",
+                                   timeout=GOTO_TIMEOUT_MS), ""
+        except Exception as exc:
+            self._url = ""
+            return None, f"{type(exc).__name__}: {exc}"
+
+    def _turned_away(self, response: Any, failed: str) -> bool:
+        """Did the site drop this browser the way shields drop headless?"""
+        if failed:
+            return any(code in failed for code in DROPPED_LOAD)
+        return getattr(response, "status", None) in TURNED_AWAY_STATUS
+
+    def _can_retry_headed(self) -> bool:
+        return (not self._headed and self._window_retry
+                and shutil.which("Xvfb") is not None)
+
+    def _go_headed(self) -> None:
+        """The same browser again, with a window on its own Xvfb."""
+        self._teardown()
+        self._release_profile()
+        self._headed = self._retried_headed = True
+        self._launch()
 
     def _click(self, ref: str) -> str:
         """Click like a person -- and when something is drawn on top of the
@@ -969,8 +1029,19 @@ class BrowserSession:
         the agent's browser closes, and the page opens in THEIR browser
         (or is a link, when this machine has no screen for one).
         ``return``: a window on the agent's own profile, and the agent
-        carries on once the person closes it."""
-        url = self._require_page().url
+        carries on once the person closes it.
+
+        ``finish`` works with no page too: a site that turned this
+        browser away is exactly the one the person's own browser should
+        get, so the address last opened goes instead. Never one the
+        model names here -- the tool still takes no address."""
+        if mode == "finish":
+            url = self._page.url if self._url and self._page else self.url
+            if not url or url.startswith("about:"):
+                raise ToolError("no page open, and no address opened yet -- "
+                                "browser_open(url) first")
+        else:
+            url = self._require_page().url
         if mode == "finish":
             self._teardown()   # done here; nothing left to hold the profile
             self._release_profile()
@@ -1022,6 +1093,7 @@ class BrowserSession:
         was_open = self._page is not None
         self._teardown()
         self._release_profile()
+        self._headed, self._retried_headed = self._headed_asked, False
         if self._exec is not None:
             self._exec.shutdown(wait=False)  # we ARE the worker; safe
             self._exec = None  # next verb builds a fresh one
@@ -1434,6 +1506,25 @@ class BrowserClose(_BrowserTool):
 #: sends no page with it.
 REFUSED_STATUS = (401, 403)
 REFUSED_LOAD = "ERR_HTTP_RESPONSE_CODE_FAILURE"
+#: How a bot shield turns a headless browser away without a page: the
+#: connection dropped mid-answer, or nothing at all. Each earns one more
+#: try with a window (notes/151). A 401 is a sign-in, which no window
+#: changes, so only 403 among the statuses.
+DROPPED_LOAD = ("ERR_HTTP2_PROTOCOL_ERROR", "ERR_CONNECTION_RESET",
+                "ERR_CONNECTION_CLOSED", "ERR_EMPTY_RESPONSE",
+                REFUSED_LOAD)
+TURNED_AWAY_STATUS = (403,)
+#: Said ahead of a page that loaded only on the second try.
+RETRIED_HEADED = ("(this site turned the headless browser away, so it was "
+                  "opened again with a window -- on a screen nobody sees)\n\n")
+#: Said after a load that failed both ways: what it means, and the way
+#: out, so nobody reports a blocked machine or tries the same thing again.
+TURNED_AWAY_TWICE = (
+    " -- it was tried again with a window and turned away again. The site "
+    "is refusing automated browsers; that is not this machine's network, "
+    "and trying again now will not change it. To give the person the page, "
+    "call browser_handoff with mode='finish' if you have it (they get it in "
+    "their own browser, or as a link), or put the address in your answer.")
 
 
 def refused_nobody_note(url: str) -> str:
@@ -1470,7 +1561,9 @@ class BrowserHandoff(_BrowserTool):
         "rest is theirs to do: anything that spends money (a purchase, a "
         "booking), needs payment or personal details, or that they should "
         "decide themselves -- it opens the page in their own browser (or "
-        "gives them a link) and your browsing ends. Never type payment "
+        "gives them a link) and your browsing ends. Also when a page will "
+        "not load here at all: 'finish' then gives them the address you "
+        "last opened, for their own browser to load. Never type payment "
         "details yourself; hand off instead. mode='return' when you need "
         "them for a moment: a sign-in, 2FA, a captcha -- a window opens "
         "for them on your browser profile, and once they close it you get "

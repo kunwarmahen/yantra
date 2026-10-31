@@ -167,8 +167,10 @@ class FakePage:
 
 
 def make_session(page: FakePage) -> BrowserSession:
-    """A session that believes it already launched, around a fake page."""
-    session = BrowserSession()
+    """A session that believes it already launched, around a fake page.
+    No second try with a window: that launches a browser for real, and
+    test_browser_turned_away owns it."""
+    session = BrowserSession(window_retry=False)
     session._pw = object()  # truthy is all _open checks before touching it
     session._browser = object()
     session._page = page

@@ -186,6 +186,12 @@ problem above is why: a browser Yantra chose for you this week is a
 browser it might choose differently next week, and the profile would
 not survive the change. You name it, or you get the bundled one.
 
+**No window until a site asks for one.** Headed stays opt-in here.
+A page headless is turned away from is now tried once more with a
+window on its own Xvfb, without the setting —
+[notes/151](151-turned-away-headless.md) — so the cost is paid only by
+the sites that charge it.
+
 **No display sharing.** Each session that needs a virtual screen
 starts its own Xvfb and kills it on teardown. A pool would save a
 process; it would also leave an X server running after a crash, and

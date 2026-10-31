@@ -133,6 +133,16 @@ def _clip(text: str, cap: int = MAX_RESULT_CHARS) -> str:
             f"{text[-keep:]}")
 
 
+#: Said after a fetch the site timed out, dropped or refused. Many shops
+#: and airlines drop every plain HTTP client and serve a real browser, so
+#: a failed fetch is no evidence the site is down or blocking this
+#: machine -- and a model told nothing says exactly that (notes/151).
+TRY_A_BROWSER = (
+    "\n(a site can drop plain fetches like this one and still load in a "
+    "real browser: try browser_open if you have it before saying the site "
+    "is down or blocking this machine)")
+
+
 def fetch(url: str) -> str:
     """GET ``url``, return readable text. Raises ToolError on everything
     the model could act on (bad scheme, HTTP status, unsupported type)."""
@@ -144,7 +154,9 @@ def fetch(url: str) -> str:
         with _client_factory() as client:
             with client.stream("GET", url) as response:
                 if response.status_code >= 400:
-                    raise ToolError(f"HTTP {response.status_code} from {url}")
+                    raise ToolError(f"HTTP {response.status_code} from {url}"
+                                    + (TRY_A_BROWSER if response.status_code
+                                       == 403 else ""))
                 content_type = (response.headers.get("content-type")
                                 or "").split(";")[0].strip().lower()
                 body = b""
@@ -155,7 +167,8 @@ def fetch(url: str) -> str:
                             f"response exceeds {MAX_DOWNLOAD_BYTES} bytes; "
                             "refusing to download more")
     except httpx.HTTPError as exc:
-        raise ToolError(f"fetch failed: {type(exc).__name__}: {exc}") from exc
+        raise ToolError(f"fetch failed: {type(exc).__name__}: {exc}"
+                        + TRY_A_BROWSER) from exc
 
     if content_type in ("text/html", "application/xhtml+xml"):
         title, text = html_to_text(body.decode("utf-8", errors="replace"))
