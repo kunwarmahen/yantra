@@ -1522,7 +1522,9 @@ RETRIED_HEADED = ("(this site turned the headless browser away, so it was "
 TURNED_AWAY_TWICE = (
     " -- it was tried again with a window and turned away again. The site "
     "is refusing automated browsers; that is not this machine's network, "
-    "and trying again now will not change it. To give the person the page, "
+    "and trying again now will not change it. If you have the phone tool "
+    "mcp__sparsh__open_url, you can offer to read it on their phone instead "
+    "(its own network; they are asked first). To give the person the page, "
     "call browser_handoff with mode='finish' if you have it (they get it in "
     "their own browser, or as a link), or put the address in your answer.")
 

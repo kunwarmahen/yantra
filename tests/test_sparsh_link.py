@@ -59,9 +59,11 @@ FAKE_SPARSH = """\
     with open(LOG, "a") as out:
         out.write(json.dumps(args) + "\\n")
     def send(m): sys.stdout.write(json.dumps(m) + "\\n"); sys.stdout.flush()
-    KINDS = {{"look": "read", "describe_hold": "read", "tap": "act", "confirm": "confirm"}}
+    KINDS = {{"look": "read", "describe_hold": "read", "tap": "act", "open_url": "ask",
+             "confirm": "confirm"}}
     def tool(name):
         hint = {{"read": {{"readOnlyHint": True}}, "act": {{"readOnlyHint": False}},
+                 "ask": {{"readOnlyHint": False, "openWorldHint": True}},
                  "confirm": {{"readOnlyHint": False, "destructiveHint": True}}}}
         return {{"name": name, "description": name, "inputSchema": {{"type": "object"}},
                 "annotations": hint.get(KINDS.get(name), {{}})}}
@@ -89,7 +91,8 @@ FAKE_SPARSH = """\
                            "on": None, "outcome": "held",
                            "said": "h1: enter could do what item Send SMS does"}}]))
     elif args[0] == "mcp":
-        TOOLS = [tool(n) for n in ("look", "describe_hold", "tap", "confirm", "mystery")]
+        TOOLS = [tool(n) for n in ("look", "describe_hold", "tap", "open_url", "confirm",
+                                   "mystery")]
         for line in sys.stdin:
             msg = json.loads(line)
             method, mid = msg.get("method"), msg.get("id")
@@ -161,7 +164,7 @@ class TestClassed:
         code, agent, manager, out = start(tmp_path, str(make_sparsh(tmp_path)))
         try:
             assert code is None
-            assert "sparsh: 5 tool(s); phone emulator-5554 (sdk_gphone64)" in out
+            assert "sparsh: 6 tool(s); phone emulator-5554 (sdk_gphone64)" in out
             assert tool(agent, "look").read_only and tool(agent, "tap").read_only
             assert not tool(agent, "tap").always_ask
             confirm = tool(agent, "confirm")
@@ -177,6 +180,17 @@ class TestClassed:
                                         summary="", read_only=confirm.read_only,
                                         always_ask=confirm.always_ask)
             assert yolo(request) is False
+        finally:
+            manager.shutdown()
+
+    def test_an_address_opened_on_the_phone_is_asked_but_not_every_time(
+            self, clean, tmp_path):
+        # Gated like web_fetch: a card in a chat, an exact grant in a watch
+        # -- not always_ask, which no watch could ever run.
+        _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
+        try:
+            opened = tool(agent, "open_url")
+            assert not opened.read_only and not opened.always_ask
         finally:
             manager.shutdown()
 
@@ -429,7 +443,7 @@ class TestThePanel:
         try:
             sparsh = client.get("/api/state").json()["sparsh"]
             assert sparsh["found"] and sparsh["ready"] == ["emulator-5554"]
-            assert sparsh["rules"]["never"] == ["*bank*"] and sparsh["tools"] == 5
+            assert sparsh["rules"]["never"] == ["*bank*"] and sparsh["tools"] == 6
             assert client.get("/api/phone").json()["phones"][0]["model"] == "sdk_gphone64"
         finally:
             manager.shutdown()
@@ -504,7 +518,7 @@ class TestAPhoneAttachedLater:
             assert out == "" and not agent.sparsh.connected
             assert not [n for n in agent.registry.names() if n.startswith("mcp__sparsh__")]
             make_sparsh(tmp_path)                   # a phone, and asked again
-            assert agent.sparsh.use_now(manager, agent).startswith("sparsh: 5 tool(s)")
+            assert agent.sparsh.use_now(manager, agent).startswith("sparsh: 6 tool(s)")
         finally:
             manager.shutdown()
 
@@ -522,7 +536,7 @@ class TestAPhoneAttachedLater:
         try:
             make_sparsh(tmp_path)                   # the phone is plugged in
             said = agent.sparsh.use_now(manager, agent)
-            assert said.startswith("sparsh: 5 tool(s); phone emulator-5554")
+            assert said.startswith("sparsh: 6 tool(s); phone emulator-5554")
             assert tool(agent, "confirm").always_ask
             assert "BY NUMBER" in agent.prompt.get("phone")
             assert "already in use" in agent.sparsh.use_now(manager, agent)
@@ -542,7 +556,7 @@ class TestAPhoneAttachedLater:
             repl._command("/phone")
             assert "in use: no -- /phone use to start" in out.getvalue()
             repl._command("/phone use")
-            assert "sparsh: 5 tool(s)" in out.getvalue()
+            assert "sparsh: 6 tool(s)" in out.getvalue()
             repl._command("/phone log")
             assert 'press_key {"keys": ["enter"]} -> held' in out.getvalue()
         finally:
@@ -567,7 +581,7 @@ class TestAPhoneAttachedLater:
             assert nameless.status_code == 409 and "no phone is called 'pixel'" in \
                 nameless.json()["detail"]                # this Sparsh names no phones
             used = client.post("/api/phone/use").json()
-            assert used["connected"] and used["said"].startswith("sparsh: 5 tool(s)")
+            assert used["connected"] and used["said"].startswith("sparsh: 6 tool(s)")
             assert "mcp__sparsh__tap" in agent.registry
             steps = client.get("/api/phone/log", params={"serial": "emulator-5554"}).json()
             assert steps["steps"][0]["outcome"] == "held"

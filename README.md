@@ -1012,7 +1012,11 @@ Enter while such a button is on screen. The
 model is told "NOT DONE", and the only way through is
 `mcp__sparsh__confirm`. Yantra asks about that every time, even under
 `--yolo`, and its card is Sparsh's own account of what will happen, with
-the screen it will happen on. `YANTRA_SPARSH=/path/to/sparsh` names it
+the screen it will happen on. `mcp__sparsh__open_url` (a web page read in
+the phone's own browser, for a site that turns this computer's browser
+away) is asked about the way a fetch is: a card in a chat, and in a
+watch only the exact call its person granted, on a phone marked spare
+([notes/151](notes/151-turned-away-headless.md)). `YANTRA_SPARSH=/path/to/sparsh` names it
 when it is elsewhere; `--sparsh` insists, even with no phone attached;
 `--no-sparsh` never looks; a plain `--mcp-config` entry running
 `sparsh mcp` works too, but then every tap asks (Yantra can't tell
@@ -2949,7 +2953,8 @@ src/yantra/
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and
-│                   act run, `confirm` asks every time), the confirm card is
+│                   act run, `ask` -- open_url -- is gated like web_fetch,
+│                   `confirm` asks every time), the confirm card is
 │                   Sparsh's describe_hold, a `phone` prompt layer (only
 │                   `phone_status` when that is all it admits,
 │                   [notes/146](notes/146-told-only-what-it-can-use.md)), and

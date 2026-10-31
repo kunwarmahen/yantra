@@ -25,7 +25,7 @@ rather than guessed at. ``YANTRA_SPARSH`` or the flags choose:
 
 THE PHONE'S RULES DECIDE WHAT ASKS, NOT THE SERVER'S HINTS. Sparsh's
 taps honestly say they change things, and a card before every tap would
-be a card nobody reads by the tenth. Sparsh names three kinds instead:
+be a card nobody reads by the tenth. Sparsh names four kinds instead:
 
     read     look, list_apps, describe_hold,      never asked about
              watch_phone, watched
@@ -34,6 +34,11 @@ be a card nobody reads by the tenth. Sparsh names three kinds instead:
                                                   ones itself (Send, Pay,
                                                   Delete, a password,
                                                   Enter beside a Send ...)
+    ask      open_url                             asked as web_fetch is: a
+                                                  card in a chat, and in a
+                                                  watch only the exact call
+                                                  granted -- the address goes
+                                                  out over the phone's network
     confirm  confirm                              asked EVERY time, even
                                                   under --yolo
 
@@ -129,7 +134,7 @@ FORMAT = "sparsh.status.v1"
 SERVER = "sparsh"
 #: How long ``sparsh status --json`` may take (it asks adb for phones).
 STATUS_TIMEOUT = 15.0
-KINDS = ("read", "act", "confirm")
+KINDS = ("read", "act", "ask", "confirm")
 #: A phone's serial as adb prints it (emulator-5554, R58M..., 192.168.1.5:5555),
 #: as it may reach an argv word: never an option.
 SERIAL_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
@@ -468,7 +473,8 @@ def classify(tool: Any, kinds: dict[str, str]) -> str | None:
     if kind not in KINDS:
         return None
     # "act" runs unasked because the phone's rules hold what is risky
-    # (module docstring) -- not because it changes nothing.
+    # (module docstring) -- not because it changes nothing. "ask" is
+    # gated like any tool that reaches out.
     tool.read_only = kind in ("read", "act")
     tool.always_ask = kind == "confirm"
     return kind

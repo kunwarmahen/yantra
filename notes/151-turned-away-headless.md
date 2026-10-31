@@ -113,10 +113,29 @@ this note started with.
 load costs about a second (the drop is quick), so paying it again on
 the next visit is cheaper than keeping a list that goes stale.
 
-**No phone browser fallback yet.** A connected Android phone has its
-own network and a real mobile browser. It's a plausible last resort,
-but opening tabs on a phone someone is holding is a different decision,
-and it's left open.
+**No automatic switch to the phone.** The phone is a last resort the
+model offers, not one the browser takes by itself. See below.
+
+## The phone, as a last resort
+
+Even with a window, the store answered 403 now and then. A phone is a
+different client altogether: a browser people really use, often on its
+own mobile network. Sparsh's `open_url` opens an address in the phone's
+own browser and reads the page back as a screen, and turned away twice,
+`browser_open` now says the model can offer that.
+
+**ASKED, NOT ALWAYS-ASKED.** Sparsh gives it a kind of its own, `ask`,
+because an address goes out over the phone's network. Yantra gates it
+like `web_fetch`: in a chat the person sees a card naming the phone and
+the address. It is not `confirm`, which asks even under `--yolo`,
+because that kind can never run in a watch.
+
+**A WATCH ONLY ON A SPARE PHONE.** A watch looks with nobody there.
+Dvara's look starts Sparsh only when the tool is `open_url`, and then
+only with this person's phones that Sarathi marks *spare*
+(`[phone.NAME] spare = true`, passed as `SPARSH_SPARE`): a phone in a
+drawer, never one in someone's pocket. With none marked, the look says
+where to mark one.
 
 ## What the tests pin
 
@@ -125,7 +144,8 @@ headed and a 401 or a timeout is not; the retry always gets its own
 Xvfb, even with `DISPLAY` set; it happens once; the session goes back
 to headless when it closes; no Xvfb or `HEADED=0` means no retry; and
 `finish` hands over a failed address even after the browser has closed,
-while `return` still refuses.
+while `return` still refuses. `tests/test_sparsh_link.py`: `open_url` is
+gated, not always asked.
 
 ## Receipt
 
