@@ -332,6 +332,9 @@ with `nomic-embed-text`.)
 To remove a memory, give its id as `/memory` shows it: `/memory forget
 2ad6b855`. Smritikosh's ids are long, so the list shows their first
 eight characters, and any start that names one memory is enough.
+Smritikosh also drops the facts it worked out from that memory (the
+ones on its dashboard's fact graph), unless another memory says the
+same thing.
 
 On the page (`yantra --web`), the bookmark chip in the header shows the
 same list. When it's long, type in the box above it: only the memories
