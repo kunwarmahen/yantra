@@ -449,7 +449,9 @@ sign-in is kept for the name it uses; the bare `localhost:3000` can open
 blank) and sign in with your account from
 Step 7, its username and password. **Memories** is what Yantra remembers
 about you. The build needs a Smritikosh from after its dashboard's type
-fixes: `git pull` if `npm run build` stops on a type error.
+fixes: `git pull` if `npm run build` stops on a type error. To change your
+password, open **Settings → Password** there; your key for Yantra keeps
+working.
 
 **Bring what Yantra already knows about you.** What the built-in file
 holds doesn't move by itself. Once `/memory` says `smritikosh`, type:
