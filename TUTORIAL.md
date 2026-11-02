@@ -801,7 +801,8 @@ you would. At *Read only* it can open pages, follow links, scroll,
 search, and take a picture of the page, but it can't click a button or
 type anywhere except a search box. Ask *"take a screenshot of my ALAB
 chart"* and it saves the picture in its folder under `screenshots/`;
-the page shows it under the tool's card. A model that can see pictures
+the page shows it under the tool's card, and the agent is told you can
+see it there. A model that can see pictures
 (Ollama lists "vision") describes it too
 ([notes/137](notes/137-a-picture-of-the-page.md)). At the next level it can click and type (add to cart, post a
 reply), and it asks you each time. At no level will it buy, pay, cancel
@@ -858,8 +859,8 @@ A few deserve a sentence each:
   harvested from the live DOM. Logins persist through a profile directory
   — cookies stay on disk, never in model context. Ask *"open the ALAB
   page on TradingView and send me a picture"* and `browser_screenshot`
-  saves one under `screenshots/` in the agent's folder; it doesn't ask
-  first, because it only shows the page you already let it open. A model
+  saves one under `screenshots/` in the agent's folder, and Yantra's
+  page shows it under that step; it doesn't ask first, because it only shows the page you already let it open. A model
   that can see pictures (Ollama lists "vision") looks at it too
   ([notes/138](notes/138-a-picture-of-any-page.md)).
 

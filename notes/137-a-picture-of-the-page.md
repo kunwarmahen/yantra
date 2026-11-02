@@ -37,12 +37,34 @@ It is **saved** in the agent's folder as
 `screenshots/<site>-<date>-<time>.jpg`. A file is the one thing every
 road can hand on:
 
-- **Telegram, Sarathi's home chat:** Dvara's `send_file` sends it from
-  the person's folder.
+- **Telegram, Sarathi's home chat:** on a chat turn it goes with the
+  answer by itself; Dvara's `send_file` sends one from earlier, and a
+  schedule's.
 - **Yantra's page:** the tool card shows it, from
   `/api/screenshots/<name>`. Only plain names in that one folder are
   served.
 - **Terminal:** the line names the file.
+
+**A HOST WITH A CHAT HANDS IT ON; THE MODEL DOESN'T HAVE TO.** At first
+the picture reached a chat only if the model thought to call
+`send_file`. Asked for tomorrow's calendar, minder took the shot and
+then answered:
+
+```
+Here it is — saved to screenshots/google-20261101-225946.jpg in my folder
+(I don't have a send-file tool, so it's not attached here).
+```
+
+It was telling the truth. minder has every tool, so Dvara sends the
+model only the dozen whose words match the turn
+([note 17](17-tool-selection.md)), and "screenshot" is not a word
+`send_file` has. So `ToolContext` carries `hand_picture`: a host with a
+chat sets it, `save_picture` calls it with the file, and the model is
+told what happened in place of the old *"send it with send_file if you
+have that tool"*. Dvara's chat turns put the file with the answer
+(Dvara's notes/26). Yantra's page answers *"The person sees it on the
+page, under this step"*, because the card already shows it there. The
+terminal sets nothing, so the model still names the file.
 
 It is **attached** for the model to look at only when the model can see.
 A picture sent to a model that can't take one fails the whole turn,

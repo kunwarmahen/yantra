@@ -57,6 +57,12 @@ class ToolContext:
     #: screenshot -- attaches it only then: sent to a model that can't
     #: take one, a picture fails the whole turn. None: nobody said, yes.
     sees_pictures: Callable[[], bool] | None = None
+    #: How a picture a tool saved reaches the person, when the host has a
+    #: chat to show it in (Yantra's page, Dvara's chat turns): called with
+    #: the file, it returns what happened, said to the model. A screenshot
+    #: asked for in a chat is the answer, not a file the model must think
+    #: to send. None: no chat, so the model hands it on itself.
+    hand_picture: Callable[[Path], str] | None = None
 
 
 @dataclass(slots=True)

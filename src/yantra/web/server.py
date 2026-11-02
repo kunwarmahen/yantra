@@ -332,6 +332,10 @@ class WebSession:
         # events and between tool calls, so a click lands mid-model-call --
         # as close to terminal Ctrl-C as a signal-less worker can get.
         agent.interrupt_check = self._cancel.is_set
+        # A screenshot is drawn under its step on this page (app.js), so
+        # the model says "here it is", not "I can't send it" (browser.py).
+        agent.ctx.hand_picture = lambda path: (
+            "The person sees it on the page, under this step")
         # A memory store that failed says so on the page, as a banner in
         # the conversation it failed for (memory/__init__.py: fails open,
         # out loud).

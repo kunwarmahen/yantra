@@ -18,9 +18,9 @@ Both tools hand the picture to `save_picture` in `tools/browser.py`.
 The file is saved as `screenshots/browser-<date>-<time>.jpg` in the
 agent's folder. It is attached for the model only when the model can
 see (`ToolContext.sees_pictures`). A model that can't see gets the file
-name and is told not to describe the picture. A chat's `send_file`
-finds the file there, and Yantra's page shows it under the tool card,
-as with a site's picture. One function means the two pictures can't
+name and is told not to describe the picture. A Dvara chat sends it
+with the answer, and Yantra's page shows it under the tool card, as with
+a site's picture (`ToolContext.hand_picture`, note 137). One function means the two pictures can't
 drift apart: same sizes, same folder, same words to the model.
 
 ## It does not ask again
@@ -85,8 +85,9 @@ live on the same page.
 
 ## What was not built
 
-* **A picture sent by itself.** As in note 137, the tool saves and
-  attaches; sending is the host's `send_file`.
+* **A picture sent by the tool.** As in note 137, the tool saves and
+  attaches; how it reaches the person is the host's (`hand_picture` in
+  a chat, `send_file` otherwise).
 * **A picture with every page.** `browser_open` still returns text
   only. Text is what local models work from best, and a picture on
   every step would fill a small model's window with images it didn't

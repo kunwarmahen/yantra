@@ -565,3 +565,26 @@ def test_the_agent_says_whether_its_model_sees_once_per_model(monkeypatch):
     assert sees() is False and sees() is False and asked == ["qwen"]
     agent.model = "llava"                      # /model, mid-session
     assert sees() is True and asked == ["qwen", "llava"]
+
+
+def test_a_host_with_a_chat_hands_the_screenshot_on_itself(tmp_path):
+    from yantra.tools.browser import save_picture
+
+    handed = []
+    ctx = ToolContext(cwd=tmp_path,
+                      hand_picture=lambda p: handed.append(p.name) or "It goes with your answer")
+    out = save_picture(b"\xff\xd8jpeg", "https://calendar.example", "google", ctx)
+    assert handed and handed[0].startswith("google-")
+    assert "It goes with your answer" in out.text and "send_file" not in out.text
+    assert f"saved to screenshots/{handed[0]}" in out.text    # the page finds it by this
+    alone = save_picture(b"\xff\xd8jpeg", "https://x", "google", ToolContext(cwd=tmp_path))
+    assert "send it with send_file" in alone.text
+
+
+def test_the_page_tells_the_model_the_person_sees_the_screenshot(tmp_path):
+    pytest.importorskip("fastapi")
+    from yantra.web.server import WebSession
+
+    agent = Agent(ScriptedProvider([]), model="m", tools=ToolRegistry(), cwd=tmp_path)
+    WebSession().attach(agent, None)
+    assert "sees it on the page" in agent.ctx.hand_picture(tmp_path / "x.jpg")

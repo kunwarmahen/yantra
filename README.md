@@ -815,7 +815,7 @@ profile kept for that connection, you sign in and close it, and the agent
 gets `amazon_open`, `amazon_follow`, `amazon_scroll`, `amazon_search`
 and `amazon_screenshot` (a picture of the open page, saved in the
 agent's folder under `screenshots/` and shown on Yantra's page, sent
-from a chat with `send_file`, and attached for the model to look at
+with the answer in a Dvara chat, and attached for the model to look at
 when it can see pictures,
 [notes/137](notes/137-a-picture-of-the-page.md)).
 None of them press anything, so they run unasked; the write level adds
@@ -1269,7 +1269,9 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   the whole page (`full_page`, cut at 6000 pixels), or one element by
   its ref. It is saved under `screenshots/` in the agent's folder and
   shown under its card on Yantra's page; it is attached for the model
-  only when the model can see. It loads and presses nothing, so unlike
+  only when the model can see. A host with a chat hands it to the person
+  itself (`ToolContext.hand_picture`), and the model is told so: asked
+  for a screenshot, it once said it had no tool to send one. It loads and presses nothing, so unlike
   the other browser verbs it runs without asking
   ([notes/138](notes/138-a-picture-of-any-page.md)).
 - **Nobody watching.** `--unattended` (or `YANTRA_UNATTENDED=1`) is a
@@ -3288,7 +3290,8 @@ src/yantra/
 │   │               ([notes/114](notes/114-nobody-watching.md)).
 │   │               browser_screenshot: the open page as a JPEG, read-only
 │   │               (loads and presses nothing); save_picture saves it in
-│   │               screenshots/ for it and site.py's screenshot alike
+│   │               screenshots/ for it and site.py's screenshot alike,
+│   │               handed to the person by a host with a chat (hand_picture)
 │   │               ([notes/138](notes/138-a-picture-of-any-page.md))
 │   ├── profile_lock.py one browser per profile across processes: flock on
 │   │               yantra.lock, waited on (10 s / 2 min unattended), the

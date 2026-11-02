@@ -500,7 +500,10 @@ def save_picture(raw: bytes, url: str, stem: str, ctx: ToolContext) -> ToolOutpu
     """A screenshot saved as ``screenshots/<stem>-<date>-<time>.jpg`` and
     said, attached only when the model can see. A picture sent to a model
     that can't take one fails the whole turn; that model gets the file to
-    hand on and is told not to describe it."""
+    hand on and is told not to describe it. A host with a chat takes it
+    from here (``ToolContext.hand_picture``): asked for a screenshot, the
+    agent once answered that it had no tool to send one, because
+    send_file's words never matched the turn's and it wasn't sent."""
     from yantra.images import image_block_from_bytes
 
     folder = ctx.cwd / SHOTS_DIR
@@ -514,8 +517,12 @@ def save_picture(raw: bytes, url: str, stem: str, ctx: ToolContext) -> ToolOutpu
     path.write_bytes(raw)
     shown = f"{SHOTS_DIR}/{path.name}"
     said = f"picture of {url} saved to {shown} ({len(raw) // 1024} KB)"
-    hand = ("To give it to the person, send it with send_file if you have that tool, "
-            f"or tell them it is {shown} in your folder.")
+    if ctx.hand_picture is not None:
+        hand = (f"{ctx.hand_picture(path)} -- so don't say you can't send it, "
+                "and don't send it again.")
+    else:
+        hand = ("To give it to the person, send it with send_file if you have that tool, "
+                f"or tell them it is {shown} in your folder.")
     if ctx.sees_pictures is not None and not ctx.sees_pictures():
         return ToolOutput(text=f"{said}. Your model can't see pictures, so it is not "
                                f"attached: don't describe it. {hand}")
