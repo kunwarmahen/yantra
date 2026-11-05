@@ -1056,7 +1056,12 @@ file that holds them). Looking there never changes what the agent's
 numbers mean: the panel peeks (`sparsh look --peek`), so it's safe to
 open mid-turn and watch. **What was done** lists every step on the
 phone (`sparsh log`), the agent's and yours, held and refused ones
-included. With Sparsh on `PATH` but no phone at the start, a session
+included. The panel is the phone beside this chat; the phones on their
+own, with every step any program took on them (a schedule, a watch,
+someone on Dvara's door), are on Sparsh's own page, `sparsh serve`
+([its note 20](https://github.com/kunwarmahen/sparsh/blob/main/notes/20-a-page-for-the-phones.md)),
+which Sarathi's home page opens from **Your phones**.
+With Sparsh on `PATH` but no phone at the start, a session
 says nothing and adds no tools. Attach one later and press **use this
 phone** in the panel, or type `/phone use`, to add them without a
 restart. `/phone` says what's attached, and `/phone log [NAME]` shows the last
