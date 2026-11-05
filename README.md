@@ -1057,10 +1057,14 @@ numbers mean: the panel peeks (`sparsh look --peek`), so it's safe to
 open mid-turn and watch. **What was done** lists every step on the
 phone (`sparsh log`), the agent's and yours, held and refused ones
 included. The panel is the phone beside this chat; the phones on their
-own, with every step any program took on them (a schedule, a watch,
-someone on Dvara's door), are on Sparsh's own page, `sparsh serve`
+own, with every step any program took on them and who asked (a
+schedule, a watch, someone on Dvara's door), are on Sparsh's own page,
+`sparsh serve`
 ([its note 20](https://github.com/kunwarmahen/sparsh/blob/main/notes/20-a-page-for-the-phones.md)),
-which Sarathi's home page opens from **Your phones**.
+which Sarathi's home page opens from its **Sparsh** card. Yantra starts
+`sparsh mcp` with `SPARSH_ASKED_BY`: `$YANTRA_ASKED_BY` when the program
+that started it set one (Samay and Prahari do), else *Yantra's page* or
+*Yantra*; Dvara sets its own per turn.
 With Sparsh on `PATH` but no phone at the start, a session
 says nothing and adds no tools. Attach one later and press **use this
 phone** in the panel, or type `/phone use`, to add them without a

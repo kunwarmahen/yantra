@@ -2551,10 +2551,10 @@ anyway, it is shown nothing on that screen.
 * the rules in force, and the file that holds them.
 
 The panel shows the phone next to this conversation. To see the phones
-on their own, with every step any program took on them (a schedule at
-night, a watch, someone on your Telegram bot), run `sparsh serve` and
-open the address it prints with the token. With Sarathi, the home
-page's **Your phones** card opens it. That page only watches: it never
+on their own, with every step any program took on them and who asked
+for it (a schedule at night, a watch, someone on your Telegram bot),
+run `sparsh serve` and open the address it prints with the token. With
+Sarathi, the home page's **Sparsh** card opens it. That page only watches: it never
 taps or types.
 
 **A phone plugged in later.** If no phone was attached when Yantra

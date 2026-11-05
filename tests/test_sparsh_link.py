@@ -856,3 +856,19 @@ def test_one_phone_named_in_the_environment_is_the_only_one_served(clean, tmp_pa
         again.shutdown()
     finally:
         manager.shutdown()
+
+
+# -- who asked: the label Sparsh's log writes beside each step ------------------------
+
+def test_the_server_is_told_who_asked_and_nothing_when_nobody_said():
+    config = sparsh_link.server_config({"mcp": {"command": "s"}}, asked="Samay: Morning brief")
+    assert config.env == {"SPARSH_ASKED_BY": "Samay: Morning brief"}
+    assert sparsh_link.server_config({"mcp": {"command": "s"}}).env is None
+
+
+def test_who_asked_is_the_starters_word_else_where_yantra_runs(monkeypatch):
+    monkeypatch.delenv(sparsh_link.ASKED_BY, raising=False)
+    assert sparsh_link.asked_by(web=True) == "Yantra's page"
+    assert sparsh_link.asked_by() == "Yantra"
+    monkeypatch.setenv(sparsh_link.ASKED_BY, "Prahari: Mayfield ice cream")
+    assert sparsh_link.asked_by(web=True) == "Prahari: Mayfield ice cream"

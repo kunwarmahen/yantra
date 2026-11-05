@@ -108,6 +108,14 @@ itself would be done on a phone no one is looking at, and a held step
 could only be refused. A host that checks the phone is free and can
 reach its person (Dvara) may give a scheduled run the phone, with the
 steps its person granted (``grants``).
+
+EVERY STEP SAYS WHO ASKED. Yantra's chat, Samay's schedules, Prahari's
+watches and Dvara's people all reach the phone through this link, and
+Sparsh's log can't tell them apart by itself. So the server is started
+with ``$SPARSH_ASKED_BY``: the link's ``asked_by`` (Dvara sets it per
+turn, "Telegram · asha"), from ``$YANTRA_ASKED_BY`` when the program
+that started this Yantra said who it is ("Samay: Morning brief"), else
+"Yantra's page" or "Yantra". Sparsh's page shows it beside each step.
 """
 
 from __future__ import annotations
@@ -228,10 +236,23 @@ def load(mode: str, path: str | None = None,
     return data, program
 
 
+#: Who started this run, in the starter's own words ("Samay: Morning
+#: brief"), passed on to Sparsh's log as ``$SPARSH_ASKED_BY``.
+ASKED_BY = "YANTRA_ASKED_BY"
+
+
+def asked_by(web: bool = False) -> str:
+    """Who this session works the phone for, as Sparsh's log will say it:
+    ``$YANTRA_ASKED_BY`` (Samay and Prahari set it for the runs they
+    start), else "Yantra's page" for ``--web``, else "Yantra"."""
+    return os.environ.get(ASKED_BY, "").strip() or ("Yantra's page" if web else "Yantra")
+
+
 def server_config(data: dict[str, Any], shots: bool = False,
                   app_rules: dict[str, Any] | None = None,
                   grants: list[str] | None = None,
-                  phones: tuple[str, ...] = ()) -> MCPServerConfig:
+                  phones: tuple[str, ...] = (),
+                  asked: str = "") -> MCPServerConfig:
     """``grants``: held taps a schedule may do without a yes, as the person
     accepted them ("send in Messages when the screen shows 555-0123"),
     for a run nobody watches -- Sparsh checks each one (its rules.py).
@@ -245,6 +266,10 @@ def server_config(data: dict[str, Any], shots: bool = False,
     env = {APP_RULES: json.dumps(app_rules)} if app_rules else {}
     if grants:
         env[GRANTS] = json.dumps(list(grants))
+    if asked:
+        # every step it takes says who asked (Sparsh's log.py): a label for
+        # the person reading the phone's page, never a key
+        env["SPARSH_ASKED_BY"] = asked
     return MCPServerConfig(name=SERVER, command=mcp["command"], args=args, env=env or None)
 
 
@@ -546,6 +571,9 @@ class Sparsh:
     shots_why: str = ""
     #: Of the phones Sparsh names, the ones this session uses (() = all).
     only: tuple[str, ...] = ()
+    #: Who the steps are for, on the phone's log ("Telegram · asha"): set
+    #: by whoever made this link (Dvara per turn; ``asked_by`` otherwise).
+    asked_by: str = ""
 
     def connect(self, manager: Any, agent: Any, grants: list[str] | None = None) -> int:
         """Start the server, set what asks, write the prompt layer.
@@ -556,7 +584,7 @@ class Sparsh:
         assert self.data is not None
         if SERVER not in manager.sessions:
             config = server_config(self.data, self.shots, app_rules_of(agent), grants,
-                                   phones=self.only)
+                                   phones=self.only, asked=self.asked_by)
             self.tools = [n for n in manager.connect(config, origin="sparsh")
                           if n in agent.registry]
             if self.sees():

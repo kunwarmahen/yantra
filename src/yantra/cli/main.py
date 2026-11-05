@@ -2343,7 +2343,8 @@ def _connect_sparsh(args, mcp_manager, agent, console: Console,
                           "session[/yellow]")
             return 2 if mode == "on" else None
     sparsh = sparsh_link.Sparsh(mode=mode, path=path, data=data, program=program,
-                                only=(one,) if one else ())
+                                only=(one,) if one else (),
+                                asked_by=sparsh_link.asked_by(bool(getattr(args, "web", False))))
     sparsh.shots, sparsh.shots_why = sparsh_link.shots(*model_road)
     if mode == "auto" and not sparsh_link.ready_phones(data):
         # Here, but no phone: no tools and no prompt for a phone that is
