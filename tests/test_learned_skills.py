@@ -1197,6 +1197,24 @@ class TestNeedsThroughSetu:
         assert resolve_needs("a Home Assistant token", link) == []
         assert [n.connected for n in resolve_needs("setu:gmail", None)] == [False]
 
+    def test_a_site_signed_in_by_browser_is_connected_by_its_own_tools(self):
+        # A recipe for Google Calendar was told "Google is NOT connected:
+        # do not work around it" -- a browser connection has no server,
+        # and only servers were counted.
+        from yantra.setu_link import Link, need_lines, resolve_needs
+
+        def site(account):
+            return {"ref": f"google:{account}", "connector": "google", "mcp": None,
+                    "browser": {"profile": f"/p/google-{account}", "home": "x"}}
+
+        one = Link({"format": "setu.status.v1", "connections": [site("personal")],
+                    "connectors": [{"id": "google", "name": "Google"}]}, road="test")
+        [need] = resolve_needs("setu:google (Google)", one)
+        assert need.connected and need.sites == ("google",)
+        assert "connected -- use its tools (google_*)" in need_lines([need])[0]
+        two = Link({**one.data, "connections": [site("personal"), site("work")]}, road="test")
+        assert resolve_needs("setu:google", two)[0].sites == ("google_personal", "google_work")
+
     def load(self, tmp_path, needs: str, *, setu=True):
         folder = saved_skill(tmp_path)
         text = (folder / SKILL_FILE).read_text()

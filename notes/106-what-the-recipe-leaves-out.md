@@ -105,6 +105,25 @@ The second one matters more. A recipe followed into an account that
 isn't there fails four steps in. The fix is yours to make (connect it),
 so the model should say so, not improvise around it.
 
+**A SITE SIGNED IN BY BROWSER IS CONNECTED TOO.** Connected once meant
+"has a server", and a browser connection has none: its tools are the
+site's own (`google_open`, `google_screenshot`). So a recipe for Google
+Calendar, kept from a chat that used exactly those tools, was told the
+second thing when it loaded: *Google is NOT connected: do not work
+around it*. `qwen3.8-64k:latest` ignored the order and used the tools
+anyway (*"The skill says google is not connected, but I actually see
+google_\* tools available"*); a model that obeyed would have told the
+person to connect an account they already had. A browser connection
+now counts, and so does a site's app on the phone, each by the names
+its tools go by:
+
+```
+Needs Google (setu:google): connected -- use its tools (google_*).
+```
+
+With two Google accounts it names both, `google_personal_*` and
+`google_work_*`, as the browser sessions name them.
+
 The write-up is given the connector ids Setu reports, so it can write
 `setu:gmail` instead of *"Gmail access"*. The save question says whether
 each one is connected:

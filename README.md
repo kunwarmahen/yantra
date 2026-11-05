@@ -2898,7 +2898,8 @@ src/yantra/
 │                   never started; the page checks Setu before each turn
 │                   ([notes/127](notes/127-a-sign-in-that-ran-out.md)).
 │                   resolve_needs: a learned skill's `setu:<id>` against the
-│                   report ([notes/106](notes/106-what-the-recipe-leaves-out.md)).
+│                   report, a server, a browser site or a phone app alike
+│                   ([notes/106](notes/106-what-the-recipe-leaves-out.md)).
 │                   AccountTool: several accounts, one tool set with
 │                   `account` (no default for writes); a package's
 │                   [connections] needs, allowed once (terminal or page,

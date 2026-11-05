@@ -587,14 +587,25 @@ class Need:
     name: str                      # the connector's own name, or the id
     known: bool                    # Setu has this connector installed
     servers: tuple[str, ...] = ()  # MCP servers of its connections, if any
+    #: Tool prefixes of its browser connections (``google``, or
+    #: ``google_work`` beside a second account): a site has no server, so
+    #: counting servers alone called every browser site NOT connected.
+    sites: tuple[str, ...] = ()
+    phone: bool = False            # through its own app on the phone
 
     @property
     def connected(self) -> bool:
-        return bool(self.servers)
+        return bool(self.servers or self.sites or self.phone)
+
+    def tools(self) -> list[str]:
+        """The names its tools go by, as the model is to look for them."""
+        return ([f"mcp__{s}__*" for s in self.servers] + [f"{p}_*" for p in self.sites]
+                + (["mcp__sparsh__open_app"] if self.phone else []))
 
     def describe(self) -> dict[str, Any]:
         return {"connector": self.connector, "name": self.name, "known": self.known,
-                "connected": self.connected, "servers": list(self.servers)}
+                "connected": self.connected, "servers": list(self.servers),
+                "sites": list(self.sites), "phone": self.phone}
 
 
 def resolve_needs(text: str, link: Link | None) -> list[Need]:
@@ -605,12 +616,21 @@ def resolve_needs(text: str, link: Link | None) -> list[Need]:
         return []
     connectors = link.connectors if link is not None else {}
     rows = link.connections if link is not None else []
+    from yantra.tools.site import prefix_for
+
     out = []
     for cid in wanted:
         info = connectors.get(cid)
-        servers = tuple((row.get("mcp") or {}).get("name", "") for row in rows
-                        if row.get("connector") == cid and (row.get("mcp") or {}).get("name"))
-        out.append(Need(cid, (info or {}).get("name") or cid, info is not None, servers))
+        mine = [row for row in rows if row.get("connector") == cid]
+        servers = tuple((row.get("mcp") or {}).get("name", "") for row in mine
+                        if (row.get("mcp") or {}).get("name"))
+        # named as _sync_sites names them: "several" counts every browser row
+        browsers = [row for row in mine if row.get("browser")]
+        sites = tuple(prefix_for(cid, account_of(row), len(browsers) > 1)
+                      for row in browsers if row["browser"].get("profile"))
+        phone = any(row.get("phone") for row in mine)
+        out.append(Need(cid, (info or {}).get("name") or cid, info is not None,
+                        servers, sites, phone))
     return out
 
 
@@ -626,7 +646,7 @@ def need_lines(needs: list[Need]) -> list[str]:
                          f"{len(need.servers)} accounts -- use its tools "
                          f"(mcp__{need.connector}__*) and say which `account`.")
         elif need.connected:
-            tools = ", ".join(f"mcp__{s}__*" for s in need.servers)
+            tools = ", ".join(need.tools())
             lines.append(f"Needs {need.name} (setu:{need.connector}): connected -- "
                          f"use its tools ({tools}).")
         else:
