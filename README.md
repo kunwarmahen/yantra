@@ -1376,8 +1376,9 @@ redoing any (the page: a **carry on / leave it** bar). The agent is
 told it stopped and looks again before it acts
 ([notes/144](notes/144-a-job-a-restart-stopped.md)). `/steps [N]` shows
 what a turn did, step by step: each tool, what it was given, what came
-back, when, how long it waited for a yes and how long it ran, and who
-said yes. `/steps export` writes it as a file for a bug report, and the
+back, when, how long it waited for a yes and how long it ran, who
+said yes, and how long the model thought before asking for it (with
+the tokens it read and wrote). `/steps export` writes it as a file for a bug report, and the
 page has a **steps** link under every answer and in History
 ([notes/145](notes/145-what-each-step-did.md));
 `/compact` force-clears context pressure — auto-compaction also fires by
@@ -2933,7 +2934,8 @@ src/yantra/
 ├── steps.py        what each step did: the loop notes when each step ran, its
 │                   wait at the gate apart from its run, who said yes
 │                   (PermissionRequest.answered_by) and its pictures, and each
-│                   turn's start, end and answer, beside the history in the
+│                   turn's start, end and answer, and each model call's time
+│                   and tokens (`thought`), beside the history in the
 │                   same payload; timeline() reads one turn as yantra.steps.v1
 │                   for Yantra's, Dvara's and Samay's pages, markdown() as a
 │                   file for a bug report; /steps, --steps FILE

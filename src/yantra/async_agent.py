@@ -433,6 +433,7 @@ class AsyncAgent:
                 messages = _with_approval_notice(self, messages)
                 messages = _with_clock_notice(self, messages)
                 self._sent_through = len(messages)
+                thinking = time.time()          # the run viewer's model time
                 response = await acollect(
                     self._atee(
                         self.provider.astream(
@@ -445,6 +446,7 @@ class AsyncAgent:
                     )
                 )
                 self.history.append(response.message)
+                steps.thought(self, thinking, response)
                 self.total_usage.add(response.usage)
                 spent.add(response.usage)
                 bucket = self.usage_by_model.setdefault(

@@ -95,12 +95,63 @@ five seconds between the two steps was the model. The first version
 printed `ran 0s` for a fast step; durations under a second now show as
 milliseconds.
 
+## Thinking is not running either
+
+The receipt above says "the five seconds between the two steps was the
+model", and that was a guess from the gaps. A local model on a GPU
+somebody else is training on, and a tool that hung, look the same from
+the steps alone. So each model call is noted too, on its turn's note:
+
+```json
+"calls": [{"at": "2026-11-05T23:28:44+00:00", "took": 10.6, "read": 4086,
+           "wrote": 141, "asked": ["c1", "c2", "c3"]}, ...]
+```
+
+`took` is the whole streamed answer, `read` the prompt (cached or not,
+the window it filled), `wrote` what came back, `asked` the steps it
+asked for. A step shows the call that asked for it as **thought**, on
+the FIRST STEP OF A BATCH ONLY: a model that asks for three reads at once
+made one call, and three "thought 10s" would say thirty. The answer
+shows the call that wrote it, and the turn's head the model's share of
+the whole (*the model: 18.6s over 2 calls*). Tokens a provider didn't
+report are left out, never shown as 0.
+
+Numbers only, a few dozen bytes a call, kept with the turn's note and
+deleted with it: the same rule as the rest of the notes. A conversation
+from before says nothing about its model calls rather than "0s".
+
+The same three files on `qwen3.8-64k:latest`, after:
+
+```
+$ yantra --job job.sqlite "Read a.txt, b.txt and c.txt here and tell me the sum of the numbers in them."
+…
+Sum = **50**
+$ yantra --steps job.sqlite
+turn 1 of 1: Read a.txt, b.txt and c.txt here and tell me the sum of the numbers in them. -- 19s, end_turn
+  the model: 18.6s over 2 calls
+  1. read_file  18:28:55 · thought 10.6s (4,086 read, 141 written) · ran 1ms
+     {"path": "a.txt"}
+     -> 1 17
+  2. read_file  18:28:55 · ran 1ms
+     {"path": "b.txt"}
+     -> 1 25
+  3. read_file  18:28:55 · ran <1ms
+     {"path": "c.txt"}
+     -> 1 8
+  answer  thought 8.0s (4,123 read, 60 written)
+```
+
+Eighteen and a half of the nineteen seconds were the model, in two
+calls; the three reads took two milliseconds. Yantra's page shows the
+same under **steps**, and so do Dvara's, Samay's and Sarathi's.
+
 ## What was deliberately not built
 
-* **Each model call's own time and tokens.** The gaps between steps are
-  the model's, and the turn's footer already has its tokens. Splitting
-  them per call would mean a record per model call, kept with the
-  conversation forever.
+* ~~**Each model call's own time and tokens.**~~ Built: *Thinking is not
+  running either*, above. Was: the gaps are the model's and the footer
+  has the tokens. The gaps were a guess, and the record is a few numbers.
+* **What the model was thinking.** A reasoning model's thinking text is
+  not shown or kept here; its time is.
 * **Pictures in the bug-report file.** A phone screenshot is a person's
   screen. The file counts them, and the page shows them.
 * **Steps of a sub-agent.** A child's turn is its own conversation; the

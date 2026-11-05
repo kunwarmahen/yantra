@@ -2145,7 +2145,9 @@ containers, see §24.
 
 * **What each step did.** `/steps` shows the last turn one step at a
   time: the tool, what it was given, what came back, when it ran, how long
-  it waited for your yes and how long it ran, and who said yes. `/steps 2`
+  it waited for your yes and how long it ran, and who said yes. A step
+  also says how long the model **thought** before asking for it, so a slow
+  turn says whether the model or a tool was slow. `/steps 2`
   shows the second turn, and `/steps export` writes it as a Markdown file
   to attach to a bug report. Read that file first: it holds what the tools
   read. On the page, every answer has a **steps** link, and so does every

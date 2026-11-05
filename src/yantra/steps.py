@@ -21,6 +21,11 @@ loop writes a small note per step and per turn beside the history, and
                       "kind": "message" | "resumed" | "carried",
                       "message": "...", "answer": "..."}
 
+and each model call the turn made, on its turn's note:
+
+    turns[KEY]["calls"] = [{"at": ISO, "took": s, "read": tokens,
+                            "wrote": tokens, "asked": [call_id, ...]}]
+
 ``KEY`` is the host's tag for the turn when it has one (Dvara's run id,
 so a run in its ledger finds its own steps) and the turn's own id
 otherwise. ``waited`` is the time at the permission gate: a person's yes
@@ -29,6 +34,16 @@ can take a minute, and that minute is not the tool's.
 NOTHING NEW IS KEPT. Arguments and results stay where they already are,
 in the history, under the conversation's own rules (History's delete
 deletes them). A note is times and names.
+
+THINKING IS NOT RUNNING EITHER. The gap between two steps was the model
+-- or was it? A local model on a busy GPU and a tool that hung look the
+same from the steps alone. So each model call is noted too: how long it
+took (the whole streamed answer), how much it read (the prompt, cached
+or not) and wrote, and which steps it asked for. Numbers only, a few
+dozen bytes a call, kept with the turn and deleted with it. A step shows
+the call that asked for it (``thought``: the first step of a batch, so a
+batch of three is not counted three times), and the answer the call that
+wrote it.
 
 ONE READING, MANY PAGES. ``timeline`` turns a payload into one turn's
 steps (format ``yantra.steps.v1``), the shape Yantra's page, Dvara's
@@ -104,6 +119,22 @@ def ran(agent: Any, call: Any, began: float, result: Any) -> None:
     note["ran"] = round(time.time() - began, 3)
     if getattr(result, "images", None):
         note["pictures"] = len(result.images)
+
+
+def thought(agent: Any, began: float, response: Any) -> None:
+    """One model call: how long, how much read and written, which steps
+    it asked for. Tokens a provider didn't report are left out, not 0."""
+    note = agent.turn_notes.get(getattr(agent, "_turn_key", ""))
+    if note is None:
+        return
+    usage = getattr(response, "usage", None)
+    call = {"at": _iso(began), "took": round(time.time() - began, 3),
+            "asked": [c.id for c in response.message.tool_calls()]}
+    if usage is not None and usage.window_tokens():
+        call["read"] = usage.window_tokens()
+    if usage is not None and usage.output_tokens:
+        call["wrote"] = usage.output_tokens
+    note.setdefault("calls", []).append(call)
 
 
 def kept(agent: Any, history: list[dict]) -> tuple[dict, dict]:
@@ -240,6 +271,8 @@ def timeline(payload: dict, which: int | str | None = None) -> dict:
             raise LookupError(f"no turn {which} in this conversation")
         index = found[0]
     segment, row = segments[index], rows[index]
+    calls = [c for k in row["keys"] for c in marks.get(k, {}).get("calls") or []]
+    asked = {c["asked"][0]: c for c in calls if c.get("asked")}
     steps = []
     for n, call in enumerate(segment["calls"], 1):
         cid = call.get("id")
@@ -252,6 +285,7 @@ def timeline(payload: dict, which: int | str | None = None) -> dict:
             "error": bool(result.get("is_error")), "missing": not result,
             "at": note.get("at"), "waited": note.get("waited"), "ran": note.get("ran"),
             "answered_by": note.get("answered_by"), "refused": note.get("refused"),
+            **_model(asked.get(cid)),
             "pictures": [{"media_type": i.get("media_type"), "data": i.get("data")}
                          for i in segment["images"].get(cid, [])],
         })
@@ -262,7 +296,23 @@ def timeline(payload: dict, which: int | str | None = None) -> dict:
             "seconds": row["seconds"], "outcome": row["outcome"],
             "kinds": [marks.get(k, {}).get("kind") for k in row["keys"]],
             "answer": (last.get("answer") or segment["answer"])[:ANSWER_CHARS],
+            "answer_model": _model(next((c for c in reversed(calls)
+                                         if not c.get("asked")), None)) or None,
+            "model_calls": len(calls),
+            "thinking": round(sum(c.get("took") or 0 for c in calls), 1) if calls else None,
             "steps": steps}
+
+
+def _model(call: dict | None) -> dict:
+    """A model call as a step's fields: ``thought`` (seconds), ``read``
+    and ``wrote`` (tokens, when the provider said)."""
+    if not call:
+        return {}
+    out = {"thought": call.get("took")}
+    for key in ("read", "wrote"):
+        if call.get(key):
+            out[key] = call[key]
+    return out
 
 
 # ---- in words, for a person and for a bug report -----------------------------------
@@ -284,10 +334,20 @@ def took(seconds: float | None) -> str:
     return f"{seconds * 1000:.0f}ms" if seconds < 1 else f"{seconds:.1f}s"
 
 
+def thinking(model: dict | None) -> str:
+    """``thought 4.2s (3,104 read, 88 written)``: one model call."""
+    if not model or model.get("thought") is None:
+        return ""
+    tokens = [f"{model[k]:,} {w}" for k, w in (("read", "read"), ("wrote", "written"))
+              if model.get(k)]
+    return f"thought {took(model['thought'])}" + (f" ({', '.join(tokens)})" if tokens else "")
+
+
 def step_line(step: dict) -> str:
-    """``3. phone_tap  10:04:12 · asked you on the page, 12s · ran 1.4s``"""
+    """``3. phone_tap  10:04:12 · thought 4.2s · asked you on the page, 12s · ran 1.4s``"""
     bits = [b for b in (
         _clock(step.get("at")),
+        thinking(step),
         (f"asked {step['answered_by']}, {took(step['waited'])}"
          if step.get("answered_by") and step.get("waited") is not None else ""),
         f"ran {took(step['ran'])}" if step.get("ran") is not None else "",
@@ -304,13 +364,26 @@ def text(view: dict) -> str:
             + (f" -- {view['seconds']:g}s" if view.get("seconds") is not None else "")
             + (f", {view['outcome']}" if view.get("outcome") else ""))
     lines = [head]
+    if said := model_time(view):
+        lines.append(f"  {said}")
     for step in view["steps"]:
         lines.append("  " + step_line(step))
         lines.append(f"     {json.dumps(step['arguments'], ensure_ascii=False)[:200]}")
         lines.append(f"     -> {step['short'] or '(no result)'}")
     if not view["steps"]:
         lines.append("  (no tools: it answered from what it knew)")
+    if said := thinking(view.get("answer_model")):
+        lines.append(f"  answer  {said}")
     return "\n".join(lines)
+
+
+def model_time(view: dict) -> str:
+    """``the model: 9.1s over 3 calls``, or "" for a turn noted before
+    model calls were."""
+    if not view.get("model_calls") or view.get("thinking") is None:
+        return ""
+    calls = view["model_calls"]
+    return f"the model: {took(view['thinking'])} over {calls} call{'s' if calls > 1 else ''}"
 
 
 def markdown(view: dict) -> str:
@@ -325,6 +398,8 @@ def markdown(view: dict) -> str:
         facts.append(f"took {view['seconds']:g}s")
     if view.get("outcome"):
         facts.append(f"ended: {view['outcome']}")
+    if said := model_time(view):
+        facts.append(said)
     out += [" · ".join(facts), "", "**Asked:**", "", view["message"], ""]
     for step in view["steps"]:
         out += [f"## {step_line(step)}", "", "```json",
@@ -332,8 +407,9 @@ def markdown(view: dict) -> str:
                 "```", step["result"] or "(no result)", "```", ""]
         if step["pictures"]:
             out += [f"*({len(step['pictures'])} picture(s) not included in this file)*", ""]
-    out += ["## Answer", "", view.get("answer") or "(none)", ""]
+    out += ["## Answer" + (f"  {said}" if (said := thinking(view.get("answer_model")))
+                           else ""), "", view.get("answer") or "(none)", ""]
     return "\n".join(out)
 
 
-__all__ = ["FORMAT", "markdown", "text", "timeline", "turns"]
+__all__ = ["FORMAT", "markdown", "model_time", "text", "thinking", "timeline", "turns"]

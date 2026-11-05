@@ -11,7 +11,10 @@ story from the turn it shows:
 * AN OLD CONVERSATION THAT WILL NOT OPEN -- one from before the notes
   must still show its steps, only without the times;
 * A NOTE THAT OUTLIVES ITS CONVERSATION -- after /clear, the next
-  conversation's payload must not carry the last one's.
+  conversation's payload must not carry the last one's;
+* THE MODEL'S TIME COUNTED TWICE OR FILED WRONG -- a call that asked for
+  three steps at once is one call, shown on the first of them, and the
+  call that wrote the answer is the answer's, not the last step's.
 """
 
 from __future__ import annotations
@@ -31,7 +34,7 @@ from yantra.agent import Agent
 from yantra.permissions import refuse
 from yantra.session import SessionStore, apply_payload, snapshot
 from yantra.tools.base import Tool, ToolOutput, ToolRegistry
-from yantra.types import ImageBlock
+from yantra.types import ImageBlock, Usage
 
 
 class Look(Tool):
@@ -155,6 +158,82 @@ class TestWhatIsNoted:
         payload = snapshot(agent, "scripted")
         assert "steps" not in payload
         assert [t["message"] for t in payload["turns"].values()] == ["hi"]
+
+
+class TestTheModelsTime:
+    def test_each_call_is_on_the_step_it_asked_for_and_the_answer_on_the_answer(self):
+        from yantra.types import Message, ModelResponse, ToolCall
+        both = ModelResponse(
+            message=Message("assistant", [ToolCall(id="c1", name="phone_look", arguments={}),
+                                          ToolCall(id="c2", name="phone_tap",
+                                                   arguments={"n": 2})]),
+            stop_reason="tool_use",
+            usage=Usage(input_tokens=900, cache_read_tokens=100, output_tokens=40))
+        agent = _agent([
+            both,
+            assistant_text("Opened Returns.", usage=Usage(input_tokens=1200,
+                                                          output_tokens=12)),
+        ])
+        agent.run("open my returns")
+
+        view = steps.timeline(snapshot(agent, "scripted"))
+
+        look, tap = view["steps"]
+        # one call asked for both: shown once, on the first
+        assert look["thought"] is not None and look["read"] == 1000 and look["wrote"] == 40
+        assert "thought" not in tap
+        assert view["answer_model"]["read"] == 1200 and view["answer_model"]["wrote"] == 12
+        assert view["model_calls"] == 2 and view["thinking"] is not None
+
+    def test_the_async_loop_notes_its_model_calls_the_same(self):
+        import asyncio
+
+        from yantra.async_agent import AsyncAgent
+        registry = ToolRegistry()
+        registry.register(Look())
+        agent = AsyncAgent(ScriptedProvider([
+            assistant_tool_call("c1", "phone_look", {}, usage=Usage(input_tokens=50)),
+            assistant_text("done", usage=Usage(output_tokens=3))]),
+            model="m", tools=registry, permissions=person)
+        asyncio.run(agent.run("look"))
+
+        view = steps.timeline(snapshot(agent, "scripted"))
+        assert view["steps"][0]["read"] == 50 and view["answer_model"]["wrote"] == 3
+
+    def test_tokens_a_provider_never_said_are_left_out_not_zero(self):
+        agent = _agent([assistant_tool_call("c1", "phone_look", {}), assistant_text("ok")])
+        agent.run("look")
+
+        [look] = steps.timeline(snapshot(agent, "scripted"))["steps"]
+        assert "read" not in look and "wrote" not in look
+        assert steps.thinking({"thought": 0.25}) == "thought 250ms"
+
+    def test_in_words_the_turn_says_the_models_share_and_each_call(self):
+        view = {"turn": 1, "of": 1, "message": "open my returns", "seconds": 20.0,
+                "outcome": "end_turn", "model_calls": 3, "thinking": 9.1,
+                "answer_model": {"thought": 2.0, "read": 3104, "wrote": 88},
+                "answer": "Opened Returns.", "started": None,
+                "steps": [{"n": 1, "tool": "phone_look", "at": None, "thought": 4.2,
+                           "read": 2900, "wrote": 30, "ran": 1.0, "waited": None,
+                           "answered_by": None, "refused": None, "error": False,
+                           "pictures": [], "arguments": {}, "short": "1 Orders",
+                           "result": "1 Orders"}]}
+        said = steps.text(view)
+        assert "the model: 9.1s over 3 calls" in said
+        assert "1. phone_look  thought 4.2s (2,900 read, 30 written) · ran 1.0s" in said
+        assert "answer  thought 2.0s (3,104 read, 88 written)" in said
+        assert "## Answer  thought 2.0s" in steps.markdown(view)
+
+    def test_a_turn_from_before_model_calls_were_noted_says_nothing_of_them(self):
+        agent = _agent(JOB)
+        agent.run("open my returns")
+        payload = snapshot(agent, "scripted")
+        for note in payload["turns"].values():
+            note.pop("calls", None)
+
+        view = steps.timeline(payload)
+        assert view["model_calls"] == 0 and view["thinking"] is None
+        assert view["answer_model"] is None and "the model:" not in steps.text(view)
 
 
 class TestOlderConversations:

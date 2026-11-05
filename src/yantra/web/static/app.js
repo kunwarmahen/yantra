@@ -1577,6 +1577,13 @@ function stepsUrl(id, turn, tail = "") {
   const base = id ? `/api/chats/${encodeURIComponent(id)}/steps` : "/api/steps";
   return `${base}${tail}?turn=${encodeURIComponent(turn || "")}`;
 }
+// One model call, as steps.thinking says it: "thought 4.2s (3,104 read, 88 written)".
+function thoughtWords(m) {
+  if (!m || m.thought == null) return "";
+  const t = [m.read ? `${m.read.toLocaleString()} read` : "",
+             m.wrote ? `${m.wrote.toLocaleString()} written` : ""].filter(Boolean);
+  return `thought ${secs(m.thought)}` + (t.length ? ` (${t.join(", ")})` : "");
+}
 function secs(n) { return n == null ? "" : n < 0.001 ? "<1ms" : n < 1 ? `${Math.round(n * 1000)}ms` : `${n.toFixed(1)}s`; }
 async function openSteps(id, turn) {
   const res = await fetch(stepsUrl(id, turn));
@@ -1584,7 +1591,9 @@ async function openSteps(id, turn) {
   if (!res.ok) { toast(d.detail || res.statusText); return; }
   $("#steps-backdrop").classList.remove("hidden");
   $("#steps-note").textContent = `turn ${d.turn} of ${d.of}` +
-    (d.seconds != null ? ` · ${d.seconds}s` : "") + (d.outcome ? ` · ${d.outcome}` : "");
+    (d.seconds != null ? ` · ${d.seconds}s` : "") + (d.outcome ? ` · ${d.outcome}` : "")
+    + (d.model_calls && d.thinking != null
+       ? ` · the model ${secs(d.thinking)} over ${d.model_calls} call${d.model_calls > 1 ? "s" : ""}` : "");
   const body = $("#steps-body");
   body.textContent = "";
   const nav = document.createElement("div");
@@ -1619,6 +1628,7 @@ async function openSteps(id, turn) {
     row.className = "step-row";
     const meta = [
       s.at ? new Date(s.at).toLocaleTimeString() : "",
+      thoughtWords(s),
       s.answered_by ? `asked ${s.answered_by}, ${secs(s.waited)}` : "",
       s.ran != null ? `ran ${secs(s.ran)}` : "",
       s.refused ? `refused (${s.refused})` : "",
@@ -1638,7 +1648,8 @@ async function openSteps(id, turn) {
   }
   const answer = document.createElement("div");
   answer.className = "step-row";
-  answer.innerHTML = `<div class="step-head">answer</div><div class="md"></div>`;
+  const by = thoughtWords(d.answer_model);
+  answer.innerHTML = `<div class="step-head">answer</div>${by ? `<div class="step-meta">${esc(by)}</div>` : ""}<div class="md"></div>`;
   answer.querySelector(".md").innerHTML = renderMarkdown(d.answer || "(none)");
   body.append(answer);
 }
