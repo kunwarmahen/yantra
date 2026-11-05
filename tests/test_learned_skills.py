@@ -392,6 +392,20 @@ class TestConsider:
         assert SECRET not in sent and "HA_TOKEN=[redacted]" in sent
         assert learner.last_skip == "not worth keeping: one-off"
 
+    def test_an_empty_answer_is_kept_only_with_proof_the_page_loaded(self, tmp_path):
+        # A calendar recipe was kept from a turn that read a page which
+        # never drew the day, and its steps said "empty means free": the
+        # next run missed a 7 pm event the same way.
+        agent = make_agent(tmp_path, [*solved_turn(), assistant_text(
+            "VERDICT: skip\nREASON: the empty answer was never proven")])
+        learner = learner_after(agent)
+        assert learner.consider() is None
+        sent = agent.provider.last_request()["messages"][0].text()
+        assert '"Nothing there" needs proof' in sent and "VERDICT: skip" in sent
+        assert learner.last_skip == "not worth keeping: the empty answer was never proven"
+        from yantra.skills.learn import UPDATE_PROMPT
+        assert '"Nothing there" needs proof' in UPDATE_PROMPT
+
     def test_learn_by_name_waives_the_effort_count(self, tmp_path):
         agent = make_agent(tmp_path, [
             assistant_tool_call("c1", "bash", {"command": "echo hi"}),

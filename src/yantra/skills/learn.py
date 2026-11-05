@@ -34,6 +34,10 @@ ONLY WHAT WAS OBSERVED. Left to itself the write-up invents "pitfalls
 learned the hard way" -- a 501 that was really a 400, error codes the
 server never sent. The prompt forbids anything the steps do not show,
 and the person reads every line before it is saved (the host's job).
+An answer that something is EMPTY -- no events, a free day -- is kept
+only with the sign in a result that proves the page loaded (a heading
+naming the date, a count of 0): a calendar recipe kept from a page that
+never drew the day said "empty means free", and missed a 7 pm event.
 
 A SKILL NEVER HOLDS A SECRET OR A PERSONAL FACT. What the model sees is
 scrubbed first (tokens, ``KEY=value`` lines, Authorization headers),
@@ -504,6 +508,13 @@ variable). Values shown as [redacted] are secrets.
 ids, places and account names are INPUTS the skill asks for or looks \
 up, never written into it. List them under FACTS instead.
 - Keep the path that worked; drop the dead ends.
+- "Nothing there" needs proof. When the answer was that something is \
+empty -- no events, no results, no messages, a free day -- the steps \
+must say what in the result showed it really loaded what was asked: a \
+heading naming that date, a count of 0, the site's own "no results" \
+words. Write that sign into the steps, and have them open it again when \
+the sign is missing. If no step's result shows such a sign, the empty \
+answer was never proven: reply VERDICT: skip.
 - If a script turns the task into one command, write it: python3 \
 standard library only (or bash), taking the inputs as command-line \
 arguments, printing what it did, and exiting non-zero when it failed. \

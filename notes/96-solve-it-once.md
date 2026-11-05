@@ -134,6 +134,29 @@ down"*. The skill it wrote holds none of them, only the path that
 worked: list the fans, match the name, `POST /api/services/fan/turn_on`,
 read the state back.
 
+**"NOTHING THERE" NEEDS PROOF.** Leaving things out isn't enough when the
+answer itself is an absence. Asked what was on Google Calendar
+tomorrow, minder opened the day with a dashed date (`/r/day/2026-11-02`).
+Calendar drew only its small month calendar and no day at all. minder
+answered *"Sunday, Nov 2 has nothing on it"*, and the write-up kept that
+as a rule: *if the grid shows only empty day-number buttons, the day is
+free*. The next run missed a 7 pm event exactly that way. Every line of
+that skill was something the steps showed; what they never showed was
+a page that had loaded. So the rules now say that an empty answer (no
+events, no results, a free day) is kept only with the sign in a result
+that proves it: a heading naming the date, a count of 0, the site's own
+"no results" words. That sign goes into the steps, with "open it again
+when it's missing". With no such sign the turn is skipped. The same
+turn, replayed on `qwen3.8-64k:latest`: before, `VERDICT: save`; after,
+
+```
+VERDICT: skip
+REASON: The "no events on Nov 2" answer was never proven — the page text
+shows a generic calendar grid with no explicit "no events," count of 0,
+or site-issued empty-state message for that date, so the empty result
+was never confirmed.
+```
+
 ## Never a secret, never a personal fact
 
 A skill is a file that lives for years and may one day be shared. It

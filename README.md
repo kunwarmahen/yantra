@@ -2781,7 +2781,8 @@ src/yantra/
 │                   small model call that decides and writes, the script
 │                   tested through the session's own bash and gate (<= 2
 │                   runs), then the save question; learned/ roots, counters
-│                   Yantra keeps ([notes/96](notes/96-solve-it-once.md)).
+│                   Yantra keeps; an empty answer kept only with proof the
+│                   page loaded ([notes/96](notes/96-solve-it-once.md)).
 │                   consider(stop=...) is the page's look BEHIND the
 │                   answer: the write-up streamed so a new message closes
 │                   it, and a test that needs a yes waits for one

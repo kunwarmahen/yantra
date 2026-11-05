@@ -357,7 +357,7 @@ that look is dropped: one model answers one thing at a time
 two or three tool calls instead of six to nine, and about 10k tokens
 instead of about 26k.
 
-Three rules keep this safe:
+Four rules keep this safe:
 
 * **You read it before it exists.** The question shows every line that
   would be saved, and the default answer is no.
@@ -366,6 +366,11 @@ Three rules keep this safe:
   the recipe.
 * **Its test runs like any other command.** It runs through the same
   permission prompt and the same sandbox as the rest of the session.
+* **"Nothing there" has to be proven.** When the answer was that
+  something is empty (no events, no results, a free day), the skill is
+  kept only if the page showed it really loaded, say a heading with the
+  date or "0 events". A calendar page that never drew the day once
+  became a skill that called empty days free, and missed a 7 pm event.
 
 On a local model this is worth the most. The first solve can be slow
 and full of wrong guesses, and every later run follows a recipe that is
