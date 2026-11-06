@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from yantra import samay_link, unattended
-from yantra.permissions import (PermissionRequest, allow_named, denial_code,
+from yantra.permissions import (Grant, PermissionRequest, allow_named, denial_code,
                                 denial_text, parse_grant)
 from yantra.tools.base import Tool, ToolRegistry
 
@@ -90,6 +90,19 @@ class TestAGrantCanFixWhatATouchesTo:
         grant = parse_grant(f'{HA}(entity_id="switch.a,switch.b")')
         assert grant.allows(HA, {"entity_id": "switch.a,switch.b"})
         assert str(grant) == f'{HA}(entity_id="switch.a,switch.b")'
+
+    def test_a_quote_inside_a_quoted_value_is_written_with_a_backslash(self):
+        # Prahari's Cary-temperature watch: the agent quoted its script's
+        # path, and no grant could say so, so every look was refused.
+        command = 'python3 "/home/x/outside_temp.py" 35.79 -78.78 fahrenheit'
+        grant = parse_grant('bash(command="python3 \\"/home/x/outside_temp.py\\" '
+                            '35.79 -78.78 fahrenheit")')
+        assert grant.allows("bash", {"command": command})
+        assert not grant.allows("bash", {"command": command + "; rm -rf ~"})
+        assert parse_grant(str(grant)) == grant
+        tricky = Grant("t", (("q", 'a\\ "b"\\'),))
+        assert parse_grant(str(tricky)) == tricky
+        assert parse_grant(r't(q="C:\dir")').args == (("q", r"C:\dir"),)
 
     def test_numbers_and_flags_match_as_they_are_written(self):
         grant = parse_grant("thermostat(temperature=21, eco=true)")

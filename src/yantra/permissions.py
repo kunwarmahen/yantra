@@ -369,7 +369,11 @@ class Grant:
     every switch in the house, and a glob in an argument describes a
     shape nobody can check in advance. So values are matched exactly, as
     written; a value with a comma or a bracket in it is written in double
-    quotes (``entity_id="switch.a,switch.b"``). Arguments the grant does
+    quotes (``entity_id="switch.a,switch.b"``), and inside the quotes a
+    quote is ``\\"`` and a backslash ``\\\\`` -- a shell command quotes its
+    paths (``command="python3 \\"/a b/x.py\\" 35.7"``), and a watch whose
+    check could not be written as a grant could never look (Prahari,
+    2026-11-05). Any other backslash is itself. Arguments the grant does
     not name are not fixed -- ``data`` on a light's ``turn_on`` may still
     carry a brightness.
     """
@@ -429,10 +433,16 @@ def parse_grant(text: str) -> Grant:
         while j < n and body[j] == " ":
             j += 1
         if j < n and body[j] == '"':
-            end = body.find('"', j + 1)
-            if end < 0:
+            chars: list[str] = []
+            k = j + 1
+            while k < n and body[k] != '"':
+                if body[k] == "\\" and k + 1 < n and body[k + 1] in '"\\':
+                    k += 1
+                chars.append(body[k])
+                k += 1
+            if k >= n:
                 raise ValueError(f"{text!r}: a quote is not closed")
-            value, j = body[j + 1:end], end + 1
+            value, j = "".join(chars), k + 1
             while j < n and body[j] == " ":
                 j += 1
             if j < n and body[j] != ",":
@@ -476,7 +486,9 @@ def _same(given: Any, want: str) -> bool:
 
 
 def _quoted(value: str) -> str:
-    return f'"{value}"' if any(c in value for c in ',()" ') else value
+    if not any(c in value for c in ',()" ') and "\\" not in value:
+        return value
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def allow_named(patterns: Sequence[str],

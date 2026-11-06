@@ -74,7 +74,11 @@ Arguments the grant doesn't name are left free, so `data` on a light's
 **THE NAME MAY BE A GLOB, A VALUE MAY NOT.** Dvara's standing rules
 learned this first (its note 03). `entity_id=switch.*` looks narrow and
 covers every switch in the house. So values match exactly, as written; a
-value with a comma in it goes in double quotes.
+value with a comma in it goes in double quotes, and a quote inside those
+quotes is written `\"` (a backslash is `\\`). A shell command quotes its
+paths, and without that a check like
+`python3 "/…/outside_temp.py" 35.79 -78.78` could not be granted at all:
+Prahari's watch on it was refused at every look.
 
 **A GRANT TYPED WRONG IS AN ERROR, NOT THE WHOLE TOOL.** A bracket left
 open could easily be read as "the name, then some noise", which would
