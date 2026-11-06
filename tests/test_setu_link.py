@@ -611,6 +611,19 @@ def test_a_connection_the_package_was_not_given_is_named_so_it_is_not_worked_aro
     assert "not given" not in (setu_link.prompt_text(link, allow={"gmail": "read"}) or "")
 
 
+def test_a_connection_a_host_kept_back_is_named_with_the_hosts_reason():
+    # a child's own Gmail, off their site list: the package asked for it,
+    # so "its package does not name it" would be a wrong reason to repeat
+    link = setu_link.Link(data=status(["connector"]), road="test")
+    ref = link.connections[0]["ref"]
+    why = "the owner set the sites this person may use to khanacademy"
+    said = setu_link.prompt_text(link, allow={}, withheld={ref: why})
+    assert f"it is kept from this agent: {why}" in said and "Gmail" in said
+    assert "package's [connections]" not in said
+    assert "not reach it another way" in said and "do not offer to connect it" in said
+    assert "may use none of them" in said
+
+
 def test_recipes_are_listed_under_the_connector_they_need():
     def skill(name, needs, learned=True, shared=""):
         return SimpleNamespace(name=name, needs=needs, is_learned=learned, shared=shared)

@@ -75,6 +75,31 @@ A missing tool is no longer read as a missing account. The answer
 becomes "minder wasn't given Yahoo", which the owner can fix in one
 line, instead of a trip to the phone.
 
+**A host's own reason.** The package isn't the only thing that keeps a
+sign-in back. Dvara keeps a person's agents to the sites the owner
+listed for them, and there the package DID ask: repeating "its package
+does not name it" sends the agent, and the person, after the wrong fix.
+So a host passes what it held back with its reason (`Setu.withheld`,
+ref -> words), and the layer says that instead:
+
+```
+This agent may use none of them.
+The person also has Gmail (`gmail:personal`) connected, but it is kept
+from this agent: the owner set the sites this person's agents may use to
+khanacademy (and of those, only what is listed above as connected). If
+they ask for it, tell them exactly that, and that the owner can change
+it. It is NOT a missing connection: do not offer to connect it, and do
+not reach it another way, such as the phone or a browser.
+```
+
+Written softer first ("If asked, say so"), `qwen3.8-64k:latest` answered
+*"you'd need to connect a Gmail account (or I could check it in a
+browser with you)"*: the generic last line, "say it is not connected",
+won over it. Said as above, three runs of three gave the owner's reason
+and offered nothing; the first wording also made one run claim a Khan
+Academy account it didn't have, which the bracket ended. "This agent may
+use only these" over an empty list now says "none of them".
+
 A package that asks for *no* accounts still hears of none. Naming the
 person's accounts to an agent that never asked would tell a stranger's
 package which banks and inboxes they use.

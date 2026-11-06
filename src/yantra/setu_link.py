@@ -453,14 +453,20 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
                 sites: dict[str, str] | None = None,
                 mention: frozenset[str] = frozenset(),
                 connect_how: str = CONNECT_HERE,
-                locked_how: str = LOCKED_HERE) -> str | None:
+                locked_how: str = LOCKED_HERE,
+                withheld: dict[str, str] | None = None) -> str | None:
     """The ``connections`` layer: what is connected, and what could be.
     ``allow`` narrows it to what a package may use; ``merged`` names the
     connectors whose accounts share one set of tools; ``sites`` maps a
     browser-road connection to its tools' prefix. ``mention`` names
     connectors to mention as not connected even when ``allow`` reaches
     none of their accounts (a package needs them, the person has none),
-    and ``connect_how`` is how this host's person gets one connected."""
+    and ``connect_how`` is how this host's person gets one connected.
+    ``withheld`` is the person's own sign-ins a HOST kept from this agent
+    on a rule of its own, ref -> the reason in the host's words (Dvara:
+    the site list the owner set them); each is named with that reason,
+    not the package's, which did ask for it."""
+    withheld = withheld or {}
     sites = sites or {}
     connectors = link.connectors
     rows = [r for r in link.connections if ceiling_of(allow, r)]
@@ -473,8 +479,10 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
     # once went to the phone for one. Only to a package that asked for
     # some: one that asked for none hears of none.
     apart = ([r for r in link.connections if not ceiling_of(allow, r)]
-             if allow is not None and (allow or mention) else [])
-    if not rows and not idle and not shut and not gone and not apart:
+             if allow is not None and (allow or mention or withheld) else [])
+    held = [r for r in apart if r.get("ref") in withheld]
+    apart = [r for r in apart if r.get("ref") not in withheld]
+    if not rows and not idle and not shut and not gone and not apart and not held:
         return None
     lines = ["# Connected accounts (through Setu)",
              "The person has signed in to these; their tools are prefixed "
@@ -522,7 +530,8 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
         who = f" as {row['email']}" if row.get("email") else ""
         lines.append(f"- {name} `{row['mcp']['name']}`{who}: {level}")
     if allow is not None:
-        lines.append("This agent may use only these, at the level the person allowed.")
+        lines.append("This agent may use only these, at the level the person allowed."
+                     if rows else "This agent may use none of them.")
         if apart:
             names = ", ".join(f"{(connectors.get(r.get('connector', '')) or {}).get('name', '')}"
                               f" (`{r.get('ref')}`)" for r in apart)
@@ -530,6 +539,15 @@ def prompt_text(link: Link, allow: dict[str, str] | None = None,
                          "given it: its package's [connections] needs does not name it "
                          "(\"*:read\" there names every account). If asked, say so; do "
                          "not reach it another way, such as the phone or a browser.")
+        for why in dict.fromkeys(withheld[r["ref"]] for r in held):
+            names = ", ".join(
+                f"{(connectors.get(r.get('connector', '')) or {}).get('name', '')}"
+                f" (`{r.get('ref')}`)" for r in held if withheld[r["ref"]] == why)
+            lines.append(f"The person also has {names} connected, but it is kept from "
+                         f"this agent: {why}. If they ask for it, tell them exactly that, "
+                         "and that the owner can change it. It is NOT a missing "
+                         "connection: do not offer to connect it, and do not reach it "
+                         "another way, such as the phone or a browser.")
     if shut:
         lines.append(f"Connected but locked right now, so not usable ({locked_how}):")
         lines += [f"- {(connectors.get(r.get('connector', '')) or {}).get('name', '')} "
@@ -896,6 +914,9 @@ class Setu:
     mention: frozenset[str] = frozenset()
     connect_how: str = CONNECT_HERE
     locked_how: str = LOCKED_HERE
+    #: The person's own sign-ins this host kept from the agent on a rule
+    #: of its own, ref -> why, in its words (prompt_text's ``withheld``).
+    withheld: dict[str, str] = field(default_factory=dict)
     #: The key to ``home`` when its person locked it and unlocked it for
     #: this host (``SETU_VAULT_KEY``); None: locked rows stay unused.
     vault_key: str | None = None
@@ -1091,7 +1112,8 @@ class Setu:
         merged = frozenset(t.connector for t in self.merged.values())
         prompt.set("connections", prompt_text(
             link, self.allow, merged, {ref: site.prefix for ref, site in self.sites.items()},
-            self.mention, self.connect_how, self.locked_how) if link is not None else None)
+            self.mention, self.connect_how, self.locked_how,
+            self.withheld) if link is not None else None)
         prompt.apply()
         return done
 
