@@ -2511,7 +2511,22 @@ function lookLine(l) {
   return `<b class="${LOOK_TONE[l.outcome] || ""}">${esc(l.outcome)}</b> ${esc(clockTime(lookAt(l)))}`
     + (came ? ` · ${esc(came)}` : "") + (l.notified ? " · sent to you" : "")
     + (l.cost_usd ? ` · $${Number(l.cost_usd).toFixed(4)}` : "")
-    + (what ? `<div>${esc(what)}</div>` : "");
+    + (what ? `<div>${esc(what)}</div>` : "")
+    + (l.why ? `<div class="look-why">why: ${esc(l.why)}</div>` : "");
+}
+
+/* One look opened: everything Prahari kept about it, so the person can see
+   for themselves why it was quiet, told them, or failed. */
+function lookInFull(l) {
+  const rows = [];
+  if (l.detail && l.detail !== l.why) rows.push(`<div><b>${["failed", "broken", "needs_person", "limited"]
+    .includes(l.outcome) ? "what went wrong" : "note"}:</b> ${esc(l.detail)}</div>`);
+  if (l.turn) rows.push(`<div><b>then:</b> ${esc(l.turn)}${l.notified ? " · sent to you" : " · nothing sent"}</div>`);
+  if (l.dvara_run_id) rows.push(`<div><b>Dvara run:</b> <code>${esc(l.dvara_run_id)}</code></div>`);
+  if (l.said) rows.push(`<div><b>the check answered:</b><pre>${esc(l.said)}</pre></div>`);
+  if (l.reply) rows.push(`<div><b>the agent said:</b><div class="reply">${renderMarkdown(l.reply)}</div></div>`);
+  if (!l.why) rows.unshift("<div>(this look was made before looks said why)</div>");
+  return rows.join("");
 }
 
 function renderSeen(body) {
@@ -2673,7 +2688,7 @@ function renderWatches() {
       looks.className = "sched-runs";
       const got = watch.looks[w.id] || [];
       looks.innerHTML = got.length
-        ? got.map((l) => `<div class="sched-run">${lookLine(l)}</div>`).join("")
+        ? got.map((l) => `<details class="sched-run look-full"><summary>${lookLine(l)}</summary>${lookInFull(l)}</details>`).join("")
         : '<div class="sched-run">no looks yet</div>';
       row.append(looks);
     }

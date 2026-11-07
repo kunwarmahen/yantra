@@ -991,7 +991,9 @@ are for accounts, pages and APIs
 ([notes/140](notes/140-a-watch-offered.md)). In the browser UI an
 **eye** chip (*2 watching*) opens the Watches panel: each watch in
 Prahari's own sentence, what happens when it fires, its last look and
-every look (*fired · heard at the inlet*), and *look now*,
+every look (*fired · heard at the inlet*, with *why* it was quiet, told
+you or failed; a click opens what the check answered and what went
+wrong), and *look now*,
 *pause*/*resume*, *delete*, and how often it looks (a box, *30m*, and
 *set*; what it saw is kept); **new watch** writes one by hand (**try it**
 looks once, **add** keeps it) and **edit** mends one, sending only what

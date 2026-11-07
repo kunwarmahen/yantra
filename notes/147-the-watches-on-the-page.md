@@ -21,7 +21,11 @@ An **eye** chip in the header, `2 watching`, opens a **Watches** panel:
   *for asha* when it is somebody else's, how many times it fired today,
   when it looks next, why it paused, and its last look;
 * **looks** (every look, newest first: how it ended, how it came — *looked
-  now*, *heard at the inlet*, *woken by a knock* — and what it saw),
+  now*, *heard at the inlet*, *woken by a knock* — what it saw, and
+  *why*: Prahari's sentence on why it was quiet, told you or failed;
+  a click opens a look to what went wrong, what happened then, the
+  Dvara run, what the check answered and what the agent said —
+  Prahari's notes/05),
   **look now**, **pause** / **resume**, **delete** (asked once, in a
   dialog, because a watch's memory of what it has seen goes with it);
 * on each watch that looks, a box with how often (*30m*, *3h*, *1d*) and

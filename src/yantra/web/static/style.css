@@ -2120,6 +2120,15 @@ pre.output { color: var(--ink); }
   padding: 6px 10px; border-left: 2px solid var(--line-strong);
 }
 .sched-run b { font-family: var(--mono); font-weight: 500; font-size: 12px; color: var(--ink); }
+/* a watch's look: its line, and opened, everything kept about it */
+.look-full > summary { cursor: pointer; list-style: none; }
+.look-full > summary::-webkit-details-marker { display: none; }
+.look-full > summary::before { content: "▸ "; color: var(--ink-3); }
+.look-full[open] > summary::before { content: "▾ "; }
+.look-full > div { margin: 4px 0 0 14px; overflow-wrap: anywhere; }
+.look-full pre { white-space: pre-wrap; background: var(--surface-2); padding: 6px 8px;
+                 border-radius: 6px; margin: 4px 0 0; max-height: 18em; overflow: auto; }
+.look-why { color: var(--ink-2); }
 @media (max-width: 560px) {
   .sched-runs { grid-column: 2; }
 }
