@@ -149,6 +149,27 @@ drive both loops with a stand-in `mcp__samay__list_schedules`.
   the checkpoint (`after_reading`, `only_after_reading`), so a page
   opened after a restart still offers it.
 
+  Live, on `qwen3.8:latest` (`yantra --web --wait-budget 20
+  --on-timeout hold`), asked to fetch example.com and then write its
+  title, its first sentence and the date to three files, one at a time.
+  The fetch was approved; the first write was left to run out of time:
+
+  ```
+  ASK web_fetch for_task=False   -> approved
+  ASK write_file for_task=True   -> left unanswered
+  held: {"for_task": true, "calls": [{"tool_name": "write_file", "summary":
+    "Asked because this turn read text you didn't write (https://example.com
+    (web_fetch)). ... NEW FILE title.txt (1 lines)"}]}
+  resume for_task: {"ok":true}
+  tool_result write_file title.txt
+  tool_result write_file first.txt
+  tool_result write_file date.txt
+  held: null
+  ```
+
+  The held card showed **yes to all for this task** beside **carry on**,
+  and after it the other two writes asked nothing.
+
 ## Tests
 
 `tests/test_yes_for_this_task.py`: the yes covers the turn's later
