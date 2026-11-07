@@ -85,9 +85,16 @@ store. That store matches words, and *"… for interpreting 'what time is
 it for me'"* shares words with *"what time is that for me"*: found went
 from 14 to 22 of 35 on `qwen3.8:latest`. The bracket stays, and it
 carries most of that (*"(Indian Standard Time)"*). The later question's
-own words don't. On `local` some of that gain may go. The recall trial
-(`examples/memory_recall_trial.py`) has not been run again with this
-wording.
+own words don't. On `local` most of that gain went. The recall trial
+(`examples/memory_recall_trial.py --store local --distractors 30
+--repeat 5`, `qwen3.8:latest`) was run again with this wording: found
+by search 22 → 11 of 35, answered from memory 20 → 16, kept 35 → 33,
+and the week's trip still never kept (0/5). The bracket kept
+`timezone` at 2 of 5 found; `packages`, whose fact had carried the
+later question's *"dependency"*, fell from 5 to 1. Accepted: a prompt
+read on every turn is worth more than words for a store that matches
+words ([note 107](107-a-fact-that-says-what-it-is.md), *With one short
+bracket*).
 
 ## What was deliberately not built
 

@@ -248,6 +248,31 @@ model. On a cloud model, reasoning tokens are billed, and the look back
 goes on the session's meter like any call. The budget is a ceiling,
 not a target, and most look backs stop well short of it.
 
+### With one short bracket
+
+A fact now says what the thing is, with at most one short detail in
+brackets, and never how to use it later
+([note 153](153-a-fact-is-not-advice.md)). The same trial on the same store, again
+(`--store local --distractors 30 --repeat 5`, `qwen3.8:latest`):
+
+| buried, `local` | longer wording | one short bracket |
+|---|---|---|
+| kept by session 1 | 35/35 | 33/35 |
+| found by the store's search | 22/35 | **11/35** |
+| answered from memory | 20/35 | **16/35** |
+| `packages` found by search | 5/5 | 1/5 |
+| `timezone` found by search | 2/5 | 2/5 |
+| kept "flying to SFO Tuesday" | 0/5 | 0/5 |
+
+The words a later question used went with the advice, so word overlap
+finds about half as many again. That was the price expected: the
+longer facts rode into every prompt once a store's facts went there
+(*"… so a later 'who handles my car insurance' question should default
+to …"*), and a prompt is read on every turn, by every road. A store
+that searches by meaning doesn't need the later question's words in
+the fact; the `local` store does, and it stays the fallback, not the
+recommendation.
+
 ## What was deliberately not built
 
 * **Accepting lines without a kind.** The parser could take bare
