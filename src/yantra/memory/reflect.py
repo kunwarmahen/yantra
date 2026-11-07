@@ -45,9 +45,14 @@ other facts for "format-on-save for Python", while "Uses Neovim as their
 text editor" was found every time (notes/105). The prompt asks for the
 kind of thing as well as the value -- with examples the recall trial
 does not use, so the trial still measures the rule and not a copied
-answer. And what it plainly implies: "Lives in Chennai." ranked
-eighteenth for "what time is that for me?", while the same fact with
-its time zone ranked second (notes/109).
+answer. And what it plainly means, in one short bracket: "Lives in
+Chennai." ranked eighteenth for "what time is that for me?", while the
+same fact with its time zone ranked second (notes/109). Only that:
+asked for "what a later question might turn on", models wrote the later
+question into the fact -- "so a later 'who handles my car insurance'
+question should default to Acme Mutual rather than asking which carrier" --
+and a store that files facts carried the advice into every prompt
+(notes/153).
 
 A FACT SAYS WHERE IT GOES. Each line carries its topic and a key in
 brackets -- ``fact [home/city]: Lives in Cary, NC (Eastern time).`` --
@@ -147,10 +152,12 @@ Already remembered:
 {remembered}
 
 Word each one so someone asking about it later finds it: say what the \
-thing IS, and what it plainly implies that a later question might turn \
-on. "Uses Fish as their command-line shell", not "Uses Fish"; "Their \
+thing IS, with at most one short detail in brackets for what it plainly \
+means. "Uses Fish as their command-line shell", not "Uses Fish"; "Their \
 dog is named Biscuit", not "Biscuit"; "Lives in Lisbon, Portugal \
-(Western European Time)", not "Lives in Lisbon".
+(Western European Time)", not "Lives in Lisbon". Only the fact: not how \
+to use it later ("so a later question should ..."), not where it was \
+seen ("visible in their inbox").
 
 Reply with one line per fact, at most {limit}. Start every line with its \
 kind -- fact:, preference: or correction: -- with, in square brackets \

@@ -194,6 +194,11 @@ The example is Lisbon, not Chennai, so the trial still measures the rule
 and not a copied answer. The `remember` tool's description says the
 same.
 
+"A later question might turn on" went too far. Models wrote the later
+question into the fact, with advice on answering it. The rule now asks
+for one short detail in brackets and only the fact
+([note 153](153-a-fact-is-not-advice.md)).
+
 ### The first run lost facts, and the cause was the token budget
 
 The first trial of this wording kept *fewer* facts: gemma 28 of 35

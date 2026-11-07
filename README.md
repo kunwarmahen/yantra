@@ -529,9 +529,11 @@ buried gemma went from 16 to 28 of 35 on Smritikosh
 ([notes/107](notes/107-a-fact-that-says-what-it-is.md)). A habit said in
 passing counts too: *"It's 31 degrees Celsius here"* used to be read as
 part of the question, and now both models keep *"Measures temperature
-in Celsius"* 5 times in 5. A fact also says what it implies (*"Lives in
+in Celsius"* 5 times in 5. A fact also says what it implies, in one short bracket (*"Lives in
 Chennai, India (Indian Standard Time)"*), which took that fact from 18th
-to 2nd in a meaning search for *"what time is that for me?"*. The layer
+to 2nd in a meaning search for *"what time is that for me?"*. Only that:
+no advice on answering a later question, and not where it was seen
+([notes/153](notes/153-a-fact-is-not-advice.md)). The layer
 stays at twenty lines. Eight lines
 crowded the right fact less, but dropped the ones a store ranks low:
 buried gemma on Smritikosh fell from 31 to 25 of 35
@@ -2756,7 +2758,9 @@ src/yantra/
 │                   by name only), proposing facts the person keeps or drops
 │                   ([notes/101](notes/101-looking-back.md)), each worded to
 │                   say what it is about so a later search finds it
-│                   ([notes/107](notes/107-a-fact-that-says-what-it-is.md)); mcp.py is a
+│                   ([notes/107](notes/107-a-fact-that-says-what-it-is.md)),
+│                   and only the fact: no advice, not where it was seen
+│                   ([notes/153](notes/153-a-fact-is-not-advice.md)); mcp.py is a
 │                   store behind any MCP server, through a verb map, bound
 │                   once the host's servers connect; user_id on every call,
 │                   the server's own memory tools taken from the model, a

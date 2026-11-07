@@ -98,8 +98,11 @@ account is a starting point; a skill still checks the live account list.
 
 ## What the store does with it
 
-Smritikosh files a labelled statement straight into its fact graph, word
-for word, with the memory as its source. Before this, a second model
+Smritikosh files a labelled statement into its fact graph in the slot
+the agent gave it, with the memory as its source. (It used to copy the
+statement in word for word. Now its next consolidation cycle words the
+fact short and leaves the memory as it was:
+[note 153](153-a-fact-is-not-advice.md).) Before this, a second model
 re-read Yantra's already-worded facts every hour and filed them under
 keys it made up, so the same thing ended up under two keys. Its own side
 of this is in its README, under *A statement that says where it goes*.
