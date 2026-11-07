@@ -47,7 +47,9 @@ rules. The ones that matter most:
   will know it by (never the tool's), `asked` — what they asked for, in
   their own words — and `thing`, what the number is ("the fare"). Prahari
   refuses a watch from an agent without a name and `asked`, and a second
-  one on the same call and pick; the preview names the one there is, and
+  one on the same call and pick (a line on the other side of the same
+  number is allowed: heat below 60 and cool above 70 are two watches,
+  each needing no model to decide); the preview names the one there is, and
   the model is told to offer to mend it. Learned the hard way: two
   watches made by voice on one flights page, both called *browser_open
   watch*, sent *the number is now 58*, and the person read it as the
