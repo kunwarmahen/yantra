@@ -516,6 +516,21 @@ class TestThePanel:
         finally:
             manager.shutdown()
 
+    def test_a_watch_that_listens_is_mended_with_no_check_and_no_every(self, fake,
+                                                                        tmp_path):
+        # the form has no tool, args or every box for one: the word stays
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            got = client.post("/api/watches/w-1/edit", json={
+                "pick": "json:sender", "when": "contains Mum", "then": "Tell me what she said."})
+            assert got.status_code == 200
+            sent = [c for c in calls(fake[1]) if c[2:4] == ["edit", "w-1"]][-1]
+            assert not any(a.startswith(("--check", "--args", "--every")) for a in sent)
+            assert {"--pick=json:sender", "--when=contains Mum",
+                    "--then=Tell me what she said."} <= set(sent)
+        finally:
+            manager.shutdown()
+
     def test_seen_is_this_persons_looks_that_mattered(self, fake, tmp_path):
         manager, client = self.served(fake[0], tmp_path)
         try:

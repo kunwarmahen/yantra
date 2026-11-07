@@ -2670,7 +2670,7 @@ function renderWatches() {
       actions.append(box);
       button("set", "", () => watchEvery(w.id, box.value));
     }
-    if (!w.listen) button("edit", "", () => { watch.form = w.id; renderWatches(); });
+    button("edit", "", () => { watch.form = w.id; renderWatches(); });
     if (w.state === "active") button("pause", "", () => watchAct(w.id, "pause"));
     if (w.state === "paused") button("resume", "primary", () => watchAct(w.id, "resume"));
     button("delete", "danger", async () => {
@@ -2739,13 +2739,24 @@ function watchForm(w) {
     l.append(input);
     form.append(l);
   };
+  // one that listens has no look to change: its word at the inlet stays,
+  // and what it hears is picked, tested and acted on as any other's
+  const listens = Boolean(w && w.listen);
   box("name", "name", "ALAB under $50");
   box("asked", "what it's for, in your words", "tell me if ALAB drops under 50", true);
-  box("tool", "look with (a tool that reads)", "web_fetch");
-  box("args", "its arguments (JSON)", '{"url": "https://example.com/item"}', true);
-  box("pick", "pick", "number · text:Landed|Delayed · json:price");
-  box("when", "when", "below 50 · new · changed · contains Mum");
-  box("every", "every", "3h");
+  if (listens) {
+    const l = document.createElement("p");
+    l.className = "wide watch-listens";
+    l.textContent = `listens for “${w.listen}” at the inlet — the word stays; make a new `
+      + "watch for another";
+    form.append(l);
+  } else {
+    box("tool", "look with (a tool that reads)", "web_fetch");
+    box("args", "its arguments (JSON)", '{"url": "https://example.com/item"}', true);
+  }
+  box("pick", "pick", listens ? "text · json:sender · text:Mum" : "number · text:Landed|Delayed · json:price");
+  box("when", "when", listens ? "any · contains Mum · new" : "below 50 · new · changed · contains Mum");
+  if (!listens) box("every", "every", "3h");
   box("then", "then ask the agent (empty: just tell you)", "Tell me the new price.", true);
   const tried = document.createElement("pre");
   tried.className = "watch-tried hidden";
@@ -2787,6 +2798,7 @@ function watchForm(w) {
     } catch (err) { tried.textContent = err.message; }
     tryIt.disabled = false;
   });
+  if (listens) tryIt.remove();    // nothing to look at: it waits for its word
   btn(w ? "save" : "add", "primary", async () => {
     try {
       if (w) {

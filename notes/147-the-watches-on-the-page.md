@@ -38,8 +38,10 @@ An **eye** chip in the header, `2 watching`, opens a **Watches** panel:
   often, what to ask the agent), with **try it** (`prahari preview`:
   looks once, keeps nothing) and **add** (`prahari add`, for this page's
   person and agent, as a chat's watch would be); and **edit** on each
-  watch that looks, the same form filled in, which sends only the boxes
-  that changed (`prahari edit`);
+  watch, the same form filled in, which sends only the boxes that
+  changed (`prahari edit`). On a watch that listens the form has no tool,
+  arguments, how often or **try it**: it names the word it listens for
+  and changes the rest;
 * a warning at the top when `prahari serve` isn't running, and where news
   goes (*to Yantra's page (its Watches panel) and Prahari's own*, or *to
   mahen's chat through Dvara, and to Yantra's page*).
@@ -95,8 +97,15 @@ MENDING SENDS ONLY WHAT CHANGED. A new name, new words or a new
 then-prompt keep what the watch has seen; a new tool, pick or test
 starts it over (Prahari's own rule, `watches.update`), and the toast
 says which. The tool and its arguments go together, since one means
-nothing without the other. A watch that listens (WhatsApp, mail pushed
-to the inlet) has no **edit**: what it hears is set where it was made.
+nothing without the other.
+
+A WATCH THAT LISTENS KEEPS ITS WORD. One woken at the inlet (WhatsApp
+through MacroDroid, mail pushed) is mended in the same form: its pick,
+its test, its then-prompt, its name. What it listens for stays: the
+word is what MacroDroid or a mailbox was set up to send, so changing it
+here would leave the sender knocking at a word nobody hears. A watch for
+another word is a new one. There is nothing to **try**, since it doesn't
+look: it waits.
 
 NO CARD FOR YOUR OWN HAND. A watch the agent writes is a yes on a card,
 because the agent wrote it. One written in this form is the person's
@@ -147,10 +156,27 @@ c0654a01  active  Example page heading
           every 6 hours, looks at example.com (with web_fetch); tells you when the text changes
 ```
 
+A watch that listens, on the same scratch state (`yantra --web --port
+8361`): `prahari add "WhatsApp from anyone" --listen whatsapp --when
+any`, then **edit** on the panel showed name, words, *listens for
+"whatsapp" at the inlet — the word stays*, pick and when, and no **try
+it**; a new then-prompt saved:
+
+```
+$ prahari list
+41e045b4  active  WhatsApp from anyone
+          when whatsapp sends something, if the value says 'Mum'
+          then: Tell me what Mum said, word for word.
+```
+
 ## Not here
 
 - ~~**Making or changing a watch from the panel.**~~ **new watch** and
   **edit** (above).
+- ~~**Editing a watch that listens.**~~ The same form, its word kept
+  (above).
+- **Changing what a watch listens for.** A new watch, since the sender
+  was set up for the old word.
 - **The inlet's address and key.** They open a door from outside; they
   stay on Prahari's page and `prahari inlet`.
 - **Mailboxes.** Added at the computer (`prahari mailbox add`); listed on
