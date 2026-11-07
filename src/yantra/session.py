@@ -354,7 +354,10 @@ def _dump_held(held: Held, message: Message) -> dict:
                  for r in held.done.values()],
         "waiting": [{"call_id": r.call_id, "tool_name": r.tool_name,
                      "arguments": r.arguments, "summary": r.summary,
-                     "read_only": r.read_only}
+                     "read_only": r.read_only,
+                     # why it asked, for "yes for this task" on its card
+                     "after_reading": list(r.after_reading),
+                     "only_after_reading": r.only_after_reading}
                     for r in held.waiting],
     }
 
@@ -377,7 +380,9 @@ def _load_held(raw: dict) -> tuple[Message, Held]:
     waiting = [PermissionRequest(
         tool_name=w["tool_name"], arguments=w.get("arguments") or {},
         summary=w.get("summary", ""), read_only=w.get("read_only", False),
-        call_id=w["call_id"], turn_id=raw.get("turn_id", ""), code=HELD)
+        call_id=w["call_id"], turn_id=raw.get("turn_id", ""), code=HELD,
+        after_reading=tuple(w.get("after_reading") or ()),
+        only_after_reading=bool(w.get("only_after_reading")))
         for w in raw.get("waiting", [])]
     held = Held(turn_id=raw.get("turn_id", ""),
                 calls=list(message.tool_calls()), done=done, waiting=waiting,

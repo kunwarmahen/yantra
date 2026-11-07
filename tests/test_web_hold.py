@@ -110,6 +110,23 @@ class TestAnsweringIt:
         assert [e["output"] for e in envelopes
                 if e["type"] == "tool_result"] == ["wrote:A", "wrote:b"]
 
+    def test_for_this_task_on_calls_that_asked_for_themselves_is_a_plain_yes(self):
+        # these writes asked with nothing read: the card offers no "for this
+        # task", and one sent anyway is the yes it was, nothing more
+        session, agent, client = held_session()
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+            post_and_finish(client, ws, "/api/message", {"text": "go"})
+            assert client.get("/api/state").json()["held"]["for_task"] is False
+            assert client.post("/api/resume", json={**answers(
+                w1={"decision": "approve"}, w2={"decision": "approve"}),
+                "for_task": "yes"}).status_code == 400
+            envelopes = post_and_finish(client, ws, "/api/resume", {**answers(
+                w1={"decision": "approve"}, w2={"decision": "approve"}), "for_task": True})
+        assert [e["output"] for e in envelopes
+                if e["type"] == "tool_result"] == ["wrote:a", "wrote:b"]
+        assert session.for_task.carried is None
+
     @pytest.mark.parametrize("payload", [
         answers(w1={"decision": "approve"}),                   # w2 missing
         answers(w1={"decision": "maybe"}, w2={"decision": "approve"}),

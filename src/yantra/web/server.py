@@ -162,6 +162,7 @@ def _held_view(agent) -> dict[str, Any] | None:
     if held is None:
         return None
     return {"at": held.at, "age": round(time.time() - held.at),
+            "for_task": TurnYes.held_offers(held.waiting),
             "calls": [{"id": r.call_id, "tool_name": r.tool_name,
                        "summary": r.summary, "arguments": r.arguments,
                        "picture": _picture(r)}
@@ -453,7 +454,7 @@ class WebSession:
         types instead of a bare no (notes/56), and "yes to all for this
         task" on a card that asks only because the turn read outside text
         (``TurnYes``)."""
-        for_task = TurnYes()
+        for_task = self.for_task = TurnYes()
 
         def gate(request: PermissionRequest) -> bool:
             if request.read_only:
@@ -624,13 +625,20 @@ class WebSession:
         task = (self.agent.unfinished or {}).get("message") or "carry on"
         self._begin(lambda: self.agent.carry_on(), task)
 
-    def start_resume(self, answers: dict[str, Any]) -> None:
+    def start_resume(self, answers: dict[str, Any], *, for_task: bool = False) -> None:
         """Answer a held turn from the page and carry it on (notes/88).
 
         Checked HERE, before a thread starts, so a stale or partial answer
         is a 400 the page can show rather than a turn_error after the fact.
+        ``for_task``: every call a plain yes on a card that offered it --
+        the resumed turn's later questions for the same reading are
+        answered too (``TurnYes.carry``); anywhere else a plain yes.
         """
         held = check_answers(self.agent.held, answers, self.agent.history)
+        if (for_task and all(a is True for a in answers.values())
+                and TurnYes.held_offers(held.waiting)
+                and getattr(self, "for_task", None) is not None):
+            self.for_task.carry(held.waiting)
         # Read off the hold and the history, not off this session: a hold
         # loaded from a checkpoint was made by a process that is gone.
         self._begin(lambda: self.agent.resume(answers),
@@ -698,6 +706,8 @@ class WebSession:
                 # look after it -- one step is not a skill.
                 from yantra.skills.learn import current_turn
                 self.lesson.add(current_turn(agent), agent)
+        if getattr(self, "for_task", None) is not None:
+            self.for_task.drop()            # a held card's yes: this turn only
         self._keep_pending_memories()
         self._keep_conversation()
         self.turn_active = False
@@ -1778,8 +1788,11 @@ def make_app(session: WebSession, static_dir: Path | None = None,
                 raise HTTPException(400, f"answer for {call_id}: decision "
                                          f"must be approve, deny or edit "
                                          f"(edit with edited_args)")
+        for_task = body.get("for_task", False)
+        if for_task not in (True, False):
+            raise HTTPException(400, "for_task must be true or false")
         try:
-            session.start_resume(answers)
+            session.start_resume(answers, for_task=for_task)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {"ok": True}

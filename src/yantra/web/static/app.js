@@ -193,6 +193,9 @@ function renderHeld(held) {
     ${rows}
     <div class="held-actions">
       <span class="held-note">or send a new message to set these aside</span>
+      ${held.for_task ? `<button class="m-btn" id="held-task"
+        title="approve these, and what the rest of this task asks because of the same
+reading; anything new it reads asks again">yes to all for this task</button>` : ""}
       <button class="m-btn primary" id="held-send">carry on</button>
     </div>`;
   // A reason typed under a call means no, whichever button is ticked.
@@ -212,6 +215,15 @@ function renderHeld(held) {
     el.querySelector("#held-send").disabled = true;
     if (await post("/api/resume", { answers })) el.remove();
     else el.querySelector("#held-send").disabled = false;
+  };
+  // every call asked only because of what the turn read: one yes for all of
+  // them and the rest of this task (TurnYes.carry)
+  const task = el.querySelector("#held-task");
+  if (task) task.onclick = async () => {
+    const answers = Object.fromEntries(held.calls.map((c) => [c.id, { decision: "approve" }]));
+    task.disabled = true;
+    if (await post("/api/resume", { answers, for_task: true })) el.remove();
+    else task.disabled = false;
   };
   transcript.append(el);
   scrollDown();

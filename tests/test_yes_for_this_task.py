@@ -27,8 +27,8 @@ from yantra.permissions import PermissionRequest, TurnYes
 
 def after_reading(read=("a mail from bank@example.com",), turn="t1", tool="send_mail",
                   only=True) -> PermissionRequest:
-    return PermissionRequest(tool_name=tool, arguments={"to": "x"}, summary=f"{tool}(x)", read_only=False,
-                             turn_id=turn, after_reading=tuple(read),
+    return PermissionRequest(tool_name=tool, arguments={"to": "x"}, summary=f"{tool}(x)",
+                             read_only=False, turn_id=turn, after_reading=tuple(read),
                              only_after_reading=only, always_ask=True)
 
 
@@ -72,6 +72,51 @@ class TestWhatAYesCovers:
         yes.given(after_reading())
         spend = after_reading(tool="buy", only=False)
         assert not TurnYes.offered(spend) and not yes.covers(spend)
+
+
+class TestAHeldTurnsYes:
+    """A held card's yes (notes/88) carries on into the resumed turn,
+    whose id is new: the same bias, plus one more -- AN UNUSED YES THAT
+    OUTLIVES ITS TURN."""
+
+    def test_offered_only_when_every_waiting_call_asked_because_of_reading(self):
+        assert TurnYes.held_offers([after_reading(), after_reading(tool="reply_mail")])
+        assert not TurnYes.held_offers([after_reading(), after_reading(tool="buy",
+                                                                        only=False)])
+        assert not TurnYes.held_offers([])
+
+    def test_the_resumed_turns_first_card_takes_it_and_its_reading(self):
+        yes = TurnYes()
+        yes.carry([after_reading(turn="held")])
+        assert yes.covers(after_reading(turn="resumed", tool="reply_mail"))
+        assert yes.covers(after_reading(turn="resumed", tool="archive_mail"))
+        assert not yes.covers(after_reading(turn="resumed", read=(
+            "a mail from bank@example.com", "a page from evil.example")))
+        assert not yes.covers(after_reading(turn="next"))
+
+    def test_dropped_at_the_turns_end_it_covers_nothing_after(self):
+        yes = TurnYes()
+        yes.carry([after_reading(turn="held")])
+        yes.drop()
+        assert not yes.covers(after_reading(turn="resumed"))
+
+    def test_a_card_that_asks_for_itself_does_not_take_it(self):
+        yes = TurnYes()
+        yes.carry([after_reading(turn="held")])
+        assert not yes.covers(after_reading(turn="resumed", tool="buy", only=False))
+        assert yes.covers(after_reading(turn="resumed"))      # still waiting for its card
+
+    def test_a_held_calls_reading_survives_the_checkpoint(self):
+        from yantra.session import _dump_held, _load_held
+        from yantra.agent import Held
+        from yantra.providers.base import Message, TextBlock
+        held = Held(turn_id="held", calls=[], done={}, waiting=[after_reading(turn="held")],
+                    at=0.0)
+        raw = _dump_held(held, Message(role="assistant", content=[TextBlock("x")]))
+        _, back = _load_held(raw)
+        assert back.waiting[0].only_after_reading
+        assert back.waiting[0].after_reading == ("a mail from bank@example.com",)
+        assert TurnYes.held_offers(back.waiting)
 
 
 class TestTheTerminal:

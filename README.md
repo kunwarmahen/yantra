@@ -786,7 +786,8 @@ change after it asks too, with what was read on the card's first line
 whose answers are your own words (your Samay schedules, your lights) can
 be named trusted, and then reading it asks nothing new; the page's card
 offers **yes to all for this task** (and the terminal `t`) on a question
-asked only because of a read, until something new is read
+asked only because of a read, until something new is read, and on a
+held turn's card whose every call asked for that reason
 ([notes/148](notes/148-a-source-you-trust.md)),
 and a tool the manifest does not list is not registered at all, unless
 the manifest says `"*" = "write"` for a server whose tool names are its

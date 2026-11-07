@@ -296,11 +296,33 @@ class TurnYes:
     page opened after the yes is one the person never saw, so the next
     call asks again and names it. It ends with the turn (a new
     ``turn_id``), never carried to the next task.
+
+    A HELD TURN CARRIES ITS YES ON. A turn that stopped for an answer
+    (notes/88) resumes as a new turn, with a new id. A yes for this task
+    given on the held card is ``carry``-ed: the resumed turn's first
+    question asked for the same reason takes it as its own, read as the
+    held card named it. The host ``drop``s it when that turn ends, so an
+    unused one never reaches the next task.
     """
 
     def __init__(self) -> None:
         self.turn = ""
         self.read: frozenset[str] = frozenset()
+        self.carried: frozenset[str] | None = None
+
+    @staticmethod
+    def held_offers(waiting: Sequence[PermissionRequest]) -> bool:
+        """Whether a held turn's card may offer it: every waiting call was
+        asked only because of what the turn read."""
+        return bool(waiting) and all(r.only_after_reading for r in waiting)
+
+    def carry(self, waiting: Sequence[PermissionRequest]) -> None:
+        """A held turn answered "for this task": its reading, for the
+        resumed turn's first question."""
+        self.carried = frozenset(r for w in waiting for r in w.after_reading)
+
+    def drop(self) -> None:
+        self.carried = None
 
     @staticmethod
     def offered(request: PermissionRequest) -> bool:
@@ -308,6 +330,9 @@ class TurnYes:
         return bool(request.only_after_reading and request.turn_id)
 
     def covers(self, request: PermissionRequest) -> bool:
+        if (self.carried is not None and self.offered(request)
+                and request.turn_id != self.turn):
+            self.turn, self.read, self.carried = request.turn_id, self.carried, None
         return (self.offered(request) and request.turn_id == self.turn
                 and frozenset(request.after_reading) <= self.read)
 

@@ -139,9 +139,15 @@ drive both loops with a stand-in `mcp__samay__list_schedules`.
 * **No trust for the open web**, however a host words it.
 * ~~**Yantra's own page and terminal don't offer "for this task" yet.**~~
   They do (`TurnYes`, above; receipt below).
-* **A held turn's answers** (the page's resume, notes/88) are one per
-  waiting call, with no "for this task": a held turn already shows
-  every waiting call at once.
+* ~~**A held turn's answers** (the page's resume, notes/88) are one per
+  waiting call, with no "for this task".~~ When every waiting call asked
+  only because of what the turn read, the held card offers **yes to all
+  for this task** too (`TurnYes.held_offers`). The resumed turn is a new
+  turn with a new id, so the yes is `carry`-ed: its first question asked
+  for the same reason takes it, read as the held card named it, and the
+  page `drop`s it when that turn ends. A held call's reading is saved in
+  the checkpoint (`after_reading`, `only_after_reading`), so a page
+  opened after a restart still offers it.
 
 ## Tests
 
@@ -149,7 +155,12 @@ drive both loops with a stand-in `mcp__samay__list_schedules`.
 after-reading cards while nothing new is read, never the next turn,
 never a card that asks for itself; the terminal offers `t` only after a
 read and asks again when something new was read; the page's card offers
-the button only after a read, and the button on a spend is a plain yes.
+the button only after a read, and the button on a spend is a plain yes;
+a held card offers it only when every waiting call asked because of a
+read, its yes is taken by the resumed turn's first card, never after
+`drop`, never by a card that asks for itself, and a held call's reading
+survives the checkpoint. `tests/test_web_hold.py`: `for_task` on a hold
+that didn't offer it is a plain yes, and a non-boolean is a 400.
 
 `tests/test_outside.py` (28, up from 16): a trusted server's answer is
 not outside text; one tool can be trusted by its full name; a read from
