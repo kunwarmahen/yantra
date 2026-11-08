@@ -973,8 +973,16 @@ how often), and Prahari repeats the look with no model (`yantra
 plus `--agent` for a package's session) and says so in one line:
 
 ```
-prahari: 10 tool(s), 3 active watch(es); it is watching -- via /home/you/prahari/.venv/bin/prahari
+prahari: 15 tool(s), 3 active watch(es); it is watching -- via /home/you/prahari/.venv/bin/prahari
 ```
+
+Five of those tools are for **indriyas**, readings Prahari keeps up to
+date for any number of watches: `list_indriyas` and `read_indriya` let
+the model answer "how cold is it outside?" from a fresh reading with no
+call out, and a watch on the same number *senses* the indriya instead of
+looking again (Prahari's notes/06). Trusting Prahari's reads by exact
+name (`trusted_reads`) needs those two names as well; naming the server
+(`prahari`) covers them.
 
 `YANTRA_PRAHARI=/path/to/prahari` names it when it is elsewhere;
 `--prahari` insists, `--no-prahari` never looks, and an unattended run
