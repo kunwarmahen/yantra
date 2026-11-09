@@ -93,6 +93,9 @@ STATUS_TIMEOUT = 15.0
 LOOK_WAIT = 200.0
 #: Prahari's tools that look before they answer.
 LOOKING = ("preview_watch",)
+#: How Prahari's preview_watch starts the line saying a reading already
+#: makes the call (its mcp.py).
+READER_SAID = "Reading already kept:"
 #: Prahari's tools that make, mend or remove an indriya: each gets a card.
 INDRIYA_WRITES = ("create_indriya", "update_indriya", "delete_indriya")
 #: An indriya's name, as Prahari takes it: one short lowercase word.
@@ -222,8 +225,9 @@ def readings_text(cards: list[dict[str, Any]], person: str = LOCAL,
         return ""
     lines = ["Readings Prahari already keeps (indriyas). When one answers what the "
              "person asks, read it with `mcp__prahari__read_indriya` instead of calling "
-             "the tool it reads with, and say how old it is; call the tool yourself only "
-             "when the reading is too old for the question or did not read. A watch on "
+             "the tool it reads with, and say how old it is. When the kept value is too "
+             "old for the question, give `max_age` (\"5m\") and it is read again first; "
+             "call the tool yourself only when the reading could not read. A watch on "
              "one of these numbers senses it (`sense`: its name) instead of a check:"]
     for card in rows[:READINGS_NAMED]:
         own = {person} | ({LOCAL, also_mine} if person == LOCAL else set())
@@ -287,7 +291,12 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "call `mcp__prahari__update_watch`.",
         "8. One number wanted by two watches (a band: heat below 60, cool above 70) or "
         "asked for often is one reading: `mcp__prahari__create_indriya`, after a "
-        "preview and the person's yes, then watches with `sense` instead of a check.",
+        "preview and the person's yes, then watches with `sense` instead of a check. "
+        "A watch made on a call a reading already makes goes by that reading by itself "
+        "(the preview and the answer say so: tell the person). Watches that already "
+        "make the call themselves move onto it only on the person's yes: "
+        "`create_indriya` with `from_watch` (and `move`), or `update_watch` with "
+        "`sense`.",
         seen_at,
     ]
     if readings:
@@ -328,7 +337,8 @@ def _pick_words(pick: Any) -> str:
 
 
 def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
-                   preview: str = "", where: str = "", zone: str = "") -> str:
+                   preview: str = "", where: str = "", zone: str = "",
+                   reader: str = "") -> str:
     """The permission card for ``create_watch``, in plain words.
 
     LAID OUT LIKE A FORM, as Samay's card is: what it looks at and how
@@ -342,7 +352,9 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     this agent doesn't have is too: it would fail every look.
 
     ``preview`` is Prahari's own words from ``preview_watch``, when the
-    card could get them; ``where`` is where the news goes.
+    card could get them; ``where`` is where the news goes. ``reader``:
+    Prahari's words when a reading already makes this call, so the watch
+    will go by it instead of calling -- the yes is to that, and says so.
     """
     name = " ".join(str(args.get("name") or "").split()) or "(no name)"
     asked = " ".join(str(args.get("asked") or "").split())
@@ -368,6 +380,9 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
         every = str(args.get("every") or "1h")
         lines += ["What it looks at, with no model",
                   f"  every {every}: {tool} {json.dumps(call_args, ensure_ascii=False)}"]
+        if reader:
+            lines.append(f"  BUT A READING ALREADY MAKES THIS CALL: {reader} No second "
+                         "call is made")
         if tool not in registry:
             lines.append("  NO TOOL BY THIS NAME in this agent -- every look would fail")
         elif not getattr(registry.get(tool), "read_only", False):
@@ -462,7 +477,7 @@ def _allowed(allow: list[str], registry: Any) -> list[str]:
 
 
 def explain_indriya(verb: str, args: dict[str, Any], *, registry: Any,
-                    listing: str = "") -> str:
+                    listing: str = "", watch_line: str = "") -> str:
     """The card for making, mending or removing an indriya -- a reading
     Prahari keeps up to date, which watches sense instead of each making
     the call.
@@ -481,13 +496,26 @@ def explain_indriya(verb: str, args: dict[str, Any], *, registry: Any,
                          + ([f"  {found}"] if found else [])
                          + ["  (Prahari refuses while a watch still senses it)"])
     check = args.get("check") if isinstance(args.get("check"), dict) else {}
-    every = str(args.get("every") or ("15m" if verb == "create_indriya" else ""))
+    source = str(args.get("from_watch") or "").strip()
+    every = str(args.get("every") or ("15m" if verb == "create_indriya" and not source
+                                      else ""))
     lines = [f"New reading kept up to date: {name}" if verb == "create_indriya"
              else f"Change the reading {name}"]
     if found:
         lines.append(f"  now: {found}")
     lines.append("")
-    if check or verb == "create_indriya":
+    if source and verb == "create_indriya":
+        lines += ["What it reads, with no model",
+                  f"  the very call watch {source} makes, with its pick, "
+                  + (f"every {every}" if every else "as often as that watch looks")]
+        if watch_line:
+            lines.append(f"  {watch_line}")
+        lines.append("  MOVES ONTO IT every watch of yours on that same call: they stop "
+                     "calling themselves, and keep what they remembered"
+                     if args.get("move") else
+                     "  watches of yours on that same call keep calling themselves "
+                     "until you say to move them")
+    elif check or verb == "create_indriya":
         tool = str(check.get("tool") or "?")
         when = f"every {every or 'as now'}"
         lines += ["What it reads, with no model",
@@ -500,7 +528,7 @@ def explain_indriya(verb: str, args: dict[str, Any], *, registry: Any,
     elif every:
         lines += ["How often it reads", f"  every {every}"]
     thing = " ".join(str(args.get("thing") or "").split())
-    if "pick" in args or thing or verb == "create_indriya":
+    if "pick" in args or thing or (verb == "create_indriya" and not source):
         lines += ["What it keeps", f"  {thing or _pick_words(args.get('pick'))}"
                   + (f" ({_pick_words(args.get('pick'))})" if thing and args.get("pick")
                      else "")]
@@ -529,6 +557,10 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
                                + ", ".join(map(str, args.get("allow_tools") or []))
             }.get(verb, f"{verb} {watch}")
     lines = [head] + ([f"  {found}"] if found else [])
+    if verb == "update_watch" and args.get("sense"):
+        lines.append(f"  moves onto the reading {args['sense']}: it stops making its own "
+                     "call and decides on each of that reading's readings (what it "
+                     "remembered is kept when the reading makes the same call)")
     if verb == "update_watch":
         for key in ("name", "asked", "thing", "check", "pick", "when", "every", "wake",
                     "renew", "then", "max_per_day", "starts", "ends", "stop", "keep"):
@@ -580,19 +612,36 @@ def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None,
         def card(args: dict[str, Any]) -> str:
             # What it sees now, in Prahari's words (a look with nothing
             # granted: only a tool that reads is tried).
-            said = ""
+            said, reader = "", ""
             if not args.get("listen"):
                 text, failed = ask("preview_watch", {k: args[k] for k in (
                     "check", "sense", "pick", "when", "every", "wake") if k in args})
-                said = "" if failed else (text.splitlines()[1] if "\n" in text else "")
+                lines = [] if failed else text.splitlines()
+                said = lines[1] if len(lines) > 1 else ""
+                # Prahari's own words when a reading already makes this call
+                reader = next((ln.removeprefix(READER_SAID).strip() for ln in lines
+                               if ln.startswith(READER_SAID)), "")
+                # the note after it is for the model, not the person
+                reader = reader.split(" (look_itself")[0].strip()
+                if args.get("look_itself"):
+                    reader = ""
             return explain_create(args, registry=registry, setu=setu_of(), preview=said,
-                                  where=where() if where is not None else "", zone=zone)
+                                  where=where() if where is not None else "", zone=zone,
+                                  reader=reader)
         return card
     if verb in INDRIYA_WRITES:
         def reading(args: dict[str, Any]) -> str:
             listing, failed = ask("list_indriyas", {})
+            watch_line = ""
+            source = str(args.get("from_watch") or "").strip()
+            if source:
+                watches_now, gone = ask("list_watches", {})
+                watch_line = "" if gone else next(
+                    (ln for ln in watches_now.splitlines() if ln.startswith(f"{source} ")),
+                    "")
             return explain_indriya(verb, args, registry=registry,
-                                   listing="" if failed else listing)
+                                   listing="" if failed else listing,
+                                   watch_line=watch_line)
         return reading
     if verb in ("update_watch", "pause_watch", "resume_watch", "delete_watch",
                 "allow_for_watch"):

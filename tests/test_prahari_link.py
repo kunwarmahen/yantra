@@ -148,7 +148,14 @@ FAKE_PRAHARI = """\
                 if os.path.exists({state!r} + "-slow"):    # a look at a slow page
                     time.sleep(1.0)
                 text = {{"preview_watch": "The watch, in words: every 3 hours ...\\n"
-                                          "It sees 61.2 now: no match yet.",
+                                          "It sees 61.2 now: no match yet."
+                                          + ("\\nReading already kept: It goes by the "
+                                             "reading outside-temp, which already makes "
+                                             "this call, instead of calling again. "
+                                             "(look_itself: true makes it call on its "
+                                             "own instead.)"
+                                             if os.path.exists({state!r} + "-reader")
+                                             else ""),
                          "list_watches": "w-1 [active] ALAB under 50: every 3 hours",
                          "list_indriyas": "outside-temp: 56.9 (4 min ago) -- reads the "
                                           "outside temperature every 15 minutes"
@@ -763,3 +770,52 @@ class TestReadingsOnThePanel:
         assert ["indriya", "pause", "outside-temp", "--json"] in [c[-4:] for c in calls(fake[1])]
         assert bad.status_code == 400 and "not a name" in bad.json()["detail"]
         assert odd.status_code == 404 and "no indriya action" in odd.json()["detail"]
+
+
+class TestOneCallByItselfOnTheCard:
+    def test_the_layer_says_ask_for_fresh_and_move_only_on_a_yes(self):
+        cards = [{"name": "outside-temp", "owner": "local", "sentence": "reads x"}]
+        layer = prahari_link.prompt_text({"serving": True},
+                                         readings=prahari_link.readings_text(cards))
+        assert "give `max_age` (\"5m\") and it is read again first" in layer
+        assert "goes by that reading by itself" in layer
+        assert "only on the person's yes" in layer and "`from_watch`" in layer
+
+    def test_a_watch_that_will_go_by_a_reading_says_so_in_capitals(self, fake, tmp_path):
+        (tmp_path / "state-reader").write_text("")
+        _, agent, manager, _ = start(fake[0], tmp_path,
+                                     tools=[Named("tradingview_open", read_only=True)])
+        try:
+            said = card(agent, "create_watch", PRICE)
+            own = card(agent, "create_watch", {**PRICE, "look_itself": True})
+        finally:
+            manager.shutdown()
+        assert ("BUT A READING ALREADY MAKES THIS CALL: It goes by the reading "
+                "outside-temp") in said and "No second call is made" in said
+        assert "look_itself" not in said.split("No second call")[0].split("CALL:")[1]
+        assert "ALREADY MAKES" not in own
+
+    def test_moving_a_watch_onto_a_reading_says_what_changes(self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            said = card(agent, "update_watch", {"id": "w-1", "sense": "outside-temp"})
+        finally:
+            manager.shutdown()
+        assert said.startswith("Change watch w-1\n  w-1 [active] ALAB under 50")
+        assert "moves onto the reading outside-temp: it stops making its own call" in said
+        assert "memory starts over" not in said
+
+    def test_a_reading_made_from_a_watch_says_whether_others_move(self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            listed = card(agent, "create_indriya", {"name": "alab", "from_watch": "w-1"})
+            moving = card(agent, "create_indriya", {"name": "alab", "from_watch": "w-1",
+                                                    "move": True, "share": "house"})
+        finally:
+            manager.shutdown()
+        assert "the very call watch w-1 makes, with its pick, as often as" in listed
+        assert "w-1 [active] ALAB under 50" in listed
+        assert "keep calling themselves until you say" in listed
+        assert "NO TOOL" not in listed and "every 15m" not in listed
+        assert "MOVES ONTO IT every watch of yours on that same call" in moving
+        assert "ANYONE IN THE HOUSE" in moving

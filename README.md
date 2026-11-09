@@ -988,6 +988,11 @@ model asked *"how cold is it outside right now?"* read `outside-temp`
 and made no weather call. Making one gets a card like a watch's: the
 call and whether it only reads, and in capitals when the whole house may
 read its value ([notes/154](notes/154-a-reading-the-model-knows.md)).
+When the kept value is too old for the question, the model asks for a
+fresh one (`max_age`), and Prahari reads again at most once in five
+minutes. A watch it offers on a call a reading already makes goes by
+that reading, and the card says so in capitals; moving older watches
+onto one has its own card and waits for your yes (Prahari's notes/07).
 Trusting Prahari's reads by exact name (`trusted_reads`) needs those two
 names as well; naming the server (`prahari`) covers them.
 
