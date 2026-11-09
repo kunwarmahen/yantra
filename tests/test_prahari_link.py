@@ -16,6 +16,12 @@ Also designed against:
 * **Offers from a run nobody watches** -- no Prahari tools at all.
 * **A Prahari that speaks another format** -- refused, never guessed at.
 * **Someone else's watches** -- the server is started ``--for`` one person.
+* **A model that doesn't know a reading is already kept** -- it calls
+  the weather tool again. The prompt names each indriya the person may
+  read (what and how often, never the value, which would be stale), says
+  to read it first, and is written again after one is made in the turn.
+  Making one gets a card that says the call, whether it only reads, and
+  in capitals when the whole house may read its value.
 * **A panel that acts behind the person's back, or on an option** -- the
   Watches panel on the page goes through the program's own verbs with an
   id that is an id, and its "seen" chip is only this person's looks that
@@ -101,10 +107,32 @@ FAKE_PRAHARI = """\
                           "said": "It sees 61.2 now: no match yet."}}))
     elif args[0] == "look":
         pass
+    elif args[:2] == ["indriya", "list"]:
+        import os
+        kept = {state!r} + "-readings"
+        print(open(kept).read() if os.path.exists(kept) else json.dumps([
+            {{"id": "i-1", "name": "outside-temp", "owner": "local", "share": "mine",
+              "state": "active", "value": "56.9", "age": "4 min ago",
+              "read_at": "2026-11-08T17:23:00+00:00",
+              "sentence": "reads the outside temperature every 15 minutes: looks at "
+                          "api.open-meteo.com/v1/forecast (with web_fetch)",
+              "sensed_by": [{{"id": "w-7", "name": "Heat the guestroom"}}]}},
+            {{"id": "i-2", "name": "steps", "owner": "asha", "share": "house",
+              "state": "paused", "paused_because": "3 readings failed",
+              "value": "", "age": "", "read_at": None,
+              "sentence": "reads the steps every 1 hour: looks with fit_steps",
+              "sensed_by": []}}]))
+    elif args[:2] in (["indriya", "pause"], ["indriya", "resume"]):
+        print(json.dumps({{"name": args[2], "state": "paused" if args[1] == "pause"
+                                                    else "active"}}))
+    elif args[:2] == ["indriya", "look"]:
+        pass
     elif args[0] == "mcp":
         TOOLS = [tool("preview_watch", True), tool("list_watches", True),
                  tool("create_watch", False), tool("update_watch", False),
-                 tool("delete_watch", False)]
+                 tool("delete_watch", False), tool("list_indriyas", True),
+                 tool("read_indriya", True), tool("create_indriya", False),
+                 tool("update_indriya", False), tool("delete_indriya", False)]
         for line in sys.stdin:
             msg = json.loads(line)
             method, mid = msg.get("method"), msg.get("id")
@@ -121,7 +149,9 @@ FAKE_PRAHARI = """\
                     time.sleep(1.0)
                 text = {{"preview_watch": "The watch, in words: every 3 hours ...\\n"
                                           "It sees 61.2 now: no match yet.",
-                         "list_watches": "w-1 [active] ALAB under 50: every 3 hours"
+                         "list_watches": "w-1 [active] ALAB under 50: every 3 hours",
+                         "list_indriyas": "outside-temp: 56.9 (4 min ago) -- reads the "
+                                          "outside temperature every 15 minutes"
                          }}.get(name, "done")
                 send({{"jsonrpc": "2.0", "id": mid, "result": {{
                     "content": [{{"type": "text", "text": text}}]}}}})
@@ -184,7 +214,7 @@ class TestFound:
             assert code is None and "mcp__prahari__create_watch" in agent.registry
             mcp_call = [c for c in calls(fake[1]) if "mcp" in c][0]
             assert mcp_call[-4:] == ["--for", "local", "--agent", str(tmp_path / "trader")]
-            assert "prahari: 5 tool(s), 2 active watch(es)" in out
+            assert "prahari: 10 tool(s), 2 active watch(es)" in out
             assert "NOT running" in out
             assert agent.prahari is not None
         finally:
@@ -589,3 +619,147 @@ def test_a_look_from_the_page_is_given_this_yantra_when_nothing_names_one(tmp_pa
     kept = prahari_link.looking_env({"PRAHARI_YANTRA": "uv run yantra",
                                      "PRAHARI_YANTRA_HOME": "/srv"})
     assert kept["PRAHARI_YANTRA"] == "uv run yantra" and kept["PRAHARI_YANTRA_HOME"] == "/srv"
+
+
+OUTSIDE = {"name": "outside-temp", "thing": "the outside temperature",
+           "check": {"tool": "web_fetch", "args": {"url": "https://api.open-meteo.com/x"}},
+           "pick": {"json": "current.temperature_2m"}, "every": "15m"}
+
+
+class TestReadings:
+    def test_the_model_is_told_which_readings_are_kept_and_never_their_value(
+            self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            layer = agent.prompt.get("watches")
+        finally:
+            manager.shutdown()
+        assert "Readings Prahari already keeps" in layer
+        assert "`mcp__prahari__read_indriya` instead of calling the tool" in layer
+        assert "- outside-temp: reads the outside temperature every 15 minutes" in layer
+        assert ("- steps: reads the steps every 1 hour: looks with fit_steps (asha's, "
+                "shared with the house) [paused: 3 readings failed]") in layer
+        assert "56.9" not in layer          # a value in the prompt is stale in minutes
+
+    def test_with_no_readings_only_the_how_is_said(self):
+        layer = prahari_link.prompt_text({"serving": True},
+                                         readings=prahari_link.readings_text([]))
+        assert "create_indriya" in layer and "`sense`" in layer
+        assert "Readings Prahari already keeps" not in layer
+
+    def test_many_readings_are_named_up_to_a_limit(self):
+        cards = [{"name": f"r{n:02d}", "owner": "local", "sentence": "reads x"}
+                 for n in range(prahari_link.READINGS_NAMED + 3)]
+        said = prahari_link.readings_text(cards)
+        assert "- r11: reads x" in said and "r12" not in said
+        assert "and 3 more (`mcp__prahari__list_indriyas`)" in said
+
+    def test_at_the_computer_ones_made_from_the_owners_chat_are_theirs(self):
+        cards = [{"name": "outside-temp", "owner": "mahen", "sentence": "reads x"}]
+        assert "mahen's" not in prahari_link.readings_text(cards, also_mine="mahen")
+        assert "(mahen's, shared" in prahari_link.readings_text(cards)
+        assert "(mahen's, shared" in prahari_link.readings_text(cards, "asha", "mahen")
+
+    def test_another_persons_readings_are_asked_for_as_them(self, fake):
+        data, program = prahari_link.load("on", str(fake[0]))
+        link = prahari_link.Prahari(mode="on", data=data, program=program, person="asha")
+        assert [c["name"] for c in link.readings()] == ["outside-temp", "steps"]
+        assert calls(fake[1])[-1][-4:] == ["indriya", "list", "--as=asha", "--json"]
+        mine = prahari_link.Prahari(mode="on", data=data, program=program)
+        mine.readings()
+        assert calls(fake[1])[-1][-3:] == ["indriya", "list", "--json"]
+
+    def test_a_prahari_with_no_readings_is_no_readings_not_a_failed_turn(self, fake,
+                                                                         tmp_path):
+        (tmp_path / "state-readings").write_text("not json")
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            layer = agent.prompt.get("watches")
+        finally:
+            manager.shutdown()
+        assert "preview_watch" in layer and "Readings Prahari" not in layer
+
+    def test_a_new_reading_says_the_call_and_whether_it_only_reads(self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path,
+                                     tools=[Named("web_fetch", read_only=False)])
+        try:
+            said = card(agent, "create_indriya", OUTSIDE)
+            house = card(agent, "create_indriya", {**OUTSIDE, "share": "house"})
+        finally:
+            manager.shutdown()
+        assert said.startswith("New reading kept up to date: outside-temp")
+        assert 'every 15m: web_fetch {"url": "https://api.open-meteo.com/x"}' in said
+        assert "web_fetch IS NOT READ-ONLY" in said
+        assert "the outside temperature (the value at current.temperature_2m)" in said
+        assert "Who may read it\n  only you" in said
+        assert "watches that sense it decide" in said
+        assert "ANYONE IN THE HOUSE" in house and "never call anything as you" in house
+
+    def test_a_change_says_the_reading_now_and_that_its_watches_start_over(
+            self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            mend = card(agent, "update_indriya", {"name": "outside-temp",
+                                                  "pick": {"json": "current.x"}})
+            pace = card(agent, "update_indriya", {"name": "outside-temp", "every": "30m"})
+            gone = card(agent, "delete_indriya", {"name": "outside-temp"})
+        finally:
+            manager.shutdown()
+        assert mend.startswith("Change the reading outside-temp\n  now: outside-temp: 56.9")
+        assert "start over" in mend
+        assert "How often it reads\n  every 30m" in pace and "start over" not in pace
+        assert gone.startswith("Delete the reading outside-temp and everything it read")
+
+    def test_a_watch_that_senses_says_its_reading_not_a_missing_tool(self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            said = card(agent, "create_watch", {"name": "Heat the guestroom",
+                                                "sense": "outside-temp",
+                                                "when": {"below": 60}})
+        finally:
+            manager.shutdown()
+        assert "the reading 'outside-temp' that Prahari already keeps" in said
+        assert "NO TOOL" not in said and "every 1h" not in said
+        assert "now: It sees 61.2 now" in said      # Prahari's own preview, asked
+
+    def test_the_readings_are_named_again_once_one_is_made_in_the_turn(self, fake,
+                                                                       tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            (tmp_path / "state-readings").write_text(json.dumps([
+                {"name": "guestroom-temp", "owner": "local", "state": "active",
+                 "sentence": "reads the guestroom temperature every 5 minutes"}]))
+            agent.registry.get("mcp__prahari__create_indriya").run(OUTSIDE, agent.ctx)
+            layer = agent.prompt.get("watches")
+        finally:
+            manager.shutdown()
+        assert "- guestroom-temp: reads the guestroom temperature" in layer
+        assert "outside-temp" not in layer
+
+
+class TestReadingsOnThePanel:
+    served = TestThePanel.served
+
+    def test_the_panel_lists_readings_and_marks_which_are_theirs(self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            got = client.get("/api/indriyas").json()["indriyas"]
+        finally:
+            manager.shutdown()
+        assert [(i["name"], i["mine"]) for i in got] == [("outside-temp", True),
+                                                         ("steps", False)]
+
+    def test_read_now_pause_and_resume_go_through_the_program(self, fake, tmp_path):
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            assert client.post("/api/indriyas/outside-temp/look").json()["result"] == {
+                "started": "outside-temp"}
+            paused = client.post("/api/indriyas/outside-temp/pause").json()
+            bad = client.post("/api/indriyas/--help/pause")
+            odd = client.post("/api/indriyas/outside-temp/rm")
+        finally:
+            manager.shutdown()
+        assert paused["result"]["state"] == "paused"
+        assert ["indriya", "pause", "outside-temp", "--json"] in [c[-4:] for c in calls(fake[1])]
+        assert bad.status_code == 400 and "not a name" in bad.json()["detail"]
+        assert odd.status_code == 404 and "no indriya action" in odd.json()["detail"]

@@ -980,9 +980,16 @@ Five of those tools are for **indriyas**, readings Prahari keeps up to
 date for any number of watches: `list_indriyas` and `read_indriya` let
 the model answer "how cold is it outside?" from a fresh reading with no
 call out, and a watch on the same number *senses* the indriya instead of
-looking again (Prahari's notes/06). Trusting Prahari's reads by exact
-name (`trusted_reads`) needs those two names as well; naming the server
-(`prahari`) covers them.
+looking again (Prahari's notes/06). The model is told which readings
+exist: the `watches` layer names each one the person may read (what it
+reads and how often, never the value, which would be stale in minutes)
+and says to read it before calling the tool it reads with. A local
+model asked *"how cold is it outside right now?"* read `outside-temp`
+and made no weather call. Making one gets a card like a watch's: the
+call and whether it only reads, and in capitals when the whole house may
+read its value ([notes/154](notes/154-a-reading-the-model-knows.md)).
+Trusting Prahari's reads by exact name (`trusted_reads`) needs those two
+names as well; naming the server (`prahari`) covers them.
 
 `YANTRA_PRAHARI=/path/to/prahari` names it when it is elsewhere;
 `--prahari` insists, `--no-prahari` never looks, and an unattended run
@@ -1010,7 +1017,12 @@ changed. It runs Prahari's own commands (`prahari
 list --json` …), so it works whether or not `prahari serve` is up, and
 says at the top when it isn't. A **seen** chip lights when one of your
 watches fired since you last looked, and the panel opens with **what
-they saw** ([notes/147](notes/147-the-watches-on-the-page.md)).
+they saw** ([notes/147](notes/147-the-watches-on-the-page.md)). Under
+the watches, the **readings** (indriyas): each value with its age, what
+it reads, which watches sense it, and **read now** and **pause** for
+your own. A watch that senses one says *senses outside-temp* and has no
+*look now* or *every* of its own
+([notes/154](notes/154-a-reading-the-model-knows.md#on-the-page)).
 
 **Your phone, through Sparsh.** [Sparsh](https://github.com/kunwarmahen/sparsh)
 works an Android phone (or the emulator on this computer) through `adb`,
@@ -3001,7 +3013,11 @@ src/yantra/
 │                   pause|resume|rm|edit|add|preview --json` and a look now (`prahari look`,
 │                   given this Yantra when nothing names one), and the seen
 │                   chip: this person's looks that fired
-│                   ([notes/147](notes/147-the-watches-on-the-page.md))
+│                   ([notes/147](notes/147-the-watches-on-the-page.md));
+│                   the readings the person may use named in the layer
+│                   (never their values; `prahari indriya list --as`), the
+│                   indriya cards, and the panel's readings with read now,
+│                   pause and resume ([notes/154](notes/154-a-reading-the-model-knows.md))
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and

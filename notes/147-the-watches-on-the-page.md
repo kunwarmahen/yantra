@@ -181,3 +181,6 @@ $ prahari list
   stay on Prahari's page and `prahari inlet`.
 - **Mailboxes.** Added at the computer (`prahari mailbox add`); listed on
   Prahari's page.
+- ~~**The readings watches share.**~~ Listed under the watches, with
+  read now and pause
+  ([note 154](154-a-reading-the-model-knows.md#on-the-page)).

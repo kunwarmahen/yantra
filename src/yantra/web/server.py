@@ -2391,6 +2391,34 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     def watches_looks(watch_id: str) -> dict[str, Any]:
         return {"looks": prahari_call(require_prahari(), "looks", watch_id)}
 
+    @app.get("/api/indriyas")
+    def indriyas_list() -> dict[str, Any]:
+        """The readings Prahari keeps that this person may read -- their own,
+        then the house's -- each with its value, how old it is, and the
+        watches that sense it. ``mine``: the panel's switches are for those."""
+        from yantra.prahari_link import LOCAL, PrahariLinkError
+        prahari = require_prahari()
+        try:
+            cards = prahari.readings()
+        except PrahariLinkError as exc:
+            raise HTTPException(503, f"prahari: {exc}") from None
+        # at this computer, the person's own are filed as local, and as their
+        # Dvara name when made from a chat (Prahari's own "home")
+        home = {prahari.person} | ({LOCAL, (prahari.data or {}).get("local_to")}
+                                   if prahari.person == LOCAL else set())
+        return {"indriyas": [{**c, "mine": c.get("owner") in home} for c in cards]}
+
+    @app.post("/api/indriyas/{name}/{action}")
+    def indriyas_act(name: str, action: str) -> dict[str, Any]:
+        """Read now (not waited for), pause, resume -- the person's own hand."""
+        from yantra.prahari_link import PrahariLinkError
+        try:
+            return {"done": action, "result": require_prahari().indriya_act(name, action)}
+        except PrahariLinkError as exc:
+            said = str(exc)
+            raise HTTPException(404 if "no indriya" in said else 400,
+                                f"prahari: {said}") from None
+
     @app.post("/api/watches/{watch_id}/every")
     def watches_every(watch_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """How often it looks, from the panel's box; what it saw is kept."""

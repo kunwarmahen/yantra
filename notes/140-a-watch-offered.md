@@ -274,3 +274,6 @@ now says such steps by their call ([Dvara's note
 - **Live offers measured on local models.** Note 116 counted Samay's
   offers on qwen and gemma. The same count for watches waits for a free
   GPU; the layer was written with that note's findings in hand.
+- ~~**Knowing a reading is already kept.**~~ The layer names each
+  indriya the person may read, and making one has its own card
+  ([note 154](154-a-reading-the-model-knows.md)).

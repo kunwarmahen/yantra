@@ -40,6 +40,16 @@ THE MODEL IS TOLD, BRIEFLY. A ``watches`` prompt layer says the tools
 exist, how a watch differs from a schedule, to preview first and fix the
 pick from what the tool actually said, and to create only after a yes.
 
+AND WHICH READINGS ARE ALREADY KEPT. Prahari keeps indriyas: one call on
+a timer, its value read by any number of watches and agents. A model
+that doesn't know one exists calls the weather tool anyway, so the layer
+names each one the person may read -- what it reads and how often, never
+its value, which would be stale in minutes and would change the prompt
+on every reading -- and says to read it (``read_indriya``) before
+calling the tool it reads with. Making, mending or removing one gets a
+card like a watch's (``explain_indriya``), and the layer is written
+again after, so the rest of the turn knows.
+
 THE PAGE'S PANEL USES THE PROGRAM, AS SAMAY'S DOES. ``prahari list
 --json``, ``looks``, ``pause``, ``resume`` and ``rm`` work whether
 ``prahari serve`` is running or not and need no token: the Watches panel
@@ -83,6 +93,14 @@ STATUS_TIMEOUT = 15.0
 LOOK_WAIT = 200.0
 #: Prahari's tools that look before they answer.
 LOOKING = ("preview_watch",)
+#: Prahari's tools that make, mend or remove an indriya: each gets a card.
+INDRIYA_WRITES = ("create_indriya", "update_indriya", "delete_indriya")
+#: An indriya's name, as Prahari takes it: one short lowercase word.
+INDRIYA_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,39}$")
+#: How many readings the prompt names; past that, list_indriyas has them.
+READINGS_NAMED = 12
+#: How long the readings list may take before the prompt goes without it.
+READINGS_WAIT = 8.0
 #: How much of a then-prompt the card shows.
 THEN_SHOWN = 240
 SHOWN = 6
@@ -191,9 +209,39 @@ OFF_HERE = ("Prahari is not running on this computer: when you make a watch, say
             "will not look until the person starts `prahari serve`.")
 
 
+def readings_text(cards: list[dict[str, Any]], person: str = LOCAL,
+                  also_mine: str = "") -> str:
+    """The readings this person may use, named in the prompt -- what each
+    reads and how often, NEVER ITS VALUE: a value written into the prompt
+    is stale a minute later, and a prompt that changes every reading is
+    one no cache keeps. The model reads the value when it is wanted
+    (``read_indriya``), with its age. ``also_mine``: the name this
+    computer's person goes by on Dvara, whose readings are theirs too."""
+    rows = [c for c in cards if isinstance(c, dict) and c.get("name")]
+    if not rows:
+        return ""
+    lines = ["Readings Prahari already keeps (indriyas). When one answers what the "
+             "person asks, read it with `mcp__prahari__read_indriya` instead of calling "
+             "the tool it reads with, and say how old it is; call the tool yourself only "
+             "when the reading is too old for the question or did not read. A watch on "
+             "one of these numbers senses it (`sense`: its name) instead of a check:"]
+    for card in rows[:READINGS_NAMED]:
+        own = {person} | ({LOCAL, also_mine} if person == LOCAL else set())
+        whose = ("" if card.get("owner") in own
+                 else f" ({card.get('owner')}'s, shared with the house)")
+        state = ("" if card.get("state") in (None, "active")
+                 else f" [paused: {card.get('paused_because') or 'by hand'}]")
+        lines.append(f"- {card['name']}: {card.get('sentence') or ''}{whose}{state}")
+    if len(rows) > READINGS_NAMED:
+        lines.append(f"- and {len(rows) - READINGS_NAMED} more "
+                     "(`mcp__prahari__list_indriyas`)")
+    return "\n".join(lines)
+
+
 def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
-                off: str = OFF_HERE) -> str:
-    """The ``watches`` layer: the tools exist, and how to write a recipe."""
+                off: str = OFF_HERE, readings: str = "") -> str:
+    """The ``watches`` layer: the tools exist, how to write a recipe, and
+    which readings are already kept (``readings_text``)."""
     lines = [
         "# Telling the person when something happens (through Prahari)",
         "When the person wants to know WHEN something happens -- a price drops under a "
@@ -237,8 +285,13 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "when the person has a Pub/Sub topic for it.",
         "7. A watch that paused because its pick found nothing: preview a new pick and "
         "call `mcp__prahari__update_watch`.",
+        "8. One number wanted by two watches (a band: heat below 60, cool above 70) or "
+        "asked for often is one reading: `mcp__prahari__create_indriya`, after a "
+        "preview and the person's yes, then watches with `sense` instead of a check.",
         seen_at,
     ]
+    if readings:
+        lines.append(readings)
     if not data.get("serving"):
         lines.append(off)
     return "\n".join(lines)
@@ -299,10 +352,16 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
     if asked:
         lines.append(f"  you asked: \"{asked}\"")
     lines.append("")
+    sense = str(args.get("sense") or "").strip()
     if listen:
         lines += ["What it listens for",
                   f"  anything sent to Prahari's inlet as '{listen}' (a phone app, a "
                   "webhook): read as text from outside"]
+    elif sense:
+        lines += ["What it decides on",
+                  f"  the reading '{sense}' that Prahari already keeps (an indriya): it "
+                  "makes no call of its own, and is told each time that reading is "
+                  "taken"]
     else:
         tool = str(check.get("tool") or "?")
         call_args = check.get("args") or {}
@@ -402,6 +461,60 @@ def _allowed(allow: list[str], registry: Any) -> list[str]:
     return out
 
 
+def explain_indriya(verb: str, args: dict[str, Any], *, registry: Any,
+                    listing: str = "") -> str:
+    """The card for making, mending or removing an indriya -- a reading
+    Prahari keeps up to date, which watches sense instead of each making
+    the call.
+
+    THE SAME YES AS A WATCH'S. An indriya runs one call on a timer, with
+    the person's accounts and nobody asked again, so its card says the
+    call as it will run and whether it only reads, in the words a watch's
+    card uses. AND WHO MAY READ IT: ``house`` lets anyone's watches and
+    agents in the house read its value (never call anything as this
+    person), and a yes to that should be a yes with eyes open."""
+    name = str(args.get("name") or "?").strip()
+    found = next((line for line in listing.splitlines()
+                  if line.startswith(f"{name}: ")), "")
+    if verb == "delete_indriya":
+        return "\n".join([f"Delete the reading {name} and everything it read, for good"]
+                         + ([f"  {found}"] if found else [])
+                         + ["  (Prahari refuses while a watch still senses it)"])
+    check = args.get("check") if isinstance(args.get("check"), dict) else {}
+    every = str(args.get("every") or ("15m" if verb == "create_indriya" else ""))
+    lines = [f"New reading kept up to date: {name}" if verb == "create_indriya"
+             else f"Change the reading {name}"]
+    if found:
+        lines.append(f"  now: {found}")
+    lines.append("")
+    if check or verb == "create_indriya":
+        tool = str(check.get("tool") or "?")
+        when = f"every {every or 'as now'}"
+        lines += ["What it reads, with no model",
+                  f"  {when}: {tool} {json.dumps(check.get('args') or {}, ensure_ascii=False)}"]
+        if tool not in registry:
+            lines.append("  NO TOOL BY THIS NAME in this agent -- every reading would fail")
+        elif not getattr(registry.get(tool), "read_only", False):
+            lines.append(f"  {tool} IS NOT READ-ONLY: saying yes lets Prahari run exactly "
+                         f"this call {when}, with nobody asked again")
+    elif every:
+        lines += ["How often it reads", f"  every {every}"]
+    thing = " ".join(str(args.get("thing") or "").split())
+    if "pick" in args or thing or verb == "create_indriya":
+        lines += ["What it keeps", f"  {thing or _pick_words(args.get('pick'))}"
+                  + (f" ({_pick_words(args.get('pick'))})" if thing and args.get("pick")
+                     else "")]
+    share = args.get("share")
+    if share or verb == "create_indriya":
+        lines += ["Who may read it",
+                  "  ANYONE IN THE HOUSE: their watches and agents read its value (never "
+                  "call anything as you)" if share == "house" else "  only you"]
+    if verb == "update_indriya" and {"check", "pick"} & set(args):
+        lines.append("  the watches that sense it start over: their next look only learns")
+    lines += ["", "It tells nobody anything: watches that sense it decide."]
+    return "\n".join(lines)
+
+
 def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
     """The card for update / pause / resume / delete / allow: the watch, in
     its words, and what changes."""
@@ -470,11 +583,17 @@ def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None,
             said = ""
             if not args.get("listen"):
                 text, failed = ask("preview_watch", {k: args[k] for k in (
-                    "check", "pick", "when", "every", "wake") if k in args})
+                    "check", "sense", "pick", "when", "every", "wake") if k in args})
                 said = "" if failed else (text.splitlines()[1] if "\n" in text else "")
             return explain_create(args, registry=registry, setu=setu_of(), preview=said,
                                   where=where() if where is not None else "", zone=zone)
         return card
+    if verb in INDRIYA_WRITES:
+        def reading(args: dict[str, Any]) -> str:
+            listing, failed = ask("list_indriyas", {})
+            return explain_indriya(verb, args, registry=registry,
+                                   listing="" if failed else listing)
+        return reading
     if verb in ("update_watch", "pause_watch", "resume_watch", "delete_watch",
                 "allow_for_watch"):
         def change(args: dict[str, Any]) -> str:
@@ -523,6 +642,7 @@ class Prahari:
     off: str = OFF_HERE
     error: str = ""
     tools: list[str] = field(default_factory=list)
+    _prompt: Any = None
 
     def connect(self, manager: Any, agent: Any) -> int:
         """Start the server, give its writes their cards, write the prompt
@@ -547,20 +667,72 @@ class Prahari:
                            self.news_goes, self.zone)
             if hook is not None:
                 tool.explain = hook
-                tool.run = self._then_refresh(tool.run)
-        prompt = attach_prompt(agent)
-        prompt.set("watches", prompt_text(self.data, self.seen_at, self.off))
-        prompt.apply()
+                tool.run = self._then_refresh(tool.run, tool.raw_name)
+        self._prompt = attach_prompt(agent)
+        self.write_layer()
         return len(self.tools)
 
-    def _then_refresh(self, run: Any) -> Any:
+    def write_layer(self) -> None:
+        """The ``watches`` prompt layer, with the readings named as they are
+        now. Again after an indriya is made, mended or removed, so the next
+        step of the same turn knows it."""
+        if self._prompt is None or self.data is None:
+            return
+        named = ""
+        if f"mcp__{SERVER}__read_indriya" in self.tools:
+            named = readings_text(self.readings(quiet=True), self.person,
+                                  str(self.data.get("local_to") or ""))
+        self._prompt.set("watches", prompt_text(self.data, self.seen_at, self.off, named))
+        self._prompt.apply()
+
+    def readings(self, *, quiet: bool = False) -> list[dict[str, Any]]:
+        """The indriyas this person may read, as Prahari's cards: their
+        own, then the house's (``prahari indriya list --as``). ``quiet``:
+        a Prahari that can't say (an older one, a slow disk) is no
+        readings, not a failed turn."""
+        argv = [*self._base(), "indriya", "list"]
+        if self.person != LOCAL:
+            argv.append(f"--as={self.person}")
+        try:
+            found = self._json(argv, "indriya list", timeout=READINGS_WAIT)
+        except PrahariLinkError:
+            if quiet:
+                return []
+            raise
+        return [c for c in found if isinstance(c, dict)] if isinstance(found, list) else []
+
+    def indriya_act(self, name: str, action: str) -> Any:
+        """The panel's switches on one of this person's indriyas: ``look``
+        starts one reading and does not wait (a reading is a look, and may
+        take minutes); ``pause`` and ``resume`` go through the program,
+        which refuses one that isn't theirs."""
+        if not INDRIYA_NAME_RE.match(name or ""):
+            raise PrahariLinkError(f"which indriya? {name!r} is not a name")
+        if action not in ("look", "pause", "resume"):
+            raise PrahariLinkError(f"no indriya action {action!r}")
+        if action != "look":
+            return self._json([*self._base(), "indriya", action, name], f"indriya {action}")
+        try:
+            child = subprocess.Popen([*self._base(), "indriya", "look", name],
+                                     env=looking_env(), stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     start_new_session=True)
+        except OSError as exc:
+            raise PrahariLinkError(f"prahari indriya look: {exc}") from None
+        threading.Thread(target=child.wait, daemon=True, name="yantra-prahari-read").start()
+        return {"started": name}
+
+    def _then_refresh(self, run: Any, verb: str = "") -> Any:
         """A write's run, followed by a fresh look at Prahari -- so the
-        page's count is right when the turn ends, not at the next launch."""
+        page's count is right when the turn ends, not at the next launch --
+        and, after an indriya's, the readings the prompt names."""
         def wrapped(args: dict[str, Any], ctx: Any) -> Any:
             try:
                 return run(args, ctx)
             finally:
                 self.refresh()
+                if verb in INDRIYA_WRITES:
+                    self.write_layer()
         return wrapped
 
     def refresh(self) -> dict[str, Any] | None:

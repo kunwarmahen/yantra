@@ -2453,7 +2453,7 @@ function renderSchedules() {
    nothing asks -- the person is the one pressing. A look started here is
    not waited for; it shows in the watch's looks when it is done. */
 
-const watch = { data: null, open: new Set(), looks: {}, form: null };
+const watch = { data: null, open: new Set(), looks: {}, form: null, indriyas: [] };
 
 $("#chip-watch").onclick = openWatchPanel;
 $("#chip-seen").onclick = openWatchPanel;
@@ -2568,6 +2568,9 @@ async function loadWatches(said) {
     return;
   }
   watch.data = data;
+  // the readings watches sense; an older Prahari has none, and that is no error
+  const got = await fetch("/api/indriyas").catch(() => null);
+  watch.indriyas = got && got.ok ? (await got.json()).indriyas || [] : [];
   $("#watch-count").textContent = `${data.counts.active || 0} watching`;
   for (const id of watch.open) await loadLooks(id);
   renderWatches();
@@ -2631,6 +2634,7 @@ function renderWatches() {
     p.textContent = "nothing yet — ask the agent to tell you when something happens "
       + "(\"tell me when a mail from the bank arrives\"); it offers, and you say yes on its card.";
     body.append(p);
+    renderIndriyas(body);
     return;
   }
   for (const w of list) {
@@ -2642,12 +2646,15 @@ function renderWatches() {
     const main = document.createElement("div");
     const last = w.last_look;
     const tags = [esc(w.id)];
+    // one that listens or senses a reading makes no look of its own
+    const looksItself = !w.listen && !w.sense;
     if (w.listen) tags.push(`listens for <code>${esc(w.listen)}</code>`);
+    if (w.sense) tags.push(`senses <code>${esc(w.sense_name || w.sense)}</code>`);
     if (w.wake) tags.push(`woken by <code>${esc(w.wake)}</code>`);
     if (w.owner && w.owner !== "local") tags.push("for " + esc(w.owner));
     if (w.state === "ended") tags.push("ended" + (w.ended_at ? " " + esc(clockTime(w.ended_at)) : ""));
     if (w.fired_today) tags.push(`fired ${w.fired_today} today (at most ${w.max_per_day})`);
-    if (w.state === "active" && w.next_at && !w.listen) tags.push("next " + esc(clockTime(w.next_at)));
+    if (w.state === "active" && w.next_at && looksItself) tags.push("next " + esc(clockTime(w.next_at)));
     main.innerHTML = `<div class="conn-title">${esc(w.name)}</div>
       ${w.asked ? `<div class="conn-sub">You asked: “${esc(w.asked)}”</div>` : ""}
       <div class="conn-sub sched-does">${esc(w.sentence)}</div>
@@ -2656,7 +2663,7 @@ function renderWatches() {
       ${w.paused_because ? `<div class="conn-sub conn-warn">paused: ${esc(w.paused_because)}</div>` : ""}
       <div class="conn-sub sched-last ${LOOK_TONE[last?.outcome] || ""}">${last
         ? `last: ${esc(last.outcome)} ${esc(clockTime(lookAt(last)))} — ${esc((last.found || []).join(" · ") || last.value || last.detail || "")}`
-        : (w.listen ? "nothing heard yet" : "not looked yet")}</div>`;
+        : (w.listen ? "nothing heard yet" : w.sense ? "not read yet" : "not looked yet")}</div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";
     const button = (label, cls, fn) => {
@@ -2671,8 +2678,8 @@ function renderWatches() {
       else { watch.open.add(w.id); await loadLooks(w.id); }
       renderWatches();
     });
-    if (!w.listen && w.state === "active") button("look now", "", () => watchAct(w.id, "look"));
-    if (!w.listen) {
+    if (looksItself && w.state === "active") button("look now", "", () => watchAct(w.id, "look"));
+    if (looksItself) {
       // how often it looks; what it saw is kept (Prahari's watches.update)
       const box = document.createElement("input");
       box.className = "watch-every";
@@ -2704,6 +2711,67 @@ function renderWatches() {
         : '<div class="sched-run">no looks yet</div>';
       row.append(looks);
     }
+    body.append(row);
+  }
+  renderIndriyas(body);
+}
+
+/* The readings Prahari keeps (indriyas): one call on its own clock, read
+   by every watch that senses it and by the agent, so asking "how cold is
+   it?" doesn't call the weather again. Its value and how old it is, what
+   it reads, who senses it; the person's own get read now (not waited for)
+   and pause. A house reading someone else keeps is theirs to change. */
+
+async function indriyaAct(name, action) {
+  const res = await fetch(`/api/indriyas/${encodeURIComponent(name)}/${action}`, { method: "POST" });
+  const data = await res.json();
+  if (!res.ok) { addBanner(`indriyas: ${data.detail}`, true); return; }
+  toast({ look: `${name} is reading — its watches decide on it when it is done`,
+          pause: `paused ${name} — the watches that sense it go quiet with it`,
+          resume: `${name} reads again` }[action]);
+  await loadWatches(false);
+}
+
+function renderIndriyas(body) {
+  const list = watch.indriyas || [];
+  if (!list.length) return;
+  section(body, `${list.length} reading${list.length === 1 ? "" : "s"}`,
+    "indriyas: one call each, read by the watches that sense it and by the agent");
+  for (const i of list) {
+    const row = document.createElement("div");
+    row.className = "conn-card sched-row";
+    const dot = document.createElement("span");
+    dot.className = i.state === "active" ? "dot" : "dot dead";
+    dot.title = i.state;
+    const main = document.createElement("div");
+    const tags = [];
+    // its sentence already says when it is shared; say whose when not theirs
+    if (!i.mine) tags.push(`${esc(i.owner)}'s`);
+    if (i.state === "active" && i.next_at) tags.push("next " + esc(clockTime(i.next_at)));
+    const sensed = (i.sensed_by || []).map((w) => esc(w.name)).join(", ");
+    const bad = i.last_reading && i.last_reading.outcome !== "read" ? i.last_reading : null;
+    main.innerHTML = `<div class="conn-title">${esc(i.name)}: <b>${i.read_at
+        ? esc(i.value) : "not read yet"}</b>${i.read_at ? ` <span class="conn-sub">(${esc(i.age)})</span>` : ""}</div>
+      <div class="conn-sub sched-does">${esc(i.sentence)}</div>
+      ${tags.length ? `<div class="conn-sub">${tags.join(" · ")}</div>` : ""}
+      <div class="conn-sub">${sensed ? `sensed by: ${sensed}` : "no watch senses it yet"}</div>
+      ${i.paused_because ? `<div class="conn-sub conn-warn">paused: ${esc(i.paused_because)}</div>` : ""}
+      ${bad ? `<div class="conn-sub sched-last ${LOOK_TONE[bad.outcome] || ""}">last: ${esc(bad.outcome)} ${esc(clockTime(bad.at))} — ${esc(bad.why || "")}</div>` : ""}`;
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    if (i.mine) {
+      const button = (label, cls, fn) => {
+        const b = document.createElement("button");
+        b.className = `m-btn ${cls}`;
+        b.textContent = label;
+        b.onclick = fn;
+        actions.append(b);
+      };
+      if (i.state === "active") button("read now", "", () => indriyaAct(i.name, "look"));
+      if (i.state === "active") button("pause", "", () => indriyaAct(i.name, "pause"));
+      else button("resume", "primary", () => indriyaAct(i.name, "resume"));
+    }
+    row.append(dot, main, actions);
     body.append(row);
   }
 }
@@ -2754,9 +2822,17 @@ function watchForm(w) {
   // one that listens has no look to change: its word at the inlet stays,
   // and what it hears is picked, tested and acted on as any other's
   const listens = Boolean(w && w.listen);
+  // one that senses a reading has no call or clock of its own: the reading's
+  const senses = Boolean(w && w.sense);
   box("name", "name", "ALAB under $50");
   box("asked", "what it's for, in your words", "tell me if ALAB drops under 50", true);
-  if (listens) {
+  if (senses) {
+    const l = document.createElement("p");
+    l.className = "wide watch-listens";
+    l.textContent = `senses the reading “${w.sense_name || w.sense}” — its call and how `
+      + "often are the reading's; pick and when are this watch's own";
+    form.append(l);
+  } else if (listens) {
     const l = document.createElement("p");
     l.className = "wide watch-listens";
     l.textContent = `listens for “${w.listen}” at the inlet — the word stays; make a new `
@@ -2768,7 +2844,7 @@ function watchForm(w) {
   }
   box("pick", "pick", listens ? "text · json:sender · text:Mum" : "number · text:Landed|Delayed · json:price");
   box("when", "when", listens ? "any · contains Mum · new" : "below 50 · new · changed · contains Mum");
-  if (!listens) box("every", "every", "3h");
+  if (!listens && !senses) box("every", "every", "3h");
   box("then", "then ask the agent (empty: just tell you)", "Tell me the new price.", true);
   const tried = document.createElement("pre");
   tried.className = "watch-tried hidden";
@@ -2810,7 +2886,7 @@ function watchForm(w) {
     } catch (err) { tried.textContent = err.message; }
     tryIt.disabled = false;
   });
-  if (listens) tryIt.remove();    // nothing to look at: it waits for its word
+  if (listens || senses) tryIt.remove();    // nothing of its own to look at
   btn(w ? "save" : "add", "primary", async () => {
     try {
       if (w) {
