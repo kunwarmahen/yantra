@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 3110 tests. The
+The harness underneath is complete and covered by 3292 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -2826,7 +2826,7 @@ src/yantra/
 │                   ([notes/102](notes/102-kept-somewhere-else.md))
 ├── prompt.py       the system prompt as ORDERED LAYERS (agent / base / env /
 │                   memory / household / connections / schedules / watches /
-│                   phone / skills; `household` a host's, e.g. Dvara's
+│                   routines / phone / skills; `household` a host's, e.g. Dvara's
 │                   facts for everyone, [notes/146](notes/146-told-only-what-it-can-use.md)):
 │                   each owner writes one named layer, attach_prompt captures
 │                   the operator's --system exactly once, recompose() rebuilds
@@ -3095,7 +3095,8 @@ src/yantra/
 │                   them), whether a local model is served and pulled
 │                   and how many tokens it holds against context_window,
 │                   extras, tool packs, and whether a session would find
-│                   Setu (a count) and Samay; yantra.status.v1, no turn
+│                   Setu (a count), Samay, Prahari, Vidhi and Sparsh;
+│                   yantra.status.v1, no turn
 │                   and no key ([notes/117](notes/117-asked-what-it-is.md))
 ├── site_guide.py   after a turn on a site added by its address: where
 │                   each call landed (address and title, never page text)
@@ -3623,7 +3624,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 2989 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 3292 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
