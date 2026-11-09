@@ -819,3 +819,22 @@ class TestOneCallByItselfOnTheCard:
         assert "NO TOOL" not in listed and "every 15m" not in listed
         assert "MOVES ONTO IT every watch of yours on that same call" in moving
         assert "ANYONE IN THE HOUSE" in moving
+
+
+class TestAReadingSentIn:
+    def test_the_layer_says_a_sender_can_push_its_own_number(self):
+        layer = prahari_link.prompt_text({"serving": True})
+        assert "pushed reading" in layer and "`pushed`: true and no check" in layer
+
+    def test_its_card_says_nothing_is_called_and_silence_is_told(self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            said = card(agent, "create_indriya", {"name": "guestroom-temp", "pushed": True,
+                                                  "thing": "the guestroom temperature"})
+        finally:
+            manager.shutdown()
+        assert said.startswith("New reading kept up to date: guestroom-temp")
+        assert "SENT IN by something outside" in said and "no call is made" in said
+        assert "expected at least every 1h" in said and "after three misses" in said
+        assert "NO TOOL" not in said and "every 15m" not in said
+        assert "What it keeps\n  the guestroom temperature" in said

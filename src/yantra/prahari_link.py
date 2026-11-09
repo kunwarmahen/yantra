@@ -296,7 +296,9 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "(the preview and the answer say so: tell the person). Watches that already "
         "make the call themselves move onto it only on the person's yes: "
         "`create_indriya` with `from_watch` (and `move`), or `update_watch` with "
-        "`sense`.",
+        "`sense`. A number that something can send itself (a Home Assistant "
+        "sensor, a script) is a pushed reading: `create_indriya` with `pushed`: "
+        "true and no check; give the person the address its answer has.",
         seen_at,
     ]
     if readings:
@@ -498,13 +500,19 @@ def explain_indriya(verb: str, args: dict[str, Any], *, registry: Any,
     check = args.get("check") if isinstance(args.get("check"), dict) else {}
     source = str(args.get("from_watch") or "").strip()
     every = str(args.get("every") or ("15m" if verb == "create_indriya" and not source
-                                      else ""))
+                                      and not args.get("pushed") else ""))
     lines = [f"New reading kept up to date: {name}" if verb == "create_indriya"
              else f"Change the reading {name}"]
     if found:
         lines.append(f"  now: {found}")
     lines.append("")
-    if source and verb == "create_indriya":
+    if args.get("pushed") and verb == "create_indriya":
+        lines += ["Where its value comes from",
+                  "  SENT IN by something outside (Home Assistant, a script), with your "
+                  "inlet key: no call is made",
+                  f"  a value expected at least every {every or '1h'}; if none comes, its "
+                  "watches are told, and after three misses it pauses"]
+    elif source and verb == "create_indriya":
         lines += ["What it reads, with no model",
                   f"  the very call watch {source} makes, with its pick, "
                   + (f"every {every}" if every else "as often as that watch looks")]

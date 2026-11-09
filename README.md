@@ -993,6 +993,10 @@ fresh one (`max_age`), and Prahari reads again at most once in five
 minutes. A watch it offers on a call a reading already makes goes by
 that reading, and the card says so in capitals; moving older watches
 onto one has its own card and waits for your yes (Prahari's notes/07).
+A number something can send itself (a Home Assistant sensor) is a
+pushed reading: its card says nothing is called and that silence will
+be told, and the agent hands you the address to send to (Prahari's
+notes/08).
 Trusting Prahari's reads by exact name (`trusted_reads`) needs those two
 names as well; naming the server (`prahari`) covers them.
 

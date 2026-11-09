@@ -2747,7 +2747,10 @@ function renderIndriyas(body) {
     const tags = [];
     // its sentence already says when it is shared; say whose when not theirs
     if (!i.mine) tags.push(`${esc(i.owner)}'s`);
-    if (i.state === "active" && i.next_at) tags.push("next " + esc(clockTime(i.next_at)));
+    if (i.state === "active" && i.next_at) {
+      tags.push((i.pushed ? "expected by " : "next ") + esc(clockTime(i.next_at)));
+    }
+    if (i.pushed) tags.push("sent in, not read");
     const sensed = (i.sensed_by || []).map((w) => esc(w.name)).join(", ");
     const bad = i.last_reading && i.last_reading.outcome !== "read" ? i.last_reading : null;
     main.innerHTML = `<div class="conn-title">${esc(i.name)}: <b>${i.read_at
@@ -2767,7 +2770,8 @@ function renderIndriyas(body) {
         b.onclick = fn;
         actions.append(b);
       };
-      if (i.state === "active") button("read now", "", () => indriyaAct(i.name, "look"));
+      // a pushed one has nothing to read: it waits for its sender
+      if (i.state === "active" && !i.pushed) button("read now", "", () => indriyaAct(i.name, "look"));
       if (i.state === "active") button("pause", "", () => indriyaAct(i.name, "pause"));
       else button("resume", "primary", () => indriyaAct(i.name, "resume"));
     }
