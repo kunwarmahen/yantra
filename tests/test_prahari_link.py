@@ -834,6 +834,16 @@ class TestOneCallByItselfOnTheCard:
         assert "moves onto the reading outside-temp: it stops making its own call" in said
         assert "memory starts over" not in said
 
+    def test_moving_a_watch_back_to_its_own_call_says_so(self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            said = card(agent, "update_watch", {"id": "w-1", "look_itself": True})
+        finally:
+            manager.shutdown()
+        assert "goes back to making its reading's call itself" in said
+        assert "the reading may slow back down" in said
+        assert "memory starts over" not in said
+
     def test_a_reading_made_from_a_watch_says_whether_others_move(self, fake, tmp_path):
         _, agent, manager, _ = start(fake[0], tmp_path)
         try:

@@ -297,9 +297,11 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "(the preview and the answer say so: tell the person). Watches that already "
         "make the call themselves move onto it only on the person's yes: "
         "`create_indriya` with `from_watch` (and `move`), or `update_watch` with "
-        "`sense`. A number that something can send itself (a Home Assistant "
-        "sensor, a script) is a pushed reading: `create_indriya` with `pushed`: "
-        "true and no check; give the person the address its answer has. A reading "
+        "`sense`; `update_watch` with `look_itself`: true moves one back to its own "
+        "call (the person's own reading only). A number that something can send "
+        "itself (a Home Assistant sensor, a script) is a pushed reading: "
+        "`create_indriya` with `pushed`: true and no check; give the person the "
+        "address its answer has. A reading "
         "somebody already wrote (the outside temperature for a place, a coin's price) "
         "is a template: `mcp__prahari__indriya_templates`, then "
         "`install_indriya_template` with its blanks filled, on the person's yes.",
@@ -607,6 +609,10 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
         lines.append(f"  moves onto the reading {args['sense']}: it stops making its own "
                      "call and decides on each of that reading's readings (what it "
                      "remembered is kept when the reading makes the same call)")
+    if verb == "update_watch" and args.get("look_itself"):
+        lines.append("  goes back to making its reading's call itself, at the pace it "
+                     "asked for (what it remembered is kept); the reading may slow "
+                     "back down")
     if verb == "update_watch":
         for key in ("name", "asked", "thing", "check", "pick", "when", "every", "wake",
                     "renew", "then", "max_per_day", "starts", "ends", "stop", "keep"):

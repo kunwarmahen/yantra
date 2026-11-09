@@ -173,7 +173,7 @@ temperature in °F*) takes the second guess away.
 - ~~**A read that asks for fresh.**~~ `read_indriya` takes `max_age`,
   and the layer says to give it when the kept value is too old for the
   question. Prahari reads again first, never within five minutes of the
-  last reading (Prahari's notes/07). A local model asked *"it has to be
+  last reading, or the site's floor (Prahari's notes/07, 12). A local model asked *"it has to be
   current"* gave `max_age: "5m"` on its own.
 - **Readings for a run nobody watches.** An unattended run gets no
   Prahari at all, as before ([note 140](140-a-watch-offered.md)).

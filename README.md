@@ -990,9 +990,11 @@ call and whether it only reads, and in capitals when the whole house may
 read its value ([notes/154](notes/154-a-reading-the-model-knows.md)).
 When the kept value is too old for the question, the model asks for a
 fresh one (`max_age`), and Prahari reads again at most once in five
-minutes. A watch it offers on a call a reading already makes goes by
+minutes (or the site's floor). A watch it offers on a call a reading already makes goes by
 that reading, and the card says so in capitals; moving older watches
-onto one has its own card and waits for your yes (Prahari's notes/07).
+onto one has its own card and waits for your yes (Prahari's notes/07),
+and so does moving one back to its own call (`look_itself`), which says
+the reading may slow back down (Prahari's notes/12).
 A number something can send itself (a Home Assistant sensor) is a
 pushed reading: its card says nothing is called and that silence will
 be told, and the agent hands you the address to send to (Prahari's
@@ -1030,7 +1032,10 @@ they saw** ([notes/147](notes/147-the-watches-on-the-page.md)). Under
 the watches, the **readings** (indriyas): each value with its age, what
 it reads, which watches sense it, and **read now** and **pause** for
 your own, and **readings**: each one, how it came, and what every watch on it
-decided, opening on why (Prahari's notes/09). A watch that senses one
+decided, opening on why (Prahari's notes/09); a value sent in with its
+own time says *measured …*, and decisions on readings from before
+looks kept which one they judged say *matched by time* (Prahari's
+notes/12). A watch that senses one
 says *senses outside-temp* and has no
 *look now* or *every* of its own
 ([notes/154](notes/154-a-reading-the-model-knows.md#on-the-page)).
