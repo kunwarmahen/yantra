@@ -51,7 +51,7 @@ from importlib.util import find_spec
 
 import httpx
 
-from yantra import prahari_link, samay_link, setu_link, sparsh_link
+from yantra import prahari_link, samay_link, setu_link, sparsh_link, vidhi_link
 from yantra.config import (default_context_window, default_model, guess_provider,
                            load_settings)
 from yantra.errors import ConfigError
@@ -165,6 +165,19 @@ def _prahari(problems: list[str]) -> dict:
     return {"found": True, "program": program, "serving": bool(data.get("serving"))}
 
 
+def _vidhi(problems: list[str]) -> dict:
+    """Would a session find Vidhi, and is it running routines?"""
+    try:
+        found = vidhi_link.load(*vidhi_link.resolve_mode(None))
+    except vidhi_link.VidhiLinkError as exc:
+        problems.append(f"vidhi: {exc}")
+        return {"found": False, "program": None, "serving": False}
+    if found is None:
+        return {"found": False, "program": None, "serving": False}
+    data, program = found
+    return {"found": True, "program": program, "serving": bool(data.get("serving"))}
+
+
 def _sparsh(problems: list[str]) -> dict:
     """Would a session find Sparsh, and which phones can it use now?"""
     mode, path = sparsh_link.resolve_mode(None)
@@ -226,6 +239,7 @@ def report() -> dict:
         "setu": _setu(problems),
         "samay": _samay(problems),
         "prahari": _prahari(problems),
+        "vidhi": _vidhi(problems),
         "sparsh": _sparsh(problems),
         "problems": problems,
     }
@@ -254,6 +268,9 @@ def lines(data: dict) -> list[str]:
     prahari = data.get("prahari") or {"found": False}
     out.append(("prahari: " + ("watching" if prahari["serving"] else "not running")
                 + f" ({prahari['program']})") if prahari["found"] else "prahari: not found")
+    vidhi = data.get("vidhi") or {"found": False}
+    out.append(("vidhi: " + ("running routines" if vidhi["serving"] else "not running")
+                + f" ({vidhi['program']})") if vidhi["found"] else "vidhi: not found")
     sparsh = data["sparsh"]
     out.append(("sparsh: " + (f"phone {', '.join(sparsh['phones'])}" if sparsh["phones"]
                               else "no phone attached")

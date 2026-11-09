@@ -1035,6 +1035,30 @@ says *senses outside-temp* and has no
 *look now* or *every* of its own
 ([notes/154](notes/154-a-reading-the-model-knows.md#on-the-page)).
 
+**Your routines, through Vidhi.** [Vidhi](https://github.com/kunwarmahen/vidhi)
+keeps routines a person drew once on its page: *the weather, my unread
+mail and the headlines, fetched side by side and written into one morning
+brief*, or *look up a price, and if it's under my line ask me before you
+plan*. When `vidhi` is on `PATH`, Yantra starts its tools (`vidhi mcp
+--for local`) and a `routines` prompt layer names the person's routines,
+so *"do my morning thing"* finds `morning-brief`:
+
+```
+vidhi: 7 tool(s), 1 routine(s); it is running -- /home/you/vidhi/.venv/bin/vidhi
+```
+
+The agent **runs** one (`run_routine`) or **installs** a ready one with its
+blanks filled (`install_template`); it never writes a routine's steps,
+because picking a name and filling a city is what a small local model
+does well and writing a graph isn't. Each is a write, and its card lists
+every call the routine makes, every question to the model, whether a step
+runs the agent with its tools, what a run costs, and the inputs it runs
+with. Asking Samay for a schedule (`routine` on `create_schedule`) or
+Prahari for a watch (`routine` on `create_watch`) starts one at a time or
+when something happens, and the watch card says *Then it starts your
+routine …*. `YANTRA_VIDHI` and `--vidhi`/`--no-vidhi` work as Prahari's
+do ([notes/155](notes/155-routines-run-by-name.md)).
+
 **Your phone, through Sparsh.** [Sparsh](https://github.com/kunwarmahen/sparsh)
 works an Android phone (or the emulator on this computer) through `adb`,
 or an iPhone once a Mac has signed its helper app (Sparsh's
@@ -3029,6 +3053,12 @@ src/yantra/
 │                   (never their values; `prahari indriya list --as`), the
 │                   indriya cards, and the panel's readings with read now,
 │                   pause and resume ([notes/154](notes/154-a-reading-the-model-knows.md))
+├── vidhi_link.py   the person's routines: Vidhi found by `vidhi status --json`
+│                   (vidhi.status.v1), its tools started `--for local`,
+│                   skipped when unattended; run and install cards that
+│                   list everything a routine touches, and a `routines`
+│                   prompt layer naming them, never what a run found
+│                   ([notes/155](notes/155-routines-run-by-name.md))
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and

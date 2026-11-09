@@ -427,6 +427,11 @@ def explain_create(args: dict[str, Any], *, registry: Any, setu: Any = None,
             lines.append("  through Setu, it can read: " + "; ".join(reach))
         lines.append("  what the watch found is given to me as text from outside, "
                      "never as instructions")
+    elif str(args.get("routine") or "").strip():
+        lines += ["Then it starts your routine " + str(args["routine"]).strip()
+                  + " (Vidhi)",
+                  "  as you, with what it saw as the routine's input found; the "
+                  "routine does what its own card says, and tells you"]
     else:
         lines += ["Then", "  you get a line saying what it saw; no model is asked"]
     most = args.get("max_per_day") or 10

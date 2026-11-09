@@ -378,6 +378,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "program. Also YANTRA_PRAHARI=auto|on|off|PATH")
     parser.add_argument("--no-prahari", action="store_const", const="off", dest="prahari",
                         help="do not look for Prahari this session")
+    parser.add_argument("--vidhi", nargs="?", const="on", default=None, metavar="PATH",
+                        dest="vidhi",
+                        help="let the agent run your routines and install ready ones, "
+                             "through Vidhi: found automatically when `vidhi` is on "
+                             "PATH; this flag errors if it cannot be found, and PATH "
+                             "names the vidhi program. Also YANTRA_VIDHI=auto|on|off|PATH")
+    parser.add_argument("--no-vidhi", action="store_const", const="off", dest="vidhi",
+                        help="do not look for Vidhi this session")
     parser.add_argument("--sparsh", nargs="?", const="on", default=None, metavar="PATH",
                         dest="sparsh",
                         help="let the agent work your Android phone (or the emulator) "
@@ -2291,6 +2299,42 @@ def _connect_prahari(args, mcp_manager, agent, console: Console,
     return None
 
 
+def _connect_vidhi(args, mcp_manager, agent, console: Console,
+                   spec=None) -> int | None:
+    """Start Vidhi's tools for the person at this computer (vidhi_link.py).
+    Prahari's shape: an exit code only when Vidhi was ASKED for and could
+    not be used; a run nobody watches gets none."""
+    from yantra import vidhi_link
+
+    mode, path = vidhi_link.resolve_mode(getattr(args, "vidhi", None))
+    agent.vidhi = None
+    if mode == "off" or is_unattended():
+        return None
+    try:
+        found = vidhi_link.load(mode, path)
+    except vidhi_link.VidhiLinkError as exc:
+        if mode == "on":
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        console.print(f"[yellow]vidhi: {exc}[/yellow]")
+        return None
+    if found is None:
+        return None
+    data, program = found
+    vidhi = vidhi_link.Vidhi(
+        mode=mode, path=path, data=data, program=program,
+        agent=str(spec.root) if spec is not None and spec.root else "")
+    try:
+        count = vidhi.connect(mcp_manager, agent)
+    except (MCPError, vidhi_link.VidhiLinkError) as exc:
+        vidhi.error = str(exc)
+        console.print(f"[yellow]vidhi: tools unavailable: {exc}[/yellow]")
+        return 2 if mode == "on" else None
+    agent.vidhi = vidhi
+    console.print(f"[dim]{vidhi_link.announce(data, count, program)}[/dim]")
+    return None
+
+
 #: Set by Samay for a scheduled run that works the phone (its runners.py).
 PHONE_RUN = "YANTRA_PHONE_RUN"
 #: Of the phones Sparsh names, the one this session works (Samay sets it
@@ -3290,6 +3334,10 @@ def main(argv: list[str] | None = None) -> int:
         # Telling the person when something happens, through Prahari --
         # after Setu too, for the same reason: its card names the accounts.
         if _connect_prahari(args, mcp_manager, agent, console, spec) is not None:
+            return 2
+
+        # The person's routines, through Vidhi: run one, install a ready one.
+        if _connect_vidhi(args, mcp_manager, agent, console, spec) is not None:
             return 2
 
         _connect_package_mcp(spec.mcp, mcp_manager, console)
