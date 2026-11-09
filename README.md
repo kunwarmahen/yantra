@@ -347,7 +347,9 @@ agent what you did. A `start` lesson doesn't see steps done by hand.
 `/learn stop` (or `/learn clear`) drops it ([notes/129](notes/129-taught-step-by-step.md)).
 A skill taught on a phone opens its app by name, so it works on the
 other phone too, and says which phone it was taught on
-([notes/133](notes/133-taught-once-for-both-phones.md)). `--learn off` stops the offers; `--learn auto` saves without
+([notes/133](notes/133-taught-once-for-both-phones.md)); its first run on the
+other phone adds that phone's own section (`## On an Android phone`), the
+taught steps kept as they were ([notes/156](notes/156-each-phone-its-own-way.md)). `--learn off` stops the offers; `--learn auto` saves without
 asking, for unattended runs only. `/skills` shows each learned skill's
 record (`worked 3 · failed 0 · last ok …`), counted by Yantra from what
 happened, never by the model. Why the write-up runs in a fresh, small
@@ -2877,7 +2879,11 @@ src/yantra/
 │                   tool), not a look-around `ls` that exited 1, nor a
 │                   call the model got wrong and then right (an argument
 │                   the tool doesn't take, fixed on the next call)
-│                   ([notes/106](notes/106-what-the-recipe-leaves-out.md))
+│                   ([notes/106](notes/106-what-the-recipe-leaves-out.md)).
+│                   A phone skill's first run on the other kind of phone
+│                   is written up as that phone's own section, never over
+│                   the taught steps; the phones it covers are read from
+│                   its text ([notes/156](notes/156-each-phone-its-own-way.md))
 │                   lesson.py: a job TAUGHT one step per message, kept as
 │                   one skill -- /learn start opens it (an opening telling
 │                   the agent to do only the step it's told), every turn

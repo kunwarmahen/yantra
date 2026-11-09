@@ -86,7 +86,9 @@ YOURS_FOOTER = (
     "Skills marked [yours] are how THIS person does that job: they taught or "
     "approved it. When one fits what they ask, load it and follow it instead "
     "of finding another way (a website, a search, other tools) -- even when "
-    "they don't say where or how."
+    "they don't say where or how. A phone skill may have a section for the other "
+    "kind of phone (\"## On an Android phone\"): on that phone, its steps take "
+    "the place of the ones they name."
 )
 
 NAMES_ONLY_FOOTER = (

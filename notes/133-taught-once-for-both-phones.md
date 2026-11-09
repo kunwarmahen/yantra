@@ -157,9 +157,9 @@ one person's only).
 * **A skill taught on one phone, run on the other, for real.** The
   write-up now writes for both. Nobody has yet taught a skill on the
   iPhone and asked for it with the Nexus plugged in.
-* **Steps that differ.** Only opening the app is made phone-free. A
-  screen that differs inside the app (a menu in another place) is left
-  to the line under the title and the next run's check of each screen.
+* ~~**Steps that differ.**~~ The first run on the other phone writes
+  that phone's own section, the taught steps kept word for word
+  ([note 156](156-each-phone-its-own-way.md)).
 * ~~**Both phones at once.**~~ With both ready, the lesson takes the
   phone its steps named, and the layer's list says its kind
   ([note 134](134-several-phones-by-name.md)).

@@ -76,6 +76,17 @@ and the streak cleared. Three failures in a row with nothing to repair
 from set a recipe aside (loader.STALE_AFTER); the next fresh solve is
 told its name, and replaces it.
 
+A PHONE SKILL KEEPS EACH PHONE'S WAY ([notes/156](../../notes/156-each-phone-its-own-way.md)).
+A skill taught on an iPhone names the iPhone's screens; inside an app the
+Android phone may put a menu somewhere else. Repaired the usual way, a
+run on the other phone would write the iPhone's steps over, and the next
+run on the iPhone would fail and write them back. So the phones a skill
+covers are read from its own text (``phone_kinds``: the *Taught on* line
+and any ``## On an Android phone`` section), and a run on a phone it
+doesn't cover yet -- worked, or failed and finished another way -- is
+written up as THAT PHONE'S SECTION, the taught steps kept word for word.
+Once per phone: the section is how the next run knows it is covered.
+
 BEHIND THE PERSON'S BACK, OR NOT AT ALL. A page looks at the turn after
 it has handed the input back, not before: the write-up is a whole model
 call, and on a local model it can take longer than the answer did. Run
@@ -280,6 +291,46 @@ def used_skill(step: Step, skills: Any) -> Skill | None:
         return skills.get(str(step.arguments.get("name", ""))) if step.ok else None
     return next((s for s in skills if s.tool_name and s.tool_name == step.name),
                 None)
+
+
+_TAUGHT_ON = re.compile(r"\btaught on an? (iphone|android phone|android)\b", re.I)
+_ON_PHONE = re.compile(r"^#{1,4}\s*on an? (iphone|android phone|android)\b", re.I | re.M)
+
+
+def _kind(word: str) -> str:
+    return "iPhone" if word.lower() == "iphone" else "Android phone"
+
+
+def taught_kind(text: str) -> str:
+    """The phone a skill's steps were taught on, from its *Taught on* line:
+    "iPhone", "Android phone", or "" (not a phone skill, or never said)."""
+    found = _TAUGHT_ON.search(text or "")
+    return _kind(found.group(1)) if found else ""
+
+
+def phone_kinds(text: str) -> set[str]:
+    """Every phone a skill has steps for: the one it was taught on and
+    each ``## On an Android phone`` section added since."""
+    kinds = {_kind(m.group(1)) for m in _ON_PHONE.finditer(text or "")}
+    taught = taught_kind(text)
+    return kinds | ({taught} if taught else set())
+
+
+def _article(kind: str) -> str:
+    return "an" if kind[:1].lower() in "aeiou" else "a"
+
+
+def run_phone(agent: Any, steps: list[Step]) -> str:
+    """The kind of phone this turn's steps worked: the named phone a step
+    gave, or the one phone the agent works. "" when it can't be told."""
+    from yantra.sparsh_link import phone_kind
+
+    named = next((str(s.arguments.get("phone")) for s in steps
+                  if s.arguments.get("phone")), "")
+    try:
+        return phone_kind(agent, named)
+    except Exception:
+        return ""
 
 
 def own_steps(skill: Skill, steps: list[Step]) -> list[Step] | None:
@@ -609,6 +660,19 @@ replaces it:
 {names}
 """
 
+#: Added to an update when the skill was followed on a phone it doesn't
+#: cover yet: that phone's way is a section of its own, never a rewrite
+#: of the phone it was taught on.
+PHONE_VARIANT = """\
+THIS RUN WAS ON {kind}. The saved skill was taught on {taught}, and has \
+no steps for {kind} yet. Do not change the steps for {taught}: copy them \
+word for word. Add one section at the end headed "## On {article} {kind}" \
+with the steps as this run did them, where they differ from the steps \
+above (name the step each one replaces). If every step went as written, \
+the section says so in one line ("The same steps work as written."). \
+Never reply "VERDICT: skip" because the steps were the same: the section \
+is how the next run knows this phone was checked."""
+
 DECIDE_ASKED = """\
 First decide. Reply "VERDICT: skip" if either of these is false:
   1. It worked: the steps show the task was actually done, not just tried.
@@ -638,7 +702,8 @@ an iPhone, and open_app finds the app on either.
 - If TAUGHT ON names the phone, say so in one line under the title \
 ("Taught on an iPhone; on an Android phone the screens may differ.") \
 and name a step that is that phone's own, such as an iPhone swiping back \
-or an Android Back key.
+or an Android Back key. The other phone's steps are added later, in a \
+section of their own, the first time it is run there.
 - A step that waited for the person's yes (a hold) still waits for it \
 next time: write it as a step that asks.
 - Write no script: a phone is worked one step at a time.
@@ -942,6 +1007,9 @@ class Learner:
         self.last_reason = ""
         #: How many facts the last write-up handed to memory.
         self.facts_found = 0
+        #: A phone skill followed on a phone it has no steps for yet, by
+        #: the last turn: (name, kind, taught kind, worked), or None.
+        self.other_phone: tuple[str, str, str, bool] | None = None
         #: Set while a look runs in the background: says the person wants
         #: the agent back. None when the person is waiting on the look.
         self._stop: Callable[[], bool] | None = None
@@ -965,6 +1033,7 @@ class Learner:
             return []
         refused = set(getattr(self.agent, "turn_refusals", {}) or {})
         counted: list[tuple[str, bool]] = []
+        self.other_phone = None
         for index, step in enumerate(turn.steps):
             skill = used_skill(step, skills)
             if skill is None or not skill.is_learned:
@@ -986,6 +1055,11 @@ class Learner:
             except (OSError, SkillError):
                 continue   # a counter must never cost the answer it follows
             counted.append((skill.name, worked))
+            kind = run_phone(self.agent, after)
+            text = _read(skill.path)
+            if (kind and taught_kind(text) and kind not in phone_kinds(text)
+                    and self.other_phone is None):
+                self.other_phone = (skill.name, kind, taught_kind(text), worked)
         if counted:
             skills.reload()
             self._report_uses(counted)
@@ -1061,6 +1135,9 @@ class Learner:
             turn = current_turn(self.agent)
             repairs, failure = self._repair_target(turn)
             reason = self.last_reason
+            variant = self._phone_variant(repairs, failure)
+            if variant is not None:
+                repairs, failure = variant
         if repairs is None and failure:
             self.last_skip = failure
             return None
@@ -1078,12 +1155,26 @@ class Learner:
             return None
 
         found: set[str] = set()
+        other = self.other_phone if (repairs is not None and self.other_phone
+                                     and self.other_phone[0] == repairs.name) else None
         if repairs is not None:
             prompt = UPDATE_PROMPT.format(
                 name=repairs.name, saved=scrub(_saved_text(repairs), found),
                 connectors=self._connectors_hint(), digest=digest(turn, found))
-            say(f"{repairs.name} failed this time; seeing whether it needs "
-                f"updating")
+            if other is not None:
+                _, kind, taught, worked = other
+                if worked:
+                    prompt = prompt.replace(
+                        "and a step failed. The task was then finished another way. "
+                        "Update the skill so the next run follows the way that worked.",
+                        "on a phone it had no steps for yet, and it worked.")
+                prompt += "\n" + PHONE_VARIANT.format(kind=kind, taught=taught,
+                                                      article=_article(kind))
+                say(f"{repairs.name} ran on the {kind} for the first time; "
+                    f"writing down that phone's way")
+            else:
+                say(f"{repairs.name} failed this time; seeing whether it needs "
+                    f"updating")
         else:
             prompt = DISTIL_PROMPT.format(
                 decide=(DECIDE_LESSON if lesson is not None
@@ -1228,6 +1319,18 @@ class Learner:
                           f"and the task was not finished another way -- "
                           f"there is nothing to update it from")
         return skill, ""
+
+    def _phone_variant(self, repairs: Skill | None,
+                       failure: str) -> tuple[Skill, str] | None:
+        """A phone skill that WORKED on a phone it has no steps for yet:
+        (skill, "") so its write-up adds that phone's section. A failed
+        one is already a repair, and the repair is told the same."""
+        if repairs is not None or self.other_phone is None:
+            return None
+        name, _, _, worked = self.other_phone
+        skills = getattr(self.agent, "skills", None)
+        skill = skills.get(name) if skills is not None and worked else None
+        return (skill, "") if skill is not None else None
 
     def _tool_names(self) -> dict[str, str]:
         """Promoted tool name -> its skill's name, for this session."""
