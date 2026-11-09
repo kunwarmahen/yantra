@@ -2453,7 +2453,8 @@ function renderSchedules() {
    nothing asks -- the person is the one pressing. A look started here is
    not waited for; it shows in the watch's looks when it is done. */
 
-const watch = { data: null, open: new Set(), looks: {}, form: null, indriyas: [] };
+const watch = { data: null, open: new Set(), looks: {}, form: null, indriyas: [],
+                readingsOpen: new Set(), readings: {} };
 
 $("#chip-watch").onclick = openWatchPanel;
 $("#chip-seen").onclick = openWatchPanel;
@@ -2571,6 +2572,7 @@ async function loadWatches(said) {
   // the readings watches sense; an older Prahari has none, and that is no error
   const got = await fetch("/api/indriyas").catch(() => null);
   watch.indriyas = got && got.ok ? (await got.json()).indriyas || [] : [];
+  for (const name of watch.readingsOpen) await loadReadings(name);
   $("#watch-count").textContent = `${data.counts.active || 0} watching`;
   for (const id of watch.open) await loadLooks(id);
   renderWatches();
@@ -2722,6 +2724,25 @@ function renderWatches() {
    it reads, who senses it; the person's own get read now (not waited for)
    and pause. A house reading someone else keeps is theirs to change. */
 
+async function loadReadings(name) {
+  const res = await fetch(`/api/indriyas/${encodeURIComponent(name)}/readings`);
+  watch.readings[name] = res.ok ? (await res.json()).readings || [] : [];
+}
+
+/* One reading in full: how it came, why, what came in, and what each
+   watch on it decided -- the indriya's answer to "what happened?". */
+function readingInFull(r) {
+  const decided = (r.decided || []).map((d) => `<li><b>${esc(d.name)}</b>: ${esc(d.outcome)}`
+    + `${d.notified ? " · told you" : ""}${d.why ? `<div class="conn-sub">${esc(d.why)}</div>` : ""}</li>`);
+  if (r.others) decided.push(`<li>and ${r.others} of other people's watches</li>`);
+  return `<div class="conn-sub">came: ${esc(r.came_words || r.came_by || "")}</div>
+    ${r.why ? `<div class="conn-sub">why: ${esc(r.why)}</div>` : ""}
+    ${r.detail && r.detail !== r.why ? `<div class="conn-sub conn-warn">${esc(r.detail)}</div>` : ""}
+    ${decided.length ? `<ul class="reading-decided">${decided.join("")}</ul>`
+      : `<div class="conn-sub">${r.came_by === "asked" ? "read on asking: no watch decides on these" : "no watch sensed it then"}</div>`}
+    ${r.said ? `<details><summary>what came in</summary><pre class="watch-tried">${esc(r.said)}</pre></details>` : ""}`;
+}
+
 async function indriyaAct(name, action) {
   const res = await fetch(`/api/indriyas/${encodeURIComponent(name)}/${action}`, { method: "POST" });
   const data = await res.json();
@@ -2762,20 +2783,35 @@ function renderIndriyas(body) {
       ${bad ? `<div class="conn-sub sched-last ${LOOK_TONE[bad.outcome] || ""}">last: ${esc(bad.outcome)} ${esc(clockTime(bad.at))} — ${esc(bad.why || "")}</div>` : ""}`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";
+    const button = (label, cls, fn) => {
+      const b = document.createElement("button");
+      b.className = `m-btn ${cls}`;
+      b.textContent = label;
+      b.onclick = fn;
+      actions.append(b);
+    };
+    // what happened, for anyone who may read it; the switches are the owner's
+    button(watch.readingsOpen.has(i.name) ? "hide readings" : "readings", "", async () => {
+      if (watch.readingsOpen.has(i.name)) watch.readingsOpen.delete(i.name);
+      else { watch.readingsOpen.add(i.name); await loadReadings(i.name); }
+      renderWatches();
+    });
     if (i.mine) {
-      const button = (label, cls, fn) => {
-        const b = document.createElement("button");
-        b.className = `m-btn ${cls}`;
-        b.textContent = label;
-        b.onclick = fn;
-        actions.append(b);
-      };
       // a pushed one has nothing to read: it waits for its sender
       if (i.state === "active" && !i.pushed) button("read now", "", () => indriyaAct(i.name, "look"));
       if (i.state === "active") button("pause", "", () => indriyaAct(i.name, "pause"));
       else button("resume", "primary", () => indriyaAct(i.name, "resume"));
     }
     row.append(dot, main, actions);
+    if (watch.readingsOpen.has(i.name)) {
+      const list = document.createElement("div");
+      list.className = "sched-runs";
+      const got = watch.readings[i.name] || [];
+      list.innerHTML = got.length
+        ? got.map((r) => `<details class="sched-run look-full"><summary><b class="${LOOK_TONE[r.outcome] || ""}">${esc(r.outcome)}</b> ${esc(clockTime(r.at))}${r.value ? " — " + esc(r.value) : ""} · ${esc(r.came_words || "")}${(r.decided || []).length ? " · " + r.decided.map((d) => `${esc(d.name)}: ${esc(d.outcome)}`).join(", ") : ""}</summary>${readingInFull(r)}</details>`).join("")
+        : '<div class="sched-run">no readings yet</div>';
+      row.append(list);
+    }
     body.append(row);
   }
 }

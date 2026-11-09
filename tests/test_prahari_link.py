@@ -127,6 +127,14 @@ FAKE_PRAHARI = """\
                                                     else "active"}}))
     elif args[:2] == ["indriya", "look"]:
         pass
+    elif args[:2] == ["indriya", "readings"]:
+        print(json.dumps([
+            {{"id": "r2", "at": "2026-11-09T14:00:00+00:00", "outcome": "read",
+              "value": "49.2", "came_by": "clock", "came_words": "on its clock",
+              "why": "Read 49.2", "detail": "", "said": "{{}}", "others": 1,
+              "decided": [{{"watch": "w-7", "name": "Heat the guestroom",
+                            "outcome": "fired", "why": "49.2 is below 60",
+                            "notified": True}}]}}]))
     elif args[0] == "mcp":
         TOOLS = [tool("preview_watch", True), tool("list_watches", True),
                  tool("create_watch", False), tool("update_watch", False),
@@ -838,3 +846,23 @@ class TestAReadingSentIn:
         assert "expected at least every 1h" in said and "after three misses" in said
         assert "NO TOOL" not in said and "every 15m" not in said
         assert "What it keeps\n  the guestroom temperature" in said
+
+
+class TestWhatHappenedToAReading:
+    def test_the_panel_asks_for_one_readings_history_as_the_person(self, fake, tmp_path):
+        manager, client = TestThePanel.served(None, fake[0], tmp_path)
+        try:
+            got = client.get("/api/indriyas/outside-temp/readings")
+            bad = client.get("/api/indriyas/--help/readings")
+        finally:
+            manager.shutdown()
+        [row] = got.json()["readings"]
+        assert row["decided"][0]["name"] == "Heat the guestroom" and row["others"] == 1
+        assert calls(fake[1])[-1][-4:] == ["readings", "outside-temp", "--limit=20", "--json"]
+        assert bad.status_code == 400 and "not a name" in bad.json()["detail"]
+
+    def test_someone_else_is_asked_as_themselves(self, fake):
+        data, program = prahari_link.load("on", str(fake[0]))
+        link = prahari_link.Prahari(mode="on", data=data, program=program, person="asha")
+        link.indriya_history("outside-temp", limit=5)
+        assert calls(fake[1])[-1][-3:] == ["--limit=5", "--as=asha", "--json"]

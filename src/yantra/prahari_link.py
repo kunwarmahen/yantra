@@ -758,6 +758,18 @@ class Prahari:
             raise
         return [c for c in found if isinstance(c, dict)] if isinstance(found, list) else []
 
+    def indriya_history(self, name: str, limit: int = 20) -> Any:
+        """One indriya's readings, newest first, each with what this
+        person's watches decided on it (``prahari indriya readings
+        --json``, asked as them: another person's watches are a count)."""
+        if not INDRIYA_NAME_RE.match(name or ""):
+            raise PrahariLinkError(f"which indriya? {name!r} is not a name")
+        argv = [*self._base(), "indriya", "readings", name,
+                f"--limit={max(1, min(int(limit), 100))}"]
+        if self.person != LOCAL:
+            argv.append(f"--as={self.person}")
+        return self._json(argv, "indriya readings")
+
     def indriya_act(self, name: str, action: str) -> Any:
         """The panel's switches on one of this person's indriyas: ``look``
         starts one reading and does not wait (a reading is a look, and may

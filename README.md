@@ -1029,7 +1029,9 @@ watches fired since you last looked, and the panel opens with **what
 they saw** ([notes/147](notes/147-the-watches-on-the-page.md)). Under
 the watches, the **readings** (indriyas): each value with its age, what
 it reads, which watches sense it, and **read now** and **pause** for
-your own. A watch that senses one says *senses outside-temp* and has no
+your own, and **readings**: each one, how it came, and what every watch on it
+decided, opening on why (Prahari's notes/09). A watch that senses one
+says *senses outside-temp* and has no
 *look now* or *every* of its own
 ([notes/154](notes/154-a-reading-the-model-knows.md#on-the-page)).
 

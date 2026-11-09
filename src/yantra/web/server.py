@@ -2408,6 +2408,18 @@ def make_app(session: WebSession, static_dir: Path | None = None,
                                    if prahari.person == LOCAL else set())
         return {"indriyas": [{**c, "mine": c.get("owner") in home} for c in cards]}
 
+    @app.get("/api/indriyas/{name}/readings")
+    def indriyas_history(name: str) -> dict[str, Any]:
+        """What happened: each reading, how it came, and what every watch on
+        it decided -- the readings fold, as looks are a watch's."""
+        from yantra.prahari_link import PrahariLinkError
+        try:
+            return {"readings": require_prahari().indriya_history(name)}
+        except PrahariLinkError as exc:
+            said = str(exc)
+            raise HTTPException(404 if "no indriya" in said else 400,
+                                f"prahari: {said}") from None
+
     @app.post("/api/indriyas/{name}/{action}")
     def indriyas_act(name: str, action: str) -> dict[str, Any]:
         """Read now (not waited for), pause, resume -- the person's own hand."""
