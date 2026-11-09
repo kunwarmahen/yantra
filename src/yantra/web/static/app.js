@@ -2513,7 +2513,7 @@ function markSeenSeen() {
 }
 
 const LOOK_TONE = { failed: "bad", broken: "bad", needs_person: "warn", limited: "warn",
-                    interrupted: "warn" };
+                    interrupted: "warn", late: "warn" };
 const CAME_BY = { clock: "", now: "looked now", inlet: "heard at the inlet",
                   wake: "woken by a knock", renew: "kept its push alive" };
 
@@ -2733,9 +2733,13 @@ async function loadReadings(name) {
    watch on it decided -- the indriya's answer to "what happened?". */
 function readingInFull(r) {
   const decided = (r.decided || []).map((d) => `<li><b>${esc(d.name)}</b>: ${esc(d.outcome)}`
-    + `${d.notified ? " · told you" : ""}${d.why ? `<div class="conn-sub">${esc(d.why)}</div>` : ""}</li>`);
+    + `${d.notified ? " · told you" : ""}`
+    + `${d.matched_by_time ? ` · <span class="conn-sub" title="made before each look kept which reading it judged">matched by time</span>` : ""}`
+    + `${d.why ? `<div class="conn-sub">${esc(d.why)}</div>` : ""}</li>`);
   if (r.others) decided.push(`<li>and ${r.others} of other people's watches</li>`);
-  return `<div class="conn-sub">came: ${esc(r.came_words || r.came_by || "")}</div>
+  const measured = r.measured_at && r.measured_at !== r.at
+    ? ` · measured ${esc(clockTime(r.measured_at))}` : "";
+  return `<div class="conn-sub">came: ${esc(r.came_words || r.came_by || "")}${measured}</div>
     ${r.why ? `<div class="conn-sub">why: ${esc(r.why)}</div>` : ""}
     ${r.detail && r.detail !== r.why ? `<div class="conn-sub conn-warn">${esc(r.detail)}</div>` : ""}
     ${decided.length ? `<ul class="reading-decided">${decided.join("")}</ul>`
