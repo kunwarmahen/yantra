@@ -97,7 +97,8 @@ LOOKING = ("preview_watch",)
 #: makes the call (its mcp.py).
 READER_SAID = "Reading already kept:"
 #: Prahari's tools that make, mend or remove an indriya: each gets a card.
-INDRIYA_WRITES = ("create_indriya", "update_indriya", "delete_indriya")
+INDRIYA_WRITES = ("create_indriya", "update_indriya", "delete_indriya",
+                  "install_indriya_template")
 #: An indriya's name, as Prahari takes it: one short lowercase word.
 INDRIYA_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,39}$")
 #: How many readings the prompt names; past that, list_indriyas has them.
@@ -298,7 +299,10 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "`create_indriya` with `from_watch` (and `move`), or `update_watch` with "
         "`sense`. A number that something can send itself (a Home Assistant "
         "sensor, a script) is a pushed reading: `create_indriya` with `pushed`: "
-        "true and no check; give the person the address its answer has.",
+        "true and no check; give the person the address its answer has. A reading "
+        "somebody already wrote (the outside temperature for a place, a coin's price) "
+        "is a template: `mcp__prahari__indriya_templates`, then "
+        "`install_indriya_template` with its blanks filled, on the person's yes.",
         seen_at,
     ]
     if readings:
@@ -495,6 +499,8 @@ def explain_indriya(verb: str, args: dict[str, Any], *, registry: Any,
     card uses. AND WHO MAY READ IT: ``house`` lets anyone's watches and
     agents in the house read its value (never call anything as this
     person), and a yes to that should be a yes with eyes open."""
+    if verb == "install_indriya_template":
+        return _explain_template(args, listing)
     name = str(args.get("name") or "?").strip()
     found = next((line for line in listing.splitlines()
                   if line.startswith(f"{name}: ")), "")
@@ -553,6 +559,33 @@ def explain_indriya(verb: str, args: dict[str, Any], *, registry: Any,
     if verb == "update_indriya" and {"check", "pick"} & set(args):
         lines.append("  the watches that sense it start over: their next look only learns")
     lines += ["", "It tells nobody anything: watches that sense it decide."]
+    return "\n".join(lines)
+
+
+def _explain_template(args: dict[str, Any], listing: str) -> str:
+    """The card for a reading made from a template: the template's own
+    line (what it calls, as ``indriya_templates`` says it), the blanks as
+    the agent filled them, and -- from a marketplace -- that it is made only
+    if a reviewer the person trusts signed it."""
+    template = str(args.get("template") or "?").strip()
+    name = str(args.get("name") or "").strip() or template
+    found = next((line for line in listing.splitlines()
+                  if line.startswith(f"{template}: ")), "")
+    lines = [f"New reading kept up to date: {name}",
+             f"  from the template {template}"
+             + (" in the marketplace: made only if a reviewer you trust signed it"
+                if args.get("from_market") else " that comes with Prahari"), ""]
+    lines += ["What it reads, with no model",
+              f"  {found.split(' -- ', 1)[-1] if found else 'as the template says'}"]
+    given = args.get("inputs") if isinstance(args.get("inputs"), dict) else {}
+    if given:
+        lines += ["Filled in with"] + [f"  {k} = {v}" for k, v in given.items()]
+    if args.get("every"):
+        lines += ["How often it reads", f"  every {args['every']}"]
+    lines += ["Who may read it",
+              "  ANYONE IN THE HOUSE: their watches and agents read its value (never "
+              "call anything as you)" if args.get("share") == "house" else "  only you",
+              "", "It tells nobody anything: watches that sense it decide."]
     return "\n".join(lines)
 
 
@@ -644,6 +677,11 @@ def explain(tool: Any, registry: Any, setu_of: Any, where: Any = None,
         return card
     if verb in INDRIYA_WRITES:
         def reading(args: dict[str, Any]) -> str:
+            if verb == "install_indriya_template":
+                listing, failed = ask("indriya_templates",
+                                      {"market": bool(args.get("from_market"))})
+                return explain_indriya(verb, args, registry=registry,
+                                       listing="" if failed else listing)
             listing, failed = ask("list_indriyas", {})
             watch_line = ""
             source = str(args.get("from_watch") or "").strip()

@@ -99,6 +99,16 @@ what it decides on: *the reading 'outside-temp' that Prahari already
 keeps; it makes no call of its own*. Its preview passes `sense` along,
 so the card's *now:* line is the reading's.
 
+**A reading from a template has a card too.** Prahari can make a reading
+from a template somebody already wrote, its blanks filled (Prahari's
+notes/11): `install_indriya_template`, after `indriya_templates` lists
+them. The layer's step 8 says to prefer one of those to writing a URL.
+Its card is the template's own line, *what it calls*, as
+`indriya_templates` says it; the blanks as the agent filled them
+(*Filled in with latitude = 35.79*); and, for one from a marketplace,
+*made only if a reviewer you trust signed it*. So the yes covers the
+call that will actually run, not a template's name.
+
 ## On the page
 
 The Watches panel lists the readings under the watches: the value in

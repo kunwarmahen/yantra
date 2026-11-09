@@ -140,7 +140,8 @@ FAKE_PRAHARI = """\
                  tool("create_watch", False), tool("update_watch", False),
                  tool("delete_watch", False), tool("list_indriyas", True),
                  tool("read_indriya", True), tool("create_indriya", False),
-                 tool("update_indriya", False), tool("delete_indriya", False)]
+                 tool("update_indriya", False), tool("delete_indriya", False),
+                 tool("indriya_templates", True), tool("install_indriya_template", False)]
         for line in sys.stdin:
             msg = json.loads(line)
             method, mid = msg.get("method"), msg.get("id")
@@ -166,7 +167,10 @@ FAKE_PRAHARI = """\
                                              else ""),
                          "list_watches": "w-1 [active] ALAB under 50: every 3 hours",
                          "list_indriyas": "outside-temp: 56.9 (4 min ago) -- reads the "
-                                          "outside temperature every 15 minutes"
+                                          "outside temperature every 15 minutes",
+                         "indriya_templates": "air-quality: Air quality (US AQI) -- calls "
+                                              "web_fetch {{\\"url\\": \\"https://aq.example/"
+                                              "[latitude]\\"}} every 1h, with no model"
                          }}.get(name, "done")
                 send({{"jsonrpc": "2.0", "id": mid, "result": {{
                     "content": [{{"type": "text", "text": text}}]}}}})
@@ -229,7 +233,7 @@ class TestFound:
             assert code is None and "mcp__prahari__create_watch" in agent.registry
             mcp_call = [c for c in calls(fake[1]) if "mcp" in c][0]
             assert mcp_call[-4:] == ["--for", "local", "--agent", str(tmp_path / "trader")]
-            assert "prahari: 10 tool(s), 2 active watch(es)" in out
+            assert "prahari: 12 tool(s), 2 active watch(es)" in out
             assert "NOT running" in out
             assert agent.prahari is not None
         finally:
@@ -709,6 +713,23 @@ class TestReadings:
         assert "Who may read it\n  only you" in said
         assert "watches that sense it decide" in said
         assert "ANYONE IN THE HOUSE" in house and "never call anything as you" in house
+
+    def test_a_reading_from_a_template_says_its_call_its_blanks_and_its_signer(
+            self, fake, tmp_path):
+        _, agent, manager, _ = start(fake[0], tmp_path)
+        try:
+            said = card(agent, "install_indriya_template", {
+                "template": "air-quality", "inputs": {"latitude": 35.79}})
+            market = card(agent, "install_indriya_template", {
+                "template": "air-quality", "from_market": True, "name": "aqi"})
+        finally:
+            manager.shutdown()
+        assert said.startswith("New reading kept up to date: air-quality\n"
+                               "  from the template air-quality that comes with Prahari")
+        assert 'calls web_fetch {"url": "https://aq.example/[latitude]"} every 1h' in said
+        assert "Filled in with\n  latitude = 35.79" in said
+        assert market.startswith("New reading kept up to date: aqi")
+        assert "made only if a reviewer you trust signed it" in market
 
     def test_a_change_says_the_reading_now_and_that_its_watches_start_over(
             self, fake, tmp_path):
