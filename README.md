@@ -873,7 +873,12 @@ its own: a package's asks and grants, recipes per account, and **open in
 its own tab**. A change on Setu's page tells Yantra, and the tools follow
 on the next message. A tab on another device, or a Setu too old for
 `serve --json`, gets the cards described above
-([notes/135](notes/135-setus-own-page-in-the-panel.md)).
+([notes/135](notes/135-setus-own-page-in-the-panel.md)). In Sarathi's
+containers the house names its own Setu page instead
+(`YANTRA_SETU_PAGE=http://127.0.0.1:8775/`), for the same folder: Yantra
+frames that one, for a tab here and, under the house's name, on its
+network, reading the page's key from Setu's folder
+([notes/135](notes/135-setus-own-page-in-the-panel.md#on-sarathis-road-the-houses-own-page)).
 
 **A sign-in the site refused.** Google expires a Testing app's sign-ins
 after seven days. Setu marks such a connection (`setu list` says
@@ -2976,7 +2981,9 @@ src/yantra/
 │                   reaches there ([notes/136](notes/136-a-sign-in-from-another-device.md));
 │                   never under a running turn ([notes/99](notes/99-the-connections-page.md)).
 │                   SetuPage: Setu's own page (`setu serve --json`) started
-│                   for the panel's frame, ended with Yantra
+│                   for the panel's frame, ended with Yantra; given_page:
+│                   the house's own (YANTRA_SETU_PAGE), its key read from
+│                   Setu's folder
 │                   ([notes/135](notes/135-setus-own-page-in-the-panel.md)).
 │                   A sign-in Setu marked expired: named with its command,
 │                   never started; the page checks Setu before each turn

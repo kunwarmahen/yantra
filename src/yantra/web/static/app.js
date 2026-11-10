@@ -3361,7 +3361,7 @@ async function openConnPanel() {
 // and only by a tab on this computer -- Setu's page listens there alone.
 async function loadSetuPage() {
   const d = conn.data;
-  if (conn.page || !d || !d.found || !d.local) return;
+  if (conn.page || !d || !d.found || !(d.local || d.page_given)) return;
   try {
     const res = await fetch("/api/connections/page");
     const out = await res.json();

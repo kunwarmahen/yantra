@@ -1004,6 +1004,61 @@ def test_a_tab_on_another_device_keeps_yantras_own_view(setu, tmp_path):
         manager.shutdown()
 
 
+def _house_page(monkeypatch, agent, tmp_path, token="a-key-of-sixteen-plus"):
+    """Sarathi's containers: Setu's page already running for this folder,
+    its key kept in the folder, its address named in the environment."""
+    folder = tmp_path / "setu-home"
+    folder.mkdir(parents=True, exist_ok=True)
+    if token:
+        (folder / "page.token").write_text(token + "\n")
+    monkeypatch.setenv("SETU_HOME", str(folder))
+    # no folder named on the session: $SETU_HOME is where Setu keeps it
+    monkeypatch.setattr(agent.setu, "home", None, raising=False)
+    monkeypatch.setenv(setu_link.ENV_GIVEN_PAGE, "http://127.0.0.1:8775/")
+    monkeypatch.delenv("SETU_PAGE_TOKEN", raising=False)
+
+
+def test_the_houses_own_setu_page_is_framed_for_a_tab_here(setu, tmp_path, monkeypatch):
+    session, agent, manager, client = served(tmp_path, setu.path)
+    try:
+        _house_page(monkeypatch, agent, tmp_path)
+        assert client.get("/api/connections").json()["page_given"] is True
+        page = client.get("/api/connections/page",
+                          headers={"host": "127.0.0.1:8321"}).json()
+        assert page == {"url": "http://127.0.0.1:8775/",
+                        "page_url": "http://127.0.0.1:8775/#token=a-key-of-sixteen-plus"}
+        assert _serve_calls(setu) == []           # no copy of its own
+    finally:
+        manager.shutdown()
+
+
+def test_the_houses_setu_page_reaches_a_tab_through_the_bridge_or_the_lan(
+        setu, tmp_path, monkeypatch):
+    # through Podman's bridge a tab here looks like another device; on the
+    # house's network the page is named as the tab named Yantra's
+    session, agent, manager, client = served(tmp_path, setu.path, local=False)
+    try:
+        _house_page(monkeypatch, agent, tmp_path)
+        page = client.get("/api/connections/page",
+                          headers={"host": "linux-al-ml-beast.singhs:8321"}).json()
+        assert page["url"] == "http://linux-al-ml-beast.singhs:8775/"
+        assert page["page_url"].endswith("#token=a-key-of-sixteen-plus")
+    finally:
+        manager.shutdown()
+
+
+def test_a_house_page_with_no_key_yet_says_so(setu, tmp_path, monkeypatch):
+    session, agent, manager, client = served(tmp_path, setu.path)
+    try:
+        _house_page(monkeypatch, agent, tmp_path, token="")
+        res = client.get("/api/connections/page")
+        assert res.status_code == 503, res.json()
+        assert "hasn't started yet" in res.json()["detail"]
+        assert _serve_calls(setu) == []
+    finally:
+        manager.shutdown()
+
+
 def test_a_new_address_for_this_page_starts_setus_again_naming_both(setu, tmp_path):
     from fastapi.testclient import TestClient
 

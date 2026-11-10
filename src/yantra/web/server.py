@@ -49,6 +49,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import queue
 import re
 import threading
@@ -1202,7 +1203,10 @@ class WebSession:
         base["recipes"] = recipes_by_connector(getattr(self.agent, "skills", None))
         base["scripts"] = self.scripts_contained()
         from yantra.setu_link import window_reaches_another_device
+        from yantra.setu_link import ENV_GIVEN_PAGE
         return {**base, "local": local,
+                # the house runs Setu's page and names it: any tab may frame it
+                "page_given": bool(os.environ.get(ENV_GIVEN_PAGE, "").strip()),
                 # a page on another device may still sign in: through
                 # Setu's streamed window, when its link opens over there
                 "window": window_reaches_another_device(),
@@ -2568,6 +2572,12 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         device's browser would take for itself. Plain ``def``: it may
         start a program."""
         setu = require_setu()
+        from yantra.setu_link import given_page
+        given = given_page(setu.home, req.url.hostname or "")
+        if given is not None:
+            if "error" in given:
+                raise HTTPException(503, given["error"])
+            return given
         if not is_local(req):
             raise HTTPException(403, "Setu's page opens on the computer running Yantra; "
                                      "this tab shows Yantra's own view of it")

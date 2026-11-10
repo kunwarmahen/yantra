@@ -50,7 +50,8 @@ else:
  "embed": ["http://127.0.0.1:8811", "http://localhost:8811"]}
 ```
 
-**A PAGE FOUND RUNNING IS NOT USED.** Something already answering on 8775
+**A PAGE FOUND RUNNING IS NOT USED** unless the house names it (below).
+Something already answering on 8775
 looks like the obvious thing to frame. On a computer running Sarathi,
 though, 8775 is Setu's container, which serves another folder and names
 no Yantra as its embedder. Yantra would show the wrong accounts, or an
@@ -133,14 +134,51 @@ own frame); Setu's `tests/test_page.py` (the one line, `--port 0`, the
 embedder in the CSP, stdin closing ends it, the message carries no
 name).
 
+## On Sarathi's road: the house's own page
+
+In Sarathi's containers none of the above could work. Yantra's page
+answers a browser on this computer through Podman's bridge, so the tab
+reads as another device (`local: False`), and a Setu page Yantra started
+inside its container would listen where no browser can reach. So that
+road kept the cards.
+
+There, though, Setu's page on 8775 serves the *same* folder: Sarathi
+gives Yantra's container and Setu's one Setu folder. So Sarathi says
+where it is, and Yantra frames that one instead of starting its own:
+
+```
+Environment=YANTRA_SETU_PAGE=http://127.0.0.1:8775/                        (Yantra's)
+Environment=SETU_PAGE_EMBED=http://127.0.0.1:8321 http://localhost:8321 \
+                            http://linux-al-ml-beast.singhs:8321           (Setu's)
+```
+
+**THE KEY IS READ, NEVER HANDED OVER.** Setu keeps its page's key in its
+folder (`page.token`), and Yantra reads it there, as Setu would
+(`$SETU_HOME`, then the default). Nothing secret is in either
+container's environment. With no key yet (Setu's page still starting),
+the panel says so and keeps the cards.
+
+**A TAB ON THE HOUSE'S NETWORK GETS IT UNDER THE SAME NAME.** Given as
+`127.0.0.1`, the address is rewritten to the name the tab reached Yantra
+by: a phone that opened `linux-al-ml-beast.singhs:8321` frames
+`linux-al-ml-beast.singhs:8775`, which Sarathi already publishes there
+for people's links. Setu's page names the house's address for Yantra as
+an embedder, so it allows the frame.
+
+Run on scratch ports (a Setu page on 8812 for a throwaway folder, a
+Yantra page on 8811 told `YANTRA_SETU_PAGE=http://127.0.0.1:8812/`):
+headless Chrome opened the panel and framed `http://127.0.0.1:8812/`,
+showing *Your connections* for that folder. No `setu serve --json` of
+Yantra's own was started. The first try found that Yantra looked for
+the key in the default folder and ignored `$SETU_HOME`. It now follows
+Setu's own order.
+
 ## What was deliberately not built
 
-* **Framing Setu's page for a tab on another device.** It would need
-  Setu's page on an address that device reaches, plus Yantra's address
-  on the house network as an embedder. Sarathi's Setu page already
-  listens there, for people's links, but it serves Sarathi's folder.
-  Mixing the two is a decision about which folder a phone sees, and the
-  cards answer the question meanwhile.
+* ~~**Framing Setu's page for a tab on another device.**~~ On Sarathi's
+  road, where it is the same folder: the house's own page, under the
+  name the tab used (above). A plain `yantra --web` tab elsewhere still
+  gets the cards.
 * **Removing Yantra's cards.** They are what a tab elsewhere sees. They
   stay, and they may fall behind Setu's page again. That is the cost of
   keeping the other-device tab working.

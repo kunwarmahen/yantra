@@ -1392,6 +1392,58 @@ def run_setu(program: str, *args: str, timeout: float = COMMAND_TIMEOUT,
     return done.returncode == 0, said
 
 
+#: The address of a Setu page already running for this session's Setu
+#: folder, that a browser reaches (``http://127.0.0.1:8775/``): Sarathi's
+#: containers set it, where Yantra's own copy could not be framed.
+ENV_GIVEN_PAGE = "YANTRA_SETU_PAGE"
+_LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+
+def given_page(home: str | None, asked_host: str = "") -> dict[str, Any] | None:
+    """THE HOUSE'S OWN SETU PAGE, WHEN IT NAMES ONE. In Sarathi's containers
+    Yantra's page answers a browser on this computer through Podman's
+    bridge, so it can't tell that tab is local, and a page it started
+    inside its container would listen where the browser can't reach.
+    Sarathi already runs Setu's page for the same folder, so it says where
+    (``$YANTRA_SETU_PAGE``) and lets this page frame it; Yantra frames that
+    one instead of starting its own.
+
+    THE KEY IS READ, NEVER HANDED OVER. Setu keeps its page's key in its
+    folder (``page.token``), which this container shares; nothing secret
+    rides in the environment. ``asked_host``: the name the tab reached
+    Yantra by -- a tab on the house's network gets Setu's page under the
+    same name, not 127.0.0.1, which on that device is the device itself.
+    None when no page is given, {"error": ...} when its key can't be read.
+    """
+    from urllib.parse import urlparse
+
+    base = os.environ.get(ENV_GIVEN_PAGE, "").strip()
+    if not base:
+        return None
+    parsed = urlparse(base)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return {"error": f"{ENV_GIVEN_PAGE} is not an address: {base!r}"}
+    host = parsed.hostname
+    if host in _LOOPBACK and asked_host and asked_host not in _LOOPBACK:
+        host = asked_host
+    shown = f"[{host}]" if ":" in host else host
+    url = f"{parsed.scheme}://{shown}{f':{parsed.port}' if parsed.port else ''}/"
+    token = os.environ.get("SETU_PAGE_TOKEN", "").strip()
+    if not token:
+        # Setu's own order: the session's folder, $SETU_HOME, then the default
+        state = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+        named = home or os.environ.get("SETU_HOME", "").strip()
+        folder = Path(named).expanduser() if named else Path(state) / "setu"
+        try:
+            token = (folder / "page.token").read_text().strip()
+        except OSError:
+            token = ""
+    if len(token) < 16:
+        return {"error": "Setu's page hasn't started yet (no key in its folder); "
+                         "try again in a moment"}
+    return {"url": url, "page_url": f"{url}#token={token}"}
+
+
 #: What ``setu serve --json`` prints first; another format is refused.
 PAGE_FORMAT = "setu-page/1"
 #: How long Setu's page may take to say where it is.
