@@ -405,6 +405,19 @@ def test_the_page_searches_reads_and_deletes(log):
     assert client.get("/api/chats", params={"q": "boiler"}).json()["rows"] == []
 
 
+def test_the_page_names_and_pins_one(log):
+    talked(log, "old", "the boiler pressure", "1.5 bar is right")
+    talked(log, "new", "dinner?", "pasta")
+    _, _, client = web(log, [])
+    assert client.post("/api/chats/old/name", json={"title": "Heating"}).json() == {
+        "named": "old", "title": "Heating"}
+    assert client.post("/api/chats/old/pin", json={"pinned": True}).json() == {"pinned": True}
+    [first, _] = client.get("/api/chats").json()["rows"]
+    assert (first["id"], first["title"], first["pinned"]) == ("old", "Heating", True)
+    assert client.post("/api/chats/gone/name", json={"title": "x"}).status_code == 404
+    assert client.post("/api/chats/old/pin", json={"pinned": "yes"}).status_code == 400
+
+
 def test_the_page_gives_one_as_a_markdown_file(log):
     talked(log, "old", "the boiler pressure", "1.5 bar is right")
     _, _, client = web(log, [])
@@ -530,3 +543,21 @@ def test_a_file_written_before_names_and_pins_gains_them(tmp_path):
     row = log.listed()[0]
     assert (row.title, row.roads, row.pinned) == ("old one", ("page",), False)
     assert log.pin("a") and log.rename("a", "kept")
+
+
+def test_chats_name_and_pin_from_the_terminal(log):
+    # the log could name and pin; only Dvara's page offered it
+    talked(log, "old", "boiler pressure?", "1.5 bar")
+    talked(log, "new", "what's for dinner?", "pasta")
+    repl, out = repl_with(log, ["/chats", "/chats name 2 The boiler", "/chats pin 2",
+                                "/chats", "/chats name 1", "/quit"], [])
+    repl.run()
+    rows = log.listed()
+    # pinned, it is 1 now; "/chats name 1" with nothing gave its first words back
+    assert [(r.id, r.title, r.pinned) for r in rows][0] == ("old", "boiler pressure?", True)
+    said = out.getvalue()
+    assert "named it: The boiler" in said and "pinned: it stays at the top" in said
+    assert "The boiler (pinned)" in said
+    assert "it's called by its first words again" in said     # name 1, no title
+    assert log.rename("old", "Heating notes")
+    assert [r.id for r in log.listed("heating")] == ["old"]    # a name is searched

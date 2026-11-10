@@ -218,9 +218,11 @@ remembers both; an older file gains the columns.
 * ~~**A conversation as a test.**~~ Built: one is kept as a case that
   replays its last turn with the tools answering from what they said
   then ([note 141](141-a-test-you-already-had.md)).
-* **Naming and pinning from the terminal.** The log can (above); the
-  terminal's `/chats` and Yantra's page don't offer it yet, only Dvara's
-  page does.
+* ~~**Naming and pinning from the terminal.**~~ `/chats name N TITLE`
+  (nothing after: its first words again), `/chats pin N` / `unpin N`,
+  and **name** / **pin** on each row of Yantra's page
+  (`POST /api/chats/ID/name {title}`, `/pin {pinned}`); a pinned one is
+  marked *(pinned)* in the terminal and 📌 on the page.
 * ~~**Searching tool output.**~~ Found too, after the words, and said so
   (above).
 * ~~**Export.**~~ Built: see *Sharing one* above.

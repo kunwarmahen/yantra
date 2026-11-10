@@ -1736,7 +1736,7 @@ async function listChats() {
     row.tabIndex = 0;
     const now = r.id === chats.current ? '<span class="chat-now">● open now</span>' : "";
     row.innerHTML = `<div>
-        <div class="conn-title">${esc(r.title)}${now}</div>
+        <div class="conn-title">${r.pinned ? "📌 " : ""}${esc(r.title)}${now}</div>
         <div class="conn-sub">${esc(chatWhen(r.updated_at))} · ${esc(r.road)} ·
           ${r.turns} message${r.turns === 1 ? "" : "s"}${folderName(r.folder)}</div>
         ${r.snippet ? `<div class="chat-snip">${r.found_in === "tools"
@@ -1744,7 +1744,7 @@ async function listChats() {
       </div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";
-    actions.append(chatDeleteButton(r));
+    actions.append(chatNameButton(r), chatPinButton(r), chatDeleteButton(r));
     row.append(actions);
     row.onclick = (e) => { if (!e.target.closest("button")) readChat(r.id); };
     row.onkeydown = (e) => { if (e.key === "Enter") readChat(r.id); };
@@ -1871,6 +1871,47 @@ async function showTests() {
       view.append(row);
     }
   }
+}
+
+/* A title of your own (searched too; empty gives its first words back),
+   and pinned to the top of the list (history.rename / pin). */
+function chatNameButton(r) {
+  const b = document.createElement("button");
+  b.className = "m-btn";
+  b.textContent = "name";
+  b.title = "give it a title of your own";
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    const title = window.prompt("A name for this conversation (empty: its first words)",
+                                r.title || "");
+    if (title === null) return;
+    const res = await fetch(`/api/chats/${encodeURIComponent(r.id)}/name`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(d.detail || res.statusText); return; }
+    await listChats();
+  };
+  return b;
+}
+
+function chatPinButton(r) {
+  const b = document.createElement("button");
+  b.className = "m-btn";
+  b.textContent = r.pinned ? "unpin" : "pin";
+  b.title = r.pinned ? "back among the others, newest first" : "keep it at the top";
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    const res = await fetch(`/api/chats/${encodeURIComponent(r.id)}/pin`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: !r.pinned }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(d.detail || res.statusText); return; }
+    await listChats();
+  };
+  return b;
 }
 
 function chatDeleteButton(r) {

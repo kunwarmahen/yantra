@@ -123,6 +123,10 @@ HELP = """[bold]commands[/bold]
                      that say WORDS -- each is kept by itself as it goes
   /chats N           read conversation N from that list
   /chats open N      carry it on here (this one stays kept)
+  /chats name N TITLE
+                     give it a title of your own (nothing after: its first
+                     words again); searched too
+  /chats pin N       keep it at the top of the list (/chats unpin N)
   /chats steps N [K] what its turn K did (its last by default), step by step
   /carry             carry on a job a restart stopped, from its last step
   /steps [N]         what turn N did (the last one by default), step by step:
@@ -2142,7 +2146,7 @@ class Repl:
             self.console.print("\n[yellow](cancelled)[/yellow]")
 
     def _chats_command(self, arg: str) -> None:
-        """/chats [WORDS] | N | open N | delete N -- answered here, never a
+        """/chats [WORDS] | N | open N | name N TITLE | pin N | delete N -- answered here, never a
         turn: reading your own conversations costs nothing."""
         if self.log is None:
             self.console.print("[yellow]conversations are not kept in this "
@@ -2181,6 +2185,20 @@ class Repl:
                     return
                 self.console.print(steps.text(view), markup=False, highlight=False)
             return
+        if verb == "name" and rest.split()[:1] and rest.split()[0].isdigit():
+            # its own title, kept over its first words; nothing after gives those back
+            number, _, title = rest.strip().partition(" ")
+            picked = self._chat_picked(number)
+            if picked is not None and self.log.rename(picked, title):
+                self.console.print(f"named it: {title.strip()}" if title.strip() else
+                                   "it's called by its first words again", markup=False)
+            return
+        if verb in ("pin", "unpin") and rest.strip().isdigit():
+            picked = self._chat_picked(rest.strip())
+            if picked is not None and self.log.pin(picked, verb == "pin"):
+                self.console.print("pinned: it stays at the top of /chats" if verb == "pin"
+                                   else "unpinned", markup=False)
+            return
         if verb in ("open", "delete") and rest.strip().isdigit():
             picked = self._chat_picked(rest.strip())
             if picked is None:
@@ -2206,6 +2224,7 @@ class Repl:
         self.console.print(head, markup=False)
         for n, row in enumerate(rows, start=1):
             now = " (this one)" if row.id == self.conversation_id else ""
+            now += " (pinned)" if row.pinned else ""
             self.console.print(
                 f"  {n:>3}. {row.title}{now} -- {_when(row.updated_at)}, "
                 f"{row.road}, {row.turns} message"
@@ -2216,7 +2235,8 @@ class Repl:
                 self.console.print(f"       {where}{' '.join(snip.split())}",
                                    markup=False, style="dim")
         self.console.print("[dim]/chats N reads one · /chats open N carries it "
-                           "on · /chats export N writes it to share · "
+                           "on · /chats name N TITLE names it · /chats pin N keeps it "
+                           "on top · /chats export N writes it to share · "
                            "/chats test N keeps it as a test · "
                            "/chats delete N deletes it for good[/dim]")
 

@@ -1437,10 +1437,12 @@ touching this session's history. `/save`+`--resume` persist
 sessions to `.yantra/session.sqlite3` (append-only versions). Apart from
 those, every conversation is kept by itself as it goes, to read again:
 `/chats` lists them newest first (pinned ones above), `/chats WORDS` searches what was said (and then what a tool returned, said so),
-`/chats N` reads one, `/chats open N` carries it on, `/chats export N`
+`/chats N` reads one, `/chats open N` carries it on, `/chats name N TITLE`
+gives it a title of your own, `/chats pin N` keeps it at the top, `/chats export N`
 writes it as a Markdown file to share and `/chats delete N` deletes it
-for good; the page's **history** button is the same list, with **share**
-(save as PDF, download, or the phone's share sheet)
+for good; the page's **history** button is the same list, with **name**,
+**pin**, **delete** on each row and **share** (save as PDF, download, or
+the phone's share sheet)
 ([notes/130](notes/130-every-conversation-kept.md)). It's kept after
 every STEP, too: a job Yantra was killed in the middle of is named in the
 next banner, and `/carry` carries it on from its last step without

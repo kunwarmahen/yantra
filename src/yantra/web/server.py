@@ -3365,6 +3365,31 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         return FileResponse(path, media_type="image/jpeg",
                             headers={"Cache-Control": "no-store"})
 
+    @app.post("/api/chats/{conversation_id}/name")
+    async def name_chat(conversation_id: str, request: Request) -> dict[str, Any]:
+        """A title of the person's own, searched too; an empty one gives
+        its first words back (history.rename)."""
+        require_ready()
+        body = await request.json()
+        title = body.get("title") if isinstance(body, dict) else None
+        if not isinstance(title, str):
+            raise HTTPException(400, "send {\"title\": \"...\"} (empty for its first words)")
+        if not require_log().rename(conversation_id, title):
+            raise HTTPException(404, "that conversation is gone")
+        return {"named": conversation_id, "title": " ".join(title.split())}
+
+    @app.post("/api/chats/{conversation_id}/pin")
+    async def pin_chat(conversation_id: str, request: Request) -> dict[str, Any]:
+        """Kept at the top of the list, or not (``{"pinned": false}``)."""
+        require_ready()
+        body = await request.json()
+        pinned = body.get("pinned", True) if isinstance(body, dict) else True
+        if not isinstance(pinned, bool):
+            raise HTTPException(400, "pinned is true or false")
+        if not require_log().pin(conversation_id, pinned):
+            raise HTTPException(404, "that conversation is gone")
+        return {"pinned": pinned}
+
     @app.delete("/api/chats/{conversation_id}")
     def delete_chat(conversation_id: str) -> dict[str, Any]:
         """Gone for good. Not the one open now: it would be written again
