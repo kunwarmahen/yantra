@@ -195,7 +195,10 @@ years of mail, or a server with no Chrome on it.
 
 ## What is not here yet
 
-- **Script links found by Setu.** `setu connect --site` writes cautious
-  defaults and leaves `script_links` off; it could notice a page full of
-  `role="link"` rows with no address and suggest it.
-- **A Yahoo IMAP connector**, as above.
+- ~~**Script links found by Setu.**~~ Each refusal of a link with no
+  address tells Setu (`script_link`, once per page per session, never the
+  page itself); twice in a week on a site added here, `setu list` and
+  Setu's page offer `setu site script-links SITE on` (Setu's README).
+- ~~**A Yahoo IMAP connector.**~~ Setu's mail finds Yahoo's server
+  (`imap.mail.yahoo.com`) from the address, and says where Yahoo makes
+  the app password (Setu's README, *Mail*).

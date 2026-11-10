@@ -339,6 +339,8 @@ class SiteSession(BrowserSession):
         if not href or not str(href).startswith(("http://", "https://")):
             if self.rules.script_links:
                 return self._press_link(ref, element)
+            # told to Setu, which offers script_links to a site full of these
+            self._note("script_link", urlparse(page.url).path)
             raise ToolError(f"{ref} has no address to load (a link that runs a script); "
                             "it needs click, which is asked about. (A site whose links "
                             "are all like this can let reading press them: "

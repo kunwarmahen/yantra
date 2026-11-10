@@ -231,6 +231,16 @@ class TestScriptLinks:
             s._follow("e1")
         assert s._page.clicks == []
 
+    def test_a_refused_script_link_is_told_to_setu_once_per_page(self):
+        # Setu offers script_links to a site whose reading keeps hitting these
+        s = session(Page(elements=self.LINKS))
+        seen = []
+        s.on_event = seen.append
+        for _ in range(2):
+            with pytest.raises(ToolError):
+                s._follow("e1")
+        assert seen == ["script_link"]
+
     def test_a_long_label_is_content_and_its_link_is_pressed(self):
         s = session(Page(elements=self.LINKS), rules=self.ON)
         s._follow("e1")
