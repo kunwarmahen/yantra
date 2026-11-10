@@ -3085,7 +3085,9 @@ src/yantra/
 │                   unattended; Sparsh's kinds decide what asks (read and
 │                   act run, `ask` -- open_url -- is gated like web_fetch,
 │                   `confirm` asks every time), the confirm card is
-│                   Sparsh's describe_hold, a `phone` prompt layer (only
+│                   Sparsh's describe_hold, a `phone` prompt layer
+│                   (asked again before a turn once a minute old, and
+│                   written again when a phone came or went; only
 │                   `phone_status` when that is all it admits,
 │                   [notes/146](notes/146-told-only-what-it-can-use.md)), and
 │                   the page's phone panel through `sparsh look --peek`

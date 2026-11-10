@@ -872,3 +872,42 @@ def test_who_asked_is_the_starters_word_else_where_yantra_runs(monkeypatch):
     assert sparsh_link.asked_by() == "Yantra"
     monkeypatch.setenv(sparsh_link.ASKED_BY, "Prahari: Mayfield ice cream")
     assert sparsh_link.asked_by(web=True) == "Prahari: Mayfield ice cream"
+
+
+# ---- the phone layer as the phones are now ------------------------------------------
+# The bias: A PROMPT THAT STILL SAYS THE PHONE IS THERE. The layer was written once,
+# at the start; unplugged an hour later, the model was still told it was ready.
+
+
+def test_the_phone_layer_is_written_again_when_the_phone_goes(clean, tmp_path):
+    program = make_sparsh(tmp_path)
+    _, agent, manager, _ = start(tmp_path, str(program))
+    try:
+        link = agent.sparsh
+        assert "none is ready" not in agent.prompt.get("phone")
+        make_sparsh(tmp_path, phones=[])                     # unplugged since
+        assert link.freshen(agent, now=link._asked_at + 5) is False   # asked a moment ago
+        assert link.freshen(agent, now=link._asked_at + sparsh_link.FRESH_WITHIN) is True
+        assert "none is ready right now" in agent.prompt.get("phone")
+        # nothing changed since: asked again, written nothing
+        assert link.freshen(agent, now=link._asked_at + sparsh_link.FRESH_WITHIN) is False
+    finally:
+        manager.shutdown()
+
+
+def test_a_turn_freshens_the_phone_layer_and_a_broken_sparsh_costs_nothing(clean,
+                                                                            tmp_path):
+    from conftest import assistant_text
+    program = make_sparsh(tmp_path)
+    _, agent, manager, _ = start(tmp_path, str(program))
+    try:
+        agent.provider = ScriptedProvider([assistant_text("ok"), assistant_text("ok")])
+        make_sparsh(tmp_path, phones=[])
+        agent.sparsh._asked_at -= sparsh_link.FRESH_WITHIN
+        agent.run("is my phone there?")
+        assert "none is ready right now" in agent.prompt.get("phone")
+        program.write_text("#!/bin/sh\nexit 3\n")            # Sparsh breaks
+        agent.sparsh._asked_at -= sparsh_link.FRESH_WITHIN
+        assert agent.run("and now?").message.text() == "ok"
+    finally:
+        manager.shutdown()

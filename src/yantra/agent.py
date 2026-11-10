@@ -37,6 +37,7 @@ from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
 from yantra import carry, steps
 from yantra.memory import note_used, prime_if_new
+from yantra.sparsh_link import freshen_phone
 from yantra.memory.reflect import before_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
@@ -460,6 +461,7 @@ class Agent:
         # before the message joins history, which is how "first" is told
         # (memory/__init__.py). Nothing happens without ``agent.memory``.
         prime_if_new(self, user_input)
+        freshen_phone(self)
         blocks: list[Block] = [TextBlock(user_input)]
         if images:
             blocks.extend(images)

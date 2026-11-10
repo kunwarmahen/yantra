@@ -72,6 +72,7 @@ from yantra import outside
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
 from yantra.memory import note_used, prime_if_new
+from yantra.sparsh_link import freshen_phone
 from yantra.memory.reflect import abefore_compaction
 from yantra.permissions import (HELD, HELD_IN_CHILD, REFUSED_USER,
                                 PermissionFn, PermissionRequest,
@@ -270,6 +271,8 @@ class AsyncAgent:
         # slow, and one conversation's first message must not stall others.
         if getattr(self, "memory", None) is not None:
             await asyncio.to_thread(prime_if_new, self, user_input)
+        if getattr(self, "sparsh", None) is not None:
+            await asyncio.to_thread(freshen_phone, self)
         blocks: list[Block] = [TextBlock(user_input)]
         if images:
             blocks.extend(images)

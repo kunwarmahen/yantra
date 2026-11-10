@@ -386,6 +386,9 @@ def _kind_words(phones: list[dict[str, Any]]) -> str:
     return kinds.pop() if len(kinds) == 1 else "phones"
 
 
+#: How old Sparsh's answer may be before a turn asks it again (seconds).
+FRESH_WITHIN = 60.0
+
 #: How the phone layer names the phone it works (``prompt_text``).
 _WORKS = "You can work the person's "
 
@@ -574,6 +577,8 @@ class Sparsh:
     #: Who the steps are for, on the phone's log ("Telegram · asha"): set
     #: by whoever made this link (Dvara per turn; ``asked_by`` otherwise).
     asked_by: str = ""
+    #: When Sparsh was last asked which phones are ready (``freshen``).
+    _asked_at: float = 0.0
 
     def connect(self, manager: Any, agent: Any, grants: list[str] | None = None) -> int:
         """Start the server, set what asks, write the prompt layer.
@@ -600,12 +605,47 @@ class Sparsh:
             if classify(tool, kinds) == "confirm":
                 tool.explain = explain_confirm(tool)
         prompt = attach_prompt(agent)
-        prompt.set("phone", prompt_text(self.data, self.sees())
-                   if self.tools == [] or f"mcp__{SERVER}__look" in self.tools
-                   else status_text(self.data))
+        prompt.set("phone", self.layer())
         prompt.apply()
         self.connected = True
+        import time
+        self._asked_at = time.monotonic()
         return len(self.tools)
+
+    def layer(self) -> str:
+        """The ``phone`` layer as Sparsh's last answer has it."""
+        return (prompt_text(self.data or {}, self.sees())
+                if self.tools == [] or f"mcp__{SERVER}__look" in self.tools
+                else status_text(self.data or {}))
+
+    def freshen(self, agent: Any, *, now: float | None = None) -> bool:
+        """Before a turn: the phone layer as the phones are NOW.
+
+        WHICH PHONE IS CONNECTED CHANGES BY THE MINUTE. The layer was
+        written once, at the start, so a session begun with the phone on
+        the cable went on telling the model it was ready after it was
+        unplugged (and the other way round), and the model looked at a
+        phone that wasn't there. So before a turn, Sparsh is asked again
+        when its last answer is older than ``FRESH_WITHIN``, and the
+        layer is written again only when it changed. A Sparsh that
+        doesn't answer leaves the layer as it was. True when it changed."""
+        import time
+
+        from yantra.prompt import attach_prompt
+
+        now = time.monotonic() if now is None else now
+        if not self.connected or now - self._asked_at < FRESH_WITHIN:
+            return False
+        self._asked_at = now
+        before = self.layer()
+        self.refresh()
+        after = self.layer()
+        if after == before:
+            return False
+        prompt = attach_prompt(agent)
+        prompt.set("phone", after)
+        prompt.apply()
+        return True
 
     def _still_allowed(self, agent: Any) -> Any:
         """Asked on every call: the model can change mid-session (/model,
@@ -738,3 +778,16 @@ class Sparsh:
             return json.loads(done.stdout)
         except json.JSONDecodeError:
             raise SparshLinkError("sparsh log did not print JSON") from None
+
+
+def freshen_phone(agent: Any) -> None:
+    """The agents' hook, before a turn: the phone layer as the phones are
+    now (``SparshLink.freshen``). Never raises: a stale line is better
+    than a lost turn."""
+    link = getattr(agent, "sparsh", None)
+    if link is None:
+        return
+    try:
+        link.freshen(agent)
+    except Exception:  # noqa: BLE001 -- the turn goes on
+        pass

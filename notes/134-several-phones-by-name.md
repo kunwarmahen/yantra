@@ -147,6 +147,24 @@ would say the agent can work a phone its tools can't reach. Named by
 the address it has now (`nexus=192.168.1.160:5555`), the same Nexus
 reads *nexus: 192.168.1.160:5555 (Nexus_6P) connected*.
 
+## The layer as the phones are now
+
+Which phone is connected changes by the minute: a cable pulled, an
+iPhone's WebDriverAgent stopped, a Wi-Fi phone gone to sleep. The
+`phone` layer was written once, when the session started, so a terminal
+or a page left open went on telling the model a phone was ready after
+it was unplugged, and the model tried to look at it (Sparsh's answer
+then said why, but the turn was spent finding out). **THE LAYER IS AS
+THE PHONES ARE NOW.** Before a turn, when Sparsh's last answer is older
+than `FRESH_WITHIN` (a minute), it is asked again (`sparsh status
+--json`, the same question as at the start), and the layer is written
+again only when it changed, so a prompt cache isn't broken for nothing.
+A Sparsh that doesn't answer leaves the layer as it was and the turn
+goes on. `tests/test_sparsh_link.py`: unplugged since the start, the
+next turn's prompt says none is ready; asked a moment ago, it isn't
+asked again; unchanged, nothing is written; broken, the turn is
+answered.
+
 ## What is not here yet
 
 * A real iPhone and a real Android in one session. The iPhone line in
