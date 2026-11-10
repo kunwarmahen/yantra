@@ -1175,3 +1175,48 @@ def test_images_are_kept_only_when_asked_and_only_kinds_a_provider_takes():
     text, failed, images = _tool_result(result, images=True)
     assert [i.media_type for i in images] == ["image/png"]
     assert "1 non-text content block(s) omitted" in text and not failed
+
+
+# ---- kept in Setu ------------------------------------------------------------------
+# The bias: A SERVER ONLY ONE YANTRA CAN REACH, AND ITS TOKEN IN AN ARGUMENT.
+# Added on the panel it reached this Yantra only; handed to Setu, its token
+# must go on stdin, where no other process on the machine can read it.
+
+
+def stand_in_setu(tmp_path: Path) -> Path:
+    setu = tmp_path / "setu"
+    setu.write_text(f"#!{sys.executable}\n"
+                    "import json, sys\n"
+                    "open(sys.argv[0] + '.log', 'w').write(json.dumps("
+                    "{'argv': sys.argv[1:], 'stdin': sys.stdin.read()}))\n"
+                    "print('connected kitchen:personal (kitchen) -- All its tools, 2 tools')\n")
+    setu.chmod(0o755)
+    return setu
+
+
+def test_an_address_server_goes_to_setu_with_its_token_on_stdin(tmp_path, monkeypatch):
+    from yantra.setu_link import keep_in_setu
+    monkeypatch.setenv("KITCHEN_TOKEN", "s3cret")
+    setu = stand_in_setu(tmp_path)
+    ok, said = keep_in_setu(str(setu), MCPServerConfig(
+        name="Kitchen", url="http://127.0.0.1:8813/mcp",
+        headers={"Authorization": "Bearer ${KITCHEN_TOKEN}"}))
+    assert ok and "connected kitchen:personal" in said
+    got = json.loads((tmp_path / "setu.log").read_text())
+    assert got["argv"] == ["connect", "--id", "kitchen", "--server",
+                           "http://127.0.0.1:8813/mcp", "--token-stdin"]
+    assert got["stdin"] == "s3cret\n" and "s3cret" not in json.dumps(got["argv"])
+
+
+def test_a_program_goes_with_its_keys_on_stdin_and_two_headers_are_said(tmp_path):
+    from yantra.setu_link import keep_in_setu
+    setu = stand_in_setu(tmp_path)
+    ok, _ = keep_in_setu(str(setu), MCPServerConfig(
+        name="weather", command="uvx", args=["weather-mcp"], env={"API_KEY": "k1"}))
+    got = json.loads((tmp_path / "setu.log").read_text())
+    assert ok and got["argv"] == ["connect", "--id", "weather", "--server-command",
+                                  "uvx weather-mcp", "--env", "API_KEY"]
+    assert got["stdin"] == "k1\n"
+    ok, said = keep_in_setu(str(setu), MCPServerConfig(
+        name="two", url="http://x/mcp", headers={"A": "1", "B": "2"}))
+    assert not ok and "Setu keeps one token header per server" in said

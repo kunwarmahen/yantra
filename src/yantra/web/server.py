@@ -3065,6 +3065,30 @@ def make_app(session: WebSession, static_dir: Path | None = None,
         session.broadcast({"type": "state", **session.state()})
         return {"ok": True, "tools": len(names), **session.state()}
 
+    @app.post("/api/mcp/keep-in-setu")
+    async def mcp_keep_in_setu(req: Request) -> dict[str, Any]:
+        """One server this Yantra holds by itself, handed to Setu (its
+        token on stdin): then Dvara's chats reach it too. Nothing here is
+        removed; the panel says so (setu_link.keep_in_setu)."""
+        from yantra.setu_link import keep_in_setu
+
+        mcp = require_mcp()
+        name = (await req.json()).get("name")
+        if not isinstance(name, str) or name not in mcp.sessions:
+            raise HTTPException(404, "no such server here")
+        if mcp.origins.get(name):
+            raise HTTPException(409, f"{name} already comes from {mcp.origins[name]}")
+        setu = getattr(session.agent, "setu", None)
+        program = getattr(setu, "program", None) if setu is not None else None
+        if not program:
+            raise HTTPException(409, "Setu isn't here to keep it (no setu program)")
+        ok, said = await asyncio.to_thread(
+            keep_in_setu, program, mcp.sessions[name].config,
+            home=getattr(setu, "home", None), key=getattr(setu, "vault_key", None))
+        if not ok:
+            raise HTTPException(400, said or "Setu didn't keep it")
+        return {"said": said, "kept": name}
+
     @app.post("/api/mcp/remove")
     async def mcp_remove(req: Request) -> dict[str, Any]:
         """Disconnect one server and pull its tools (a saved entry is

@@ -192,6 +192,25 @@ The decisions worth writing down:
   hand-written config is worse than a refused launch; `load_remembered`
   raises rather than shrugging.
 
+### Kept in Setu
+
+A server added here reaches this Yantra only. Dvara's chats (Telegram,
+Sarathi's home page) start what Setu holds, and the token sits in this
+session's config. **keep in Setu** on a panel row (one with no origin:
+not the package's, not Setu's own) hands it over: `setu connect --server
+URL --id NAME` with `--token-stdin` (an `Authorization: Bearer` value,
+or one header by its own name with `--header`), or `--server-command
+'CMD ARGS'` with `--env NAME` for each key. Every secret goes on stdin,
+`${VAR}` read from here first; none is ever an argument. Two headers are
+more than Setu keeps for one server, and the panel says so. Setu tries
+the server before it keeps anything, and nothing here is removed: the
+person removes this copy when they see Setu's.
+
+Live, the real `setu` on a scratch folder and a small stdio server with
+a key: *"connected kitchen-notes:personal (python3) -- All its tools, 2
+tools / 1 of them only read"*; the key was in Setu's vault, not in
+`servers/kitchen-notes.toml`.
+
 ## Trying it in the portal, end to end
 
 The panel is the easiest way to see MCP work without editing a config

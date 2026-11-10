@@ -4562,6 +4562,24 @@ function mcpRow(s) {
     row.append(auth);
   }
 
+  if (!s.origin) {
+    // held by this Yantra alone: Setu can keep it for every road (Dvara's chats too)
+    const keep = document.createElement("button");
+    keep.className = "m-btn mcp-keep";
+    keep.textContent = "keep in Setu";
+    keep.title = "add it to Setu (its token goes to Setu's vault), so Dvara's chats "
+      + "reach it too; this copy stays until you remove it";
+    keep.onclick = async () => {
+      keep.disabled = true;
+      const out = await post("/api/mcp/keep-in-setu", { name: s.name });
+      keep.disabled = false;
+      if (!out) return;
+      toast(`${s.name} is kept in Setu now — remove this copy (×) and it comes from `
+        + "Setu from the next session");
+    };
+    row.append(keep);
+  }
+
   const rm = document.createElement("button");
   rm.className = "m-btn danger mcp-remove";
   rm.innerHTML = icon("x", "ico-sm", 2);

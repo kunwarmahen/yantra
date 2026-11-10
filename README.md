@@ -750,7 +750,10 @@ them, `/mcp add NAME URL` (or `NAME COMMAND [ARGS...]`) connects one
 mid-session — asking whether to remember it in `.yantra/mcp.json` for
 future launches — and `/mcp off|on NAME` / `/mcp remove NAME` toggle or
 tear down. The web panel's "servers & tools" section does the same:
-health dots, add-by-form or paste-JSON, per-server switches, remove.
+health dots, add-by-form or paste-JSON, per-server switches, remove, and
+**keep in Setu** on a server this Yantra holds by itself: Setu tries it and
+keeps it (its token or keys on stdin, into Setu's vault), so Dvara's chats
+reach it too; remove this copy once it has.
 Disabling keeps the process warm; removing kills it and forgets any
 saved entry. Paste-JSON takes the same `{"servers": {...}}` object as
 the config file above — several servers in one go, each reporting its

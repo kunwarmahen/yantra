@@ -1392,6 +1392,62 @@ def run_setu(program: str, *args: str, timeout: float = COMMAND_TIMEOUT,
     return done.returncode == 0, said
 
 
+def keep_in_setu(program: str, config: Any, *, home: str | None = None,
+                 key: str | None = None) -> tuple[bool, str]:
+    """A server this Yantra reaches by itself (``--mcp-config``, the panel)
+    handed to Setu: ``setu connect --server URL`` or ``--server-command``,
+    its token or keys on stdin, never in the arguments.
+
+    KEPT IN SETU, IT IS EVERY ROAD'S. Added here, a server reaches this
+    Yantra only: Dvara's chats (Telegram, the home page) start only what
+    Setu holds, and its token sits in this session's config. Setu tries
+    it first and keeps the token in its vault; nothing here is changed, so
+    the person removes this copy once Setu's has connected. A token is a
+    header (``Authorization: Bearer …``, or one header of its own name);
+    a program's keys are its ``env``. ``${VAR}`` is read from here. Two
+    headers are more than Setu keeps for one server: said, not guessed."""
+    import os
+    import re
+    import shlex
+
+    def expanded(value: str) -> str:
+        return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}",
+                      lambda m: os.environ.get(m.group(1), ""), value)
+
+    name = re.sub(r"[^a-z0-9_-]+", "-", (config.name or "").lower()).strip("-") or "server"
+    argv = [program, "connect", "--id", name]
+    lines: list[str] = []
+    if config.url:
+        argv += ["--server", config.url]
+        headers = {k: expanded(v) for k, v in (config.headers or {}).items()}
+        if len(headers) > 1:
+            return False, (f"{config.name} sends {len(headers)} headers; Setu keeps one "
+                           "token header per server, so add it with setu connect --server "
+                           "yourself")
+        for header, value in headers.items():
+            bearer = re.match(r"(?i)^bearer\s+(.+)$", value)
+            argv.append("--token-stdin")
+            if header.lower() != "authorization" or not bearer:
+                argv += ["--header", header]
+            lines.append(bearer.group(1) if bearer and header.lower() == "authorization"
+                         else value)
+    else:
+        argv += ["--server-command", shlex.join([config.command or "", *config.args])]
+        for env_name, value in (config.env or {}).items():
+            argv += ["--env", env_name]
+            lines.append(expanded(value))
+    try:
+        done = subprocess.run(argv, input="".join(f"{v}\n" for v in lines),
+                              capture_output=True, text=True, timeout=120,
+                              env=home_env(home, key))
+    except FileNotFoundError:
+        return False, f"no setu program at {program}"
+    except subprocess.TimeoutExpired:
+        return False, "Setu took longer than two minutes to try the server"
+    said = (done.stdout + done.stderr).strip()
+    return done.returncode == 0, said
+
+
 #: The address of a Setu page already running for this session's Setu
 #: folder, that a browser reaches (``http://127.0.0.1:8775/``): Sarathi's
 #: containers set it, where Yantra's own copy could not be framed.
