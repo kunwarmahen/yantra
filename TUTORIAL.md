@@ -1999,8 +1999,11 @@ when you want that answer from last week again:
 
 ```
 /chats                 every conversation kept, newest first (pinned ones on top)
-/chats boiler          only the ones that mention "boiler"
+/chats boiler          only the ones that mention "boiler" (then any where only a
+                       tool's output did, marked "in what a tool returned:")
 /chats 2               read number 2 from the list
+/chats name 2 Boiler   give it a name of your own (nothing after: its first words)
+/chats pin 2           keep it at the top (/chats unpin 2)
 /chats open 2          go on with it from where it stopped
 /chats export 2        save it as a file to share (here, named by its date)
 /chats delete 2        delete it for good (it asks first)
@@ -2016,7 +2019,11 @@ into the box and the list shrinks to the conversations that say it, with
 the word marked. Click one to read it the way it looked (the tools it
 used are folded under small grey lines). **carry on here** puts it back
 into the chat, and **delete** removes it for good: from the list, from
-the search, and from the file on disk.
+the search, and from the file on disk. **name** and **pin** on each row
+do what `/chats name` and `/chats pin` do. A server you added yourself
+on the servers panel has **keep in Setu**: Setu keeps it (and its token)
+from then on, so your agents on Telegram reach it too; remove this copy
+once Setu's has connected.
 Every answer, there and in the chat, has a small **steps** link: what
 that turn did, one tool at a time, with **file for a bug report**.
 
