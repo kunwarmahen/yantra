@@ -114,6 +114,7 @@ import json
 import os
 import re
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
@@ -135,6 +136,9 @@ PROMPT_LIMIT = 20
 #: narrow layer cannot reach them (notes/109).
 PROMPT_SEARCHED = PROMPT_LIMIT
 PROMPT_CHARS = 2_000
+#: A memory reported used is reported again when an answer draws on it
+#: this long after, in a conversation still going (seconds: a day).
+USED_AGAIN_AFTER = 24 * 3600
 #: One statement's ceiling. A memory is a sentence, not a document.
 MAX_STATEMENT_CHARS = 300
 
@@ -393,8 +397,9 @@ class Memory:
         # ---- memories in use (note_used) ----
         #: What ``recall_memory`` handed the model this conversation.
         self.recalled: dict[str, MemoryItem] = {}
-        #: Ids already reported used this conversation: once is enough.
-        self.marked: set[str] = set()
+        #: Ids reported used this conversation, and when (``time.time``):
+        #: once is enough, unless the conversation is still going a day on.
+        self.marked: dict[str, float] = {}
         #: Whether a failed ``used`` has been said; said once a session.
         self.used_failed = False
 
@@ -507,7 +512,7 @@ class Memory:
         """
         self.primed = True
         self.recalled = {}
-        self.marked = set()
+        self.marked = {}
         self.facts, self.beliefs = [], []
         if supports(self.store, "profile"):
             try:
@@ -615,13 +620,20 @@ class Memory:
     def drawn_on(self, said: str, answered: str) -> list[str]:
         """Ids of the memories shown this conversation that ``answered``
         (the turn's replies and tool arguments) drew on, past what the
-        person ``said``; none already reported."""
+        person ``said``; none reported in the last ``USED_AGAIN_AFTER``.
+
+        A CONVERSATION THAT RUNS FOR DAYS REPORTS AGAIN. Once per
+        conversation keeps one long morning from reporting the same memory
+        every turn; a conversation still going the next day (a Telegram
+        chat, a page left open) draws on it on a new day, and that day is
+        what keeps it fresh in the store."""
+        now = time.time()
         shown = {item.id: item.statement for item in self.in_prompt}
         shown.update({item.id: item.statement for item in self.recalled.values()})
         shown.update({fact.id: fact.statement for fact in self.facts})
         shown.update({belief.id: belief.statement for belief in self.beliefs})
         return [memory_id for memory_id, statement in shown.items()
-                if memory_id not in self.marked
+                if now - self.marked.get(memory_id, -USED_AGAIN_AFTER) >= USED_AGAIN_AFTER
                 and drew_on(statement, said, answered)]
 
     def shown_ids(self) -> set[str]:
@@ -637,7 +649,7 @@ class Memory:
         before the call does is not reported twice."""
         if not memory_ids or not supports(self.store, "used"):
             return None
-        self.marked.update(memory_ids)
+        self.marked.update(dict.fromkeys(memory_ids, time.time()))
 
         def send() -> None:
             try:

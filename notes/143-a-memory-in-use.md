@@ -51,8 +51,13 @@ memory that the person's own message did not?
 Words the person said themselves don't count. An answer about Python to
 a question about Python did not draw on *"prefers Python"*.
 
-**Once per conversation.** A memory is reported once per conversation,
-the first time an answer draws on it. It's sent on its own thread
+**Once per conversation, and again a day on.** A memory is reported once
+per conversation, the first time an answer draws on it. A conversation
+still going the next day (a Telegram chat, a page left open for days)
+reports it again the first time an answer draws on it after
+`USED_AGAIN_AFTER` (a day): its date in the store is what keeps it
+fresh, and Tuesday's use is a use Monday's report didn't cover. One
+morning of turns still sends it once. It's sent on its own thread
 behind the answer, so a slow store never delays the next message. If
 the store fails, Yantra says so once a session and the turn carries on.
 
@@ -140,6 +145,5 @@ another person's memory marked 0.
   for a person saying a memory was good or bad. Being used isn't a
   judgment of the memory, so it changes when the memory counts as new,
   not how much it counts.
-* **Reporting a memory again later in the same conversation.** Once is
-  enough for its date. A conversation that runs for days might deserve a
-  second report; none has needed one yet.
+* ~~**Reporting a memory again later in the same conversation.**~~ A day
+  on, it is (*Once per conversation, and again a day on*, above).

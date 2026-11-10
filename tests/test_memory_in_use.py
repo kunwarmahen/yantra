@@ -161,6 +161,30 @@ class TestReported:
 
         assert len(calls) == 1
 
+    def test_a_conversation_still_going_a_day_later_reports_it_again(self, store,
+                                                                       monkeypatch):
+        # a Telegram chat left open: drawn on Monday and again on Tuesday
+        from yantra import memory as memory_module
+        store.remember("asha", "Lives near RDU", {})
+        agent = _agent(store, [assistant_text("From RDU."), assistant_text("RDU."),
+                               assistant_text("RDU, still.")])
+        calls = []
+        real = store.used
+        store.used = lambda user, ids: calls.append(ids) or real(user, ids)
+        clock = [1_000_000.0]
+        monkeypatch.setattr(memory_module.time, "time", lambda: clock[0])
+
+        agent.run("flights to Denver")
+        _wait_for_reports()
+        clock[0] += 3600                         # an hour on: the same morning
+        agent.run("and to Austin?")
+        _wait_for_reports()
+        clock[0] += memory_module.USED_AGAIN_AFTER  # the next day, same conversation
+        agent.run("and Boston?")
+        _wait_for_reports()
+
+        assert len(calls) == 2
+
     def test_a_store_without_used_costs_nothing(self):
         class FourVerbs:
             name = "four"
