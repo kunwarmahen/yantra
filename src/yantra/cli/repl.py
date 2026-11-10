@@ -2212,7 +2212,8 @@ class Repl:
                 f"{'s' if row.turns != 1 else ''}", markup=False)
             if row.snippet:
                 snip = row.snippet.replace(HIT, "[").replace(END, "]")
-                self.console.print(f"       {' '.join(snip.split())}",
+                where = "in what a tool returned: " if row.found_in == "tools" else ""
+                self.console.print(f"       {where}{' '.join(snip.split())}",
                                    markup=False, style="dim")
         self.console.print("[dim]/chats N reads one · /chats open N carries it "
                            "on · /chats export N writes it to share · "

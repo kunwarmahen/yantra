@@ -1739,7 +1739,8 @@ async function listChats() {
         <div class="conn-title">${esc(r.title)}${now}</div>
         <div class="conn-sub">${esc(chatWhen(r.updated_at))} · ${esc(r.road)} ·
           ${r.turns} message${r.turns === 1 ? "" : "s"}${folderName(r.folder)}</div>
-        ${r.snippet ? `<div class="chat-snip">${snippetHtml(r.snippet)}</div>` : ""}
+        ${r.snippet ? `<div class="chat-snip">${r.found_in === "tools"
+          ? "in what a tool returned: " : ""}${snippetHtml(r.snippet)}</div>` : ""}
       </div>`;
     const actions = document.createElement("div");
     actions.className = "conn-actions";

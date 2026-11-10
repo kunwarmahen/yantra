@@ -52,10 +52,21 @@ an SQLite full-text index (FTS5): local, instant, nothing spent and no
 model asked. Every word typed must appear, each matching the start of a
 word (`rout` finds *router*). The search box is built from word
 characters only, each one quoted, so a stray `"` or the word `NEAR` is
-a word and never FTS5 syntax. A tool's output is not indexed: a page of
-search results the agent read is not what anybody remembers a
-conversation by. The reading view shows the tools anyway, folded, with
-what came back.
+a word and never FTS5 syntax. The reading view shows the tools, folded,
+with what came back.
+
+WHAT A TOOL RETURNED IS FOUND TOO, AFTER THE WORDS. A page of search
+results the agent read is rarely what anybody remembers a conversation
+by -- but a tracking number from an order page, or a figure from a mail,
+is, and nobody typed those. So each tool's result goes into an index of
+its own (`conversation_found`: the first 2,000 characters of each, 40,000
+in all, so one huge page can't fill the file). A search lists the
+conversations whose words match first, then those found only in what a
+tool returned, each said so (*in what a tool returned: …*, in the
+terminal, on Yantra's page, Dvara's `/chats` and Sarathi's list). It is
+the file the conversation is already kept in, on this computer, so it
+shows nothing to anyone new; delete takes it too (and merges that index
+as well); a file from before is indexed once when it opens.
 
 DELETED MEANS GONE. `delete` drops the row and its index entry with
 SQLite's `secure_delete` on, so the freed pages are overwritten, and
@@ -210,9 +221,8 @@ remembers both; an older file gains the columns.
 * **Naming and pinning from the terminal.** The log can (above); the
   terminal's `/chats` and Yantra's page don't offer it yet, only Dvara's
   page does.
-* **Searching tool output.** Left out on purpose (above). If "the agent
-  found it on some page" turns out to be how people remember, it is one
-  more column in the index.
+* ~~**Searching tool output.**~~ Found too, after the words, and said so
+  (above).
 * ~~**Export.**~~ Built: see *Sharing one* above.
 * ~~**A PDF where there is no print window.**~~ Telegram has none, so
   Dvara makes one for `/chats export N pdf`: the same reasoning as

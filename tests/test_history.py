@@ -181,6 +181,59 @@ def test_a_deleted_conversation_leaves_no_words_in_the_file(tmp_path):
     assert b"zebracorn" not in path.read_bytes()
 
 
+# ---- what a tool returned is found too ------------------------------------------
+# The bias: A NUMBER THAT WAS ONLY IN A TOOL'S OUTPUT IS NEVER FOUND AGAIN. A
+# tracking number from an order page, a figure from a mail: nobody typed them.
+
+
+def used_echo(log: ConversationLog, cid: str, question: str, said: str) -> None:
+    agent = agent_with([assistant_tool_call("c1", "echo", {"text": said}),
+                        assistant_text("Done, it's on its way.")])
+    list(agent.run_streaming(question))
+    log.record(cid, agent, provider_name="scripted", road="terminal", folder="/w")
+
+
+def test_a_search_finds_what_only_a_tools_output_said(log):
+    used_echo(log, "a", "where is my parcel?", "tracking 1Z999AA10123456784")
+    talked(log, "b", "what is 1Z?", "a UPS prefix")
+    got = log.listed("1Z999AA1")
+    assert [(r.id, r.found_in) for r in got] == [("a", "tools")]
+    assert "\x021Z999AA10123456784\x03" in got[0].snippet
+    # found in the words wins: listed once, as a words match
+    assert [(r.id, r.found_in) for r in log.listed("1Z")] == [("b", ""), ("a", "tools")]
+
+
+def test_a_huge_output_is_indexed_only_its_start(log):
+    import yantra.history as history
+    used_echo(log, "a", "read the page", "start " + "x" * 5000 + " needleword")
+    assert log.listed("needleword") == []                  # past FOUND_EACH
+    assert len(history.found_of(log.payload("a"))) <= history.FOUND_EACH + 50
+
+
+def test_deleting_it_takes_the_tool_output_from_the_file_too(tmp_path):
+    path = tmp_path / "c.sqlite"
+    log = ConversationLog(path)
+    used_echo(log, "a", "the code?", "zebratool-secret-9")
+    talked(log, "b", "keep me", "kept")
+    log.delete("a")
+    log.close()
+    assert b"zebratool" not in path.read_bytes()
+
+
+def test_a_file_from_before_is_indexed_when_it_is_opened(tmp_path):
+    import sqlite3
+    path = tmp_path / "c.sqlite"
+    log = ConversationLog(path)
+    used_echo(log, "a", "where is it?", "tracking 1Z42")
+    log.close()
+    db = sqlite3.connect(path)                              # as a file from before
+    db.execute("DELETE FROM conversation_found")
+    db.execute("PRAGMA user_version = 0")
+    db.commit()
+    db.close()
+    assert [r.id for r in ConversationLog(path).listed("1Z42")] == ["a"]
+
+
 def test_the_log_is_off_when_asked_and_beside_memory_by_default(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     monkeypatch.delenv("YANTRA_HISTORY", raising=False)

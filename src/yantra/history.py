@@ -40,6 +40,18 @@ first words (an empty one gives those back); ``pin`` keeps it above the
 newest. Each row also remembers every road it went on, not only the one
 it is on now, so one carried from a phone to the page says both.
 
+WHAT A TOOL RETURNED IS FOUND TOO. "Which conversation had that tracking
+number?" -- the number was in what a tool returned (the order page, the
+mail), never in anyone's words, so a search of the words found nothing.
+Each tool's result is indexed too, apart from the words
+(``conversation_found``: the first ``FOUND_EACH`` characters of each
+result, ``FOUND_ALL`` in all, so one huge page can't fill the file). A
+conversation found only there is listed with ``found_in = "tools"``, so
+the list can say so, and its snippet is from that output. It is the same
+file the conversation itself is kept in, on this computer: indexing what
+is already kept here shows it to no one new. Deleting a conversation
+deletes this too. A file from before is indexed once when it is opened.
+
 SHARED AS WORDS, NOT AS A RECORD. ``export_markdown`` writes one
 conversation as a Markdown file to send somebody, save, or print to PDF:
 the person's words, the agent's answers, and under each answer the NAMES
@@ -89,7 +101,14 @@ CREATE TABLE IF NOT EXISTS conversations (
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS conversation_words
     USING fts5(title, body);
+CREATE VIRTUAL TABLE IF NOT EXISTS conversation_found
+    USING fts5(tools);
 """
+#: What a tool returned, as much as is indexed: of each result, and in all.
+FOUND_EACH = 2_000
+FOUND_ALL = 40_000
+#: ``PRAGMA user_version`` once every row's tool output is indexed.
+FOUND_VERSION = 2
 #: Added after the first files were written: an older file gains them.
 #: ``named`` is a title the person gave it (kept over the first words),
 #: ``pinned`` keeps it at the top, ``roads`` is every road it went on.
@@ -140,6 +159,9 @@ class Kept:
     #: conversation carried on in two places says both.
     roads: tuple[str, ...] = ()
     pinned: bool = False
+    #: Where a search found it: "" (the words) or "tools" (only in what a
+    #: tool returned).
+    found_in: str = ""
 
     def as_dict(self) -> dict:
         return {**self.__dict__, "roads": list(self.roads)}
@@ -174,6 +196,19 @@ def body_of(payload: dict) -> str:
     return "\n".join(t for m in payload.get("history") or []
                      if m.get("role") in ("user", "assistant")
                      and (t := _texts(m).strip()))
+
+
+def found_of(payload: dict) -> str:
+    """What the tool index searches: each tool's result, its start only."""
+    out, room = [], FOUND_ALL
+    for message in payload.get("history") or []:
+        for block in message.get("content") or []:
+            if isinstance(block, dict) and block.get("kind") == "tool_result" and room > 0:
+                text = " ".join(str(block.get("content", "")).split())[:min(FOUND_EACH, room)]
+                if text:
+                    out.append(text)
+                    room -= len(text)
+    return "\n".join(out)
 
 
 def _short(text: str) -> str:
@@ -305,7 +340,20 @@ class ConversationLog:
         for column, alter in LATER_COLUMNS:
             if column not in have:
                 self._db.execute(alter)
+        if self._db.execute("PRAGMA user_version").fetchone()[0] < FOUND_VERSION:
+            # a file from before tool output was searched: indexed once
+            for n, payload in self._db.execute(
+                    "SELECT n, payload FROM conversations").fetchall():
+                self._found(n, json.loads(payload))
+            self._db.execute(f"PRAGMA user_version = {FOUND_VERSION}")
         self._db.commit()
+
+    def _found(self, n: int, payload: dict) -> None:
+        self._db.execute("DELETE FROM conversation_found WHERE rowid = ?", (n,))
+        found = found_of(payload)
+        if found:
+            self._db.execute("INSERT INTO conversation_found (rowid, tools) VALUES (?,?)",
+                             (n, found))
 
     def close(self) -> None:
         with self._lock:
@@ -363,6 +411,7 @@ class ConversationLog:
             self._db.execute(
                 "INSERT INTO conversation_words (rowid, title, body) "
                 "VALUES (?,?,?)", (n, named or title, body_of(payload)))
+            self._found(n, payload)
             self._db.commit()
         return True
 
@@ -403,11 +452,13 @@ class ConversationLog:
                 return False
             self._db.execute("DELETE FROM conversation_words WHERE rowid = ?",
                              (row[0],))
+            self._db.execute("DELETE FROM conversation_found WHERE rowid = ?",
+                             (row[0],))
             self._db.execute("DELETE FROM conversations WHERE n = ?", (row[0],))
             # A deleted FTS5 row leaves its words in older index segments
             # until they merge; merging now leaves none behind.
-            self._db.execute("INSERT INTO conversation_words "
-                             "(conversation_words) VALUES ('optimize')")
+            for table in ("conversation_words", "conversation_found"):
+                self._db.execute(f"INSERT INTO {table} ({table}) VALUES ('optimize')")
             self._db.commit()
         return True
 
@@ -419,11 +470,11 @@ class ConversationLog:
     _MARKS = "c.roads, c.pinned"
 
     @staticmethod
-    def _kept(row) -> Kept:
+    def _kept(row, found_in: str = "") -> Kept:
         *head, roads, pinned = row
         # a row kept before roads were has only the one it is on
         went = tuple(r for r in (roads or "").split("\n") if r) or (head[2],)
-        return Kept(*head, roads=went, pinned=bool(pinned))
+        return Kept(*head, roads=went, pinned=bool(pinned), found_in=found_in)
 
     def listed(self, words: str = "", *, folder: str | None = None,
                limit: int = 200) -> list[Kept]:
@@ -441,13 +492,29 @@ class ConversationLog:
                     "ORDER BY c.pinned DESC, c.updated_at DESC, c.n DESC LIMIT ?",
                     (*args, limit)).fetchall()
             else:
-                rows = self._db.execute(
+                said = self._db.execute(
                     f"SELECT {self._COLUMNS}, snippet(conversation_words, 1, "
-                    f"char(2), char(3), '…', 12), {self._MARKS} FROM conversation_words w "
+                    f"char(2), char(3), '…', 12), {self._MARKS}, "
+                    "c.pinned, c.updated_at, c.n FROM conversation_words w "
                     "JOIN conversations c ON c.n = w.rowid "
                     f"WHERE conversation_words MATCH ? {where}"
                     "ORDER BY c.pinned DESC, c.updated_at DESC, c.n DESC LIMIT ?",
                     (query, *args, limit)).fetchall()
+                found = self._db.execute(
+                    f"SELECT {self._COLUMNS}, snippet(conversation_found, 0, "
+                    f"char(2), char(3), '…', 12), {self._MARKS}, "
+                    "c.pinned, c.updated_at, c.n FROM conversation_found f "
+                    "JOIN conversations c ON c.n = f.rowid "
+                    f"WHERE conversation_found MATCH ? {where}"
+                    "ORDER BY c.pinned DESC, c.updated_at DESC, c.n DESC LIMIT ?",
+                    (query, *args, limit)).fetchall()
+                # found in the words first; then the ones only a tool's output says
+                seen = {r[0] for r in said}
+                both = [(r, "") for r in said] + [(r, "tools") for r in found
+                                                  if r[0] not in seen]
+                both.sort(key=lambda pair: (pair[0][-3], pair[0][-2], pair[0][-1]),
+                          reverse=True)
+                return [self._kept(r[:-3], found_in) for r, found_in in both[:limit]]
         return [self._kept(r) for r in rows]
 
     def stopped(self, road: str) -> tuple[str, dict] | None:
