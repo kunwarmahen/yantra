@@ -149,6 +149,11 @@ SERIAL_RE = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,63}"
                        r"|https?://[A-Za-z0-9.:\[\]-]{1,80}/?)$")  # or an iPhone's WDA
 #: How long a peek may take: a dump (~2.5 s) and a screenshot.
 PEEK_TIMEOUT = 30.0
+#: How long ``open_url`` may take: a web page fills in slower than an app.
+#: Sparsh waits up to 18 s for a page's words, after waking the phone and
+#: before reading its screen, which a heavy shop page pushed past the 30 s
+#: every other call gets -- and a watch's daily look failed on it.
+PAGE_TIMEOUT = 60.0
 #: Sparsh's name for the per-app rules a harness adds (Setu's phone road).
 APP_RULES = "SPARSH_APP_RULES"
 #: Sparsh's name for a schedule's grants (held taps it may do unasked).
@@ -505,6 +510,8 @@ def classify(tool: Any, kinds: dict[str, str]) -> str | None:
     # gated like any tool that reaches out.
     tool.read_only = kind in ("read", "act")
     tool.always_ask = kind == "confirm"
+    if tool.raw_name == "open_url":
+        tool.timeout = PAGE_TIMEOUT
     return kind
 
 

@@ -194,6 +194,16 @@ class TestClassed:
         finally:
             manager.shutdown()
 
+    def test_a_page_gets_longer_than_a_tap(self, clean, tmp_path):
+        # A heavy shop page, read after waking the phone, ran past the 30 s
+        # every call gets, and a watch's daily look failed on it.
+        _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
+        try:
+            assert tool(agent, "open_url").timeout == sparsh_link.PAGE_TIMEOUT > 30
+            assert tool(agent, "tap").timeout is None
+        finally:
+            manager.shutdown()
+
     def test_a_tool_sparsh_did_not_name_keeps_its_own_hint(self, clean, tmp_path):
         _, agent, manager, _ = start(tmp_path, str(make_sparsh(tmp_path)))
         try:

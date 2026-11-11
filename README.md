@@ -3093,7 +3093,9 @@ src/yantra/
 ├── sparsh_link.py  the person's phone: Sparsh found by `sparsh status --json`
 │                   (sparsh.status.v1) when a phone is attached, skipped when
 │                   unattended; Sparsh's kinds decide what asks (read and
-│                   act run, `ask` -- open_url -- is gated like web_fetch,
+│                   act run, `ask` -- open_url -- is gated like web_fetch
+│                   and gets 60 s, not 30, for a page to fill in,
+│                   [notes/151](notes/151-turned-away-headless.md);
 │                   `confirm` asks every time), the confirm card is
 │                   Sparsh's describe_hold, a `phone` prompt layer
 │                   (asked again before a turn once a minute old, and

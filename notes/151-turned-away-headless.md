@@ -141,12 +141,19 @@ where to mark one.
 every day, and Chrome on the phone keeps yesterday's tab around, frozen
 in the background, where it never answers. Sparsh reads the newest tab
 at the address. A read that is slow is tried again, but never past the
-page's 18 seconds, so a look fits inside the 30 seconds a phone call
-gets; and a step that breaks in some unforeseen way comes back as a
-failed look, never the end of Sparsh's tools (Sparsh's README, under
-`open_url`). On the Nexus 6P the Food Lion page's words came back in
-about two seconds this way, where reading the old tab timed out on
-every look.
+page's 18 seconds; a loaded page whose text moves by only a few words
+(a carousel) counts as still; and a step that breaks in some unforeseen
+way comes back as a failed look, never the end of Sparsh's tools
+(Sparsh's README, under `open_url`).
+
+**A PAGE GETS 60 SECONDS.** Every other call to Sparsh gets the 30
+seconds an MCP call has by default. `open_url` wakes the phone, waits
+for the page's words and then reads the screen, and Harris Teeter's
+page pushed that past 30 on most looks; `sparsh_link.PAGE_TIMEOUT`
+gives it 60. On the Nexus 6P the Food Lion page's words came back in
+about two seconds, where reading the old tab timed out on every look,
+and Harris Teeter's watch read $6.99 three looks in three, each 30 to
+34 seconds from start to finish.
 
 ## What the tests pin
 
