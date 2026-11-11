@@ -137,6 +137,17 @@ only with this person's phones that Sarathi marks *spare*
 drawer, never one in someone's pocket. With none marked, the look says
 where to mark one.
 
+**THE TAB JUST OPENED, NOT YESTERDAY'S.** A watch opens the same address
+every day, and Chrome on the phone keeps yesterday's tab around, frozen
+in the background, where it never answers. Sparsh reads the newest tab
+at the address. A read that is slow is tried again, but never past the
+page's 18 seconds, so a look fits inside the 30 seconds a phone call
+gets; and a step that breaks in some unforeseen way comes back as a
+failed look, never the end of Sparsh's tools (Sparsh's README, under
+`open_url`). On the Nexus 6P the Food Lion page's words came back in
+about two seconds this way, where reading the old tab timed out on
+every look.
+
 ## What the tests pin
 
 `tests/test_browser_turned_away.py`: a drop or a 403 is tried again
