@@ -2335,6 +2335,26 @@ def make_app(session: WebSession, static_dir: Path | None = None,
     def schedules_runs(schedule_id: str) -> dict[str, Any]:
         return {"runs": samay_call(require_samay(), "runs", schedule_id)}
 
+    @app.post("/api/schedules/preview")
+    def schedules_preview(body: dict[str, Any]) -> dict[str, Any]:
+        """A when in Samay's words, as the Change form is typed."""
+        from yantra.samay_link import SamayLinkError
+        try:
+            return require_samay().preview(str(body.get("when") or ""),
+                                           str(body.get("tz") or ""))
+        except SamayLinkError as exc:
+            raise HTTPException(400, f"samay: {exc}") from None
+
+    @app.post("/api/schedules/{schedule_id}/edit")
+    def schedules_edit(schedule_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Changed on the panel -- the person's own hand, so no card --
+        through ``samay edit``, only what the form changed."""
+        from yantra.samay_link import SamayLinkError
+        try:
+            return {"done": "edit", "result": require_samay().edit(schedule_id, body)}
+        except SamayLinkError as exc:
+            raise HTTPException(400, f"samay: {exc}") from None
+
     @app.post("/api/schedules/{schedule_id}/{action}")
     def schedules_act(schedule_id: str, action: str) -> dict[str, Any]:
         """Pause, resume, delete -- the person's own hand, so no card -- or

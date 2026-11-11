@@ -69,6 +69,15 @@ FAKE_SAMAY = """\
         print(json.dumps({{**CARD, "state": "paused" if args[0] == "pause" else "active"}}))
     elif args[0] == "rm":
         print(json.dumps({{"removed": args[1]}}))
+    elif args[0] == "edit" and args[-1] == "--json":
+        given = dict(a[2:].split("=", 1) for a in args[2:-1])
+        if given.get("when") == "sometimes":
+            sys.exit("error: cannot read 'sometimes'")
+        print(json.dumps({{**CARD, "prompt": given.get("prompt", CARD["prompt"]),
+                          "sentence": "every day at 08:00" if "when" in given
+                          else CARD["sentence"]}}))
+    elif args[0] == "preview":
+        print(json.dumps({{"sentence": "said: " + args[-1], "next": []}}))
     elif args[0] == "runs" and args[1].startswith("-"):
         print(json.dumps([
             {{"id": "r3", "schedule": "s-abc", "outcome": "ok", "reply": "2 new mails",
@@ -502,6 +511,26 @@ class TestThePanel:
         finally:
             manager.shutdown()
 
+    def test_a_schedule_is_changed_from_the_panel_with_only_what_changed(
+            self, fake_samay, tmp_path):
+        _, manager, client = self.served(fake_samay[0], tmp_path)
+        try:
+            done = client.post("/api/schedules/s-abc/edit",
+                               json={"when": "at 08:00", "prompt": "--mail and weather"})
+            assert done.status_code == 200
+            assert done.json()["result"]["sentence"] == "every day at 08:00"
+            state = str(tmp_path / "state")
+            # each box as --flag=value: a prompt starting with dashes is still a prompt
+            assert ["--state", state, "edit", "s-abc", "--prompt=--mail and weather",
+                    "--when=at 08:00", "--json"] in calls(fake_samay[1])
+            bad = client.post("/api/schedules/s-abc/edit", json={"when": "sometimes"})
+            assert bad.status_code == 400 and "sometimes" in bad.json()["detail"]
+            assert client.post("/api/schedules/s-abc/edit", json={}).status_code == 400
+            said = client.post("/api/schedules/preview", json={"when": "-every 2h"}).json()
+            assert said["sentence"] == "said: -every 2h"
+        finally:
+            manager.shutdown()
+
     def test_an_option_is_not_a_schedule_id(self, fake_samay, tmp_path):
         _, manager, client = self.served(fake_samay[0], tmp_path)
         try:
@@ -564,3 +593,29 @@ def test_a_person_on_another_clock_gets_a_server_that_keeps_it():
         manager, agent)
     assert started[0].env == {"SAMAY_TZ": "Europe/London"}
     assert not started[1].env
+
+
+class TestTheChangeCard:
+    """change_schedule's card: what it is now, and each change in words."""
+
+    def test_each_change_is_said_and_a_new_when_in_samay_s_sentence(self):
+        card = samay_link.explain_edit(
+            {"id": "s-abc", "prompt": "brief and weather", "when": {"at": "08:00"},
+             "notify": "always"},
+            "s-abc [active] every day at 07:00\n  does: brief",
+            sentence="every day at 08:00 -- next: Wed 11 Nov 08:00")
+        assert card.splitlines()[0] == ("Change schedule s-abc (its runs and allowed "
+                                        "tools stay)")
+        assert "now: s-abc [active] every day at 07:00" in card
+        assert "  brief and weather" in card
+        assert "When: every day at 08:00 -- next" in card
+        assert "Tells you: after every run" in card
+
+    def test_a_when_samay_cannot_read_is_said_in_capitals(self):
+        card = samay_link.explain_edit({"id": "s-abc", "when": {"every": "1s"}},
+                                       problem="5 minutes at the least")
+        assert "SAMAY CAN'T READ THIS: 5 minutes at the least" in card
+
+    def test_the_prompt_tells_the_agent_to_change_not_remake(self):
+        said = samay_link.prompt_text({"serving": True})
+        assert "mcp__samay__change_schedule" in said and "Never delete it" in said

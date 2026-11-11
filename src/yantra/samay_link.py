@@ -249,6 +249,11 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "unless the person asked for exactly that. Use exact tool names.",
         "4. `notify`: `when_new` for a check that may find nothing; `always` for a "
         "digest, a summary or a reminder.",
+        "5. TO CHANGE ONE the person already has -- another time, more or less in what it "
+        "does, a different phone -- call `mcp__samay__change_schedule` with its id and "
+        "ONLY what changes (a new `prompt` is the whole new instruction). Never delete it "
+        "and make it again: that throws away its runs and the tools it was allowed. "
+        "Preview a new `when` first and say its sentence.",
         seen_at,
     ]
     if not data.get("serving"):
@@ -475,6 +480,28 @@ def explain_change(verb: str, args: dict[str, Any], listing: str = "") -> str:
     return head + (f"\n  {found}" if found else "")
 
 
+def explain_edit(args: dict[str, Any], listing: str = "", sentence: str = "",
+                 problem: str = "") -> str:
+    """The card for ``change_schedule``: the schedule as it is, and each
+    thing that changes, in words -- a new when as Samay says it."""
+    schedule = str(args.get("id") or "?")
+    found = next((line for line in listing.splitlines() if line.startswith(f"{schedule} ")),
+                 "")
+    lines = [f"Change schedule {schedule} (its runs and allowed tools stay)"]
+    if found:
+        lines.append(f"  now: {found}")
+    if args.get("prompt") is not None:
+        lines += ["", "It will do, each time:", f"  {str(args['prompt']).strip()}"]
+    if args.get("when"):
+        lines += ["", f"When: {sentence}" if sentence
+                  else f"When: {args['when']} -- SAMAY CAN'T READ THIS: {problem}"]
+    if args.get("notify"):
+        lines.append(f"Tells you: {NOTIFY_WORDS.get(args['notify'], args['notify'])}")
+    if args.get("phone_name") is not None:
+        lines.append(f"On the phone: {args['phone_name'] or 'your only one'}")
+    return "\n".join(lines)
+
+
 def explain_allow(args: dict[str, Any], registry: Any, listing: str = "") -> str:
     """The card for ``allow_for_schedule``: the schedule, in its words,
     and what it may now do unasked -- each grant with what it matches
@@ -531,6 +558,18 @@ def explain(tool: Any, registry: Any, setu_of: Any, phone: bool = False,
             listing, failed = ask("list_schedules", {})
             return explain_allow(args, registry, "" if failed else listing)
         return allowing
+    if verb == "change_schedule":
+        def editing(args: dict[str, Any]) -> str:
+            listing, failed = ask("list_schedules", {})
+            said, bad = "", ""
+            if args.get("when"):
+                preview = {"when": args["when"]}
+                if args.get("tz"):
+                    preview["tz"] = args["tz"]
+                text, wrong = ask("preview_schedule", preview)
+                said, bad = ("", text) if wrong else (text, "")
+            return explain_edit(args, "" if failed else listing, said, bad)
+        return editing
     if verb in ("pause_schedule", "resume_schedule", "delete_schedule"):
         def change(args: dict[str, Any]) -> str:
             listing, failed = ask("list_schedules", {})
@@ -658,6 +697,43 @@ class Samay:
             argv += ["--limit", str(max(1, min(int(limit), 200)))]
         try:
             done = subprocess.run([*argv, "--json"], capture_output=True, text=True,
+                                  timeout=STATUS_TIMEOUT)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise SamayLinkError(f"samay {verb}: {exc}") from None
+        if done.returncode != 0:
+            why = (done.stderr or done.stdout).strip().splitlines()
+            raise SamayLinkError(why[-1] if why else f"samay {verb} failed")
+        try:
+            return json.loads(done.stdout)
+        except json.JSONDecodeError:
+            raise SamayLinkError(f"samay {verb} did not print JSON") from None
+
+    def edit(self, schedule: str, fields: dict[str, Any]) -> Any:
+        """A schedule changed on the panel: ``samay edit``, only what the
+        form changed, each as ``--flag=value`` so a prompt is never taken
+        for an option. Samay's refusal comes back in its words."""
+        if not WORD_RE.match(schedule):
+            raise SamayLinkError(f"which schedule? {schedule!r} is not an id")
+        flags = []
+        for key, flag in (("prompt", "--prompt"), ("when", "--when"), ("tz", "--tz"),
+                          ("notify", "--notify"), ("phone_name", "--phone")):
+            if fields.get(key) is not None:
+                flags.append(f"{flag}={str(fields[key]).strip()}")
+        if not flags:
+            raise SamayLinkError("say what to change: its prompt, when, zone, notify "
+                                 "or phone")
+        return self._json([*self._base(), "edit", schedule, *flags, "--json"], "edit")
+
+    def preview(self, when: str, tz: str = "") -> Any:
+        """A ``when`` said back in Samay's words with its next times, before
+        anything is saved: the panel's Change form, as it is typed."""
+        zone = [f"--tz={tz}"] if tz else []
+        return self._json([*self._base(), "preview", *zone, "--json", "--", str(when)],
+                          "preview")
+
+    def _json(self, argv: list[str], verb: str) -> Any:
+        try:
+            done = subprocess.run(argv, capture_output=True, text=True,
                                   timeout=STATUS_TIMEOUT)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise SamayLinkError(f"samay {verb}: {exc}") from None

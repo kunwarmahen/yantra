@@ -2343,7 +2343,16 @@ comes back saying so, for one more approve.
 
 **The panel.** In `yantra --web`, the clock chip opens the Schedules
 panel: each schedule, its next times and last run, what each run needed
-from you, and *run now*, *pause*, *delete*.
+from you, and *change*, *run now*, *pause*, *delete*.
+
+**Changing one.** Press *change* on a schedule: what it does, when, and
+when it tells you open in boxes. Type a new time, `at 08:00 on weekdays`,
+and Samay says it back under the box before you save (*at 08:00, Mon–Fri
+-- next: Wed 11 Nov 08:00, …*). Press *save*. It's the same schedule: its
+past runs and the tools it may use are kept. Or just tell the agent:
+"make my morning brief 8 instead of 7". It changes that one
+(`change_schedule`, one card) and doesn't make a second
+([notes/157](notes/157-changed-in-place.md)).
 
 **The answers.** Press *run now* on a schedule and wait for it to
 finish (or let it run at its time). Within a minute an **answers** chip
@@ -2811,8 +2820,12 @@ it fires.
 
 **Seeing your watches.** On the page, the **eye** chip in the header
 (*1 watching*) opens the Watches panel: each watch in a sentence, its
-last look, and buttons for **looks**, **look now**, **pause** and
-**delete**. When a watch fires, a second chip appears (*1 seen*) and the
+last look, and buttons for **looks**, **look now**, **edit**, **pause**
+and **delete**. **edit** opens the watch's words in boxes. Change its
+test from `above 70` to `above 80` and watch the name and *what it's for*
+boxes change from 70 to 80 as you type, before you save. Asking the agent
+("make the guestroom one 80") changes the words in the same call
+([notes/157](notes/157-changed-in-place.md)). When a watch fires, a second chip appears (*1 seen*) and the
 panel opens with **what they saw** at the top:
 
 ```

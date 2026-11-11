@@ -459,6 +459,11 @@ def test_a_watch_and_a_schedule_are_told_apart_in_both_layers():
     assert "Only without them" in schedules
 
 
+def test_changing_a_watch_s_line_changes_its_words_in_the_same_call():
+    said = prahari_link.prompt_text({"serving": True})
+    assert "TO CHANGE A WATCH'S LINE" in said and "in the same call" in said
+
+
 class TestThePanel:
     def served(self, program, tmp_path):
         pytest.importorskip("fastapi")
@@ -562,6 +567,20 @@ class TestThePanel:
             assert ["--state", state, "edit", "w-1", "--when=below 40",
                     "--json"] in calls(fake[1])
             assert client.post("/api/watches/--help/edit", json={}).status_code == 400
+        finally:
+            manager.shutdown()
+
+    def test_a_new_line_goes_with_its_words_in_one_mend(self, fake, tmp_path):
+        """70 -> 80 on the panel: the form carries the number into the name
+        and the words, and they go in the same ``prahari edit``."""
+        manager, client = self.served(fake[0], tmp_path)
+        try:
+            client.post("/api/watches/w-1/edit", json={
+                "when": "above 80", "name": "Cool the guestroom above 80",
+                "asked": "AC on above 80", "thing": "guestroom at 80"})
+            sent = [c for c in calls(fake[1]) if c[2:4] == ["edit", "w-1"]][-1]
+            assert "--when=above 80" in sent and "--name=Cool the guestroom above 80" in sent
+            assert "--asked=AC on above 80" in sent and "--thing=guestroom at 80" in sent
         finally:
             manager.shutdown()
 

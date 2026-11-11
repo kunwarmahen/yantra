@@ -289,7 +289,11 @@ def prompt_text(data: dict[str, Any], seen_at: str = SEEN_HERE,
         "Gmail's own push is `wake` plus `renew` with `mcp__gmail__watch_mailbox`, only "
         "when the person has a Pub/Sub topic for it.",
         "7. A watch that paused because its pick found nothing: preview a new pick and "
-        "call `mcp__prahari__update_watch`.",
+        "call `mcp__prahari__update_watch`. TO CHANGE A WATCH'S LINE (\"make the "
+        "guestroom one 80, not 70\"), call `update_watch` with the new `when` AND its "
+        "`name`, `asked` and `thing` with the number changed, in the same call, so its "
+        "words never say the old line; if the answer still says its words say the old "
+        "test, offer those words.",
         "8. One number wanted by two watches (a band: heat below 60, cool above 70) or "
         "asked for often is one reading: `mcp__prahari__create_indriya`, after a "
         "preview and the person's yes, then watches with `sense` instead of a check. "
@@ -996,7 +1000,7 @@ class Prahari:
                     raise PrahariLinkError("say when it matters (below 50, new, changed)")
                 out.append(f"{flag}={value}")
         if made:
-            for key, flag in (("asked", "--asked"), ("then", "--then")):
+            for key, flag in (("asked", "--asked"), ("thing", "--thing"), ("then", "--then")):
                 value = given(key)
                 if value is not None and (value or partial):
                     out.append(f"{flag}={value}")

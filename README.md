@@ -947,7 +947,9 @@ nothing allowed is asked about through Dvara at its time, not refused. On the pa
 the card has a **Tell me** list too; a different choice comes back as an
 edited card to approve. In the browser UI a **clock** chip opens the
 Schedules panel: every schedule with its next times and last run, its
-history (what a run needed from you, what it was refused), and *run
+history (what a run needed from you, what it was refused), and
+*change* (what it does, when, when it tells you, said back by Samay as
+you type; [notes/157](notes/157-changed-in-place.md)), *run
 now*, *pause*/*resume*, *delete*. The panel runs Samay's own commands
 (`samay list --json` …), so it works whether or not `samay serve` is up,
 and it says at the top when the clock is not running
@@ -3044,8 +3046,11 @@ src/yantra/
 │                   reaches, the accounts it changes or reads unasked; laid
 │                   out like Samay's new-schedule form, and where an answer
 │                   goes, [notes/125](notes/125-the-answer-comes-back-here.md)), a
-│                   `schedules` prompt layer, and the page's Schedules panel
-│                   through `samay list|runs|pause|resume|rm --json`
+│                   `schedules` prompt layer (change one in place with
+│                   `change_schedule`, never delete and remake), the change
+│                   card (what it is now, each change, a new when in Samay's
+│                   sentence), and the page's Schedules panel through `samay
+│                   list|runs|pause|resume|rm|edit|preview --json` (notes/157)
 │                   ([notes/115](notes/115-what-a-yes-covers.md)); a host
 │                   whose turn has the phone (Dvara) starts it `--phone`,
 │                   and for a job that works the phone (`phone`, or steps)
@@ -3069,7 +3074,9 @@ src/yantra/
 │                   the check's profile is closed, so the look isn't left
 │                   waiting on the chat's lock ([notes/140](notes/140-a-watch-offered.md));
 │                   the page's Watches panel through `prahari list|looks|
-│                   pause|resume|rm|edit|add|preview --json` and a look now (`prahari look`,
+│                   pause|resume|rm|edit|add|preview --json` (a mended test's
+│                   number carried into its name, asked and thing boxes as it
+│                   is typed, notes/157) and a look now (`prahari look`,
 │                   given this Yantra when nothing names one), and the seen
 │                   chip: this person's looks that fired
 │                   ([notes/147](notes/147-the-watches-on-the-page.md));
@@ -3499,7 +3506,9 @@ src/yantra/
 │                   with each --trace-full turn's answer as the file holds
 │                   it ([notes/90](notes/90-what-it-said.md)).
 │                   The clock chip's Schedules panel lists what Samay keeps,
-│                   with run now / pause / resume / delete
+│                   with change / run now / pause / resume / delete
+│                   (change through `samay edit`, a when said back by
+│                   `samay preview` as it is typed; notes/157)
 │                   ([notes/115](notes/115-what-a-yes-covers.md)); the
 │                   answers chip and "what they said", the replies of this
 │                   person's schedules (GET /api/schedules/answers), seen

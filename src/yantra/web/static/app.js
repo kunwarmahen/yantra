@@ -2274,7 +2274,7 @@ function renderMemory() {
    here is a model turn and nothing asks: the person is the one pressing.
    A run started here is not waited for -- it appears in the history. */
 
-const sched = { data: null, open: new Set(), runs: {} };
+const sched = { data: null, open: new Set(), runs: {}, form: null };
 
 $("#chip-sched").onclick = openSchedPanel;
 $("#chip-answers").onclick = openSchedPanel;
@@ -2458,6 +2458,10 @@ function renderSchedules() {
       else { sched.open.add(s.id); await loadRuns(s.id); }
       renderSchedules();
     });
+    button(sched.form === s.id ? "close" : "change", "", () => {
+      sched.form = sched.form === s.id ? null : s.id;
+      renderSchedules();
+    });
     if (s.state !== "done") button("run now", "", () => schedAct(s.id, "run"));
     if (s.state === "active") button("pause", "", () => schedAct(s.id, "pause"));
     if (s.state === "paused") button("resume", "primary", () => schedAct(s.id, "resume"));
@@ -2470,6 +2474,7 @@ function renderSchedules() {
       if (ok) schedAct(s.id, "delete");
     });
     row.append(dot, main, actions);
+    if (sched.form === s.id) row.append(schedForm(s));
     if (sched.open.has(s.id)) {
       const runs = document.createElement("div");
       runs.className = "sched-runs";
@@ -2485,6 +2490,85 @@ function renderSchedules() {
     }
     body.append(row);
   }
+}
+
+/* Change a schedule in place: what it does, when, when it tells you, which
+   phone. Only the boxes that changed go, through ``samay edit``; its runs
+   and the tools it was allowed stay. A new when is said back by Samay as
+   it is typed, the same sentence its own page shows. */
+function schedForm(s) {
+  const was = { prompt: s.prompt || "", when: s.when_text || "", notify: s.notify,
+                phone_name: s.phone_name || "" };
+  const form = document.createElement("form");
+  form.className = "watch-form";
+  const boxes = {};
+  const label = (text, input, wide) => {
+    const l = document.createElement("label");
+    if (wide) l.className = "wide";
+    l.textContent = text;
+    l.append(input);
+    form.append(l);
+  };
+  boxes.prompt = document.createElement("textarea");
+  boxes.prompt.value = was.prompt;
+  label(s.runner === "vidhi" ? "routine" : "what it does each time", boxes.prompt, true);
+  boxes.when = document.createElement("input");
+  boxes.when.className = "mono";
+  boxes.when.value = was.when;
+  boxes.when.placeholder = "every 2h · at 08:00 on weekdays · once 2026-12-01T09:00";
+  label("when", boxes.when, false);
+  boxes.notify = document.createElement("select");
+  for (const [v, t] of Object.entries(NOTIFY_SAID)) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = t; o.selected = v === was.notify;
+    boxes.notify.append(o);
+  }
+  label("tells you", boxes.notify, false);
+  if (s.phone) {
+    boxes.phone_name = document.createElement("input");
+    boxes.phone_name.value = was.phone_name;
+    boxes.phone_name.placeholder = "empty for your only phone";
+    label("which phone", boxes.phone_name, false);
+  }
+  const said = document.createElement("pre");
+  said.className = "watch-tried";
+  said.textContent = s.sentence;
+  form.append(said);
+  let timer = 0;
+  boxes.when.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const text = boxes.when.value.trim();
+      if (!text || text === was.when) { said.textContent = s.sentence; return; }
+      const res = await fetch("/api/schedules/preview", { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ when: text, tz: s.tz }) });
+      const data = await res.json().catch(() => ({}));
+      said.textContent = res.ok ? data.sentence : (data.detail || res.statusText);
+    }, 350);
+  });
+  const act = document.createElement("div");
+  act.className = "conn-actions";
+  const btn = (text, cls, fn) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = `m-btn ${cls}`; b.textContent = text; b.onclick = fn;
+    act.append(b);
+  };
+  btn("save", "primary", async () => {
+    const body = {};
+    for (const [k, b] of Object.entries(boxes)) if (b.value.trim() !== String(was[k]).trim()) body[k] = b.value.trim();
+    if (!Object.keys(body).length) { sched.form = null; renderSchedules(); return; }
+    const res = await fetch(`/api/schedules/${encodeURIComponent(s.id)}/edit`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { said.textContent = data.detail || res.statusText; return; }
+    toast(data.result?.sentence ? `${s.id} changed — ${data.result.sentence}` : `${s.id} changed`);
+    sched.form = null;
+    await loadSchedules(false);
+  });
+  btn("cancel", "", () => { sched.form = null; renderSchedules(); });
+  form.append(act);
+  form.onsubmit = (e) => e.preventDefault();
+  return form;
 }
 
 /* ---------- watches panel (prahari_link.py) ----------
@@ -2884,7 +2968,7 @@ function whenWords(when) {
 
 function watchForm(w) {
   const was = w ? {
-    name: w.name || "", asked: w.asked || "", tool: w.check?.tool || "",
+    name: w.name || "", asked: w.asked || "", thing: w.thing || "", tool: w.check?.tool || "",
     args: w.check ? JSON.stringify(w.check.args || {}) : "", pick: pickWords(w.pick),
     when: whenWords(w.when), every: w.every || "", then: w.then || "",
   } : { name: "", asked: "", tool: "web_fetch", args: "", pick: "", when: "", every: "1h",
@@ -2912,6 +2996,7 @@ function watchForm(w) {
   const senses = Boolean(w && w.sense);
   box("name", "name", "ALAB under $50");
   box("asked", "what it's for, in your words", "tell me if ALAB drops under 50", true);
+  if (w) box("thing", "the thing it watches", "ALAB's price", true);
   if (senses) {
     const l = document.createElement("p");
     l.className = "wide watch-listens";
@@ -2932,6 +3017,29 @@ function watchForm(w) {
   box("when", "when", listens ? "any · contains Mum · new" : "below 50 · new · changed · contains Mum");
   if (!listens && !senses) box("every", "every", "3h");
   box("then", "then ask the agent (empty: just tell you)", "Tell me the new price.", true);
+  // A test whose number changes carries it into the name and the words
+  // still saying the old one -- in the boxes, before save; a box the
+  // person typed in themselves is theirs and left alone.
+  if (w) {
+    const numbers = (text) => String(text).match(/-?\d+(?:\.\d+)?/g) || [];
+    const typed = new Set();
+    ["name", "asked", "thing"].forEach((k) => boxes[k].addEventListener("input", () => typed.add(k)));
+    const carry = () => {
+      const olds = numbers(`${was.when} ${was.pick}`);
+      const news = numbers(`${boxes.when.value} ${boxes.pick.value}`);
+      for (const k of ["name", "asked", "thing"]) {
+        if (typed.has(k)) continue;
+        let text = was[k];
+        if (olds.length === news.length) olds.forEach((o, i) => {
+          if (o !== news[i]) text = text.replace(
+            new RegExp(`(?<![\\d.])${o.replace(".", "\\.")}(?!\\d)`, "g"), news[i]);
+        });
+        boxes[k].value = text;
+      }
+    };
+    boxes.when.addEventListener("input", carry);
+    boxes.pick.addEventListener("input", carry);
+  }
   const tried = document.createElement("pre");
   tried.className = "watch-tried hidden";
   const values = () => Object.fromEntries(Object.entries(boxes).map(([k, b]) => [k, b.value]));
@@ -2978,10 +3086,11 @@ function watchForm(w) {
       if (w) {
         const body = changed();
         if (!Object.keys(body).length) { watch.form = null; renderWatches(); return; }
-        await post(`/api/watches/${encodeURIComponent(w.id)}/edit`, body);
-        toast(("pick" in body || "when" in body || "tool" in body)
+        const done = (await post(`/api/watches/${encodeURIComponent(w.id)}/edit`, body)).result || {};
+        toast((("pick" in body || "when" in body || "tool" in body)
           ? `${w.id} changed — it learns again at its next look`
-          : `${w.id} changed — what it saw is kept`);
+          : `${w.id} changed — what it saw is kept`)
+          + (done.notes?.length ? ` · ${done.notes.join(" · ")}` : ""));
       } else {
         const made = (await post("/api/watches", values())).result || {};
         toast(`added ${made.id || "the watch"} — ${made.sentence || ""}`);
