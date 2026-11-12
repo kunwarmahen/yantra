@@ -19,6 +19,14 @@ that read (`list_routines`, `list_templates`, `routine_runs`) and four
 that write (`run_routine`, `install_template`, `set_routine_inputs`,
 `stop_run`).
 
+`list_routines` gives each routine's blanks with their kinds and what
+starts it (*Samay: at 20:00 (active)*, *Prahari: Cold night warning:
+outside-temp below 35*, or *only when asked*). To start one by itself
+the agent gives Samay's `create_schedule` or Prahari's `create_watch`
+its `routine`; nothing new was needed here. The owner's agent through
+Dvara asks as `owner`, which Vidhi reads as `local`, so it sees the
+routines installed on Vidhi's page (Vidhi's notes/09).
+
 **NONE WRITES A STEP.** Drawing a routine is the person's, on Vidhi's
 page. Writing a graph is exactly where a small local model goes wrong;
 picking `morning-brief` and filling `latitude = 51.5` is where it goes
