@@ -1786,6 +1786,13 @@ figure** — never `$0`. Override or extend it:
 
 ([notes/21](notes/21-cost-accounting.md), [notes/34](notes/34-budgets.md))
 
+Every turn also leaves one line in a usage file
+(`~/.local/state/yantra/usage.jsonl`): which program, for whom, the
+model, tokens, seconds, and dollars (blank when there's no price). No
+words go in it. Every program in the house writes the same file, and
+Sarathi's `sarathi usage` reads it. `YANTRA_USAGE=off` writes none
+([notes/160](notes/160-the-house-s-meter.md)).
+
 ## 15 · The warning before the stop
 
 You get one heads-up, priced from the request the agent is *about to
@@ -2878,6 +2885,14 @@ received* trigger and an HTTP request do it; Prahari's README has the
 three steps. An iPhone can't: it doesn't let other apps read its
 notifications.
 
+**A camera, seen.** A look can be a picture: Setu's Home Assistant
+connection has `camera_snapshot`, and a watch whose pick is `{"see":
+"Is there a package by the door? Answer yes or no."}` has a model that
+can see answer that question each time. It's the one look a model makes,
+and the card says so. Yantra's side is `--call-pictures`: the look gets
+the picture back inline instead of the line saying one was left out
+([notes/139](notes/139-one-tool-no-model.md); Prahari's notes/14).
+
 Installing Prahari, its page, the inlet, and its rules (the first look
 only learns, a price fires once when it crosses its line, a check that
 broke is never quiet) are Prahari's: see its README.
@@ -3112,5 +3127,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 2803 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 3362 offline tests passing (1 skipped) — no network, no key.
 Copyright 2026 Mahen Singh, Apache License 2.0.*

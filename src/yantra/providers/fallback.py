@@ -24,7 +24,9 @@ Deliberately NOT a Provider subclass: it has no settings, no base URL,
 no client of its own -- it IS a list of those. Duck-typed to the two
 methods the agent actually calls. Library-level on purpose: session
 persistence stores a provider NAME and rebuilds it via the factory, and
-a composite cannot round-trip through a name yet.
+a composite cannot round-trip through a name. The house's own failover is
+``standby.py``, which keeps its primary's name (so it round-trips), asks
+each backend for its own model, and says every switch (notes/159).
 
 All-fail surfacing follows retry.py's honesty rule, upgraded: the LAST
 error is the raised exception (its ``__cause__``), and every earlier

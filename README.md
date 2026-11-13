@@ -691,6 +691,10 @@ by discovery ([.env.example](.env.example)):
 YANTRA_DISABLED_TOOLS=browser_*,mcp__slack__*   # comma-separated globs on tool names
 ```
 
+`YANTRA_FALLBACK` (a model standing by, [notes/159](notes/159-a-model-standing-by.md))
+and `YANTRA_USAGE` / `YANTRA_USAGE_FILE` (the house's usage file,
+[notes/160](notes/160-the-house-s-meter.md)) are in the same file.
+
 That kill-switch is permanent (tools unregistered at startup). To pull
 a tool for just this session and put it back later: `/tools off bash`,
 `/tools on bash` in the REPL — globs work (`/tools off browser_*`) —
