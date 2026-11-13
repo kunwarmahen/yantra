@@ -280,11 +280,18 @@ def parse_reply(text: str, remembered: list[str],
         match = _LINE.match(line)
         if match is None:
             continue
-        from yantra.memory import TOPICS
+        from yantra.memory import TOPICS, peel_label
         kind = match.group(1).lower()
         topic = (match.group(2) or "").lower() or None
         key = " ".join((match.group(3) or "").split()).lower() or None
         statement = " ".join(match.group(4).strip().strip('"').split())
+        # "fact: [family/wife] Their wife ...": the tag copied from how the
+        # kept memories were shown, put after the colon -- it is the slot.
+        statement, tag_topic, tag_about, tag_key = peel_label(statement)
+        statement = statement.strip().strip('"')
+        if tag_topic is not None and topic is None:
+            topic = tag_topic
+            key = f"{tag_about}.{tag_key}" if tag_about and tag_key else tag_key
         norm = _norm(statement)
         if not statement or REDACTED in statement or len(statement) > 300:
             continue

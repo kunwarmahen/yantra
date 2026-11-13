@@ -223,3 +223,36 @@ class TestOverMcp:
                               "metadata": {"topic": "home", "slot": "home||"}}]}
         assert _items(rows) == [MemoryItem("e1", "Lives in Cary, NC.", topic="home",
                                            slot="home||")]
+
+
+class TestATagCopiedIntoTheWords:
+    """The look back is shown "[family/wife] Their wife ..."; a model that
+    copies that into its own line must not have the tag kept as words
+    (two such memories reached Smritikosh 2026-11-07)."""
+
+    def test_the_reply_line_gets_the_slot_not_the_tag(self):
+        [c] = parse_reply("fact: [family/wife] Their wife is called Meera.", [])
+        assert c.statement == "Their wife is called Meera."
+        assert (c.topic, c.key) == ("family", "wife")
+
+    def test_a_tag_naming_someone_keeps_who(self):
+        [c] = parse_reply("fact: [contact/ravi.email] Ravi's email is r@x.org.", [])
+        assert c.statement == "Ravi's email is r@x.org."
+        assert c.key == "ravi.email"
+
+    def test_a_line_with_its_own_slot_keeps_it(self):
+        [c] = parse_reply("fact [home/city]: [family/wife] Lives in Pune.", [])
+        assert (c.topic, c.key) == ("home", "city")
+        assert c.statement == "Lives in Pune."
+
+    def test_remember_never_keeps_the_tag(self, memory):
+        memory.remember("[family/daughters] Has two daughters.")
+        [item] = memory.list(10)
+        assert item.statement == "Has two daughters."
+        assert item.topic == "family"
+        assert item.slot == slot("family", None, "daughters")
+
+    def test_an_unknown_tag_is_the_persons_words(self, memory):
+        memory.remember("[draft] Writes notes in Obsidian.")
+        [item] = memory.list(10)
+        assert item.statement == "[draft] Writes notes in Obsidian."

@@ -187,6 +187,28 @@ def label(item: MemoryItem) -> str:
     return f"[{item.topic}] " if item.topic else ""
 
 
+#: A ``label`` at the front of a statement: ``[family/wife] ...``.
+_LEADING_LABEL = re.compile(r"^\s*\[\s*([a-z]+)\s*(?:/\s*([a-z0-9_.\-]+)\s*)?\]\s*",
+                            re.IGNORECASE)
+
+
+def peel_label(statement: str) -> tuple[str, str | None, str | None, str | None]:
+    """The statement without a ``[topic/key]`` tag at its front, and the
+    topic, about and key the tag named (None each when it had none).
+
+    The tag is how kept memories are SHOWN to a look back (``label``); a
+    model that copies the look into its own line hands back "[family/wife]
+    Their wife ..." -- and the tag was then kept as part of the memory's
+    words. A tag naming no known topic is left in place: it is the
+    person's words, not ours."""
+    match = _LEADING_LABEL.match(statement or "")
+    if match is None or match.group(1).lower() not in TOPICS:
+        return statement, None, None, None
+    topic = match.group(1).lower()
+    who, _, key = (match.group(2) or "").lower().rpartition(".")
+    return statement[match.end():], topic, who or None, key or None
+
+
 @dataclass(frozen=True, slots=True)
 class MemoryItem:
     """One remembered statement, as a store hands it back."""
@@ -417,6 +439,9 @@ class Memory:
         """Write it; forget what sat in its slot before. Returns the id and
         the memories let go. Written FIRST, forgotten after: a store that
         fails between the two keeps both, never neither."""
+        statement, tag_topic, tag_about, tag_key = peel_label(statement)
+        if topic is None and tag_topic is not None:
+            topic, about, key = tag_topic, about or tag_about, key or tag_key
         if topic is not None and topic not in TOPICS:
             raise MemoryStoreError(f"topic {topic!r} is not one of "
                                    f"{', '.join(TOPICS)}")
@@ -833,6 +858,7 @@ __all__ = [
     "memory_mode",
     "note_used",
     "label",
+    "peel_label",
     "short_id",
     "slot",
     "prime_if_new",

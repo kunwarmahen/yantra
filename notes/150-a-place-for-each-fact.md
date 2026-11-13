@@ -66,6 +66,17 @@ slot. A look back that keeps the fact unlabelled beats one that loses
 it ([note 107](107-a-fact-that-says-what-it-is.md) has the time a
 wording change lost every fact).
 
+**A tag is never part of the words.** Shown `- [family/wife] Their wife
+is …`, a model copied the look rather than the format and wrote
+`fact: [family/wife] Their wife is …`, tag after the colon. The parser
+read the bracket only before the colon, so the memory was kept as
+"[family/wife] Their wife is …" with no slot at all, and the tag went
+into the store's words and into every prompt after. Now `peel_label`
+takes a leading `[topic/key]` off a statement and files it as the slot:
+in the look back's reply, and again in `remember`, so no road keeps one.
+A bracket naming no known topic (`[draft] …`) is the person's own words
+and stays.
+
 ## How long it lasts unused
 
 Time is a poor signal for where someone lives. They move, and they say
