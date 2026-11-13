@@ -72,9 +72,9 @@ The house's models, today: 1 turns, 0 minutes of answering, nothing billed
   in the line.
 * **No pruning yet.** At a few hundred bytes a turn, a busy house writes
   well under a megabyte a week.
-* **Floors and alerts don't read it yet.** The meter comes first. A house
-  ceiling that reads it is the next step, and it's said there, not
-  assumed here.
+* ~~**Floors and alerts don't read it yet.**~~ A house ceiling reads it
+  now: `YANTRA_HOUSE_DAY_USD`, the house's billed dollars a day, from this
+  same file ([notes/161](161-the-house-s-day.md)).
 
 ## Tests
 

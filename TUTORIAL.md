@@ -1793,6 +1793,15 @@ words go in it. Every program in the house writes the same file, and
 Sarathi's `sarathi usage` reads it. `YANTRA_USAGE=off` writes none
 ([notes/160](notes/160-the-house-s-meter.md)).
 
+The same file can hold the whole house to a day's money.
+`YANTRA_HOUSE_DAY_USD=2.00` (Sarathi's *Most a day for billed models*)
+is every program's billed dollars together. Once the day reaches it, a
+billed model isn't asked again until midnight. A local model standing by
+answers instead, and the answer says why. With none standing by, the
+answer is *Nothing was done: the house's $2.00 for today is spent…*. A
+local model is never stopped by it
+([notes/161](notes/161-the-house-s-day.md)).
+
 ## 15 · The warning before the stop
 
 You get one heads-up, priced from the request the agent is *about to
@@ -3127,5 +3136,5 @@ If you remember nothing else:
 
 ---
 
-*Yantra: 3362 offline tests passing (1 skipped) — no network, no key.
+*Yantra: 3376 offline tests passing (1 skipped) — no network, no key.
 Copyright 2026 Mahen Singh, Apache License 2.0.*

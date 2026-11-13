@@ -37,6 +37,16 @@ YOU HEAR WHICH. Every switch is written down as it happens ("qwen3.8:latest
 answered"), and the agent puts the turn's switches on its ``TurnEnd``
 (``switched``), so each host can say it under the answer.
 
+A BILLED MODEL ISN'T ASKED ONCE THE HOUSE'S DAY IS SPENT. With
+``YANTRA_HOUSE_DAY_USD`` set (usage_log.py), each billed model is checked
+before it is asked, and when the house's dollars for today are gone it is
+passed over the way a down one is: a local model standing by answers, and
+the switch says so ("claude-sonnet-5-5 (anthropic) wasn't asked: the house's
+$2.00 for today is spent ($2.03 so far), so gemma4:12b (ollama) answered").
+With nothing local standing by, the turn ends with that sentence, never a
+bill nobody agreed to. An agent that says ``wait`` is held to the ceiling too:
+it keeps its own model, and the ceiling still applies to it.
+
 THE SAME COMMIT RULE AS FALLBACK. A switch happens only before the first
 event of a stream, so nothing is ever said twice. The taxonomy of what is
 worth switching for is fallback.py's: a backend that is unreachable,
@@ -57,11 +67,16 @@ import os
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
+from yantra import usage_log
 from yantra.errors import ProviderError
 from yantra.providers.fallback import _can_fail_over
 
 ENV = "YANTRA_FALLBACK"
 MODES = ("switch", "wait")
+
+
+class DaySpent(ProviderError):
+    """A billed model passed over: the house's dollars for today are gone."""
 
 
 def parse(raw: str | None) -> list[tuple[str, str, str]]:
@@ -110,10 +125,14 @@ def standbys(raw: str | None = None, *, say=None) -> list[tuple[Any, str]]:
 def wrap(primary: Any, model: str, standing_by: list[tuple[Any, str]],
          when_down: str | None = None) -> Any:
     """The primary, or the primary with models standing by. ``wait`` (an
-    agent's own ``when_down``) and an empty list give the primary back."""
-    if not standing_by or (when_down or "switch") == "wait":
-        return primary
+    agent's own ``when_down``) and an empty list give the primary back --
+    unless the house has a day's ceiling, which holds a billed primary to
+    it with nothing standing by."""
     if isinstance(primary, Standby):
+        return primary
+    if (when_down or "switch") == "wait":
+        standing_by = []
+    if not standing_by and usage_log.day_ceiling() is None:
         return primary
     return Standby(primary, model, standing_by)
 
@@ -147,6 +166,9 @@ class Standby:
         self.standing_by = list(standing_by)
         #: What happened since the last ``take_switches``, in words.
         self.switches: list[str] = []
+        #: The provider that answered last (its name: "ollama"), so the
+        #: usage file says local or billed of the one that really did.
+        self.answered: str = str(getattr(primary, "name", "") or "")
 
     # Everything not about choosing a backend is the primary's: its name
     # round-trips through a session file, its settings answer "can it see?".
@@ -160,14 +182,27 @@ class Standby:
     def _order(self, model: str) -> list[tuple[Any, str]]:
         return [(self.primary, model), *self.standing_by]
 
+    @staticmethod
+    def _held(provider: Any, model: str) -> DaySpent | None:
+        """The house's day spent, for a billed model (usage_log.day_spent)."""
+        why = usage_log.day_spent(str(getattr(provider, "name", "") or ""))
+        return DaySpent(why) if why else None
+
     def _note(self, failed: list[tuple[Any, str, Exception]], provider: Any,
               model: str) -> None:
+        self.answered = str(getattr(provider, "name", "") or "")
         if not failed:
             return
-        down = "; ".join(f"{label(p, m)} didn't answer ({_why(e)})" for p, m, e in failed)
+        down = "; ".join(f"{label(p, m)} wasn't asked: {e}" if isinstance(e, DaySpent)
+                         else f"{label(p, m)} didn't answer ({_why(e)})"
+                         for p, m, e in failed)
         self.switches.append(f"{down}, so {label(provider, model)} answered")
 
     def _all_failed(self, failed: list[tuple[Any, str, Exception]]) -> ProviderError:
+        spent = next((e for _, _, e in failed if isinstance(e, DaySpent)), None)
+        if spent is not None and all(isinstance(e, DaySpent) for _, _, e in failed):
+            self.switches.append(f"no model was asked ({spent})")
+            return DaySpent(str(spent))
         down = "; ".join(f"{label(p, m)}: {_why(e)}" for p, m, e in failed)
         error = ProviderError(f"no model answered: {down}",
                               status=getattr(failed[-1][2], "status", None))
@@ -178,6 +213,10 @@ class Standby:
                temperature=None) -> Iterator:
         failed: list[tuple[Any, str, Exception]] = []
         for provider, slug in self._order(model):
+            held = self._held(provider, slug)
+            if held is not None:
+                failed.append((provider, slug, held))
+                continue
             try:
                 gen = provider.stream(messages=messages, system=system, tools=tools,
                                       model=slug, max_tokens=max_tokens,
@@ -200,6 +239,10 @@ class Standby:
                       temperature=None) -> AsyncIterator:
         failed: list[tuple[Any, str, Exception]] = []
         for provider, slug in self._order(model):
+            held = self._held(provider, slug)
+            if held is not None:
+                failed.append((provider, slug, held))
+                continue
             try:
                 agen = provider.astream(messages=messages, system=system, tools=tools,
                                         model=slug, max_tokens=max_tokens,
@@ -223,6 +266,10 @@ class Standby:
                  temperature=None):
         failed: list[tuple[Any, str, Exception]] = []
         for provider, slug in self._order(model):
+            held = self._held(provider, slug)
+            if held is not None:
+                failed.append((provider, slug, held))
+                continue
             try:
                 answer = provider.complete(messages=messages, system=system, tools=tools,
                                            model=slug, max_tokens=max_tokens,
@@ -240,6 +287,10 @@ class Standby:
         failed: list[tuple[Any, str, Exception]] = []
         model = kwargs.pop("model")
         for provider, slug in self._order(model):
+            held = self._held(provider, slug)
+            if held is not None:
+                failed.append((provider, slug, held))
+                continue
             try:
                 answer = await provider.acomplete(model=slug, **kwargs)
             except Exception as exc:
@@ -267,6 +318,9 @@ def down_words(exc: BaseException) -> str | None:
 
     seen: BaseException | None = exc
     while seen is not None:
+        if isinstance(seen, DaySpent):
+            return (f"Nothing was done: {seen}, and no local model stands by. "
+                    f"Billed models answer again after midnight.")
         if isinstance(seen, ProviderError) and str(seen).startswith("no model answered"):
             return (f"The model didn't answer, so nothing was done. "
                     f"{str(seen)[len('no model answered: '):]}. Ask again in a little while.")

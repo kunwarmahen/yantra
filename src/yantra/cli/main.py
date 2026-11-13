@@ -3406,7 +3406,11 @@ def main(argv: list[str] | None = None) -> int:
                           f"{len(agent.registry) - 1}+discovery each turn "
                           f"(--tool-select 0 to disable)[/dim]")
         from yantra.providers.standby import Standby, label
-        if isinstance(agent.provider, Standby):
+        from yantra.usage_log import day_ceiling
+        if isinstance(agent.provider, Standby) and day_ceiling() is not None:
+            console.print(f"[dim]held to the house's ${day_ceiling():.2f} a day for billed "
+                          f"models[/dim]")
+        if isinstance(agent.provider, Standby) and agent.provider.standing_by:
             console.print("[dim]standing by: " + ", ".join(
                 label(p, m) for p, m in agent.provider.standing_by)
                 + f" (when {agent.model} doesn't answer)[/dim]")

@@ -99,6 +99,10 @@ And with no standby at all, where `[Errno 111] Connection refused` used to
 be printed, the terminal now says *The model didn't answer (nothing is
 listening there), so nothing was done. Ask again in a little while.*
 
+A billed model is also passed over once the house's dollars for the day
+are gone, the same way a down one is
+([notes/161](161-the-house-s-day.md)).
+
 ## What is deliberately not here
 
 * **No automatic choice of a standby.** The house never picks a cloud

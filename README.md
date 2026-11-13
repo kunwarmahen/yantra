@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 3362 tests. The
+The harness underneath is complete and covered by 3376 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -162,7 +162,9 @@ uv run yantra --cache                                # prompt-cache breakpoints 
 uv run yantra --max-usd 0.50                         # stop a turn once it costs this much
                                                       #   (every turn also writes one line,
                                                       #   no words, to the house's usage file;
-                                                      #   YANTRA_USAGE=off; notes/160)
+                                                      #   YANTRA_USAGE=off; notes/160; and
+                                                      #   YANTRA_HOUSE_DAY_USD=2 holds every
+                                                      #   program to $2 a day, notes/161)
 uv run yantra --fallback "anthropic:claude-sonnet-5-5"   # when your model doesn't answer,
                                                       #   this one does, and the answer
                                                       #   says so (also YANTRA_FALLBACK;
@@ -693,7 +695,9 @@ YANTRA_DISABLED_TOOLS=browser_*,mcp__slack__*   # comma-separated globs on tool 
 
 `YANTRA_FALLBACK` (a model standing by, [notes/159](notes/159-a-model-standing-by.md))
 and `YANTRA_USAGE` / `YANTRA_USAGE_FILE` (the house's usage file,
-[notes/160](notes/160-the-house-s-meter.md)) are in the same file.
+[notes/160](notes/160-the-house-s-meter.md)) are in the same file, with
+`YANTRA_HOUSE_DAY_USD` (the house's billed dollars a day: past it a billed
+model isn't asked, [notes/161](notes/161-the-house-s-day.md)).
 
 That kill-switch is permanent (tools unregistered at startup). To pull
 a tool for just this session and put it back later: `/tools off bash`,
@@ -3317,7 +3321,10 @@ src/yantra/
 │                   (YANTRA_USAGE_BY), who (a label, never words), model,
 │                   local or billed, tokens, dollars (null without a price),
 │                   seconds; one O_APPEND write; YANTRA_USAGE=off
-│                   ([notes/160](notes/160-the-house-s-meter.md))
+│                   ([notes/160](notes/160-the-house-s-meter.md)); the
+│                   house's day: today's billed dollars read from the
+│                   file's end, YANTRA_HOUSE_DAY_USD held by the standby
+│                   layer ([notes/161](notes/161-the-house-s-day.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -3373,7 +3380,9 @@ src/yantra/
 │                   for its own model; looks like its primary (name, settings);
 │                   every switch said on TurnEnd.switched; [model] when_down =
 │                   "wait" keeps an agent on its own; a down model said in words
-│                   ([notes/159](notes/159-a-model-standing-by.md))
+│                   ([notes/159](notes/159-a-model-standing-by.md)); a billed
+│                   model passed over once the house's day is spent
+│                   ([notes/161](notes/161-the-house-s-day.md))
 │   ├── sse.py      hand-rolled SSE framing (incremental UTF-8, CRLF/CR/LF, comments)
 │   ├── anthropic.py  Messages-dialect adapter (encode request / decode stream)
 │   ├── openai.py     chat-completions-dialect adapter behind the same interface
@@ -3702,7 +3711,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 3362 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 3376 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
