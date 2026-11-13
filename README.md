@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 3328 tests. The
+The harness underneath is complete and covered by 3337 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -787,7 +787,11 @@ tool is classed by Setu's manifest, not by the server's own hint: reads
 run, writes ask, anything that spends asks every time even under `--yolo`,
 and once a turn has read an email, a page or any server's answer, every
 change after it asks too, with what was read on the card's first line
-([notes/142](notes/142-outside-text-cannot-give-orders.md)). A server
+([notes/142](notes/142-outside-text-cannot-give-orders.md)), and so does
+a look to an address the turn didn't already have in front of it (a page
+that says "open /page2?reader=YOURNAME" is not obeyed silently: the
+address could carry your words out;
+[notes/158](notes/158-a-look-that-could-carry-words-out.md)). A server
 whose answers are your own words (your Samay schedules, your lights) can
 be named trusted, and then reading it asks nothing new; the page's card
 offers **yes to all for this task** (and the terminal `t`) on a question
@@ -2722,6 +2726,11 @@ src/yantra/
 │                   says what was read. One list per turn, shared with
 │                   sub-agents, kept across a hold
 │                   ([notes/142](notes/142-outside-text-cannot-give-orders.md)).
+│                   A look asks too when its address isn't one the turn
+│                   already had (the person's words, a page read, a link
+│                   it gave, a bare front page): outside_seen, exact
+│                   addresses never hosts, sends_to on the request
+│                   ([notes/158](notes/158-a-look-that-could-carry-words-out.md)).
 │                   Agent.trusted_reads names servers whose answers are
 │                   the person's own words (no wildcards, never the web),
 │                   and only_after_reading marks a call a host may let one
@@ -3661,7 +3670,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 3328 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 3337 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local

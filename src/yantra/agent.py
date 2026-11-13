@@ -380,6 +380,10 @@ class Agent:
         #: sub-agents (subagent.py shares it), cleared only by a new
         #: message -- a resumed hold is still the turn that read it.
         self.outside_read: list[str] = []
+        #: The web addresses this turn has in front of it (outside.py): the
+        #: person's own, what was read, the links in what came back. A
+        #: look elsewhere after outside text asks. Shared like the list.
+        self.outside_seen: set[str] = set()
         #: Sources the owner trusts (outside.py): an MCP server by its name,
         #: or one of its tools by its full name. Their answers are not
         #: noted as outside text. Set by the host after building; a
@@ -471,6 +475,8 @@ class Agent:
             # between them and a change. Not a sub-agent's run, whose
             # list is its parent's (outside.py).
             self.outside_read.clear()
+            self.outside_seen.clear()
+            outside.seen_in(self.outside_seen, user_input)
         self._begin_turn()
         yield from self._turn_then_release()
 
@@ -1079,7 +1085,7 @@ class Agent:
         )
         # After outside text, a call that changes something asks, whatever
         # would have allowed it (outside.py).
-        outside.mark(request, tool, self.outside_read)
+        outside.mark(request, tool, self.outside_read, self.outside_seen)
         try:
             # decide(), not self.permissions(): an async gate handed to the
             # SYNCHRONOUS agent raises here instead of being approved as a
@@ -1148,7 +1154,7 @@ class Agent:
             else:
                 result = ToolResult(call.id, _truncate_middle(output))
         outside.noted(self.outside_read, tool, call.arguments, result.content,
-                      self.trusted_reads)
+                      self.trusted_reads, self.outside_seen)
         self.on_after_tool(call, result)
         return result
 

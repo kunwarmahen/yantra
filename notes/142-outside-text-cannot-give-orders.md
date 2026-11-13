@@ -141,10 +141,12 @@ No cloud model was run. That trial waits on a key.
 
 ## What is deliberately not here
 
-* **A look can still carry words out.** `web_fetch` to an address with
+* ~~**A look can still carry words out.** `web_fetch` to an address with
   something packed into its query string is egress, and this rule is
   about acting. In ask mode egress already asks. A session in yolo has
-  chosen not to be asked about it.
+  chosen not to be asked about it.~~ After outside text, a look to an
+  address the turn didn't already have in front of it asks too, exactly
+  as a change does ([note 158](158-a-look-that-could-carry-words-out.md)).
 * **bash is not an outside reader**, even though `curl` makes it one.
   Marking it would make every yolo coding session ask before each edit.
   bash has the sandbox for that ([note 16](16-sandboxing.md)).

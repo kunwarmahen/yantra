@@ -400,6 +400,7 @@ class SubagentSpawner:
         # the child through its objective, the child's reach the parent
         # through its answer, so a read in either marks a change in both.
         child.outside_read = self.parent.outside_read
+        child.outside_seen = self.parent.outside_seen
         child.trusted_reads = self.parent.trusted_reads
         if self.on_child_event is not None:
             # Stream tee: the child's raw StreamEvents are PUSHED to the
