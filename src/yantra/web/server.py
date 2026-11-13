@@ -1457,6 +1457,8 @@ class WebSession:
                     "refused": _refusal_tally(self.agent),
                     # which turn, for its steps link (steps.py)
                     "turn_number": steps_turn_number(self.agent.history),
+                    # a model standing by answered (providers/standby.py)
+                    "switched": list(event.switched),
                 })
             case TurnEnd(reason=reason, response=response, iterations=n,
                          detail=detail):
@@ -1471,6 +1473,7 @@ class WebSession:
                                          if response is not None else ""),
                                 "iterations": n, "cost_line": "",
                                 "refused": _refusal_tally(self.agent),
+                                "switched": list(event.switched),
                                 "held": _held_view(self.agent)})
 
     # ---- snapshots -------------------------------------------------------------

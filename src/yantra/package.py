@@ -82,7 +82,7 @@ DEFAULT_TOOLS = "tools"
 SCHEMA: dict[str, frozenset[str]] = {
     "agent": frozenset({"name", "description", "version", "prompt"}),
     "model": frozenset({"provider", "model", "max_tokens", "max_iterations",
-                        "context_window", "cache"}),
+                        "context_window", "cache", "when_down"}),
     "tools": frozenset({"allow", "deny", "per_turn", "dirs", "packs",
                         "prefix"}),
     "skills": frozenset({"dirs", "disabled", "enabled"}),
@@ -155,6 +155,17 @@ def _str(table: dict[str, Any], key: str, path: Path,
         return None
     if not isinstance(value, str):
         _fail(path, f"{where}.{key} must be a string")
+    return value
+
+
+def _when_down(table: dict[str, Any], path: Path) -> str | None:
+    """``[model] when_down``: "switch" to a model standing by, or "wait"
+    for this agent's own (providers/standby.py)."""
+    from yantra.providers.standby import MODES
+    value = _str(table, "when_down", path, "model")
+    if value is not None and value not in MODES:
+        _fail(path, f"model.when_down is \"switch\" (use a model standing by when "
+                    f"this one doesn't answer) or \"wait\" (never), not {value!r}")
     return value
 
 
@@ -551,6 +562,7 @@ def load_package(where: Path) -> AgentSpec:
         max_iterations=_int(model, "max_iterations", manifest, "model"),
         context_window=_int(model, "context_window", manifest, "model"),
         cache=_bool(model, "cache", manifest, "model"),
+        when_down=_when_down(model, manifest),
         prompt=prompt_text,
         tool_allow=_str_list(tools, "allow", manifest, "tools"),
         tool_deny=_str_list(tools, "deny", manifest, "tools") or (),

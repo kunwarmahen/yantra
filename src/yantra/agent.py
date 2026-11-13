@@ -132,6 +132,9 @@ class TurnEnd:
     #: reports. None only on an event built by hand; the agents always
     #: set it, including on a turn that ended with no response at all.
     usage: Usage | None = None
+    #: Each time a model standing by answered because the usual one
+    #: didn't, in words (providers/standby.py); () when nothing switched.
+    switched: tuple[str, ...] = ()
 
 
 AgentEvent = StreamEvent | ToolExecuted | BudgetWarning | TurnEnd
@@ -603,6 +606,10 @@ class Agent:
                 if isinstance(event, TurnEnd):
                     ended = True
                     self.turn_open = False
+                    # which model answered, when it wasn't the usual one
+                    take = getattr(self.provider, "take_switches", None)
+                    if callable(take):
+                        event.switched = take()
                     steps.turn_ended(self, event)
                     carry.step_done(self)   # and as it ends: no longer open
                     if event.reason != "held":

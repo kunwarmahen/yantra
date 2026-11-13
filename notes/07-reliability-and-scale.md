@@ -57,7 +57,11 @@ Two honesty details:
 Deliberately not a Provider subclass (no settings/base URL/client of its
 own — it IS a list of those), and deliberately library-only for now:
 session persistence rebuilds providers by NAME via the factory, and a
-composite can't round-trip through a name yet.
+composite can't round-trip through a name yet. ~~Library-only~~: the
+house's version is `providers/standby.py`, which keeps the primary's name
+(so it round-trips), gives each backend its own model, says every switch,
+and is switched on by `--fallback` / `YANTRA_FALLBACK`
+([note 159](159-a-model-standing-by.md)).
 
 Live-verified against OpenRouter by pointing the primary at a bogus base
 URL: first turn fails over to the real backend transparently; answer,

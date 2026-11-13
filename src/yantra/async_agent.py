@@ -388,6 +388,10 @@ class AsyncAgent:
                 if isinstance(event, TurnEnd):
                     ended = True
                     self.turn_open = False
+                    # which model answered, when it wasn't the usual one
+                    take = getattr(self.provider, "take_switches", None)
+                    if callable(take):
+                        event.switched = take()
                     steps.turn_ended(self, event)
                     carry.step_done(self)   # the sync twin's last checkpoint
                     if event.reason != "held":

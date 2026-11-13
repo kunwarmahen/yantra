@@ -141,6 +141,7 @@ class Renderer:
                         f"{usage.output_tokens} out"
                         f"{cost} · {n} iteration(s)[/dim]"
                     )
+                self._render_switched(event)
                 self._render_refusals()
 
             case TurnEnd(reason=reason, iterations=n, detail=detail):
@@ -152,7 +153,13 @@ class Renderer:
                 why = f" -- {detail}" if detail else ""
                 self.console.print(f"\n[yellow]── turn ended: {reason}{why} "
                                    f"(after {n} iteration(s))[/yellow]")
+                self._render_switched(event)
                 self._render_refusals()
+
+    def _render_switched(self, event) -> None:
+        """A model standing by answered (providers/standby.py): said once."""
+        for line in getattr(event, "switched", ()) or ():
+            self.console.print(f"[yellow]↪ {line}[/yellow]")
 
     def _render_refusals(self) -> None:
         """One line per turn, grouped by cause, or nothing at all.

@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 3339 tests. The
+The harness underneath is complete and covered by 3356 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -160,6 +160,11 @@ uv run yantra --yolo                                 # no permission prompts (ca
                                                       #   or a page still asks (notes/142)
 uv run yantra --cache                                # prompt-cache breakpoints on
 uv run yantra --max-usd 0.50                         # stop a turn once it costs this much
+uv run yantra --fallback "anthropic:claude-sonnet-5-5"   # when your model doesn't answer,
+                                                      #   this one does, and the answer
+                                                      #   says so (also YANTRA_FALLBACK;
+                                                      #   PROVIDER:MODEL[@ADDRESS], ...)
+                                                      #   (notes/159)
 uv run yantra --resume                               # restore the newest checkpoint
 uv run yantra --steps run.sqlite [--turn N] [--json|--markdown]
                                                       # what that run did, step by step,
@@ -1795,6 +1800,9 @@ version     = "0.1.0"
 max_iterations = 20             # provider/model left open on purpose
 # provider = "auto"             # ...and "auto" is the word for that (notes/54);
                                 # "local" is another word for "ollama"
+# when_down = "wait"            # never switch to a model standing by
+                                # (YANTRA_FALLBACK): this agent's words stay
+                                # on its own model (notes/159)
 
 [tools]
 allow = ["read_file", "glob", "grep", "web_fetch", "load_skill"]
@@ -3347,6 +3355,12 @@ src/yantra/
 │                   time problems, fallback fixes place problems); closing one
 │                   closes EVERY provider it holds, including the venue it
 │                   never fell back to
+│   ├── standby.py  the house's fallback: YANTRA_FALLBACK / --fallback names
+│                   models standing by (PROVIDER:MODEL[@ADDRESS]), each asked
+│                   for its own model; looks like its primary (name, settings);
+│                   every switch said on TurnEnd.switched; [model] when_down =
+│                   "wait" keeps an agent on its own; a down model said in words
+│                   ([notes/159](notes/159-a-model-standing-by.md))
 │   ├── sse.py      hand-rolled SSE framing (incremental UTF-8, CRLF/CR/LF, comments)
 │   ├── anthropic.py  Messages-dialect adapter (encode request / decode stream)
 │   ├── openai.py     chat-completions-dialect adapter behind the same interface
@@ -3675,7 +3689,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 3339 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 3356 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local

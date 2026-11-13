@@ -2223,6 +2223,23 @@ containers, see §24.
   ```bash
   uv run yantra --build "CLI that converts between temperature units"
   ```
+* **A model standing by**, for the day Ollama isn't running. Name models
+  to try when yours doesn't answer, and the answer says which one did:
+
+  ```bash
+  uv run yantra --fallback "ollama:gemma4:12b@http://other-box:11434/v1" \
+                --provider local --model qwen3.8
+  # standing by: gemma4:12b (ollama at http://other-box:11434/v1) (when qwen3.8 doesn't answer)
+  # ...
+  # ↪ qwen3.8 (ollama) didn't answer (nothing is listening there), so gemma4:12b … answered
+  ```
+
+  `YANTRA_FALLBACK` is the same, for a program. A cloud model works too
+  (`anthropic:claude-sonnet-5-5`), with its key, and only because you
+  named it. An agent package that must never leave its own model says
+  `when_down = "wait"` under `[model]`. With no standby, a model that
+  isn't answering is said in words (*The model didn't answer … so nothing
+  was done*), not as `[Errno 111]`. ([notes/159](notes/159-a-model-standing-by.md))
 
 ## 20 · Many conversations at once
 

@@ -97,6 +97,10 @@ class AgentSpec:
     max_iterations: int | None = None
     context_window: int | None = None
     cache: bool | None = None
+    #: When the model doesn't answer: "switch" to one standing by
+    #: (``YANTRA_FALLBACK``), or "wait" -- never send this agent's words
+    #: anywhere else (providers/standby.py). None: switch.
+    when_down: str | None = None
 
     # ---- prompt ------------------------------------------------------------
     #: The agent's own prompt -> the ``agent`` layer. Who this agent IS.
@@ -339,6 +343,11 @@ class AgentSpec:
             provider = get_provider(name, load_settings(name),
                                     cache_control=bool(self.cache))
         model_slug = model or self.model or default_model(name)
+        # a model standing by, when the house names one and this agent may
+        # use it (providers/standby.py)
+        from yantra.providers import standby
+        provider = standby.wrap(provider, model_slug, standby.standbys(say=_said_standby),
+                                self.when_down)
         root = Path(cwd) if cwd is not None else (self.cwd or Path.cwd())
 
         # The admission policy goes on BEFORE anything is registered, so a
@@ -504,3 +513,10 @@ class AgentSpec:
             EnvContext(self.env_context, root).attach(agent)
 
         return agent
+
+
+def _said_standby(line: str) -> None:
+    """A model standing by that couldn't be built: said once, on stderr,
+    and the agent starts without it (providers/standby.py)."""
+    import sys
+    print(f"yantra: {line}", file=sys.stderr)

@@ -683,6 +683,13 @@ function onTurnEnd(env) {
   if (env.turn_number) foot.append(stepsLink(null, env.turn_number));
   const wrap = ensureAssistant().parentElement;
   wrap.append(foot);
+  // a model standing by answered: whose words these are (providers/standby.py)
+  for (const line of env.switched || []) {
+    const said = document.createElement("div");
+    said.className = "turn-foot switched";
+    said.textContent = `↪ ${line}`;
+    wrap.append(said);
+  }
   const tally = refusalTally(env.refused);
   if (tally) wrap.append(tally);
   ui.currentAssistant = null;

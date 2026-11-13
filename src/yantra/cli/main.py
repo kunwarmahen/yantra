@@ -96,6 +96,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "people reading this want a local model rather "
                              "than a brand")
     parser.add_argument("--model", help="model slug (default from env / per-provider)")
+    parser.add_argument("--fallback", metavar="PROVIDER:MODEL[,...]", default=None,
+                        help="models to try, in order, when yours doesn't answer "
+                             "(anthropic:claude-sonnet-5-5, ollama:gemma4:12b); the "
+                             "answer says which one did. Also $YANTRA_FALLBACK. An "
+                             "agent with [model] when_down = \"wait\" never switches")
     parser.add_argument("--system", help="system prompt")
     parser.add_argument("--max-iterations", type=int, default=None,
                         help="tool round-trips allowed per turn (default 25)")
@@ -2741,6 +2746,14 @@ def main(argv: list[str] | None = None) -> int:
         return _keeps_mode(given[1:])
     args = build_parser().parse_args(argv)
     console = Console()
+    if args.fallback is not None:
+        from yantra.providers.standby import ENV, parse
+        try:
+            parse(args.fallback)
+        except ValueError as exc:
+            print(f"error: --fallback: {exc}", file=sys.stderr)
+            return 2
+        os.environ[ENV] = args.fallback
 
     if args.call_args is not None and args.call is None:
         print("error: --args goes with --call TOOL", file=sys.stderr)
@@ -3392,6 +3405,13 @@ def main(argv: list[str] | None = None) -> int:
             console.print(f"[dim]tool selection: top {width} of "
                           f"{len(agent.registry) - 1}+discovery each turn "
                           f"(--tool-select 0 to disable)[/dim]")
+        from yantra.providers.standby import Standby, label
+        if isinstance(agent.provider, Standby):
+            console.print("[dim]standing by: " + ", ".join(
+                label(p, m) for p, m in agent.provider.standing_by)
+                + f" (when {agent.model} doesn't answer)[/dim]")
+        elif spec.when_down == "wait" and os.environ.get("YANTRA_FALLBACK", "").strip():
+            console.print("[dim]standing by: none for this agent (when_down = wait)[/dim]")
 
         if args.resume:
             payload = store.load_latest("default")
@@ -3443,9 +3463,12 @@ def main(argv: list[str] | None = None) -> int:
                     _print_run(None, agent, error=str(exc))
                 return 1
             except Exception as exc:
-                console.print(f"\n[red]{exc}[/red]")
+                # a model that didn't answer, said in words (providers/standby.py)
+                from yantra.providers.standby import down_words
+                said = down_words(exc) or str(exc)
+                console.print(f"\n[red]{escape(said)}[/red]")
                 if args.json_out:
-                    _print_run(None, agent, error=str(exc))
+                    _print_run(None, agent, error=said)
                 return 1
             if args.json_out:
                 _print_run(repl.last_turn, agent)

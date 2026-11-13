@@ -466,6 +466,14 @@ class Repl:
             except RateLimitError as exc:
                 wait = f" retry after {exc.retry_after:.0f}s" if exc.retry_after else ""
                 self.console.print(f"\n[red]rate limited.{wait}[/red]")
+            except Exception as exc:
+                # the model didn't answer: say so and keep the session; any
+                # other failure is still a crash worth seeing
+                from yantra.providers.standby import down_words
+                said = down_words(exc)
+                if said is None:
+                    raise
+                self.console.print(f"\n[red]{escape(said)}[/red]")
 
     def _read_line(self) -> str:
         """One LOGICAL line of input. ``input()`` is line-oriented and we
