@@ -133,3 +133,10 @@ one place that decides.
   phone's notifications on a timer needs neither a model nor a person,
   but it wakes the phone every time; a phone that tells you itself is
   the better road (Prahari's inlet, its README).
+- ~~**No picture back.**~~ A tool that answers with a picture (a camera's
+  snapshot, through Setu's Home Assistant connector) is counted in
+  `images` and nothing more, unless the caller asks with
+  `--call-pictures` (or `pictures: true` on Dvara's `/call`). Then each
+  picture comes back inline in `pictures`, as `{"media_type", "data"}`
+  (base64), so a pipe and Dvara's door carry it alike. This is what
+  Prahari's `see` pick asks for (its notes/14).

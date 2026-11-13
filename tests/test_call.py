@@ -164,3 +164,48 @@ class TestWhatACallIsNot:
         run(monkeypatch, tmp_path, ["--json", "--call", "read_file",
                                     "--args", '{"path": "a.txt"}'])
         assert os.environ.get("YANTRA_UNATTENDED") == "1"
+
+
+class TestAPictureOnlyWhenAskedFor:
+    """A camera's snapshot is a picture; the usual caller wants text."""
+
+    def agent(self):
+        from yantra.tools.base import Tool, ToolOutput
+        from yantra.types import ImageBlock
+
+        class Camera(Tool):
+            name = "mcp__home__camera_snapshot"
+            description = "a camera's picture"
+            parameters = {"type": "object", "properties": {}}
+            read_only = True
+            images = False                    # as an MCP tool starts (mcp.py)
+
+            def summary(self, args, ctx):
+                return "a camera's picture"
+
+            def run(self, args, ctx):
+                if not self.images:
+                    return "camera.porch at 12:00\n[1 non-text content block(s) omitted]"
+                return ToolOutput(text="camera.porch at 12:00",
+                                  images=[ImageBlock("image/jpeg", "/9j/2Q==")])
+
+        from yantra.agent import Agent
+        agent = Agent(ScriptedProvider([]), model="m")
+        camera = Camera()
+        agent.registry.register(camera)
+        return agent, camera
+
+    def test_asked_the_picture_comes_back_inline_and_the_tool_is_put_back(self):
+        from yantra.calling import as_json, call_once
+        agent, camera = self.agent()
+        called = call_once(agent, camera.name, {}, pictures=True)
+        out = as_json(called)
+        assert out["images"] == 1
+        assert out["pictures"] == [{"media_type": "image/jpeg", "data": "/9j/2Q=="}]
+        assert camera.images is False
+
+    def test_not_asked_there_is_no_picture_in_the_answer(self):
+        from yantra.calling import as_json, call_once
+        agent, camera = self.agent()
+        out = as_json(call_once(agent, camera.name, {}))
+        assert "pictures" not in out and "omitted" in out["text"]

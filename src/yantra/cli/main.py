@@ -293,6 +293,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--args", metavar="JSON", default=None, dest="call_args",
                         help="the arguments for --call, as one JSON object "
                              "(default {})")
+    parser.add_argument("--call-pictures", action="store_true", dest="call_pictures",
+                        help="with --call --json: hand back any picture the tool "
+                             "answered with (a camera's snapshot), inline as base64 "
+                             "in yantra.call.v1's pictures")
     parser.add_argument("--json", action="store_true", dest="json_out",
                         help="with a one-shot prompt: everything a person "
                              "would read goes to stderr, and stdout gets ONE "
@@ -2677,7 +2681,8 @@ def _call_mode(agent, args) -> int:
     except json.JSONDecodeError as exc:
         called = Called(False, args.call, detail=f"--args is not JSON: {exc}")
     else:
-        called = call_once(agent, args.call, arguments, args.allow_tools)
+        called = call_once(agent, args.call, arguments, args.allow_tools,
+                           pictures=bool(getattr(args, "call_pictures", False)))
     if args.json_out:
         print(json.dumps(as_json(called, needs=unattended.needs(),
                                  busy=unattended.busy())), flush=True)

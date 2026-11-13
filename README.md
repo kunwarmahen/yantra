@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 3337 tests. The
+The harness underneath is complete and covered by 3339 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -1398,7 +1398,11 @@ and one that finishes ([notes/23](notes/23-glob.md)–
   grant naming this exact tool and fixing every argument passed
   (`web_fetch(url=https://example.com)`). No API key is needed. This is
   how Prahari looks for "tell me when…" without paying a model for every
-  look ([notes/139](notes/139-one-tool-no-model.md)).
+  look ([notes/139](notes/139-one-tool-no-model.md)). A tool that answers
+  with a picture (Setu's `camera_snapshot`) only counts it in `images`;
+  `--call-pictures` hands the picture back inline (`pictures`, base64), for
+  a caller that will put it to a model that can see (Prahari's `see` pick;
+  its notes/14).
 - **The browser can be one you already have.**
   `YANTRA_BROWSER_EXECUTABLE=chrome` (a Playwright channel) or a path
   — `/usr/bin/google-chrome`, `/snap/bin/brave`, `/usr/bin/chromium`,
@@ -3047,7 +3051,8 @@ src/yantra/
 ├── calling.py      one tool, run once, no model: the rule `--call` keeps
 │                   (only a tool that reads, or one call granted word for
 │                   word), shared with Dvara's `POST /call`, a look made as
-│                   one person of the house ([notes/139](notes/139-one-tool-no-model.md))
+│                   one person of the house ([notes/139](notes/139-one-tool-no-model.md));
+│                   a picture handed back only when asked (`--call-pictures`)
 ├── samay_link.py   doing things later: Samay found by `samay status --json`
 │                   (samay.status.v1), its tools started `--for local` and
 │                   `--agent` this package, skipped when unattended; the
@@ -3670,7 +3675,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 3337 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 3339 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local

@@ -18,6 +18,14 @@ this address every three hours" approved that address, and nothing
 else. A bare name or a glob never covers a call, and a tool that asks
 every time (a purchase) is never run.
 
+A PICTURE ONLY WHEN ASKED FOR. A tool that answers with a picture (a
+camera's snapshot) says so in ``images`` and keeps its pixels to itself,
+because the usual caller wants text. A caller that will look at the
+picture -- Prahari, putting it to a model that can see -- asks with
+``pictures``, and gets each one back inline (``{"media_type", "data"}``,
+base64) in the same JSON, so it works through a pipe and through Dvara's
+door alike, with no folder the two have to share.
+
 ONE RULE, TWO DOORS. The terminal's ``--call`` (cli/main.py) and Dvara's
 ``POST /call`` -- a look made as one person of the house, with their own
 accounts -- both come here, so a look through Dvara cannot be let do
@@ -43,12 +51,16 @@ class Called:
     text: str = ""
     detail: str = ""
     #: Pictures the tool made (a screenshot is saved where the tool saves
-    #: it; its pixels are not handed back).
+    #: it; its pixels are not handed back unless ``pictures`` asked).
     images: int = 0
+    #: The pictures themselves, as ``{"media_type", "data"}`` (base64),
+    #: when the caller asked for them; () otherwise.
+    pictures: tuple = ()
 
 
 def call_once(agent: Any, name: str, arguments: Any,
-              allow_tools: list[str] | tuple[str, ...] = ()) -> Called:
+              allow_tools: list[str] | tuple[str, ...] = (),
+              pictures: bool = False) -> Called:
     """Run ``name`` once with ``arguments``, by the rule above. Never
     raises for anything a caller could have got wrong: a refusal, an
     unknown tool and a tool's own failure are all answers."""
@@ -68,17 +80,25 @@ def call_once(agent: Any, name: str, arguments: Any,
             f"{name} is not read-only; --call runs only tools that read, or one call "
             f"granted word for word: --allow-tools '{name}(key=value, ...)' fixing "
             "every argument"))
+    # an MCP tool keeps a picture only when told to (mcp.py); asked for, it is
+    before = getattr(tool, "images", None)
+    if pictures and before is not None:
+        tool.images = True
     try:
         out = tool.run(arguments, agent.ctx)
     except Exception as exc:          # a tool's failure is the answer, said as one
         return Called(False, name, detail=str(exc) or type(exc).__name__)
     finally:
+        if pictures and before is not None:
+            tool.images = before
         try:
             tool.turn_ended()         # a browser it opened closes with the call
         except Exception:
             pass
     if isinstance(out, ToolOutput):
-        return Called(True, name, out.text, images=len(out.images))
+        kept = tuple({"media_type": i.media_type, "data": i.data}
+                     for i in out.images) if pictures else ()
+        return Called(True, name, out.text, images=len(out.images), pictures=kept)
     return Called(True, name, str(out))
 
 
@@ -103,6 +123,9 @@ def said_yes_to(patterns: list[str], tool: Any, arguments: dict) -> bool:
 def as_json(called: Called, *, needs: list[str] | None = None,
             busy: list[str] | None = None) -> dict:
     """``yantra.call.v1``: what was said, and what it needed a person for."""
-    return {"format": CALL_FORMAT, "ok": called.ok, "tool": called.tool,
-            "text": called.text, "detail": called.detail, "images": called.images,
-            "needs_person": list(needs or []), "busy": list(busy or [])}
+    out = {"format": CALL_FORMAT, "ok": called.ok, "tool": called.tool,
+           "text": called.text, "detail": called.detail, "images": called.images,
+           "needs_person": list(needs or []), "busy": list(busy or [])}
+    if called.pictures:
+        out["pictures"] = list(called.pictures)
+    return out
