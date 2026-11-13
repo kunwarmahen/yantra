@@ -32,7 +32,7 @@ from yantra.context import (
     estimate_history,
 )
 from yantra.errors import ToolError
-from yantra import outside
+from yantra import outside, usage_log
 from yantra.hold import (HOLD, Answer, Held, TurnHeld, abandoned_results,
                          check_answers, refusal_text, still_current)
 from yantra import carry, steps
@@ -392,6 +392,10 @@ class Agent:
         #: noted as outside text. Set by the host after building; a
         #: sub-agent shares its parent's.
         self.trusted_reads: tuple[str, ...] = ()
+        #: Who a turn is for, in the house's usage file (usage_log.py): a
+        #: label the host sets (Dvara: the person's id), never a message.
+        self.usage_who: str = ""
+        self.turn_clock: float | None = None
         # ---- a job stopped by a restart (carry.py) ----
         #: Set while a turn runs; still set in a checkpoint written by a
         #: process that was killed or a task that was cancelled.
@@ -555,6 +559,8 @@ class Agent:
         return self._run_one(call)
 
     def _begin_turn(self, kind: str = "message") -> None:
+        # when the turn started, for its line in the usage file (usage_log.py)
+        self.turn_clock = time.monotonic()
         # One turn is one thing the agent was asked to do, so that is the
         # unit the ceiling covers -- and the meter only listens to the
         # agent it belongs to, which is what stops a sub-agent from
@@ -610,6 +616,8 @@ class Agent:
                     take = getattr(self.provider, "take_switches", None)
                     if callable(take):
                         event.switched = take()
+                    # one line in the house's usage file (usage_log.py)
+                    usage_log.record(self, event, getattr(self, "turn_clock", None))
                     steps.turn_ended(self, event)
                     carry.step_done(self)   # and as it ends: no longer open
                     if event.reason != "held":

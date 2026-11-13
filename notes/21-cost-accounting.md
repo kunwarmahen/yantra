@@ -130,3 +130,12 @@ summaries keep reading `.input_tokens` — now unambiguous, and for
 OpenAI-dialect sessions slightly smaller and more truthful than before.
 Published live-run numbers in older notes reflect the semantics at
 capture time; this note is the boundary.
+
+## The whole house, one file
+
+Every turn in the house (the page, the terminal, each person's turns
+through Dvara, Samay's runs, Prahari's questions, Vidhi's steps) now
+writes its tokens, model, seconds and dollars to one usage file, with
+dollars left null where there's no price, as above. Sarathi's `sarathi
+usage` reads it beside Smritikosh's own calls
+([note 160](160-the-house-s-meter.md)).

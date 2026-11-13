@@ -23,7 +23,7 @@ tour, with diagrams.
 
 ## Status
 
-The harness underneath is complete and covered by 3356 tests. The
+The harness underneath is complete and covered by 3362 tests. The
 framework layer on top — agents you define as a folder of files, tools
 and sub-agents declared in that folder, evals as an acceptance gate you
 can run without a key — is built and in use, and the API is not stable
@@ -160,6 +160,9 @@ uv run yantra --yolo                                 # no permission prompts (ca
                                                       #   or a page still asks (notes/142)
 uv run yantra --cache                                # prompt-cache breakpoints on
 uv run yantra --max-usd 0.50                         # stop a turn once it costs this much
+                                                      #   (every turn also writes one line,
+                                                      #   no words, to the house's usage file;
+                                                      #   YANTRA_USAGE=off; notes/160)
 uv run yantra --fallback "anthropic:claude-sonnet-5-5"   # when your model doesn't answer,
                                                       #   this one does, and the answer
                                                       #   says so (also YANTRA_FALLBACK;
@@ -3305,6 +3308,12 @@ src/yantra/
 │                   failure (an error, a cut-off list, prose) raised so the
 │                   recorder withholds rather than writes raw
 │                   ([notes/89](notes/89-names-nobody-listed.md))
+├── usage_log.py    every turn's model use, one JSON line in the house's
+│                   usage file ($XDG_STATE_HOME/yantra/usage.jsonl): by
+│                   (YANTRA_USAGE_BY), who (a label, never words), model,
+│                   local or billed, tokens, dollars (null without a price),
+│                   seconds; one O_APPEND write; YANTRA_USAGE=off
+│                   ([notes/160](notes/160-the-house-s-meter.md))
 ├── pricing.py      list-price table -> $ figures: slug matching (exact /
 │                   date-suffix / vendor-prefix / family), per-model session
 │                   buckets, YANTRA_PRICES overrides; unknown = no figure,
@@ -3689,7 +3698,7 @@ end ([notes/03](notes/03-sse-and-collect.md)).
 ## Run & test
 
 ```bash
-uv run pytest -q                 # full offline suite: 3356 tests, NO network, NO key
+uv run pytest -q                 # full offline suite: 3362 tests, NO network, NO key
 uv run ruff check .              # lint: correctness rules, not style policing
 
 # everything below makes REAL model calls. The examples default to a local
