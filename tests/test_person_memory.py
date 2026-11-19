@@ -414,6 +414,15 @@ class TestReplCommand:
         assert store.list("asha", 5) == []
         assert "forgot #1" in out.getvalue()
 
+    def test_fix_puts_a_memory_right_in_its_place(self, store):
+        repl, out = self._repl(store)
+        repl._command("/memory add I live near RDU")
+        repl._command("/memory fix 1 I live near CLT now")
+        assert [i.statement for i in store.list("asha", 5)] == ["I live near CLT now"]
+        assert "was: I live near RDU" in out.getvalue()
+        repl._command("/memory fix 1")
+        assert "usage: /memory fix ID" in out.getvalue()
+
     def test_a_long_id_is_shown_short_and_its_start_forgets_it(self):
         """A server's id is a UUID: /memory showed 36 characters, and
         '/memory forget 1' (the tutorial's) found nothing."""

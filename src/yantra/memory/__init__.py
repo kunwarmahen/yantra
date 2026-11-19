@@ -232,6 +232,8 @@ class Fact:
     group: str = ""                   # a store's category or a TOPICS word
     core: bool = False                # always handed over, whatever was asked
     sources: tuple[str, ...] = ()     # the memories it was made from
+    confidence: float = 0.0           # how sure the store is, when it says (0-1)
+    seen: int = 0                     # how many memories said it, when it says
 
 
 @dataclass(frozen=True, slots=True)
@@ -523,6 +525,50 @@ class Memory:
 
     def list(self, limit: int = 100) -> list[MemoryItem]:
         return self.store.list(self.user, limit)
+
+    # ---- what a person sees and mends (Dvara's /memory, the page) ----------
+
+    def known(self) -> Profile | None:
+        """The facts and beliefs a conversation starts with, asked now (not
+        the ones this conversation was primed with: a person checking after
+        a fix wants the fix). None when the store has no ``profile``."""
+        if not supports(self.store, "profile"):
+            return None
+        return self.store.profile(self.user, "")
+
+    def turn_down(self, fact_or_belief_id: str) -> bool:
+        """A profile fact or belief, gone from every prompt. The id is the
+        store's own (``fact:…``, ``belief:…`` on Smritikosh; a memory's id
+        on the built-in store, whose facts ARE memories), so it is passed
+        whole, never shortened and guessed at like a typed memory id."""
+        return self.store.forget(self.user, fact_or_belief_id)
+
+    def correct(self, memory_id: str, statement: str) -> tuple[str, MemoryItem]:
+        """A kept memory, put right: the new words in the old one's place.
+
+        WRITTEN FIRST, FORGOTTEN AFTER, as ``remember_replacing``: a store
+        that fails between the two keeps both, and the person sees both on
+        ``/memory``, never neither. The new memory takes the old one's
+        topic and slot, so it answers the same question; its kind is
+        ``correction``. Returns the new id and the memory it replaced."""
+        if not supports(self.store, "list"):
+            raise MemoryStoreError("this store can't list its memories, so there's no "
+                                   "saying which one to put right")
+        wanted = self.resolve(memory_id)
+        old = next((item for item in self.list(1000) if item.id == wanted), None)
+        if old is None:
+            raise MemoryStoreError(f"there's no memory #{memory_id.strip().lstrip('#')}")
+        if not statement.strip():
+            raise MemoryStoreError("say what it should say instead")
+        parts = (old.slot or "").split("|")
+        topic, about, key = (parts + ["", "", ""])[:3] if old.slot else (old.topic, "", "")
+        new_id, replaced = self.remember_replacing(
+            statement, kind="correction", topic=topic or None, about=about or None,
+            key=key or None)
+        if old.id != new_id and old.id not in {item.id for item in replaced} \
+                and supports(self.store, "forget"):
+            self.store.forget(self.user, old.id)
+        return new_id, old
 
     # ---- the prompt layer -------------------------------------------------
 

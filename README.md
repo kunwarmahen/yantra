@@ -491,6 +491,8 @@ keeps the memories it came from too
 ([notes/152](notes/152-what-the-store-made-of-you.md)).
 
 `/memory forget ID` removes one (the start of a long id is enough),
+`/memory fix ID TEXT` puts one right in its place (written first, the
+old one let go after, so a failure keeps both),
 `/memory add TEXT` keeps one in your words, `/memory find WORDS`
 searches, and `/memory copy local` copies the built-in file into a store
 you moved to. The page's bookmark chip opens

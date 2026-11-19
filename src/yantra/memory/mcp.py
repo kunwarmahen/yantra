@@ -191,7 +191,9 @@ class McpStore:
         facts = [Fact(id=str(row["id"]), statement=" ".join(str(row["value"]).split()),
                       group=str(row.get("category") or row.get("group") or ""),
                       core=bool(row.get("core")),
-                      sources=tuple(str(i) for i in row.get("sources") or ()))
+                      sources=tuple(str(i) for i in row.get("sources") or ()),
+                      confidence=_number(row.get("confidence")),
+                      seen=int(_number(row.get("seen"))))
                  for row in data.get("facts") or []
                  if isinstance(row, dict) and row.get("id") and row.get("value")]
         beliefs = [Belief(id=str(row["id"]), statement=" ".join(str(row["statement"]).split()),
@@ -224,6 +226,14 @@ class McpStore:
             return json.loads(text)
         except (json.JSONDecodeError, TypeError):
             return text
+
+
+def _number(value: Any) -> float:
+    """A store's number, or 0 for one it didn't send or sent as words."""
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _first(data: dict[str, Any], keys: tuple[str, ...]) -> Any:

@@ -135,6 +135,10 @@ other three not.
   person's choice.
 * **A belief Yantra works out itself.** Finding patterns across memories
   is the store's job, done in its own time; the built-in store has none.
+* ~~**A person seeing the facts and beliefs.**~~ Dvara's `/memory` lists
+  them with how sure, and turns one down or puts it right by its number;
+  `Memory.known`, `turn_down` and `correct` are the verbs underneath, and
+  the terminal has `/memory fix` ([Dvara's notes/86](../../dvara/notes/86-what-you-are-told.md)).
 * **Switches in Yantra.** What a prompt carries about someone is decided
   where their memories are kept, by that store's admin, so every agent
   reading them gets the same answer.

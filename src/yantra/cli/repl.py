@@ -1035,6 +1035,16 @@ class Repl:
                 else:
                     self.console.print(f"[red]no memory #{rest}[/red]")
                 return
+            if verb in ("fix", "correct"):
+                target, _, words = rest.partition(" ")
+                if not target or not words.strip():
+                    self.console.print("[red]usage: /memory fix ID THE RIGHT WORDS[/red]")
+                    return
+                new_id, was = memory.correct(target, words)
+                self.console.print(f"put right: #{short_id(new_id)} {words.strip()}  "
+                                   f"(was: {was.statement}) -- from the next "
+                                   "conversation on", markup=False, style="green")
+                return
             if verb == "add":
                 if not rest:
                     self.console.print("[red]usage: /memory add TEXT[/red]")
@@ -1049,8 +1059,8 @@ class Repl:
                 items = memory.recall(rest, 20) if rest else []
                 title = f"{len(items)} match {rest!r}"
             elif verb:
-                self.console.print("[red]usage: /memory [forget ID | add TEXT "
-                                   "| find WORDS | copy local][/red]")
+                self.console.print("[red]usage: /memory [forget ID | fix ID TEXT "
+                                   "| add TEXT | find WORDS | copy local][/red]")
                 return
             elif "list" in memory.cannot():
                 self.console.print(
