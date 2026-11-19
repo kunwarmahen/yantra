@@ -426,6 +426,11 @@ class Memory:
         self.marked: dict[str, float] = {}
         #: Whether a failed ``used`` has been said; said once a session.
         self.used_failed = False
+        #: What the last answer leaned on, as (id, statement): every shown
+        #: memory, fact or belief it drew on, whether or not the store keeps
+        #: use and however recently it was reported. For a host to keep with
+        #: the turn ("why did you do that?"); set at each turn's end.
+        self.leaned: list[tuple[str, str]] = []
 
     # ---- the verbs, scoped to this person --------------------------------
 
@@ -699,13 +704,23 @@ class Memory:
         chat, a page left open) draws on it on a new day, and that day is
         what keeps it fresh in the store."""
         now = time.time()
+        return [memory_id for memory_id, statement in self._shown().items()
+                if now - self.marked.get(memory_id, -USED_AGAIN_AFTER) >= USED_AGAIN_AFTER
+                and drew_on(statement, said, answered)]
+
+    def leaned_on(self, said: str, answered: str) -> list[tuple[str, str]]:
+        """Every shown memory, fact or belief this answer drew on, as (id,
+        statement) -- ``drawn_on`` without its once-a-day rule, which is
+        about telling the store, not about what this answer rested on."""
+        return [(memory_id, statement) for memory_id, statement in self._shown().items()
+                if drew_on(statement, said, answered)]
+
+    def _shown(self) -> dict[str, str]:
         shown = {item.id: item.statement for item in self.in_prompt}
         shown.update({item.id: item.statement for item in self.recalled.values()})
         shown.update({fact.id: fact.statement for fact in self.facts})
         shown.update({belief.id: belief.statement for belief in self.beliefs})
-        return [memory_id for memory_id, statement in shown.items()
-                if now - self.marked.get(memory_id, -USED_AGAIN_AFTER) >= USED_AGAIN_AFTER
-                and drew_on(statement, said, answered)]
+        return shown
 
     def shown_ids(self) -> set[str]:
         """The memories this conversation's layer carries: shown as
@@ -817,10 +832,15 @@ def note_used(agent: Any) -> threading.Thread | None:
     """The agents' other hook: when a turn ends with an answer, report the
     memories it drew on (``Memory.drawn_on``). Never raises."""
     memory = getattr(agent, "memory", None)
-    if memory is None or not supports(memory.store, "used"):
+    if memory is None:
         return None
     try:
         said, answered = _turn_text(agent.history)
+        # what this answer rested on, for the host to keep with the turn,
+        # whether or not the store keeps use
+        memory.leaned = memory.leaned_on(said, answered)
+        if not supports(memory.store, "used"):
+            return None
         return memory.report_used(memory.drawn_on(said, answered))
     except Exception:  # deciding is ours; a bug here must not cost the turn
         return None

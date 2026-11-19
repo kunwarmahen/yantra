@@ -2849,7 +2849,9 @@ src/yantra/
 │                   ([notes/150](notes/150-a-place-for-each-fact.md)); the
 │                   layer is twenty lines, search first, then the newest
 │                   ([notes/109](notes/109-fewer-lines-fewer-facts.md));
-│                   note_used, as a turn ends, tells the store (optional
+│                   note_used, as a turn ends, notes what the answer leaned
+│                   on (Memory.leaned, every turn, for a host's "why?") and
+│                   tells the store (optional
 │                   fifth verb, used) which memories the answer or a tool's
 │                   arguments drew on, past the person's own words, so a
 │                   memory in use is listed as new; an optional verb,

@@ -298,3 +298,43 @@ class TestOverMcp:
         store.bind(lambda: UsedServer(), {"remember", "recall", "forget", "list_memories"})
 
         assert not supports(store, "used")
+
+
+# ---- what an answer leaned on, kept for the host ("why did you do that?") ---------
+# The bias: a host asked "why?" can only say what it was told. The once-a-
+# day rule and a store without ``used`` are about telling the STORE; what
+# an answer rested on is true of every turn, so it is noted every turn.
+
+
+class TestLeaned:
+    def test_every_turn_notes_what_it_leaned_on_even_after_it_was_reported(self, store):
+        store.remember("asha", "Lives near RDU", {})
+        agent = _agent(store, [assistant_text("From RDU, as before."),
+                               assistant_text("RDU again, then.")])
+        agent.run("flights to Denver?")
+        assert [s for _, s in agent.memory.leaned] == ["Lives near RDU"]
+        agent.run("and to Austin?")
+        assert [s for _, s in agent.memory.leaned] == ["Lives near RDU"]
+
+    def test_a_turn_that_leaned_on_nothing_clears_the_last_ones(self, store):
+        store.remember("asha", "Lives near RDU", {})
+        agent = _agent(store, [assistant_text("From RDU."), assistant_text("Hello!")])
+        agent.run("flights to Denver?")
+        agent.run("hi")
+        assert agent.memory.leaned == []
+
+    def test_a_store_without_used_still_notes_it(self):
+        class FourVerbs:
+            name = "four"
+            def remember(self, user, statement, meta): return "1"
+            def recall(self, user, query, limit): return []
+            def forget(self, user, memory_id): return True
+            def list(self, user, limit):
+                from yantra.memory import MemoryItem
+                return [MemoryItem("m1", "Lives near RDU")]
+
+        agent = Agent(ScriptedProvider([assistant_text("From RDU, as before.")]),
+                      model="m", tools=ToolRegistry())
+        enable_memory(agent, FourVerbs(), user="asha")
+        agent.run("flights to Denver?")
+        assert agent.memory.leaned == [("m1", "Lives near RDU")]
